@@ -1,0 +1,38 @@
+<?php
+
+namespace App\Http\Requests\Applicant;
+
+use Illuminate\Foundation\Http\FormRequest;
+
+class UploadForeignConsentRequest extends FormRequest
+{
+    public function authorize(): bool
+    {
+        $application = $this->route('application');
+
+        return $this->user() && $application && $this->user()->can('update', $application);
+    }
+
+    /**
+     * @return array<string, array<int, mixed>>
+     */
+    public function rules(): array
+    {
+        $maxKb = (int) config('documents.max_upload_kb', 10240);
+        $mimeTypes = (array) config('documents.allowed_mimetypes', [
+            'application/pdf',
+            'image/jpeg',
+            'image/png',
+            'image/webp',
+        ]);
+
+        return [
+            'file' => ['required', 'file', 'max:'.$maxKb, 'mimetypes:'.implode(',', $mimeTypes)],
+            // Canonical term
+            'source_awarding_institution_name' => ['nullable', 'string', 'max:255'],
+            // Back-compat alias for older clients
+            'source_awarding_body_name' => ['nullable', 'string', 'max:255'],
+        ];
+    }
+}
+

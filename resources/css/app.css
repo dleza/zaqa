@@ -1,0 +1,228 @@
+@import 'tailwindcss';
+
+@source '../../vendor/laravel/framework/src/Illuminate/Pagination/resources/views/*.blade.php';
+@source '../../storage/framework/views/*.php';
+@source '../**/*.blade.php';
+@source '../**/*.js';
+@source '../**/*.ts';
+@source '../**/*.vue';
+
+:root {
+    --zaqa-brand: #0076bd;
+    --zaqa-brand-foreground: #f9fafb;
+    --zaqa-brand-dark: #0b3a66;
+    --zaqa-accent: #f18230;
+    --zaqa-accent-foreground: #1f2937;
+    --zaqa-accent-deep: #d96a16;
+
+    --zaqa-background: #f7fafc;
+    --zaqa-surface: #ffffff;
+    --zaqa-surface-muted: #eef4f8;
+    --zaqa-border: #d6e2ea;
+    --zaqa-text: #1f2937;
+    --zaqa-text-muted: #5b6b7a;
+    --zaqa-text-on-dark: #f9fafb;
+
+    --zaqa-success: #15803d;
+    --zaqa-warning: #b7791f;
+    --zaqa-danger: #b42318;
+    --zaqa-info: #0076bd;
+}
+
+@theme {
+    --font-sans: 'Instrument Sans', ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji',
+        'Segoe UI Symbol', 'Noto Color Emoji';
+
+    /* ZAQA Design Tokens (Tailwind v4 token mapping) */
+    --color-brand: var(--zaqa-brand);
+    --color-brand-foreground: var(--zaqa-brand-foreground);
+    --color-brand-dark: var(--zaqa-brand-dark);
+    --color-accent: var(--zaqa-accent);
+    --color-accent-foreground: var(--zaqa-accent-foreground);
+    --color-accent-deep: var(--zaqa-accent-deep);
+
+    --color-background: var(--zaqa-background);
+    --color-surface: var(--zaqa-surface);
+    --color-surface-muted: var(--zaqa-surface-muted);
+    --color-border: var(--zaqa-border);
+    --color-text-primary: var(--zaqa-text);
+    --color-text-muted: var(--zaqa-text-muted);
+    --color-text-on-dark: var(--zaqa-text-on-dark);
+
+    --color-success: var(--zaqa-success);
+    --color-warning: var(--zaqa-warning);
+    --color-danger: var(--zaqa-danger);
+    --color-info: var(--zaqa-info);
+}
+
+@layer base {
+    body {
+        background-color: var(--zaqa-background);
+        color: var(--zaqa-text);
+    }
+
+    ::selection {
+        background: color-mix(in oklab, var(--zaqa-brand) 24%, transparent);
+    }
+}
+
+@layer components {
+    .zaqa-page {
+        @apply min-h-screen bg-background text-text-primary;
+    }
+
+    .zaqa-container {
+        @apply mx-auto w-full max-w-6xl px-4;
+    }
+
+    .zaqa-topbar {
+        @apply border-b border-brand-dark/30 bg-brand-dark text-text-on-dark;
+    }
+
+    .zaqa-topbar-inner {
+        @apply mx-auto flex w-full max-w-6xl items-center justify-between px-4 py-4;
+    }
+
+    .zaqa-brand {
+        @apply inline-flex items-center gap-3 font-semibold tracking-tight text-brand-foreground no-underline;
+    }
+
+    .zaqa-brand-kicker {
+        @apply text-xs font-semibold tracking-wider text-text-on-dark/90 uppercase;
+    }
+
+    .zaqa-brand-name {
+        @apply text-base font-semibold leading-tight;
+    }
+
+    .zaqa-nav-link {
+        @apply inline-flex items-center rounded-md px-3 py-2 text-sm font-medium text-text-on-dark/90 transition-colors hover:bg-brand/25 hover:text-text-on-dark focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-brand-dark;
+    }
+
+    .zaqa-nav-link-active {
+        @apply bg-brand/30 text-text-on-dark;
+    }
+
+    .zaqa-footer {
+        @apply bg-black text-text-on-dark;
+    }
+
+    .zaqa-footer-inner {
+        @apply mx-auto flex w-full max-w-6xl flex-col gap-2 px-4 py-8 text-sm sm:flex-row sm:items-center sm:justify-between;
+    }
+
+    .zaqa-card {
+        @apply rounded-xl border border-border bg-surface p-6 shadow-sm;
+    }
+
+    .zaqa-card-muted {
+        @apply rounded-xl border border-border bg-surface-muted p-6;
+    }
+
+    .zaqa-input {
+        @apply mt-1 block h-11 w-full rounded-md border border-border bg-surface px-4 text-sm text-text-primary shadow-sm outline-none transition placeholder:text-text-muted/70 focus:border-brand focus:ring-2 focus:ring-brand/25;
+    }
+
+    .zaqa-wizard-shell {
+        @apply mx-auto w-full max-w-7xl;
+    }
+
+    .zaqa-wizard-stepper {
+        @apply rounded-xl border border-border bg-surface p-3;
+    }
+
+    .zaqa-stepper-flow {
+        @apply flex w-full items-stretch overflow-hidden rounded-lg border border-border bg-surface-muted;
+    }
+
+    .zaqa-stepper-item {
+        @apply relative flex min-w-0 flex-1 items-center gap-2 px-4 py-3 text-left text-sm font-semibold text-text-muted transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/30;
+        clip-path: polygon(0 0, calc(100% - 14px) 0, 100% 50%, calc(100% - 14px) 100%, 0 100%, 14px 50%);
+    }
+
+    .zaqa-stepper-item-first {
+        clip-path: polygon(0 0, calc(100% - 14px) 0, 100% 50%, calc(100% - 14px) 100%, 0 100%);
+    }
+
+    .zaqa-stepper-item-last {
+        clip-path: polygon(0 0, 100% 0, 100% 100%, 0 100%, 14px 50%);
+    }
+
+    .zaqa-stepper-item + .zaqa-stepper-item {
+        @apply -ml-3;
+    }
+
+    .zaqa-stepper-index {
+        @apply inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-border bg-surface text-xs font-bold text-text-muted;
+    }
+
+    .zaqa-stepper-item-active {
+        @apply bg-brand/12 text-brand;
+    }
+
+    .zaqa-stepper-item-active .zaqa-stepper-index {
+        @apply border-brand/25 bg-brand/10 text-brand;
+    }
+
+    .zaqa-stepper-item-complete {
+        @apply bg-success/10 text-success;
+    }
+
+    .zaqa-stepper-item-complete .zaqa-stepper-index {
+        @apply border-success/20 bg-success/10 text-success;
+    }
+
+    .zaqa-radio-card {
+        @apply flex cursor-pointer items-start gap-3 rounded-xl border border-border bg-surface px-4 py-4 transition hover:bg-surface-muted focus-within:ring-2 focus-within:ring-brand/30;
+    }
+
+    .zaqa-radio-card-active {
+        @apply border-brand/25 bg-brand/10;
+    }
+
+    .zaqa-btn {
+        @apply inline-flex h-11 items-center justify-center gap-2 rounded-md px-4 text-sm font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:pointer-events-none disabled:opacity-60;
+        --zaqa-btn-shadow: color-mix(in oklab, currentColor 18%, transparent);
+        box-shadow:
+            0 1px 0 color-mix(in oklab, var(--zaqa-border) 60%, transparent),
+            0 10px 22px -14px var(--zaqa-btn-shadow);
+    }
+
+    .zaqa-btn-primary {
+        @apply bg-brand text-brand-foreground hover:bg-brand-dark;
+        --zaqa-btn-shadow: color-mix(in oklab, var(--zaqa-brand) 35%, transparent);
+    }
+
+    .zaqa-btn-secondary {
+        @apply border border-border bg-surface text-text-primary hover:bg-surface-muted;
+        --zaqa-btn-shadow: color-mix(in oklab, var(--zaqa-text-muted) 18%, transparent);
+    }
+
+    .zaqa-btn-ghost-on-brand {
+        @apply border border-brand-foreground/30 bg-transparent text-brand-foreground hover:bg-brand-dark/25;
+    }
+
+    .zaqa-link {
+        @apply font-medium text-brand hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background;
+    }
+
+    .zaqa-badge {
+        @apply inline-flex items-center rounded-full border border-border bg-surface-muted px-2.5 py-1 text-xs font-semibold text-text-primary;
+    }
+
+    .zaqa-badge-success {
+        @apply border-success/20 bg-success/10 text-success;
+    }
+
+    .zaqa-badge-warning {
+        @apply border-warning/25 bg-warning/12 text-warning;
+    }
+
+    .zaqa-badge-danger {
+        @apply border-danger/20 bg-danger/10 text-danger;
+    }
+
+    .zaqa-badge-info {
+        @apply border-info/25 bg-info/12 text-info;
+    }
+}
