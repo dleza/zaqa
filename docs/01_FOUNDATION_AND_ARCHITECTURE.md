@@ -78,6 +78,7 @@ app/
     Notifications/
     Reporting/
     Administration/
+    AdminDashboard/
     Audit/
   Enums/
   Events/
@@ -170,6 +171,19 @@ Use dedicated services such as:
 - `CertificateIssuanceService`
 - `NotificationOrchestrator`
 - `AuditLogService`
+- `AdminDashboardService` (role- and permission-aware admin home metrics; see Admin dashboard below)
+
+### Admin dashboard (operations)
+The admin home at `GET /admin/dashboard` (`dashboard.view`) is **not** a static landing page. It is a **data-driven, role-aware** operations dashboard:
+
+- **Personalized header**: time-of-day greeting (`Good morning|afternoon|evening`) plus the user’s **first name** when present (fallback to the first token of `name`), primary **Spatie role** label, formatted **current date**, and a short **contextual subtitle** driven by permissions (e.g. verification vs finance vs audit).
+- **Backend-only authorization**: `App\Domain\AdminDashboard\AdminDashboardService` aggregates KPIs, charts, and queues from real tables (`applications`, `invoices`, `payments`, `qualification_documents`, `users`, `audit_logs`, `application_lifecycle_events`, etc.). Each block is included only if the user passes the relevant `can()` checks (e.g. `admin.finance.view`, `verification.pool.view`, `admin.audit.view`). Unauthorized metrics are **omitted from the payload**, not merely hidden in Vue.
+- **Charts**: [Chart.js](https://www.chartjs.org/) (Vue canvas components) for **this week** trends and breakdowns (e.g. submissions by day, revenue by day, payment methods, audit volume). Week boundaries use **Monday–Sunday** in `config('app.timezone')`.
+- **Queues**: compact, low-PII lists (e.g. application **numbers** and statuses, audit **module/action** snippets) with links only where the user already has route access.
+- **Quick actions**: buttons and links derived from the same permission gates as the sidebar (pool, finance queue, users, settings modules, SLA report, etc.).
+- **Empty state**: if a user has `dashboard.view` but no widget permissions, the page shows a clear empty state (no fabricated numbers).
+
+The default **Auditor** role (see `RolesAndPermissionsSeeder`) has `dashboard.view` + `admin.audit.view` for monitoring-focused dashboards.
 
 ### Events
 Use domain events for major actions:

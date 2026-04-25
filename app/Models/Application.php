@@ -22,6 +22,7 @@ class Application extends Model
         'service_type',
         'qualification_category',
         'current_status',
+        'verification_state',
         'is_foreign',
         'country_id',
         'awarding_body_id',
@@ -136,4 +137,3 @@ class Application extends Model
         };
     }
 }
-

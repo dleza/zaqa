@@ -74,6 +74,7 @@ Implement:
 - technical reissue flow
 - user and role administration
 - settings and template management
+- **role-aware admin dashboard** at `/admin/dashboard`: personalized greeting, permission-filtered KPIs, Chart.js trends for today/this week (application timezone), work queues, and quick actions (`AdminDashboardService` + `Admin/Dashboard` Inertia page); see `docs/01_FOUNDATION_AND_ARCHITECTURE.md` (Admin dashboard section)
 
 ### Phase 7 — Reporting, security hardening, and testing
 Implement:

@@ -125,6 +125,12 @@ class RolesAndPermissionsSeeder extends Seeder
             'verification.overdue.view',
         ])->get());
 
+        $auditor = Role::query()->firstOrCreate(['name' => 'Auditor', 'guard_name' => 'web']);
+        $auditor->syncPermissions(Permission::query()->where('guard_name', 'web')->whereIn('name', [
+            'dashboard.view',
+            'admin.audit.view',
+        ])->get());
+
         // Super Admin always has all permissions that exist in the system.
         $superAdmin->syncPermissions(Permission::query()->where('guard_name', 'web')->get());
     }

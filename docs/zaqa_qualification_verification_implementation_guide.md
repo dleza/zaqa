@@ -595,6 +595,11 @@ Browsershot is often better for modern layouts.
 
 ## 14. Admin and Back-Office Features
 
+### Operations dashboard (admin home)
+- The default admin landing (`/admin/dashboard`) is a **role-aware, stats-based** dashboard (not a static welcome page).
+- It shows a **personalized greeting** (time of day + first name), primary role, current date, KPI cards, **Chart.js** summaries for the **current week** (aligned to `config('app.timezone')`), actionable **queues** (application numbers / audit snippets; no extra PII), and **quick actions** gated by the same permissions as navigation.
+- **Super Admin** sees broad system metrics; **Finance Officer** sees finance KPIs and revenue charts; **Verification Level 1 / 2** see assignment and pool-oriented metrics; **Auditor** (optional seeded role) sees audit-focused widgets. Data is **filtered on the server** so users never receive props for sections they cannot authorize.
+
 ### System admin
 - create users
 - assign roles
