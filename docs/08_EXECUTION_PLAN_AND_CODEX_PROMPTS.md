@@ -45,7 +45,7 @@ Implement:
 - payment records
 - online payment adapters
 - manual proof upload
-- finance review queue
+- finance review queue + finance operations pages (`/admin/finance`, `/admin/finance/payment-proofs`, `/admin/finance/payments`)
 - receipt generation
 - applicant portal finance panel
 

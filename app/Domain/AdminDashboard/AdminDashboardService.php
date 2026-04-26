@@ -160,7 +160,7 @@ class AdminDashboardService
             ];
         }
 
-        if ($user->can('admin.finance.view')) {
+        if ($user->can('admin.finance.view') || $user->can('finance.payment_proofs.view') || $user->can('finance.payments.view')) {
             $proofPending = Payment::query()
                 ->where('status', PaymentStatus::AwaitingFinanceReview)
                 ->count();
@@ -620,7 +620,9 @@ class AdminDashboardService
         $push('Assigned to me', '/admin/verification/assigned-to-me', 'user-check', 'verification.level1.process');
         $push('Application outcomes', '/admin/applications', 'clipboard', 'admin.applications.view');
         $push('Track application', '/admin/applications/track', 'search', 'admin.applications.view');
-        $push('Payment proofs', '/finance/payment-proofs', 'banknote', 'admin.finance.view');
+        $push('Finance dashboard', '/admin/finance', 'banknote', 'finance.dashboard.view');
+        $push('Payment proofs', '/admin/finance/payment-proofs', 'banknote', 'finance.payment_proofs.view');
+        $push('Processed payments', '/admin/finance/payments', 'banknote', 'finance.payments.view');
         $push('Manage users', '/admin/users', 'users', 'admin.users.view');
         $push('Applicants', '/admin/applicants', 'user', 'admin.applicants.view');
         $push('Roles & permissions', '/admin/roles', 'shield', 'admin.roles.view');

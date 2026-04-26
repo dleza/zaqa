@@ -199,6 +199,46 @@ Because the requirements mention integration with other systems:
 - export center
 - reconciliation log
 
+## Finance back-office pages (implemented)
+Finance operations are part of the admin portal and are permission-gated. Routes:
+
+- `GET /admin/finance` — Finance dashboard (`finance.dashboard.view`)
+- `GET /admin/finance/payment-proofs` — Payment proof review queue (`finance.payment_proofs.view`)
+- `GET /admin/finance/payment-proofs/{payment}` — Proof detail/review page (`finance.payment_proofs.view`)
+- `POST /admin/finance/payment-proofs/{payment}/approve` — Approve proof (`finance.payment_proofs.approve`)
+- `POST /admin/finance/payment-proofs/{payment}/reject` — Reject proof (`finance.payment_proofs.reject`)
+- `GET /admin/finance/payments` — Processed payments registry with server-side filters (`finance.payments.view`)
+- `GET /admin/finance/payments/{payment}` — Payment detail page (`finance.payments.detail`)
+
+### Proof review model notes
+The system does not use a separate `payment_proofs` table. Manual proof uploads are stored as:
+
+- `payments.proof_document_id` → `qualification_documents.id` (document type `payment_proof`)
+- `payments.status = awaiting_finance_review` after upload
+- review metadata stored on `payments` (`reviewed_by_user_id`, `reviewed_at`, `review_comment`, `rejection_reason`)
+
+### Approval / rejection behavior
+When finance approves a proof:
+- `payments.status` becomes `confirmed` and `confirmed_at` is set
+- the invoice is settled (`invoices.status = paid`, `paid_at` set)
+- the application is marked paid (`applications.paid_at` set) for submission gating
+- lifecycle milestone recorded (`payment.finance_approved`) and audit log recorded (`finance.payment_approved`)
+- applicant notifications are dispatched (email + SMS log)
+
+When finance rejects a proof:
+- `payments.status` becomes `rejected` and `rejected_at` is set (reason required)
+- lifecycle milestone recorded (`payment.finance_rejected`) and audit log recorded (`finance.payment_rejected`)
+- applicant notifications are dispatched (email + SMS log)
+
+Idempotency rules:
+- approving an already-confirmed payment is a no-op (no duplicate confirmation)
+- rejecting a confirmed payment is blocked
+
+### Applicant notifications
+Manual proof outcomes trigger queued notifications:
+- **Approved**: `PaymentProofApproved` → `SendPaymentProofApprovedNotification` → `PaymentProofApprovedMail`
+- **Rejected**: `PaymentProofRejected` → `SendPaymentProofRejectedNotification` → `PaymentProofRejectedMail`
+
 ## Backend services
 Create:
 - `InvoiceService`

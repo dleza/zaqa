@@ -8,9 +8,15 @@ class ReviewPaymentProofRequest extends FormRequest
 {
     public function authorize(): bool
     {
-        // Minimal staff gate: only non-applicant (staff) accounts can review.
-        // (The full RBAC module will tighten this later.)
-        return (bool) $this->user() && ($this->user()->applicant_type?->value ?? null) === null;
+        $user = $this->user();
+        if (! $user) {
+            return false;
+        }
+
+        // Finance actions are RBAC-controlled; controllers also enforce specific action permissions.
+        return $user->can('finance.payment_proofs.review')
+            || $user->can('finance.payment_proofs.approve')
+            || $user->can('finance.payment_proofs.reject');
     }
 
     /**
@@ -24,4 +30,3 @@ class ReviewPaymentProofRequest extends FormRequest
         ];
     }
 }
-

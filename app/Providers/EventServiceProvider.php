@@ -10,6 +10,10 @@ use App\Domain\Audit\Listeners\LogUserLoggedIn;
 use App\Domain\Audit\Listeners\LogUserLoggedOut;
 use App\Domain\Audit\Listeners\LogUserLoginFailed;
 use App\Domain\Audit\Listeners\LogUserRegistered;
+use App\Domain\Finance\Events\PaymentProofApproved;
+use App\Domain\Finance\Events\PaymentProofRejected;
+use App\Domain\Finance\Listeners\SendPaymentProofApprovedNotification;
+use App\Domain\Finance\Listeners\SendPaymentProofRejectedNotification;
 use App\Domain\Identity\Events\ActivationEmailTokenIssued;
 use App\Domain\Identity\Events\PhoneOtpIssued;
 use App\Domain\Identity\Listeners\SendActivationEmail;
@@ -53,6 +57,12 @@ class EventServiceProvider extends ServiceProvider
         ],
         ApplicationSentBackToApplicant::class => [
             SendSendBackNotification::class,
+        ],
+        PaymentProofApproved::class => [
+            SendPaymentProofApprovedNotification::class,
+        ],
+        PaymentProofRejected::class => [
+            SendPaymentProofRejectedNotification::class,
         ],
         Registered::class => [
             LogUserRegistered::class,

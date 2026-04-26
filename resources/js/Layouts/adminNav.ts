@@ -138,14 +138,28 @@ export const adminNavSections: AdminNavSection[] = [
   },
   {
     label: 'Finance',
-    requiredAnyPermissions: ['admin.finance.view'],
+    requiredAnyPermissions: ['finance.dashboard.view', 'finance.payment_proofs.view', 'finance.payments.view'],
     items: [
       {
-        label: 'Payment proof review',
-        href: '/finance/payment-proofs',
+        label: 'Dashboard',
+        href: '/admin/finance',
         icon: Banknote,
-        activeStartsWith: '/finance/payment-proofs',
-        requiredAnyPermissions: ['admin.finance.view'],
+        activeStartsWith: '/admin/finance',
+        requiredAnyPermissions: ['finance.dashboard.view'],
+      },
+      {
+        label: 'Payment proof review',
+        href: '/admin/finance/payment-proofs',
+        icon: Banknote,
+        activeStartsWith: '/admin/finance/payment-proofs',
+        requiredAnyPermissions: ['finance.payment_proofs.view'],
+      },
+      {
+        label: 'Processed payments',
+        href: '/admin/finance/payments',
+        icon: Banknote,
+        activeStartsWith: '/admin/finance/payments',
+        requiredAnyPermissions: ['finance.payments.view'],
       },
     ],
   },

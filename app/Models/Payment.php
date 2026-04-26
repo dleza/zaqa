@@ -41,6 +41,7 @@ class Payment extends Model
         'raw_payload' => 'array',
         'reviewed_at' => 'datetime',
         'initiated_at' => 'datetime',
+        'awaiting_finance_review_at' => 'datetime',
         'confirmed_at' => 'datetime',
         'failed_at' => 'datetime',
         'rejected_at' => 'datetime',
@@ -70,4 +71,3 @@ class Payment extends Model
         return $this->belongsTo(User::class, 'reviewed_by_user_id');
     }
 }
-

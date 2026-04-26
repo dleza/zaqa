@@ -8,6 +8,9 @@ use App\Http\Controllers\Admin\AdminDashboardController;
 use App\Http\Controllers\Admin\AdminRolesController;
 use App\Http\Controllers\Admin\AdminSlaReportController;
 use App\Http\Controllers\Admin\AdminUsersController;
+use App\Http\Controllers\Admin\Finance\AdminFinanceDashboardController;
+use App\Http\Controllers\Admin\Finance\AdminFinancePaymentProofController;
+use App\Http\Controllers\Admin\Finance\AdminFinancePaymentsController;
 use App\Http\Controllers\Admin\Settings\AdminAwardingInstitutionsController;
 use App\Http\Controllers\Admin\Settings\AdminCountriesController;
 use App\Http\Controllers\Admin\Settings\AdminDepartmentsController;
@@ -39,16 +42,17 @@ use App\Http\Controllers\Auth\RegisteredApplicantController;
 use App\Http\Controllers\Finance\FinanceApplicationTrackingController;
 use App\Http\Controllers\Finance\FinancePaymentProofController;
 use App\Http\Middleware\EnsureAccountIsActive;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Route;
 
 // Authenticated users must not be sent to `login` (guest middleware redirects them using
 // RedirectIfAuthenticated, which otherwise matched the old `home` route and caused a redirect loop).
 Route::get('/', function () {
-    if (! auth()->check()) {
+    if (! Auth::check()) {
         return redirect()->route('login');
     }
 
-    $user = auth()->user();
+    $user = Auth::user();
 
     if (! $user->is_active) {
         return redirect()->route('activation.show');
@@ -143,6 +147,39 @@ Route::middleware('auth')->group(function () {
 
     Route::prefix('admin')->name('admin.')->middleware(['auth', 'can:dashboard.view'])->group(function () {
         Route::get('/dashboard', [AdminDashboardController::class, 'index'])->name('dashboard');
+
+        Route::prefix('finance')->name('finance.')->group(function () {
+            Route::get('/', [AdminFinanceDashboardController::class, 'index'])
+                ->middleware('can:finance.dashboard.view')
+                ->name('dashboard');
+
+            Route::get('/payment-proofs', [AdminFinancePaymentProofController::class, 'index'])
+                ->middleware('can:finance.payment_proofs.view')
+                ->name('payment_proofs.index');
+            Route::get('/payment-proofs/{payment}', [AdminFinancePaymentProofController::class, 'show'])
+                ->middleware('can:finance.payment_proofs.view')
+                ->name('payment_proofs.show');
+            Route::post('/payment-proofs/{payment}/approve', [AdminFinancePaymentProofController::class, 'approve'])
+                ->middleware('can:finance.payment_proofs.approve')
+                ->name('payment_proofs.approve');
+            Route::post('/payment-proofs/{payment}/reject', [AdminFinancePaymentProofController::class, 'reject'])
+                ->middleware('can:finance.payment_proofs.reject')
+                ->name('payment_proofs.reject');
+
+            Route::get('/payments', [AdminFinancePaymentsController::class, 'index'])
+                ->middleware('can:finance.payments.view')
+                ->name('payments.index');
+            Route::get('/payments/{payment}', [AdminFinancePaymentsController::class, 'show'])
+                ->middleware('can:finance.payments.detail')
+                ->name('payments.show');
+
+            Route::get('/documents/{document}/preview', [AdminFinancePaymentProofController::class, 'preview'])
+                ->middleware('can:finance.payment_proofs.view')
+                ->name('documents.preview');
+            Route::get('/documents/{document}/download', [AdminFinancePaymentProofController::class, 'download'])
+                ->middleware('can:finance.payment_proofs.view')
+                ->name('documents.download');
+        });
         Route::get('/users', [AdminUsersController::class, 'index'])->middleware('can:admin.users.view')->name('users.index');
         Route::get('/users/create', [AdminUsersController::class, 'create'])
             ->middleware('can:admin.users.create')

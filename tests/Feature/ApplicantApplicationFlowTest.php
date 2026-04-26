@@ -8,8 +8,9 @@ use App\Enums\PaymentStatus;
 use App\Models\ApplicantProfile;
 use App\Models\Application;
 use App\Models\ConsentForm;
-use App\Models\QualificationDocument;
 use App\Models\Payment;
+use App\Models\Qualification;
+use App\Models\QualificationDocument;
 use App\Models\QualificationType;
 use App\Models\User;
 use Database\Seeders\BillingCategoriesSeeder;
@@ -95,7 +96,7 @@ class ApplicantApplicationFlowTest extends TestCase
         $this->assertDatabaseHas('audit_logs', [
             'event_type' => 'qualifications.saved',
             'module' => 'Qualifications',
-            'entity_type' => \App\Models\Qualification::class,
+            'entity_type' => Qualification::class,
             'entity_id' => $application->qualification->id,
         ]);
 
@@ -311,7 +312,7 @@ class ApplicantApplicationFlowTest extends TestCase
         $finance = User::factory()->activated()->create([
             'applicant_type' => null,
         ]);
-        $finance->givePermissionTo('admin.finance.view');
+        $finance->assignRole('Finance Officer');
 
         $this->actingAs($user);
 
@@ -448,4 +449,3 @@ class ApplicantApplicationFlowTest extends TestCase
         ]);
     }
 }
-

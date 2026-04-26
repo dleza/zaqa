@@ -617,6 +617,11 @@ Browsershot is often better for modern layouts.
 - receipt generation
 - export reports
 
+Implemented finance pages (admin portal):
+- `/admin/finance` — Finance dashboard (KPIs + charts)
+- `/admin/finance/payment-proofs` — proof review queue + detail/review actions
+- `/admin/finance/payments` — processed payments registry + detail page with provider references and webhook log summary
+
 ### Verification dashboards
 - applications pool
 - by country/awarding institution categories
