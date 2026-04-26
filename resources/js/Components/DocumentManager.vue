@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { router, useForm } from '@inertiajs/vue3'
 import InputError from '@/Components/InputError.vue'
 import Swal from 'sweetalert2'
@@ -77,12 +77,45 @@ const form = useForm<{ document_type: string; file: File | null }>({
   file: null,
 })
 
+const selectedPreviewUrl = ref<string | null>(null)
+const selectedPreviewKind = ref<'image' | 'pdf' | 'other' | null>(null)
+
+function resetSelectedPreview() {
+  if (selectedPreviewUrl.value) {
+    URL.revokeObjectURL(selectedPreviewUrl.value)
+  }
+  selectedPreviewUrl.value = null
+  selectedPreviewKind.value = null
+}
+
+function computeKind(file: File): 'image' | 'pdf' | 'other' {
+  const t = (file.type ?? '').toLowerCase()
+  if (t.startsWith('image/')) return 'image'
+  if (t === 'application/pdf') return 'pdf'
+  return 'other'
+}
+
+watch(
+  () => form.file,
+  (file) => {
+    resetSelectedPreview()
+    if (!file) return
+    selectedPreviewKind.value = computeKind(file)
+    selectedPreviewUrl.value = URL.createObjectURL(file)
+  },
+)
+
+onBeforeUnmount(() => {
+  resetSelectedPreview()
+})
+
 function openUpload(type: DocType) {
   modalOpen.value = true
   modalType.value = type
   modalMode.value = currentByType.value.get(type) ? 'replace' : 'upload'
   form.clearErrors()
   form.reset('file')
+  resetSelectedPreview()
   form.document_type = type
   window.setTimeout(() => {
     fileInput.value?.focus?.()
@@ -94,6 +127,7 @@ function cancelUpload() {
   modalDropActive.value = false
   form.clearErrors()
   form.reset('file')
+  resetSelectedPreview()
 }
 
 function setFile(file: File | null) {
@@ -127,6 +161,7 @@ function replace(type: DocType) {
   modalMode.value = 'replace'
   form.clearErrors()
   form.reset('file')
+  resetSelectedPreview()
   form.document_type = type
   window.setTimeout(() => {
     fileInput.value?.focus?.()
@@ -321,6 +356,29 @@ async function confirmDelete(doc: DocItem | null) {
               <div v-if="form.file" class="mt-2 w-full rounded-xl border border-border bg-surface px-4 py-3 text-left">
                 <div class="text-xs font-semibold text-text-muted uppercase tracking-wider">Selected file</div>
                 <div class="mt-1 truncate text-sm font-semibold text-text-primary">{{ form.file.name }}</div>
+              </div>
+
+              <div v-if="form.file && selectedPreviewUrl" class="mt-3 w-full overflow-hidden rounded-xl border border-border bg-surface">
+                <div class="border-b border-border bg-surface-muted px-4 py-2 text-xs font-semibold text-text-muted uppercase tracking-wider">
+                  Preview
+                </div>
+                <div class="p-3">
+                  <img
+                    v-if="selectedPreviewKind === 'image'"
+                    :src="selectedPreviewUrl"
+                    alt="Selected document preview"
+                    class="mx-auto max-h-[420px] w-full rounded-lg object-contain"
+                  />
+                  <iframe
+                    v-else-if="selectedPreviewKind === 'pdf'"
+                    :src="selectedPreviewUrl"
+                    title="Selected PDF preview"
+                    class="h-[420px] w-full rounded-lg border border-border"
+                  />
+                  <div v-else class="text-xs text-text-muted">
+                    Preview is available for images and PDFs. This file will still be uploaded.
+                  </div>
+                </div>
               </div>
             </div>
           </div>
