@@ -956,7 +956,7 @@ onBeforeUnmount(() => {
               <select v-model="qualificationDetailsForm.qualification_type_id" class="zaqa-input" :disabled="!!application.invoice">
                 <option value="" disabled>Select a qualification type…</option>
                 <option v-for="t in qualificationTypes" :key="t.id" :value="t.id">
-                  {{ t.level_label }} — {{ t.name }}
+                   {{ t.name }}
                 </option>
               </select>
               <InputError :message="(qualificationDetailsForm.errors as any).qualification_type_id" />
@@ -992,6 +992,12 @@ onBeforeUnmount(() => {
               </div>
             </div>
 
+            <div>
+              <label class="text-sm font-medium">Title of qualification</label>
+              <input v-model="qualificationDetailsForm.title_of_qualification" class="zaqa-input" />
+              <InputError :message="qualificationDetailsForm.errors.title_of_qualification" />
+            </div>
+
             <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div>
                 <label class="text-sm font-medium">Identifier type</label>
@@ -1009,12 +1015,6 @@ onBeforeUnmount(() => {
                 <input v-model="identifierValue" class="zaqa-input" />
                 <InputError :message="qualificationDetailsForm.errors.certificate_number" />
               </div>
-            </div>
-
-            <div>
-              <label class="text-sm font-medium">Title of qualification</label>
-              <input v-model="qualificationDetailsForm.title_of_qualification" class="zaqa-input" />
-              <InputError :message="qualificationDetailsForm.errors.title_of_qualification" />
             </div>
 
             <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
