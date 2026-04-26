@@ -25,9 +25,10 @@ const props = defineProps<{
   applicant: ApplicantPayload
   serviceTypes: Array<{ value: string; label: string }>
   qualificationTypes: Array<any>
-  countries: Array<{ id: number; name: string }>
+  countries: Array<{ id: number; name: string; iso_code?: string | null }>
   awardingInstitutions: Array<{ id: number; name: string }>
   localConsent: { title: string; text: string; version: string }
+  foreignFeePreview?: any | null
 }>()
 
 type StepKey = 'applicant' | 'qualification' | 'subjects' | 'documents' | 'consent' | 'payment' | 'review'
@@ -252,6 +253,27 @@ const transcriptRequired = computed(() => false)
 const selectedQualificationType = computed(() => {
   const id = Number(qualificationDetailsForm.qualification_type_id || 0)
   return (props.qualificationTypes ?? []).find((t: any) => Number(t.id) === id) ?? null
+})
+
+const selectedCountry = computed(() => {
+  const id = Number(qualificationDetailsForm.country_id || 0)
+  return (props.countries ?? []).find((c: any) => Number(c.id) === id) ?? null
+})
+
+const isForeignBySelection = computed(() => {
+  const iso = (selectedCountry.value?.iso_code ?? '').toString().trim().toUpperCase()
+  if (!iso) return (props.application?.is_foreign ?? false) === true
+  return iso !== 'ZMB'
+})
+
+const effectiveBillingCategory = computed(() => {
+  if (isForeignBySelection.value) return props.foreignFeePreview?.billing_category ?? null
+  return selectedQualificationType.value?.billing_category ?? null
+})
+
+const effectiveFeePreview = computed(() => {
+  if (isForeignBySelection.value) return props.foreignFeePreview?.fee_preview ?? null
+  return selectedQualificationType.value?.fee_preview ?? null
 })
 const needsSubjects = computed(() => !!selectedQualificationType.value?.requires_subject_results)
 const qualificationSaved = computed(() => !!props.application.qualification?.id)
@@ -555,7 +577,18 @@ const stepCompletion = computed(() => {
   const applicantType = (props.applicant?.applicant_type ?? '').toString()
   const selfNrc = (props.applicant?.applicant_profile?.nrc_number ?? '').toString().trim()
   const selfPassport = (props.applicant?.applicant_profile?.passport_number ?? '').toString().trim()
-  const identityOk = applicantType === 'individual' ? selfNrc.length > 0 || selfPassport.length > 0 : true
+  const submittingFor = ((props.application?.metadata?.submitting_for ?? 'self') as string).toString()
+  const subject = props.application?.metadata?.verification_subject ?? null
+  const otherFullName = (subject?.full_name ?? '').toString().trim()
+  const otherNrc = (subject?.nrc_number ?? '').toString().trim()
+  const otherPassport = (subject?.passport_number ?? '').toString().trim()
+
+  const identityOk =
+    submittingFor === 'other'
+      ? otherFullName.length > 0 && (otherNrc.length > 0 || otherPassport.length > 0)
+      : applicantType === 'individual'
+        ? selfNrc.length > 0 || selfPassport.length > 0
+        : true
   const applicantOk =
     (props.applicant?.email ?? '').toString().trim().length > 0 &&
     (props.applicant?.phone_primary ?? '').toString().trim().length > 0 &&
@@ -564,6 +597,8 @@ const stepCompletion = computed(() => {
   const q = props.application?.qualification
   const qualificationOk =
     !!q?.id &&
+    (q?.qualification_holder_name ?? '').toString().trim().length > 0 &&
+    (q?.nrc_passport_number ?? '').toString().trim().length > 0 &&
     !!q?.country_id &&
     (!!q?.awarding_institution_id || (q?.awarding_institution_name_other ?? '').toString().trim().length > 0) &&
     (q?.title_of_qualification ?? '').toString().trim().length > 0 &&
@@ -916,6 +951,47 @@ onBeforeUnmount(() => {
               </div>
             </div>
 
+            <div>
+              <label class="text-sm font-medium">Qualification type (ZQF level)</label>
+              <select v-model="qualificationDetailsForm.qualification_type_id" class="zaqa-input" :disabled="!!application.invoice">
+                <option value="" disabled>Select a qualification type…</option>
+                <option v-for="t in qualificationTypes" :key="t.id" :value="t.id">
+                  {{ t.level_label }} — {{ t.name }}
+                </option>
+              </select>
+              <InputError :message="(qualificationDetailsForm.errors as any).qualification_type_id" />
+              <div v-if="application.invoice" class="mt-2 rounded-lg border border-warning/20 bg-warning/10 px-3 py-2 text-xs text-warning">
+                An invoice has been generated. Qualification type is now locked and cannot be changed.
+              </div>
+
+              <div v-if="effectiveBillingCategory" class="mt-2 rounded-lg border border-border bg-surface-muted px-3 py-2 text-xs text-text-muted">
+                  <div class="font-semibold text-text-primary">
+                  {{ effectiveBillingCategory.name }}
+                    <span v-if="isForeignBySelection" class="ml-2 rounded-full bg-brand/10 px-2 py-0.5 text-[11px] font-semibold text-brand">Foreign Qualification</span>
+                  <span v-else class="ml-2 rounded-full bg-emerald-500/10 px-2 py-0.5 text-[11px] font-semibold text-emerald-700">Local Qualification</span>
+                </div>
+                <div class="mt-1">
+                  Estimated processing time:
+                  <span class="font-semibold text-text-primary">
+                      {{ isForeignBySelection ? effectiveBillingCategory.foreign_processing_days : effectiveBillingCategory.local_processing_days }}
+                    working days
+                  </span>
+                </div>
+                <div v-if="effectiveFeePreview" class="mt-1">
+                  Fee:
+                  <span class="font-semibold text-text-primary">
+                    {{
+                      new Intl.NumberFormat(undefined, {
+                        style: 'currency',
+                        currency: effectiveFeePreview.currency || 'ZMW',
+                        }).format(((isForeignBySelection ? effectiveFeePreview.foreign_fee_cents : effectiveFeePreview.local_fee_cents) || 0) / 100)
+                    }}
+                  </span>
+                    <span v-if="isForeignBySelection" class="ml-2 text-[11px] font-semibold text-text-muted">(Foreign Qualifications fee applied)</span>
+                </div>
+              </div>
+            </div>
+
             <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div>
                 <label class="text-sm font-medium">Identifier type</label>
@@ -946,42 +1022,6 @@ onBeforeUnmount(() => {
                 <label class="text-sm font-medium">Award date</label>
                 <input v-model="qualificationDetailsForm.award_date" type="date" class="zaqa-input" />
                 <InputError :message="qualificationDetailsForm.errors.award_date" />
-              </div>
-
-              <div>
-                <label class="text-sm font-medium">Qualification type (ZQF level)</label>
-                <select v-model="qualificationDetailsForm.qualification_type_id" class="zaqa-input" :disabled="!!application.invoice">
-                  <option value="" disabled>Select a qualification type…</option>
-                  <option v-for="t in qualificationTypes" :key="t.id" :value="t.id">
-                    {{ t.level_label }} — {{ t.name }}
-                  </option>
-                </select>
-                <InputError :message="(qualificationDetailsForm.errors as any).qualification_type_id" />
-                <div v-if="application.invoice" class="mt-2 rounded-lg border border-warning/20 bg-warning/10 px-3 py-2 text-xs text-warning">
-                  An invoice has been generated. Qualification type is now locked and cannot be changed.
-                </div>
-
-                <div v-if="selectedQualificationType?.billing_category" class="mt-2 rounded-lg border border-border bg-surface-muted px-3 py-2 text-xs text-text-muted">
-                  <div class="font-semibold text-text-primary">{{ selectedQualificationType.billing_category.name }}</div>
-                  <div class="mt-1">
-                    Estimated processing time:
-                    <span class="font-semibold text-text-primary">
-                      {{ application.is_foreign ? selectedQualificationType.billing_category.foreign_processing_days : selectedQualificationType.billing_category.local_processing_days }}
-                      working days
-                    </span>
-                  </div>
-                  <div v-if="selectedQualificationType.fee_preview" class="mt-1">
-                    Fee:
-                    <span class="font-semibold text-text-primary">
-                      {{
-                        new Intl.NumberFormat(undefined, {
-                          style: 'currency',
-                          currency: selectedQualificationType.fee_preview.currency || 'ZMW',
-                        }).format(((application.is_foreign ? selectedQualificationType.fee_preview.foreign_fee_cents : selectedQualificationType.fee_preview.local_fee_cents) || 0) / 100)
-                      }}
-                    </span>
-                  </div>
-                </div>
               </div>
             </div>
 

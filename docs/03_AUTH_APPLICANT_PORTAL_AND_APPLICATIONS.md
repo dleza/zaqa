@@ -89,6 +89,7 @@ Capture:
 
 Rules:
 - when submitting as self (individual applicants), the authenticated profile must have **either NRC or Passport** before proceeding
+- regardless of self vs on-behalf, the system must persist **qualification holder name** and **NRC/Passport number** onto the qualification/application record so verification staff can see it
 
 ### Step 2 — Applicant details
 Preload from profile but allow controlled updates where appropriate.
@@ -107,6 +108,7 @@ Notes:
 - foreign/local is derived automatically: if **country of award is not Zambia**, the application is treated as **foreign**
 - awarding institution is captured in the applicant wizard step (with **Other** supported)
 - fees and estimated processing time are derived from billing category rules mapped from the selected qualification type
+- **foreign fee override**: if country of award is not Zambia, billing must use the **Foreign Qualifications** fee path (billing category `FOREIGN_QUALIFICATIONS`) across all qualification types
 
 ### Step 4 — Subject results where applicable
 For school certificates and equivalents, capture grades per subject exactly as on transcript or certificate.
@@ -201,6 +203,7 @@ Implementation rules:
 
 ### Application
 - qualification holder name required
+- qualification holder NRC/passport number required
 - title of qualification required
 - date of award required
 - country or awarding institution must be captured correctly

@@ -41,10 +41,55 @@ class FeeResolutionTest extends TestCase
         $this->assertSame('ZMW', $local['currency']);
         $this->assertSame(20000, $local['fee_cents']); // Local Certificates & Diplomas
         $this->assertSame(14, $local['processing_days']);
+        $this->assertSame('LOCAL_CERTS_DIPLOMAS', $local['billing_category']->code);
 
         $foreign = $resolver->resolve($type->id, true, now());
         $this->assertSame(120000, $foreign['fee_cents']); // Foreign fee path
         $this->assertSame(60, $foreign['processing_days']);
+        $this->assertSame('FOREIGN_QUALIFICATIONS', $foreign['billing_category']->code);
+    }
+
+    public function test_invoice_generation_uses_foreign_qualifications_category_when_is_foreign_true(): void
+    {
+        $user = User::factory()->activated()->create(['applicant_type' => null]);
+
+        $application = Application::query()->create([
+            'uuid' => (string) \Illuminate\Support\Str::uuid(),
+            'application_number' => 'ZAQA-TEST-INV-FOR-001',
+            'applicant_user_id' => $user->id,
+            'applicant_type' => 'individual',
+            'service_type' => 'verification',
+            'qualification_category' => 'degree',
+            'current_status' => 'draft',
+            'is_foreign' => true,
+            'metadata' => [],
+        ]);
+
+        $type = QualificationType::query()->where('zqf_level_code', 'L7')->firstOrFail(); // Degree category
+
+        Qualification::query()->create([
+            'application_id' => $application->id,
+            'awarding_institution_name' => 'Test',
+            'qualification_holder_name' => 'John Doe',
+            'country_name_other' => 'United Kingdom',
+            'nrc_passport_number' => 'P12345',
+            'title_of_qualification' => 'Degree',
+            'award_date' => now()->subYear()->toDateString(),
+            'qualification_type' => $type->zqf_level_code,
+            'qualification_type_id' => $type->id,
+            'transcript_required' => false,
+        ]);
+
+        /** @var InvoiceService $invoices */
+        $invoices = $this->app->make(InvoiceService::class);
+        $invoice = $invoices->ensureInvoice($application, $user);
+
+        $this->assertSame(120000, $invoice->amount_cents);
+        $this->assertTrue($invoice->is_foreign_snapshot);
+        $this->assertSame(
+            BillingCategory::query()->where('code', 'FOREIGN_QUALIFICATIONS')->firstOrFail()->id,
+            $invoice->billing_category_id
+        );
     }
 
     public function test_invoice_snapshots_fee_and_remains_historically_correct_after_fee_change(): void

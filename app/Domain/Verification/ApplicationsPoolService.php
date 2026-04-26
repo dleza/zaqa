@@ -59,7 +59,20 @@ class ApplicationsPoolService
             ]);
 
         if ($q !== '') {
-            $query->where('application_number', 'like', '%'.$q.'%');
+            $query->where(function ($inner) use ($q) {
+                $inner->where('application_number', 'like', '%'.$q.'%')
+                    ->orWhere('metadata->verification_subject->full_name', 'like', '%'.$q.'%')
+                    ->orWhere('metadata->verification_subject->nrc_number', 'like', '%'.$q.'%')
+                    ->orWhere('metadata->verification_subject->passport_number', 'like', '%'.$q.'%')
+                    ->orWhereHas('qualification', function ($qq) use ($q) {
+                        $qq->where('qualification_holder_name', 'like', '%'.$q.'%')
+                            ->orWhere('nrc_passport_number', 'like', '%'.$q.'%')
+                            ->orWhere('title_of_qualification', 'like', '%'.$q.'%')
+                            ->orWhere('certificate_number', 'like', '%'.$q.'%')
+                            ->orWhere('student_number', 'like', '%'.$q.'%')
+                            ->orWhere('examination_number', 'like', '%'.$q.'%');
+                    });
+            });
         }
 
         if ($assigned === '1') {

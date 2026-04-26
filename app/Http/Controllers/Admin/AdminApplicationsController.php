@@ -75,6 +75,15 @@ class AdminApplicationsController extends Controller
                         ? [
                             'holder_name' => $a->qualification->qualification_holder_name
                                 ?: ($a->metadata['verification_subject']['full_name'] ?? null),
+                            'holder_nrc_passport' => $a->qualification->nrc_passport_number
+                                ?: (function () use ($a) {
+                                    $subject = $a->metadata['verification_subject'] ?? null;
+                                    if (! is_array($subject)) {
+                                        return null;
+                                    }
+
+                                    return ($subject['nrc_number'] ?? null) ?: ($subject['passport_number'] ?? null);
+                                })(),
                             'title' => $a->qualification->title_of_qualification,
                             'certificate_number' => $a->qualification->certificate_number,
                           ]

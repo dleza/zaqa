@@ -10,6 +10,7 @@ use App\Http\Requests\Applicant\CreateApplicationDraftRequest;
 use App\Http\Requests\Applicant\UpdateApplicationDraftRequest;
 use App\Models\Application;
 use App\Models\AwardingInstitution;
+use App\Models\BillingCategory;
 use App\Models\Country;
 use App\Models\FeeStructure;
 use App\Models\QualificationType;
@@ -62,6 +63,8 @@ class ApplicantApplicationController extends Controller
         $needsSubjects = (bool) ($qualification?->qualificationTypeMaster?->requires_subject_results ?? false);
 
         $qualificationOk = (bool) $qualification
+            && trim((string) ($qualification->qualification_holder_name ?? '')) !== ''
+            && trim((string) ($qualification->nrc_passport_number ?? '')) !== ''
             && (bool) $qualification->country_id
             && ((bool) $qualification->awarding_institution_id || trim((string) $qualification->awarding_institution_name_other) !== '')
             && trim((string) $qualification->title_of_qualification) !== ''
@@ -188,12 +191,32 @@ class ApplicantApplicationController extends Controller
             ->groupBy('billing_category_id')
             ->map(fn ($group) => $group->first());
 
+        $foreignCategory = BillingCategory::query()->where('code', 'FOREIGN_QUALIFICATIONS')->first();
+        $foreignFeePreview = $foreignCategory && $feeStructures->get($foreignCategory->id)
+            ? [
+                'billing_category' => [
+                    'id' => $foreignCategory->id,
+                    'code' => $foreignCategory->code,
+                    'name' => $foreignCategory->name,
+                    'local_processing_days' => $foreignCategory->local_processing_days,
+                    'foreign_processing_days' => $foreignCategory->foreign_processing_days,
+                ],
+                'fee_preview' => [
+                    'currency' => $feeStructures->get($foreignCategory->id)->currency,
+                    'local_fee_cents' => $feeStructures->get($foreignCategory->id)->local_fee_cents,
+                    'foreign_fee_cents' => $feeStructures->get($foreignCategory->id)->foreign_fee_cents,
+                    'effective_from' => optional($feeStructures->get($foreignCategory->id)->effective_from)?->toIso8601String(),
+                ],
+            ]
+            : null;
+
         return Inertia::render('Applicant/Applications/Edit', [
             'application' => $this->applicationPayload($request, $application),
             'serviceTypes' => array_map(
                 fn (ServiceType $type) => ['value' => $type->value, 'label' => ucfirst($type->value)],
                 ServiceType::cases(),
             ),
+            'foreignFeePreview' => $foreignFeePreview,
             'qualificationTypes' => array_map(
                 fn (QualificationType $t) => [
                     'id' => $t->id,

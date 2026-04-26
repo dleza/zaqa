@@ -188,6 +188,29 @@ class ApplicationDraftService
 
         $application->save();
 
+        // Keep the qualification holder details aligned with the selected verification subject (self vs other).
+        // This ensures admin/verification views always have holder identity data available even if the applicant
+        // does not revisit the qualification step after changing the subject selection.
+        if (array_key_exists('submitting_for', $data)) {
+            $application->loadMissing('qualification');
+            if ($application->qualification) {
+                $subject = $application->metadata['verification_subject'] ?? null;
+                $holderName = is_array($subject) ? trim((string) ($subject['full_name'] ?? '')) : '';
+                $holderId = is_array($subject)
+                    ? trim((string) (($subject['nrc_number'] ?? '') ?: ($subject['passport_number'] ?? '')))
+                    : '';
+
+                if ($holderName !== '') {
+                    $application->qualification->qualification_holder_name = $holderName;
+                }
+                if ($holderId !== '') {
+                    $application->qualification->nrc_passport_number = $holderId;
+                }
+
+                $application->qualification->save();
+            }
+        }
+
         $after = [
             'service_type' => $application->service_type?->value ?? (string) $application->service_type,
             'qualification_category' => $application->qualification_category,

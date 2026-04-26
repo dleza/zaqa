@@ -25,6 +25,17 @@ class AdminVerificationAssignedToMeController extends Controller
                 'service_deadline_at' => optional($a->service_deadline_at)?->toIso8601String(),
                 'updated_at' => optional($a->updated_at)?->toIso8601String(),
                 'applicant_name' => $a->metadata['verification_subject']['full_name'] ?? $a->applicant?->name,
+                'holder_name' => $a->qualification?->qualification_holder_name
+                    ?: ($a->metadata['verification_subject']['full_name'] ?? null),
+                'holder_nrc_passport' => $a->qualification?->nrc_passport_number
+                    ?: (function () use ($a) {
+                        $subject = $a->metadata['verification_subject'] ?? null;
+                        if (! is_array($subject)) {
+                            return null;
+                        }
+
+                        return ($subject['nrc_number'] ?? null) ?: ($subject['passport_number'] ?? null);
+                    })(),
             ]),
             'filters' => [
                 'q' => (string) $request->query('q', ''),

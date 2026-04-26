@@ -355,6 +355,7 @@ Fields:
 - qualification_holder_name
 - country_id
 - nrc_passport_number
+- (rule) holder name + NRC/passport are mandatory for final submission; submission must be blocked if missing
 - certificate_number
 - student_exam_number
 - title_of_qualification

@@ -28,6 +28,13 @@ Fees must be configured as first-class entities:
 - billing categories drive processing time and fee logic
 - fee structures are **effective-dated versions** per billing category
 
+Foreign qualification billing rule:
+- **country of award controls locality**:
+  - Zambia => local
+  - non-Zambia => foreign
+- if an application is foreign (`is_foreign = true`), billing must use the **Foreign Qualifications** fee path (billing category `FOREIGN_QUALIFICATIONS`) regardless of the selected qualification type’s normal local billing category mapping
+- invoice generation and the applicant Step 2 fee preview must use the same resolver logic (no mismatches)
+
 Historical correctness rules:
 - do not compute fees only dynamically at render time
 - when an invoice is generated, store:

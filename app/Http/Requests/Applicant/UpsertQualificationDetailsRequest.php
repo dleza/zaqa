@@ -56,7 +56,7 @@ class UpsertQualificationDetailsRequest extends FormRequest
                 $validator->errors()->add('awarding_institution_name_other', 'Please type the awarding institution name.');
             }
 
-            if ($awardingInstitutionId && $awardingInstitutionOther !== '') {
+            if ($awardingInstitutionId && (string) $awardingInstitutionId !== 'other' && $awardingInstitutionOther !== '') {
                 $validator->errors()->add('awarding_institution_name_other', 'Remove the manual institution name when selecting from the list.');
             }
 

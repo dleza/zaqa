@@ -30,9 +30,6 @@ class InvoiceService
     {
         return DB::transaction(function () use ($application, $actor) {
             $existing = Invoice::query()->where('application_id', $application->id)->lockForUpdate()->first();
-            if ($existing) {
-                return $existing;
-            }
 
             $application->loadMissing('qualification');
 
@@ -44,6 +41,99 @@ class InvoiceService
             }
 
             $resolved = $this->fees->resolve($qualificationTypeId, (bool) $application->is_foreign, Carbon::now());
+
+            if ($existing) {
+                // Invoice immutability: do not mutate settled invoices. For unpaid/issued invoices (before payment),
+                // keep Step 2 + Payment consistent by updating the fee snapshot if fee-impacting fields changed.
+                if ($existing->status !== InvoiceStatus::Issued || $existing->paid_at) {
+                    return $existing;
+                }
+
+                $application->loadMissing('payments');
+                $hasConfirmedPayment = $application->payments->contains(fn ($p) => $p->status?->value === 'confirmed');
+                if ($hasConfirmedPayment) {
+                    return $existing;
+                }
+
+                $needsUpdate =
+                    (int) $existing->billing_category_id !== (int) $resolved['billing_category']->id
+                    || (int) $existing->qualification_type_id !== (int) $resolved['qualification_type']->id
+                    || (int) $existing->fee_structure_id !== (int) $resolved['fee_structure']->id
+                    || (bool) $existing->is_foreign_snapshot !== (bool) $application->is_foreign
+                    || (int) $existing->amount_cents !== (int) $resolved['fee_cents']
+                    || (string) $existing->currency !== (string) $resolved['currency'];
+
+                if (! $needsUpdate) {
+                    return $existing;
+                }
+
+                $before = $existing->only([
+                    'billing_category_id',
+                    'qualification_type_id',
+                    'fee_structure_id',
+                    'is_foreign_snapshot',
+                    'processing_days_snapshot',
+                    'fee_label_snapshot',
+                    'currency',
+                    'amount_cents',
+                ]);
+
+                $existing->forceFill([
+                    'billing_category_id' => $resolved['billing_category']->id,
+                    'qualification_type_id' => $resolved['qualification_type']->id,
+                    'fee_structure_id' => $resolved['fee_structure']->id,
+                    'is_foreign_snapshot' => (bool) $application->is_foreign,
+                    'processing_days_snapshot' => $resolved['processing_days'],
+                    'fee_label_snapshot' => $resolved['billing_category']->name,
+                    'currency' => $resolved['currency'],
+                    'amount_cents' => $resolved['fee_cents'],
+                ])->save();
+
+                $after = $existing->only([
+                    'billing_category_id',
+                    'qualification_type_id',
+                    'fee_structure_id',
+                    'is_foreign_snapshot',
+                    'processing_days_snapshot',
+                    'fee_label_snapshot',
+                    'currency',
+                    'amount_cents',
+                ]);
+
+                $this->audit->record(
+                    eventType: 'finance.invoice_updated',
+                    module: 'Finance',
+                    actionName: 'invoice_updated',
+                    message: 'Invoice updated to reflect fee-impacting changes before payment.',
+                    entityType: Invoice::class,
+                    entityId: $existing->id,
+                    beforeState: $before,
+                    afterState: $after,
+                    metadata: [
+                        'application_id' => $application->id,
+                        'invoice_number' => $existing->invoice_number,
+                    ],
+                    actor: $actor,
+                );
+
+                $this->lifecycle->event(
+                    application: $application,
+                    eventType: 'payment',
+                    eventCodeBase: 'payment.invoice_updated',
+                    stage: LifecycleStage::Payment,
+                    title: 'Invoice updated',
+                    description: 'Invoice was updated to reflect the latest qualification and locality details.',
+                    visibility: LifecycleVisibility::Internal,
+                    actor: $actor,
+                    metadata: [
+                        'invoice_id' => $existing->id,
+                        'invoice_number' => $existing->invoice_number,
+                    ],
+                    occurredAt: now(),
+                );
+
+                return $existing;
+            }
 
             $invoice = Invoice::create([
                 'application_id' => $application->id,

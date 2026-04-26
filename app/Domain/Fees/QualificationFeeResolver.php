@@ -2,6 +2,7 @@
 
 namespace App\Domain\Fees;
 
+use App\Models\BillingCategory;
 use App\Models\FeeStructure;
 use App\Models\QualificationType;
 use Illuminate\Support\Carbon;
@@ -27,6 +28,20 @@ class QualificationFeeResolver
             ->findOrFail($qualificationTypeId);
 
         $category = $qualificationType->billingCategory;
+        if (! $category) {
+            throw ValidationException::withMessages([
+                'fee' => 'Qualification type has no billing category configured.',
+            ]);
+        }
+        if ($isForeign) {
+            $foreignCategory = BillingCategory::query()
+                ->where('code', 'FOREIGN_QUALIFICATIONS')
+                ->where('is_active', true)
+                ->first();
+            if ($foreignCategory) {
+                $category = $foreignCategory;
+            }
+        }
 
         $feeStructure = FeeStructure::query()
             ->where('billing_category_id', $category->id)

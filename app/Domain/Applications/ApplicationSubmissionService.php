@@ -46,6 +46,29 @@ class ApplicationSubmissionService
                 ]);
             }
 
+            $holderName = trim((string) ($application->qualification->qualification_holder_name ?? ''));
+            $holderId = trim((string) ($application->qualification->nrc_passport_number ?? ''));
+            if ($holderName === '' || $holderId === '') {
+                $this->audit->record(
+                    eventType: 'applications.submission_blocked_due_to_missing_holder_identity',
+                    module: 'Applications',
+                    actionName: 'submission_blocked',
+                    message: 'Submission blocked: missing qualification holder identity data.',
+                    entityType: Application::class,
+                    entityId: $application->id,
+                    metadata: [
+                        'missing_holder_name' => $holderName === '',
+                        'missing_holder_identity' => $holderId === '',
+                    ],
+                    actor: $actor,
+                );
+
+                throw ValidationException::withMessages([
+                    'qualification_holder_name' => 'Qualification holder name is required before submission.',
+                    'nrc_passport_number' => 'Qualification holder NRC/Passport number is required before submission.',
+                ]);
+            }
+
             $requiredDocumentTypes = $this->requiredDocumentTypes($application);
             $missingDocuments = $this->missingDocumentTypes($application, $requiredDocumentTypes);
 

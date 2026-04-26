@@ -89,6 +89,7 @@ watch([q, status], () => {
               <th class="px-5 py-3 text-left">Status</th>
               <th class="px-5 py-3 text-left">Applicant</th>
               <th class="px-5 py-3 text-left">Holder</th>
+              <th class="px-5 py-3 text-left">NRC / Passport</th>
               <th class="px-5 py-3 text-left">Qualification</th>
               <th class="px-5 py-3 text-left">Certificate/Student/Exam #</th>
               <th class="px-5 py-3 text-left">Invoice</th>
@@ -108,6 +109,10 @@ watch([q, status], () => {
               </td>
               <td class="px-5 py-3 text-text-primary">{{ a.applicant_name ?? '—' }}</td>
               <td class="px-5 py-3 text-text-primary">{{ a.qualification?.holder_name ?? '—' }}</td>
+              <td class="px-5 py-3 text-text-primary">
+                <span v-if="a.qualification?.holder_nrc_passport" class="font-mono">{{ a.qualification.holder_nrc_passport }}</span>
+                <span v-else class="zaqa-badge zaqa-badge-danger">Missing</span>
+              </td>
               <td class="px-5 py-3 text-text-primary">{{ a.qualification?.title ?? '—' }}</td>
               <td class="px-5 py-3 font-mono text-text-primary">{{ a.qualification?.certificate_number ?? '—' }}</td>
               <td class="px-5 py-3 text-text-primary">

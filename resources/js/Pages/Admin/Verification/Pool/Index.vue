@@ -100,7 +100,7 @@ watch([q, assigned, mine, overdue, overdueDays, foreign, awardingInstitutionId, 
           <div class="flex flex-col gap-2 sm:flex-row sm:items-center">
             <div class="relative">
               <Search class="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-text-muted" aria-hidden="true" />
-              <input v-model="q" class="zaqa-input h-10 pl-9" placeholder="Search application number..." />
+              <input v-model="q" class="zaqa-input h-10 pl-9" placeholder="Search application #, holder, NRC/Passport..." />
             </div>
             <input v-model="qualificationQ" type="text" class="zaqa-input h-10" placeholder="Qualification contains..." />
             <input v-model="submittedFrom" type="date" class="zaqa-input h-10" />
@@ -142,6 +142,8 @@ watch([q, assigned, mine, overdue, overdueDays, foreign, awardingInstitutionId, 
             <tr>
               <th class="px-5 py-3 text-left">Application</th>
               <th class="px-5 py-3 text-left">Applicant</th>
+              <th class="px-5 py-3 text-left">Holder</th>
+              <th class="px-5 py-3 text-left">NRC / Passport</th>
               <th class="px-5 py-3 text-left">Qualification</th>
               <th class="px-5 py-3 text-left">SLA deadline</th>
               <th class="px-5 py-3 text-left">Status</th>
@@ -155,6 +157,14 @@ watch([q, assigned, mine, overdue, overdueDays, foreign, awardingInstitutionId, 
                 <div class="mt-0.5 text-xs text-text-muted">{{ a.is_foreign ? 'Foreign' : 'Local' }}</div>
               </td>
               <td class="px-5 py-3 text-text-primary">{{ a.applicant_name ?? '—' }}</td>
+              <td class="px-5 py-3 text-text-primary">
+                <div v-if="a.holder_name" class="font-semibold">{{ a.holder_name }}</div>
+                <span v-else class="zaqa-badge zaqa-badge-danger">Missing</span>
+              </td>
+              <td class="px-5 py-3 text-text-primary">
+                <span v-if="a.holder_nrc_passport" class="font-mono">{{ a.holder_nrc_passport }}</span>
+                <span v-else class="zaqa-badge zaqa-badge-danger">Missing</span>
+              </td>
               <td class="px-5 py-3 text-text-primary">
                 <div class="font-semibold">{{ a.qualification_title ?? '—' }}</div>
                 <div class="mt-0.5 text-xs text-text-muted">

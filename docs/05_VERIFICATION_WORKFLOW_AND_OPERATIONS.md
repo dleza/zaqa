@@ -54,6 +54,8 @@ All verification users may view pool entries, but action permissions differ by r
 Pool columns:
 - application number
 - applicant name
+- holder name
+- holder NRC / passport number
 - applicant type
 - service type
 - qualification title

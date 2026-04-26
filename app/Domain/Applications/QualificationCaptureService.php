@@ -68,7 +68,10 @@ class QualificationCaptureService
 
             $verificationSubject = null;
             $meta = $application->metadata;
-            if ($meta instanceof \ArrayAccess) {
+            if (is_array($meta)) {
+                $candidate = $meta['verification_subject'] ?? null;
+                $verificationSubject = is_array($candidate) ? $candidate : null;
+            } elseif ($meta instanceof \ArrayAccess) {
                 $candidate = $meta['verification_subject'] ?? null;
                 $verificationSubject = is_array($candidate) ? $candidate : null;
             }

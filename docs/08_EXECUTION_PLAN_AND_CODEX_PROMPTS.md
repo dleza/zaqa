@@ -225,6 +225,11 @@ Implement the full verification workflow.
 Requirements:
 - applications pool
 - category views by country of award and awarding institution
+
+Fee locality rule (critical):
+- Zambia country of award => local fee path (qualification type billing category)
+- non-Zambia country of award => **foreign fee override** using billing category `FOREIGN_QUALIFICATIONS` across all qualification types
+- Step 2 fee preview and invoice generation must use the same centralized fee resolver
 - Level 2 assigns to Level 1
 - Level 1 can process only assigned applications
 - Level 1 and Level 2 can send back to applicant with comment

@@ -19,7 +19,7 @@ class RegisterInstitutionRequest extends FormRequest
             'phone_primary' => ['required', 'string', 'max:30', 'unique:users,phone_primary'],
             'phone_secondary' => ['nullable', 'string', 'max:30'],
             'email' => ['required', 'string', 'email:rfc', 'max:255', 'unique:users,email'],
-            'password' => ['required', 'confirmed', Password::min(12)],
+            'password' => ['required', 'confirmed', Password::min(8)],
         ];
     }
 }

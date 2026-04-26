@@ -25,6 +25,17 @@ class AdminVerificationPoolController extends Controller
                 'assigned_level1_user_id' => $a->assigned_level1_user_id,
                 'updated_at' => optional($a->updated_at)?->toIso8601String(),
                 'applicant_name' => $a->metadata['verification_subject']['full_name'] ?? $a->applicant?->name,
+                'holder_name' => $a->qualification?->qualification_holder_name
+                    ?: ($a->metadata['verification_subject']['full_name'] ?? null),
+                'holder_nrc_passport' => $a->qualification?->nrc_passport_number
+                    ?: (function () use ($a) {
+                        $subject = $a->metadata['verification_subject'] ?? null;
+                        if (! is_array($subject)) {
+                            return null;
+                        }
+
+                        return ($subject['nrc_number'] ?? null) ?: ($subject['passport_number'] ?? null);
+                    })(),
                 'qualification_title' => $a->qualification?->title_of_qualification,
                 'country_of_award' => $a->qualification?->country?->name,
                 'awarding_institution' => $a->qualification?->awardingInstitution?->name ?? $a->qualification?->awarding_institution_name_other,

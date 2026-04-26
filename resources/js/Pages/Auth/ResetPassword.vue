@@ -2,6 +2,8 @@
 import { Link, useForm } from '@inertiajs/vue3'
 import GuestLayout from '@/Layouts/GuestLayout.vue'
 import InputError from '@/Components/InputError.vue'
+import { Eye, EyeOff } from 'lucide-vue-next'
+import { ref } from 'vue'
 
 const props = defineProps<{
   token: string
@@ -14,6 +16,9 @@ const form = useForm({
   password: '',
   password_confirmation: '',
 })
+
+const showPassword = ref(false)
+const showPasswordConfirmation = ref(false)
 
 function submit() {
   form.post('/reset-password')
@@ -38,23 +43,45 @@ function submit() {
 
       <div>
         <label class="text-sm font-medium">New password</label>
-        <input
-          v-model="form.password"
-          type="password"
-          class="zaqa-input"
-          autocomplete="new-password"
-        />
+        <div class="relative">
+          <input
+            v-model="form.password"
+            :type="showPassword ? 'text' : 'password'"
+            class="zaqa-input pr-11"
+            autocomplete="new-password"
+          />
+          <button
+            type="button"
+            class="absolute inset-y-0 right-0 inline-flex items-center px-3 text-text-muted hover:text-text-primary"
+            :aria-label="showPassword ? 'Hide password' : 'Show password'"
+            @click="showPassword = !showPassword"
+          >
+            <EyeOff v-if="showPassword" class="h-4 w-4" aria-hidden="true" />
+            <Eye v-else class="h-4 w-4" aria-hidden="true" />
+          </button>
+        </div>
         <InputError :message="form.errors.password" />
       </div>
 
       <div>
         <label class="text-sm font-medium">Confirm new password</label>
-        <input
-          v-model="form.password_confirmation"
-          type="password"
-          class="zaqa-input"
-          autocomplete="new-password"
-        />
+        <div class="relative">
+          <input
+            v-model="form.password_confirmation"
+            :type="showPasswordConfirmation ? 'text' : 'password'"
+            class="zaqa-input pr-11"
+            autocomplete="new-password"
+          />
+          <button
+            type="button"
+            class="absolute inset-y-0 right-0 inline-flex items-center px-3 text-text-muted hover:text-text-primary"
+            :aria-label="showPasswordConfirmation ? 'Hide password confirmation' : 'Show password confirmation'"
+            @click="showPasswordConfirmation = !showPasswordConfirmation"
+          >
+            <EyeOff v-if="showPasswordConfirmation" class="h-4 w-4" aria-hidden="true" />
+            <Eye v-else class="h-4 w-4" aria-hidden="true" />
+          </button>
+        </div>
       </div>
 
       <button
