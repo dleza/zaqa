@@ -9,6 +9,7 @@ enum DocumentType: string
     case CertificateCopy = 'certificate_copy';
     case Transcript = 'transcript';
     case ConsentFormSigned = 'consent_form_signed';
+    case ZaqaConsentFormSigned = 'zaqa_consent_form_signed';
     case PaymentProof = 'payment_proof';
     case GeneratedReceipt = 'generated_receipt';
     case GeneratedCertificate = 'generated_certificate';

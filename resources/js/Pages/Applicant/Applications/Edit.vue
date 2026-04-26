@@ -248,8 +248,8 @@ const qualificationDetailsForm = useForm({
   notes: props.application.qualification?.notes ?? '',
 })
 
-// Transcript upload is optional in the applicant wizard UI.
-const transcriptRequired = computed(() => false)
+// Transcript is mandatory for foreign qualifications.
+const transcriptRequired = computed(() => (props.application?.is_foreign ?? false) === true)
 const selectedQualificationType = computed(() => {
   const id = Number(qualificationDetailsForm.qualification_type_id || 0)
   return (props.qualificationTypes ?? []).find((t: any) => Number(t.id) === id) ?? null
@@ -408,9 +408,24 @@ function acceptLocalConsent() {
   })
 }
 
-const foreignConsentForm = useForm<{ file: File | null; source_awarding_institution_name: string }>({
+const foreignConsentForm = useForm<{
+  file: File | null
+  zaqa_file: File | null
+  source_awarding_institution_name: string
+}>({
   file: null,
+  zaqa_file: null,
   source_awarding_institution_name: props.application.consent_form?.source_awarding_institution_name ?? '',
+})
+
+const awardingInstitutionLabel = computed(() => {
+  const q = props.application?.qualification ?? null
+  const fromRelation = (q?.awarding_institution?.name ?? '').toString().trim()
+  if (fromRelation) return fromRelation
+  const other = (q?.awarding_institution_name_other ?? '').toString().trim()
+  if (other) return other
+  const legacy = (q?.awarding_institution_name ?? '').toString().trim()
+  return legacy || '—'
 })
 
 function onForeignFileChange(event: Event) {
@@ -418,13 +433,20 @@ function onForeignFileChange(event: Event) {
   foreignConsentForm.file = target.files && target.files.length > 0 ? target.files[0] : null
 }
 
+function onZaqaFileChange(event: Event) {
+  const target = event.target as HTMLInputElement
+  foreignConsentForm.zaqa_file = target.files && target.files.length > 0 ? target.files[0] : null
+}
+
 function uploadForeignConsent() {
   setSaving('Uploading consent…')
+  // Source awarding institution is already captured on Step 2.
+  foreignConsentForm.source_awarding_institution_name = awardingInstitutionLabel.value !== '—' ? awardingInstitutionLabel.value : ''
   foreignConsentForm.post(`/applicant/applications/${props.application.id}/consent/foreign-upload`, {
     preserveScroll: true,
     forceFormData: true,
     onSuccess: () => {
-      foreignConsentForm.reset('file')
+      foreignConsentForm.reset('file', 'zaqa_file')
       setSaved('Consent uploaded.')
       router.reload({ only: ['application'] })
     },
@@ -612,7 +634,10 @@ const stepCompletion = computed(() => {
 
   const subjectsOk = !needsSubjects.value ? true : (q?.subject_results ?? []).length > 0
 
-  const documentsOk = hasCurrentDocumentType('nrc_copy') && hasCurrentDocumentType('certificate_copy')
+  const documentsOk =
+    hasCurrentDocumentType('nrc_copy') &&
+    hasCurrentDocumentType('certificate_copy') &&
+    (props.application?.is_foreign ? hasCurrentDocumentType('transcript') : true)
 
   const consentOk = props.application?.is_foreign
     ? !!props.application?.consent_form?.uploaded_document_id
@@ -1118,26 +1143,60 @@ onBeforeUnmount(() => {
           <h2 class="text-sm font-semibold text-text-primary">Consent</h2>
 
           <div v-if="application.is_foreign" class="mt-3">
-            <p class="text-sm text-text-muted">Foreign applications may require a signed consent form. Upload it here if applicable.</p>
+            <p class="text-sm text-text-muted">
+              Foreign applications require two consent uploads:
+              <span class="font-semibold text-text-primary">Awarding Institution consent</span> and
+              <span class="font-semibold text-text-primary">ZAQA consent</span>.
+            </p>
 
-            <div v-if="application.consent_form?.uploaded_document_id" class="mt-3 rounded-lg border border-success/20 bg-success/10 px-4 py-3 text-sm text-success">
-              Signed consent form uploaded.
+            <div class="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <div
+                class="rounded-lg border px-4 py-3 text-sm"
+                :class="application.consent_form?.uploaded_document_id ? 'border-success/20 bg-success/10 text-success' : 'border-warning/20 bg-warning/10 text-warning'"
+              >
+                <div class="font-semibold">Awarding Institution consent</div>
+                <div class="mt-1 text-xs opacity-90">
+                  {{ application.consent_form?.uploaded_document_id ? 'Uploaded' : 'Missing' }}
+                </div>
+              </div>
+              <div
+                class="rounded-lg border px-4 py-3 text-sm"
+                :class="application.consent_form?.zaqa_uploaded_document_id ? 'border-success/20 bg-success/10 text-success' : 'border-warning/20 bg-warning/10 text-warning'"
+              >
+                <div class="font-semibold">ZAQA consent</div>
+                <div class="mt-1 text-xs opacity-90">
+                  {{ application.consent_form?.zaqa_uploaded_document_id ? 'Uploaded' : 'Missing' }}
+                </div>
+              </div>
             </div>
 
             <div class="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div class="sm:col-span-2">
-                <label class="text-sm font-medium">Awarding institution name (optional)</label>
-                <input v-model="foreignConsentForm.source_awarding_institution_name" class="zaqa-input" />
-                <InputError :message="foreignConsentForm.errors.source_awarding_institution_name" />
+                <div class="text-xs font-semibold uppercase tracking-wider text-text-muted">Awarding institution</div>
+                <div class="mt-2 rounded-xl border border-border bg-surface-muted px-4 py-3 text-sm font-semibold text-text-primary">
+                  {{ awardingInstitutionLabel }}
+                </div>
+                <div class="mt-1 text-xs text-text-muted">This is pulled from Step 2 and saved with your application.</div>
               </div>
 
               <div class="sm:col-span-2">
-                <label class="text-sm font-medium">Signed consent form file</label>
+                <label class="text-sm font-medium">Awarding Institution signed consent form</label>
                 <input type="file" accept="application/pdf,image/*" class="zaqa-input" @change="onForeignFileChange" />
                 <InputError :message="foreignConsentForm.errors.file" />
               </div>
 
-              <button type="button" class="zaqa-btn zaqa-btn-primary sm:col-span-2" :disabled="foreignConsentForm.processing || !foreignConsentForm.file" @click="uploadForeignConsent">
+              <div class="sm:col-span-2">
+                <label class="text-sm font-medium">ZAQA signed consent form</label>
+                <input type="file" accept="application/pdf,image/*" class="zaqa-input" @change="onZaqaFileChange" />
+                <InputError :message="(foreignConsentForm.errors as any).zaqa_file" />
+              </div>
+
+              <button
+                type="button"
+                class="zaqa-btn zaqa-btn-primary sm:col-span-2"
+                :disabled="foreignConsentForm.processing || !foreignConsentForm.file || !foreignConsentForm.zaqa_file"
+                @click="uploadForeignConsent"
+              >
                 Upload signed consent
               </button>
             </div>

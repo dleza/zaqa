@@ -207,7 +207,9 @@ class ApplicationSubmissionService
             DocumentType::CertificateCopy,
         ];
 
-        // Transcript is optional and should not gate final submission.
+        if ((bool) $application->is_foreign) {
+            $required[] = DocumentType::Transcript;
+        }
 
         if ((bool) $application->is_foreign) {
             $required[] = DocumentType::ConsentFormSigned;
@@ -247,9 +249,13 @@ class ApplicationSubmissionService
     private function assertConsentSatisfied(Application $application): void
     {
         if ((bool) $application->is_foreign) {
-            if (! $application->consentForm || ! $application->consentForm->uploaded_document_id) {
+            if (
+                ! $application->consentForm
+                || ! $application->consentForm->uploaded_document_id
+                || ! $application->consentForm->zaqa_uploaded_document_id
+            ) {
                 throw ValidationException::withMessages([
-                    'consent' => 'A signed foreign consent form upload is required before submission.',
+                    'consent' => 'Foreign applications require both the awarding institution consent and the ZAQA consent uploads before submission.',
                 ]);
             }
 

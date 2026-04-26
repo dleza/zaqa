@@ -25,7 +25,11 @@ const props = defineProps<{
   transcriptRequired: boolean
 }>()
 
-const requiredTypes = computed<DocType[]>(() => ['nrc_copy', 'certificate_copy'])
+const requiredTypes = computed<DocType[]>(() => {
+  const base: DocType[] = ['nrc_copy', 'certificate_copy']
+  if (props.transcriptRequired) base.push('transcript')
+  return base
+})
 const allTypes = computed<DocType[]>(() => ['nrc_copy', 'certificate_copy', 'transcript'])
 
 function typeMeta(type: DocType) {
@@ -45,8 +49,10 @@ function typeMeta(type: DocType) {
     }
   return {
     label: 'Transcript',
-    helper: 'Transcript is optional. Upload it if you have it available.',
-    required: false,
+    helper: props.transcriptRequired
+      ? 'Transcript is required for foreign qualifications.'
+      : 'Transcript is optional. Upload it if you have it available.',
+    required: props.transcriptRequired,
     icon: FileText,
   }
 }

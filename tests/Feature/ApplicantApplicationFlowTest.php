@@ -265,6 +265,7 @@ class ApplicantApplicationFlowTest extends TestCase
 
         $this->post("/applicant/applications/{$application->id}/consent/foreign-upload", [
             'file' => UploadedFile::fake()->create('consent.pdf', 80, 'application/pdf'),
+            'zaqa_file' => UploadedFile::fake()->create('zaqa-consent.pdf', 80, 'application/pdf'),
             'source_awarding_institution_name' => 'Foreign University',
         ])->assertRedirect();
 
@@ -275,6 +276,7 @@ class ApplicantApplicationFlowTest extends TestCase
 
         $consent = ConsentForm::query()->where('application_id', $application->id)->firstOrFail();
         $this->assertNotNull($consent->uploaded_document_id);
+        $this->assertNotNull($consent->zaqa_uploaded_document_id);
 
         $failedPaymentSubmit = $this->post("/applicant/applications/{$application->id}/submit");
         $failedPaymentSubmit->assertSessionHasErrors(['payment']);

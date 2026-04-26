@@ -15,6 +15,7 @@ class ConsentForm extends Model
         'agreed_by_name',
         'agreed_at',
         'uploaded_document_id',
+        'zaqa_uploaded_document_id',
         'source_awarding_body_name',
     ];
 
@@ -33,6 +34,11 @@ class ConsentForm extends Model
     public function uploadedDocument(): BelongsTo
     {
         return $this->belongsTo(QualificationDocument::class, 'uploaded_document_id');
+    }
+
+    public function zaqaUploadedDocument(): BelongsTo
+    {
+        return $this->belongsTo(QualificationDocument::class, 'zaqa_uploaded_document_id');
     }
 }
 

@@ -98,11 +98,15 @@ class ApplicantConsentController extends Controller
         // For foreign applications, this upload may be required by business rules.
 
         $file = $request->file('file');
+        $zaqaFile = $request->file('zaqa_file');
 
         $before = $application->consentForm?->toArray();
 
-        DB::transaction(function () use ($request, $application, $documents, $audit, $lifecycle, $file, $before) {
-            $document = $documents->upload($application, DocumentType::ConsentFormSigned, $file, $request->user());
+        DB::transaction(function () use ($request, $application, $documents, $audit, $lifecycle, $file, $zaqaFile, $before) {
+            $awardingInstitutionDocument = $documents->upload($application, DocumentType::ConsentFormSigned, $file, $request->user());
+            $zaqaDocument = $zaqaFile
+                ? $documents->upload($application, DocumentType::ZaqaConsentFormSigned, $zaqaFile, $request->user())
+                : null;
 
             $consent = ConsentForm::updateOrCreate(
                 ['application_id' => $application->id],
@@ -111,7 +115,8 @@ class ApplicantConsentController extends Controller
                     'embedded_text_version' => (bool) $application->is_foreign ? null : (string) config('consent.local.version'),
                     'agreed_by_name' => (string) ($application->consentForm?->agreed_by_name ?: $request->user()->name),
                     'agreed_at' => $application->consentForm?->agreed_at ?: now(),
-                    'uploaded_document_id' => $document->id,
+                    'uploaded_document_id' => $awardingInstitutionDocument->id,
+                    'zaqa_uploaded_document_id' => $zaqaDocument?->id,
                     'source_awarding_body_name' => $request->validated()['source_awarding_institution_name']
                         ?? $request->validated()['source_awarding_body_name']
                         ?? null,
@@ -129,7 +134,8 @@ class ApplicantConsentController extends Controller
                 afterState: $consent->toArray(),
                 metadata: [
                     'application_id' => $application->id,
-                    'document_id' => $document->id,
+                    'document_id' => $awardingInstitutionDocument->id,
+                    'zaqa_document_id' => $zaqaDocument?->id,
                 ],
                 actor: $request->user(),
             );
@@ -147,6 +153,7 @@ class ApplicantConsentController extends Controller
                 actor: $request->user(),
                 metadata: [
                     'document_id' => $consent->uploaded_document_id,
+                    'zaqa_document_id' => $consent->zaqa_uploaded_document_id,
                 ],
                 occurredAt: now(),
             );

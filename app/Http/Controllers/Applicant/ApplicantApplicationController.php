@@ -81,10 +81,11 @@ class ApplicantApplicationController extends Controller
 
         $hasNrc = $application->documents->contains(fn ($d) => ($d->document_type?->value ?? (string) $d->document_type) === 'nrc_copy' && (bool) $d->is_current_version);
         $hasCert = $application->documents->contains(fn ($d) => ($d->document_type?->value ?? (string) $d->document_type) === 'certificate_copy' && (bool) $d->is_current_version);
-        $documentsOk = $hasNrc && $hasCert;
+        $hasTranscript = $application->documents->contains(fn ($d) => ($d->document_type?->value ?? (string) $d->document_type) === 'transcript' && (bool) $d->is_current_version);
+        $documentsOk = $hasNrc && $hasCert && ((bool) $application->is_foreign ? $hasTranscript : true);
 
         $consentOk = (bool) $application->is_foreign
-            ? (bool) ($application->consentForm?->uploaded_document_id)
+            ? (bool) ($application->consentForm?->uploaded_document_id) && (bool) ($application->consentForm?->zaqa_uploaded_document_id)
             : (bool) ($application->consentForm?->agreed_at);
 
         $steps = [
