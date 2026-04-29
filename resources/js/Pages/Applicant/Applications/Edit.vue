@@ -675,6 +675,15 @@ const stepCompletion = computed(() => {
   } as Record<StepKey, boolean>
 })
 
+const wizardCompletion = computed(() => {
+  const stepKeys = steps.value.map((s) => s.key as StepKey)
+  const total = stepKeys.length
+  const completed = stepKeys.filter((k) => stepCompletion.value[k]).length
+  const percent = total > 0 ? Math.min(100, Math.max(0, Math.round((completed / total) * 100))) : 0
+
+  return { total, completed, percent }
+})
+
 const disabledStepKeys = computed<StepKey[]>(() => {
   const keys = steps.value.map((s) => s.key) as StepKey[]
   // find first incomplete step; allow up to that step (inclusive)
@@ -792,6 +801,30 @@ onBeforeUnmount(() => {
 
         <div class="mt-4">
           <WizardStepper :steps="steps" :active-key="activeStep" :on-step-click="requestStepChange" :disabled-keys="disabledStepKeys" />
+        </div>
+
+        <div class="mt-3 rounded-xl border border-border bg-surface px-4 py-3">
+          <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <div class="min-w-0">
+              <div class="text-[11px] font-semibold uppercase tracking-wider text-text-muted">Completion</div>
+              <div class="mt-0.5 truncate text-sm font-semibold text-text-primary">
+                {{ wizardCompletion.completed }} / {{ wizardCompletion.total }} steps • {{ wizardCompletion.percent }}%
+              </div>
+            </div>
+            <span v-if="wizardCompletion.percent === 100" class="zaqa-badge zaqa-badge-success">Ready to submit</span>
+          </div>
+
+          <div class="mt-3 h-2.5 w-full overflow-hidden rounded-full border border-border bg-surface-muted">
+            <div
+              class="h-full rounded-full bg-brand bg-gradient-to-r from-brand to-brand/60 shadow-sm transition-[width] duration-500 ease-out"
+              :style="{ width: `${wizardCompletion.percent}%` }"
+              role="progressbar"
+              :aria-valuenow="wizardCompletion.percent"
+              aria-valuemin="0"
+              aria-valuemax="100"
+              aria-label="Application completion"
+            />
+          </div>
         </div>
       </div>
     </template>

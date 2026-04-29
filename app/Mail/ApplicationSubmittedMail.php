@@ -15,6 +15,7 @@ class ApplicationSubmittedMail extends Mailable
     public function __construct(
         public readonly string $recipientName,
         public readonly string $applicationNumber,
+        public readonly string $trackingUrl,
         public readonly bool $isResubmission,
     ) {
     }
@@ -33,9 +34,9 @@ class ApplicationSubmittedMail extends Mailable
             with: [
                 'recipientName' => $this->recipientName,
                 'applicationNumber' => $this->applicationNumber,
+                'trackingUrl' => $this->trackingUrl,
                 'isResubmission' => $this->isResubmission,
             ],
         );
     }
 }
-

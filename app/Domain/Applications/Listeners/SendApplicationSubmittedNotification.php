@@ -19,6 +19,7 @@ class SendApplicationSubmittedNotification implements ShouldQueue
     {
         $user = $event->actor;
         $application = $event->application;
+        $trackingUrl = route('applicant.applications.track', ['application' => $application->id]);
 
         $subject = $event->isResubmission
             ? 'ZAQA application resubmitted'
@@ -38,6 +39,7 @@ class SendApplicationSubmittedNotification implements ShouldQueue
             Mail::to($user->email)->send(new ApplicationSubmittedMail(
                 recipientName: $user->name,
                 applicationNumber: $application->application_number,
+                trackingUrl: $trackingUrl,
                 isResubmission: $event->isResubmission,
             ));
 
@@ -86,4 +88,3 @@ class SendApplicationSubmittedNotification implements ShouldQueue
         }
     }
 }
-
