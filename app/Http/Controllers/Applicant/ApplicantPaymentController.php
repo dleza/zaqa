@@ -8,13 +8,17 @@ use App\Domain\Payments\PaymentService;
 use App\Enums\DocumentType;
 use App\Enums\PaymentMethod;
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Applicant\InitiateMobileMoneyApplicationPaymentRequest;
 use App\Http\Requests\Applicant\InitiateMobileMoneyPaymentRequest;
 use App\Http\Requests\Applicant\SelectPaymentMethodRequest;
+use App\Http\Requests\Applicant\UploadApplicationPaymentProofRequest;
 use App\Http\Requests\Applicant\UploadPaymentProofRequest;
 use App\Models\Application;
 use App\Models\Payment;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Inertia\Inertia;
+use Symfony\Component\HttpFoundation\Response;
 
 class ApplicantPaymentController extends Controller
 {
@@ -32,21 +36,64 @@ class ApplicantPaymentController extends Controller
         $this->authorize('update', $application);
 
         $method = PaymentMethod::from((string) $request->validated()['method']);
-        $payments->selectMethod($application, $method, $request->user());
+        $payments->rememberSelectedMethod($application, $method, $request->user());
 
         return back()->with('success', 'Payment method selected.');
     }
 
-    public function initiateCard(Request $request, Payment $payment, PaymentService $payments): RedirectResponse
+    public function initiateCard(Request $request, Payment $payment, PaymentService $payments): Response
     {
         $this->authorize('update', $payment->application);
 
         $result = $payments->initiateOnline($payment, [], $request->user());
         $redirectUrl = $result['redirect_url'] ?? null;
 
-        return $redirectUrl
-            ? redirect()->away($redirectUrl)
-            : back()->with('error', 'Could not initiate card payment.');
+        if (! $redirectUrl) {
+            return back()->with('error', 'Could not initiate card payment.');
+        }
+
+        if ($request->inertia()) {
+            return Inertia::location($redirectUrl);
+        }
+
+        return redirect()->away($redirectUrl);
+    }
+
+    public function initiateCardForApplication(Request $request, Application $application, PaymentService $payments): Response
+    {
+        $this->authorize('update', $application);
+
+        $payment = $payments->createDraftPayment($application, PaymentMethod::Card, $request->user());
+
+        $result = $payments->initiateOnline($payment, [], $request->user());
+        $redirectUrl = $result['redirect_url'] ?? null;
+        if (! $redirectUrl) {
+            return back()->with('error', 'Could not initiate card payment.');
+        }
+
+        if ($request->inertia()) {
+            return Inertia::location($redirectUrl);
+        }
+
+        return redirect()->away($redirectUrl);
+    }
+
+    public function initiateMobileMoneyForApplication(
+        InitiateMobileMoneyApplicationPaymentRequest $request,
+        Application $application,
+        PaymentService $payments,
+    ): RedirectResponse {
+        $this->authorize('update', $application);
+
+        $payment = $payments->createDraftPayment($application, PaymentMethod::MobileMoney, $request->user());
+
+        $payload = [
+            'mobile_number' => (string) $request->validated()['mobile_number'],
+        ];
+
+        $payments->initiateOnline($payment, $payload, $request->user());
+
+        return back()->with('success', 'Mobile Money payment initiated. Please approve the prompt on your phone.');
     }
 
     public function initiateMobileMoney(InitiateMobileMoneyPaymentRequest $request, Payment $payment, PaymentService $payments): RedirectResponse
@@ -60,6 +107,24 @@ class ApplicantPaymentController extends Controller
         $payments->initiateOnline($payment, $payload, $request->user());
 
         return back()->with('success', 'Mobile Money payment initiated. Please approve the prompt on your phone.');
+    }
+
+    public function uploadProofForApplication(
+        UploadApplicationPaymentProofRequest $request,
+        Application $application,
+        ApplicantDocumentService $documents,
+        PaymentService $payments,
+    ): RedirectResponse {
+        $this->authorize('update', $application);
+
+        $payment = $payments->paymentForManualProofUpload($application, $request->user());
+
+        $file = $request->file('file');
+        $document = $documents->upload($application, DocumentType::PaymentProof, $file, $request->user());
+
+        $payments->attachProof($payment, $document, $request->user());
+
+        return back()->with('success', 'Proof of payment uploaded. Awaiting finance review.');
     }
 
     public function uploadProof(UploadPaymentProofRequest $request, Payment $payment, ApplicantDocumentService $documents, PaymentService $payments): RedirectResponse
@@ -108,4 +173,3 @@ class ApplicantPaymentController extends Controller
             ->with('success', $status === 'success' ? 'Payment confirmed.' : 'Payment failed.');
     }
 }
-

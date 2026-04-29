@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Applicant;
 
 use App\Domain\Applications\ApplicationDraftService;
 use App\Domain\Applications\ApplicationSubmissionService;
+use App\Enums\PaymentStatus;
 use App\Enums\ServiceType;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Applicant\CreateApplicationDraftRequest;
@@ -316,11 +317,11 @@ class ApplicantApplicationController extends Controller
                 'changed_at' => optional($history->changed_at)?->toIso8601String(),
             ]);
 
-        $latestPayment = $application->payments
-            ->sortByDesc('id')
-            ->first();
+        $paymentsSorted = $application->payments->sortByDesc('id');
+        $displayPayment = $paymentsSorted->first(fn ($p) => $p->status === PaymentStatus::Confirmed)
+            ?? $paymentsSorted->first();
 
-        $paymentProof = $latestPayment?->proofDocument;
+        $paymentProof = $displayPayment?->proofDocument;
 
         return [
             'id' => $application->id,
@@ -346,20 +347,20 @@ class ApplicantApplicationController extends Controller
                     'paid_at' => optional($application->invoice->paid_at)?->toIso8601String(),
                 ]
                 : null,
-            'payment' => $latestPayment
+            'payment' => $displayPayment
                 ? [
-                    'id' => $latestPayment->id,
-                    'method' => $latestPayment->method?->value ?? (string) $latestPayment->method,
-                    'status' => $latestPayment->status?->value ?? (string) $latestPayment->status,
-                    'currency' => $latestPayment->currency,
-                    'amount_cents' => $latestPayment->amount_cents,
-                    'provider' => $latestPayment->provider,
-                    'provider_reference' => $latestPayment->provider_reference,
-                    'mobile_number' => $latestPayment->mobile_number,
-                    'proof_document_id' => $latestPayment->proof_document_id,
-                    'rejection_reason' => $latestPayment->rejection_reason,
-                    'review_comment' => $latestPayment->review_comment,
-                    'confirmed_at' => optional($latestPayment->confirmed_at)?->toIso8601String(),
+                    'id' => $displayPayment->id,
+                    'method' => $displayPayment->method?->value ?? (string) $displayPayment->method,
+                    'status' => $displayPayment->status?->value ?? (string) $displayPayment->status,
+                    'currency' => $displayPayment->currency,
+                    'amount_cents' => $displayPayment->amount_cents,
+                    'provider' => $displayPayment->provider,
+                    'provider_reference' => $displayPayment->provider_reference,
+                    'mobile_number' => $displayPayment->mobile_number,
+                    'proof_document_id' => $displayPayment->proof_document_id,
+                    'rejection_reason' => $displayPayment->rejection_reason,
+                    'review_comment' => $displayPayment->review_comment,
+                    'confirmed_at' => optional($displayPayment->confirmed_at)?->toIso8601String(),
                     'proof_document' => $paymentProof
                         ? [
                             'id' => $paymentProof->id,
@@ -438,6 +439,7 @@ class ApplicantApplicationController extends Controller
                     'agreed_by_name' => $application->consentForm->agreed_by_name,
                     'agreed_at' => optional($application->consentForm->agreed_at)?->toIso8601String(),
                     'uploaded_document_id' => $application->consentForm->uploaded_document_id,
+                    'zaqa_uploaded_document_id' => $application->consentForm->zaqa_uploaded_document_id,
                     'source_awarding_institution_name' => $application->consentForm->source_awarding_body_name,
                     // Back-compat
                     'source_awarding_body_name' => $application->consentForm->source_awarding_body_name,

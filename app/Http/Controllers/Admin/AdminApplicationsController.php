@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Models\Application;
 use App\Enums\ApplicationStatus;
+use App\Enums\PaymentStatus;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -62,7 +63,9 @@ class AdminApplicationsController extends Controller
             ->paginate(25)
             ->withQueryString()
             ->through(function (Application $a) {
-                $latestPayment = $a->payments->sortByDesc('id')->first();
+                $paymentsSorted = $a->payments->sortByDesc('id');
+                $displayPayment = $paymentsSorted->first(fn ($p) => $p->status === PaymentStatus::Confirmed)
+                    ?? $paymentsSorted->first();
 
                 return [
                     'id' => $a->id,
@@ -96,12 +99,12 @@ class AdminApplicationsController extends Controller
                             'status' => $a->invoice->status?->value ?? (string) $a->invoice->status,
                           ]
                         : null,
-                    'latest_payment' => $latestPayment
+                    'latest_payment' => $displayPayment
                         ? [
-                            'method' => $latestPayment->method?->value ?? (string) $latestPayment->method,
-                            'status' => $latestPayment->status?->value ?? (string) $latestPayment->status,
-                            'currency' => $latestPayment->currency,
-                            'amount_cents' => $latestPayment->amount_cents,
+                            'method' => $displayPayment->method?->value ?? (string) $displayPayment->method,
+                            'status' => $displayPayment->status?->value ?? (string) $displayPayment->status,
+                            'currency' => $displayPayment->currency,
+                            'amount_cents' => $displayPayment->amount_cents,
                           ]
                         : null,
                 ];
@@ -119,4 +122,3 @@ class AdminApplicationsController extends Controller
         ]);
     }
 }
-

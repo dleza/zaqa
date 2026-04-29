@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Applicant;
 
 use App\Domain\Feedback\ServiceFeedbackService;
+use App\Enums\PaymentStatus;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Applicant\StoreServiceFeedbackRequest;
 use App\Models\Application;
@@ -24,6 +25,10 @@ class ApplicantServiceFeedbackController extends Controller
             $service->recordPromptShown($application, $request->user());
         }
 
+        $paymentsSorted = $application->payments->sortByDesc('id');
+        $displayPayment = $paymentsSorted->first(fn ($p) => $p->status === PaymentStatus::Confirmed)
+            ?? $paymentsSorted->first();
+
         return Inertia::render('Applicant/Applications/Feedback', [
             'application' => [
                 'id' => $application->id,
@@ -37,11 +42,11 @@ class ApplicantServiceFeedbackController extends Controller
                         'status' => $application->invoice->status?->value ?? (string) $application->invoice->status,
                     ]
                     : null,
-                'payment' => $application->payments->sortByDesc('id')->first()
+                'payment' => $displayPayment
                     ? [
-                        'method' => $application->payments->sortByDesc('id')->first()->method?->value ?? (string) $application->payments->sortByDesc('id')->first()->method,
-                        'status' => $application->payments->sortByDesc('id')->first()->status?->value ?? (string) $application->payments->sortByDesc('id')->first()->status,
-                        'confirmed_at' => optional($application->payments->sortByDesc('id')->first()->confirmed_at)?->toIso8601String(),
+                        'method' => $displayPayment->method?->value ?? (string) $displayPayment->method,
+                        'status' => $displayPayment->status?->value ?? (string) $displayPayment->status,
+                        'confirmed_at' => optional($displayPayment->confirmed_at)?->toIso8601String(),
                     ]
                     : null,
             ],
@@ -88,4 +93,3 @@ class ApplicantServiceFeedbackController extends Controller
             ->with('success', 'Thank you. You can provide feedback later from your application.');
     }
 }
-

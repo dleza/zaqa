@@ -43,7 +43,9 @@ class ApplicantDashboardService
         ];
 
         $applications = $apps->map(function (Application $a) {
-            $latestPayment = $a->payments->sortByDesc('id')->first();
+            $paymentsSorted = $a->payments->sortByDesc('id');
+            $displayPayment = $paymentsSorted->first(fn ($p) => $p->status === PaymentStatus::Confirmed)
+                ?? $paymentsSorted->first();
 
             return [
                 'id' => $a->id,
@@ -69,11 +71,11 @@ class ApplicantDashboardService
                         'status' => $a->invoice->status?->value ?? (string) $a->invoice->status,
                       ]
                     : null,
-                'payment' => $latestPayment
+                'payment' => $displayPayment
                     ? [
-                        'method' => $latestPayment->method?->value ?? (string) $latestPayment->method,
-                        'status' => $latestPayment->status?->value ?? (string) $latestPayment->status,
-                        'confirmed_at' => optional($latestPayment->confirmed_at)?->toIso8601String(),
+                        'method' => $displayPayment->method?->value ?? (string) $displayPayment->method,
+                        'status' => $displayPayment->status?->value ?? (string) $displayPayment->status,
+                        'confirmed_at' => optional($displayPayment->confirmed_at)?->toIso8601String(),
                       ]
                     : null,
                 'primary_action' => $this->primaryActionFor($a),
@@ -155,9 +157,10 @@ class ApplicantDashboardService
             }
 
             $invoiceStatus = $app->invoice?->status?->value ?? (string) ($app->invoice?->status ?? '');
-            $latestPaymentStatus = $app->payments->sortByDesc('id')->first()?->status?->value ?? (string) ($app->payments->sortByDesc('id')->first()?->status ?? '');
+            $paymentConfirmed = $invoiceStatus === InvoiceStatus::Paid->value
+                || $app->payments->contains(fn ($p) => $p->status === PaymentStatus::Confirmed);
 
-            if ($invoiceStatus !== '' && $invoiceStatus !== InvoiceStatus::Paid->value && $latestPaymentStatus !== PaymentStatus::Confirmed->value) {
+            if ($invoiceStatus !== '' && ! $paymentConfirmed) {
                 $alerts[] = [
                     'type' => 'warning',
                     'title' => 'Payment pending',
@@ -202,4 +205,3 @@ class ApplicantDashboardService
             ->all();
     }
 }
-

@@ -463,7 +463,7 @@ const declarationAccepted = ref(false)
 const submissionBlockReasons = computed(() => {
   const reasons: string[] = []
   if (!stepCompletion.value.review) reasons.push('Complete all required steps before submission.')
-  if ((props.application?.payment?.status ?? '') !== 'confirmed') reasons.push('Payment must be confirmed before submission.')
+  if (!invoiceSettled.value) reasons.push('Payment must be confirmed before submission.')
   if (!declarationAccepted.value) reasons.push('Please accept the declaration to proceed.')
   return reasons
 })
@@ -504,28 +504,10 @@ const invoiceSettled = computed(() => (invoice.value?.status ?? '') === 'paid' |
 // Applicant wizard is now full-width on all steps (no right-side sidebar panels).
 const showSidebar = computed(() => false)
 
-const selectPaymentMethodForm = useForm<{ method: string }>({ method: 'card' })
-function selectPaymentMethod(method: string) {
-  selectPaymentMethodForm.method = method
-  setSaving('Saving payment method…')
-  selectPaymentMethodForm.post(`/applicant/applications/${props.application.id}/payment/select`, {
-    preserveScroll: true,
-    onSuccess: () => {
-      setSaved('Payment method selected.')
-      router.reload({ only: ['application'] })
-    },
-    onError: () => setError('Could not select payment method.'),
-    onFinish: () => {
-      if (saveState.value.state === 'saving') saveState.value = { state: 'idle' }
-    },
-  })
-}
-
 const mobileMoneyForm = useForm<{ mobile_number: string }>({ mobile_number: '' })
 function initiateMobileMoney() {
-  if (!payment.value?.id) return
   setSaving('Initiating Mobile Money…')
-  mobileMoneyForm.post(`/applicant/payments/${payment.value.id}/initiate-mobile-money`, {
+  mobileMoneyForm.post(`/applicant/applications/${props.application.id}/payment/initiate-mobile-money`, {
     preserveScroll: true,
     onSuccess: () => {
       setSaved('Mobile Money initiated.')
@@ -540,9 +522,8 @@ function initiateMobileMoney() {
 
 const cardInitiateForm = useForm({})
 function initiateCardPayment() {
-  if (!payment.value?.id) return
   setSaving('Redirecting to card payment…')
-  cardInitiateForm.post(`/applicant/payments/${payment.value.id}/initiate-card`, {
+  cardInitiateForm.post(`/applicant/applications/${props.application.id}/payment/initiate-card`, {
     preserveScroll: true,
     onError: () => setError('Could not initiate card payment.'),
     onFinish: () => {
@@ -552,15 +533,44 @@ function initiateCardPayment() {
 }
 
 type PaymentTabKey = 'card' | 'bank_transfer' | 'mobile_money'
-const activePaymentTab = ref<PaymentTabKey>(
-  (payment.value?.method as PaymentTabKey) || (invoice.value ? 'card' : 'card'),
-)
+
+function paymentTabFromMethod(method: any): PaymentTabKey | null {
+  const m = (method ?? '').toString()
+  if (m === 'bank_deposit') return 'bank_transfer'
+  if (m === 'card' || m === 'bank_transfer' || m === 'mobile_money') return m as PaymentTabKey
+  return null
+}
+
+function loadPaymentTabPreference(): PaymentTabKey | null {
+  try {
+    const v = localStorage.getItem(`zaqa:wizard:${props.application.id}:payment_tab`)
+    if (v === 'card' || v === 'bank_transfer' || v === 'mobile_money') return v
+  } catch {
+    // ignore
+  }
+  return null
+}
+
+function storePaymentTabPreference(tab: PaymentTabKey) {
+  try {
+    localStorage.setItem(`zaqa:wizard:${props.application.id}:payment_tab`, tab)
+  } catch {
+    // ignore
+  }
+}
+
+function setPaymentTab(tab: PaymentTabKey) {
+  activePaymentTab.value = tab
+  storePaymentTabPreference(tab)
+}
+
+const activePaymentTab = ref<PaymentTabKey>(paymentTabFromMethod(payment.value?.method) ?? loadPaymentTabPreference() ?? 'card')
 watch(
   () => payment.value?.method,
   (m) => {
     if (!m) return
-    if (m === 'bank_deposit') activePaymentTab.value = 'bank_transfer'
-    if (m === 'bank_transfer' || m === 'card' || m === 'mobile_money') activePaymentTab.value = m as PaymentTabKey
+    const tab = paymentTabFromMethod(m)
+    if (tab) setPaymentTab(tab)
   },
 )
 
@@ -570,9 +580,8 @@ function onProofFileChange(e: Event) {
   proofForm.file = target.files && target.files.length > 0 ? target.files[0] : null
 }
 function uploadPaymentProof() {
-  if (!payment.value?.id) return
   setSaving('Uploading proof…')
-  proofForm.post(`/applicant/payments/${payment.value.id}/upload-proof`, {
+  proofForm.post(`/applicant/applications/${props.application.id}/payment/upload-proof`, {
     preserveScroll: true,
     forceFormData: true,
     onSuccess: () => {
@@ -581,6 +590,16 @@ function uploadPaymentProof() {
       router.reload({ only: ['application'] })
     },
     onError: () => setError('Could not upload proof.'),
+    onFinish: () => {
+      if (saveState.value.state === 'saving') saveState.value = { state: 'idle' }
+    },
+  })
+}
+
+function refreshPaymentStatus() {
+  setSaving('Refreshing payment status…')
+  router.reload({
+    only: ['application'],
     onFinish: () => {
       if (saveState.value.state === 'saving') saveState.value = { state: 'idle' }
     },
@@ -640,10 +659,10 @@ const stepCompletion = computed(() => {
     (props.application?.is_foreign ? hasCurrentDocumentType('transcript') : true)
 
   const consentOk = props.application?.is_foreign
-    ? !!props.application?.consent_form?.uploaded_document_id
+    ? !!props.application?.consent_form?.uploaded_document_id && !!props.application?.consent_form?.zaqa_uploaded_document_id
     : !!props.application?.consent_form?.agreed_at
 
-  const paymentOk = (props.application?.payment?.status ?? '').toString() === 'confirmed'
+  const paymentOk = invoiceSettled.value
 
   return {
     applicant: applicantOk,
@@ -1344,34 +1363,34 @@ onBeforeUnmount(() => {
 
             <div v-else>
             <div class="flex gap-2 overflow-x-auto rounded-xl border border-border bg-surface p-2">
-              <button
-                type="button"
-                class="flex min-w-[10.5rem] flex-1 items-center gap-2 rounded-lg px-3 py-2 text-left text-sm font-semibold transition"
-                :class="activePaymentTab === 'card' ? 'bg-brand/10 text-brand ring-1 ring-brand/20' : 'text-text-muted hover:bg-surface-muted'"
-                @click="activePaymentTab = 'card'; selectPaymentMethod('card')"
-              >
-                <CreditCard class="h-4 w-4" aria-hidden="true" />
-                <span>Card payment</span>
-              </button>
-              <button
-                type="button"
-                class="flex min-w-[10.5rem] flex-1 items-center gap-2 rounded-lg px-3 py-2 text-left text-sm font-semibold transition"
-                :class="activePaymentTab === 'bank_transfer' ? 'bg-brand/10 text-brand ring-1 ring-brand/20' : 'text-text-muted hover:bg-surface-muted'"
-                @click="activePaymentTab = 'bank_transfer'; selectPaymentMethod('bank_transfer')"
-              >
-                <Landmark class="h-4 w-4" aria-hidden="true" />
-                <span>Bank transfer</span>
-              </button>
-              <button
-                type="button"
-                class="flex min-w-[10.5rem] flex-1 items-center gap-2 rounded-lg px-3 py-2 text-left text-sm font-semibold transition"
-                :class="activePaymentTab === 'mobile_money' ? 'bg-brand/10 text-brand ring-1 ring-brand/20' : 'text-text-muted hover:bg-surface-muted'"
-                @click="activePaymentTab = 'mobile_money'; selectPaymentMethod('mobile_money')"
-              >
-                <Smartphone class="h-4 w-4" aria-hidden="true" />
-                <span>Mobile Money</span>
-              </button>
-            </div>
+	              <button
+	                type="button"
+	                class="flex min-w-[10.5rem] flex-1 items-center gap-2 rounded-lg px-3 py-2 text-left text-sm font-semibold transition"
+	                :class="activePaymentTab === 'card' ? 'bg-brand/10 text-brand ring-1 ring-brand/20' : 'text-text-muted hover:bg-surface-muted'"
+	                @click="setPaymentTab('card')"
+	              >
+	                <CreditCard class="h-4 w-4" aria-hidden="true" />
+	                <span>Card payment</span>
+	              </button>
+	              <button
+	                type="button"
+	                class="flex min-w-[10.5rem] flex-1 items-center gap-2 rounded-lg px-3 py-2 text-left text-sm font-semibold transition"
+	                :class="activePaymentTab === 'bank_transfer' ? 'bg-brand/10 text-brand ring-1 ring-brand/20' : 'text-text-muted hover:bg-surface-muted'"
+	                @click="setPaymentTab('bank_transfer')"
+	              >
+	                <Landmark class="h-4 w-4" aria-hidden="true" />
+	                <span>Bank transfer</span>
+	              </button>
+	              <button
+	                type="button"
+	                class="flex min-w-[10.5rem] flex-1 items-center gap-2 rounded-lg px-3 py-2 text-left text-sm font-semibold transition"
+	                :class="activePaymentTab === 'mobile_money' ? 'bg-brand/10 text-brand ring-1 ring-brand/20' : 'text-text-muted hover:bg-surface-muted'"
+	                @click="setPaymentTab('mobile_money')"
+	              >
+	                <Smartphone class="h-4 w-4" aria-hidden="true" />
+	                <span>Mobile Money</span>
+	              </button>
+	            </div>
 
             <div class="mt-4 rounded-xl border border-border bg-surface p-4">
               <!-- Card -->
@@ -1388,11 +1407,11 @@ onBeforeUnmount(() => {
                   >
                     Pay by card
                   </button>
-                  <div class="text-xs text-text-muted">
-                    Status: <span class="font-semibold text-text-primary">{{ payment?.status ?? 'draft' }}</span>
-                  </div>
-                </div>
-              </div>
+	                  <div class="text-xs text-text-muted">
+	                    Status: <span class="font-semibold text-text-primary">{{ payment?.status ?? 'not started' }}</span>
+	                  </div>
+	                </div>
+	              </div>
 
               <!-- Bank transfer -->
               <div v-else-if="activePaymentTab === 'bank_transfer'">
@@ -1402,13 +1421,13 @@ onBeforeUnmount(() => {
                 </div>
 
                 <div class="mt-3 flex items-center justify-between gap-3">
-                  <span class="zaqa-badge" :class="(payment?.status ?? '') === 'confirmed' ? 'zaqa-badge-success' : (payment?.status ?? '') === 'rejected' ? 'zaqa-badge-danger' : 'zaqa-badge-warning'">
-                    {{ payment?.status ?? 'draft' }}
-                  </span>
-                  <div v-if="payment?.proof_document" class="flex flex-wrap gap-2 text-xs">
-                    <a :href="payment.proof_document.preview_url" target="_blank" rel="noopener" class="zaqa-link">Preview proof</a>
-                    <a :href="payment.proof_document.download_url" target="_blank" rel="noopener" class="zaqa-link">Download proof</a>
-                  </div>
+	                  <span class="zaqa-badge" :class="(payment?.status ?? '') === 'confirmed' ? 'zaqa-badge-success' : (payment?.status ?? '') === 'rejected' ? 'zaqa-badge-danger' : 'zaqa-badge-warning'">
+	                    {{ payment?.status ?? 'not started' }}
+	                  </span>
+	                  <div v-if="payment?.proof_document" class="flex flex-wrap gap-2 text-xs">
+	                    <a :href="payment.proof_document.preview_url" target="_blank" rel="noopener" class="zaqa-link">Preview proof</a>
+	                    <a :href="payment.proof_document.download_url" target="_blank" rel="noopener" class="zaqa-link">Download proof</a>
+	                  </div>
                 </div>
 
                 <div v-if="payment?.rejection_reason" class="mt-3 rounded-lg border border-danger/20 bg-danger/10 px-3 py-2 text-xs text-danger">
@@ -1426,15 +1445,15 @@ onBeforeUnmount(() => {
                     <Upload class="h-4 w-4" aria-hidden="true" />
                     Upload proof
                   </button>
-                  <button
-                    type="button"
-                    class="zaqa-btn zaqa-btn-secondary w-full sm:w-auto"
-                    :disabled="(payment?.status ?? '') === 'confirmed'"
-                    @click="selectPaymentMethod('bank_transfer')"
-                  >
-                    Refresh status
-                  </button>
-                </div>
+	                  <button
+	                    type="button"
+	                    class="zaqa-btn zaqa-btn-secondary w-full sm:w-auto"
+	                    :disabled="(payment?.status ?? '') === 'confirmed'"
+	                    @click="refreshPaymentStatus"
+	                  >
+	                    Refresh status
+	                  </button>
+	                </div>
               </div>
 
               <!-- Mobile money -->
@@ -1452,11 +1471,11 @@ onBeforeUnmount(() => {
                   <button type="button" class="zaqa-btn zaqa-btn-primary w-full sm:w-auto" :disabled="mobileMoneyForm.processing || (payment?.status ?? '') === 'confirmed'" @click="initiateMobileMoney">
                     Initiate Mobile Money
                   </button>
-                  <div class="text-xs text-text-muted">
-                    Status: <span class="font-semibold text-text-primary">{{ payment?.status ?? 'draft' }}</span>
-                  </div>
-                </div>
-              </div>
+	                  <div class="text-xs text-text-muted">
+	                    Status: <span class="font-semibold text-text-primary">{{ payment?.status ?? 'not started' }}</span>
+	                  </div>
+	                </div>
+	              </div>
             </div>
             </div>
           </div>
@@ -1666,7 +1685,15 @@ onBeforeUnmount(() => {
                 <div class="rounded-xl border border-border bg-surface-muted px-4 py-3">
                   <div class="text-[11px] font-semibold uppercase tracking-wider text-text-muted">Status</div>
                   <div class="mt-1 text-sm font-semibold text-text-primary">
-                    {{ application.is_foreign ? (application.consent_form?.uploaded_document_id ? 'Uploaded' : 'Pending') : (application.consent_form?.agreed_at ? 'Accepted' : 'Pending') }}
+                    {{
+                      application.is_foreign
+                        ? application.consent_form?.uploaded_document_id && application.consent_form?.zaqa_uploaded_document_id
+                          ? 'Uploaded'
+                          : 'Pending'
+                        : application.consent_form?.agreed_at
+                          ? 'Accepted'
+                          : 'Pending'
+                    }}
                   </div>
                 </div>
               </div>
@@ -1759,4 +1786,3 @@ onBeforeUnmount(() => {
     </WizardShell>
   </ApplicantLayout>
 </template>
-

@@ -36,7 +36,54 @@ class PaymentService
             ->first();
     }
 
-    public function selectMethod(Application $application, PaymentMethod $method, User $actor): Payment
+    public function rememberSelectedMethod(Application $application, PaymentMethod $method, User $actor): void
+    {
+        // Persist the choice for UX (tabs), but don't create a payment attempt.
+        // A Payment row should be created only when the applicant actually initiates a payment or uploads proof.
+        $this->invoices->ensureInvoice($application, $actor);
+
+        DB::transaction(function () use ($application, $method, $actor) {
+            $lockedApplication = Application::query()
+                ->whereKey($application->id)
+                ->lockForUpdate()
+                ->firstOrFail();
+
+            $metadata = (array) ($lockedApplication->metadata ?? []);
+            $metadata['preferred_payment_method'] = $method->value;
+            $lockedApplication->forceFill(['metadata' => $metadata])->save();
+
+            $this->audit->record(
+                eventType: 'payments.method_preference_updated',
+                module: 'Finance',
+                actionName: 'method_preference_updated',
+                message: 'Payment method preference updated.',
+                entityType: Application::class,
+                entityId: $lockedApplication->id,
+                metadata: [
+                    'application_id' => $lockedApplication->id,
+                    'method' => $method->value,
+                ],
+                actor: $actor,
+            );
+
+            $this->lifecycle->milestone(
+                application: $lockedApplication,
+                eventType: 'payment',
+                eventCode: 'payment.method_preference_updated',
+                stage: LifecycleStage::Payment,
+                title: 'Payment method selected',
+                description: 'Applicant selected a payment method (preference only).',
+                visibility: LifecycleVisibility::Both,
+                actor: $actor,
+                metadata: [
+                    'method' => $method->value,
+                ],
+                occurredAt: now(),
+            );
+        });
+    }
+
+    public function createDraftPayment(Application $application, PaymentMethod $method, User $actor): Payment
     {
         $invoice = $this->invoices->ensureInvoice($application, $actor);
 
@@ -61,6 +108,18 @@ class PaymentService
                 throw ValidationException::withMessages([
                     'payment' => 'Payment is already confirmed for this invoice. You cannot change payment method.',
                 ]);
+            }
+
+            $existingDraft = Payment::query()
+                ->where('application_id', $application->id)
+                ->where('invoice_id', $invoice->id)
+                ->where('method', $method)
+                ->where('status', PaymentStatus::Draft)
+                ->latest('id')
+                ->first();
+
+            if ($existingDraft) {
+                return $existingDraft;
             }
 
             $payment = Payment::create([
@@ -104,6 +163,81 @@ class PaymentService
                 actor: $actor,
                 metadata: [
                     'method' => $method->value,
+                    'payment_id' => $payment->id,
+                    'invoice_id' => $invoice->id,
+                ],
+                occurredAt: now(),
+            );
+
+            return $payment;
+        });
+    }
+
+    public function paymentForManualProofUpload(Application $application, User $actor): Payment
+    {
+        $invoice = $this->invoices->ensureInvoice($application, $actor);
+
+        return DB::transaction(function () use ($application, $invoice, $actor) {
+            $invoice->refresh();
+            if ($invoice->status === InvoiceStatus::Paid) {
+                throw ValidationException::withMessages([
+                    'payment' => 'Payment is already confirmed for this invoice.',
+                ]);
+            }
+
+            $existing = Payment::query()
+                ->where('application_id', $application->id)
+                ->where('invoice_id', $invoice->id)
+                ->whereIn('method', [PaymentMethod::BankDeposit, PaymentMethod::BankTransfer])
+                ->where('status', '!=', PaymentStatus::Confirmed)
+                ->latest('id')
+                ->first();
+
+            if ($existing) {
+                return $existing;
+            }
+
+            $payment = Payment::create([
+                'application_id' => $application->id,
+                'invoice_id' => $invoice->id,
+                'method' => PaymentMethod::BankTransfer,
+                'status' => PaymentStatus::Draft,
+                'currency' => $invoice->currency,
+                'amount_cents' => $invoice->amount_cents,
+                'provider' => 'test',
+                'provider_reference' => null,
+                'provider_transaction_id' => null,
+                'mobile_number' => null,
+                'proof_document_id' => null,
+                'last_status_at' => now(),
+            ]);
+
+            $this->audit->record(
+                eventType: 'payments.method_selected',
+                module: 'Finance',
+                actionName: 'method_selected',
+                message: 'Payment method selected.',
+                entityType: Payment::class,
+                entityId: $payment->id,
+                metadata: [
+                    'application_id' => $application->id,
+                    'invoice_id' => $invoice->id,
+                    'method' => PaymentMethod::BankTransfer->value,
+                ],
+                actor: $actor,
+            );
+
+            $this->lifecycle->milestone(
+                application: $application,
+                eventType: 'payment',
+                eventCode: 'payment.method_selected',
+                stage: LifecycleStage::Payment,
+                title: 'Payment method selected',
+                description: 'Applicant selected a payment method.',
+                visibility: LifecycleVisibility::Both,
+                actor: $actor,
+                metadata: [
+                    'method' => PaymentMethod::BankTransfer->value,
                     'payment_id' => $payment->id,
                     'invoice_id' => $invoice->id,
                 ],
@@ -508,4 +642,3 @@ class PaymentService
         ]);
     }
 }
-

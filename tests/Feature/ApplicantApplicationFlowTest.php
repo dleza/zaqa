@@ -130,23 +130,27 @@ class ApplicantApplicationFlowTest extends TestCase
             'consent_type' => 'local_embedded',
         ]);
 
+        // Selecting a method should not create a payment attempt/record.
         $this->post("/applicant/applications/{$application->id}/payment/select", [
             'method' => 'card',
         ])->assertRedirect();
+        $this->assertDatabaseMissing('payments', [
+            'application_id' => $application->id,
+        ]);
 
-        $payment = Payment::query()->where('application_id', $application->id)->latest('id')->firstOrFail();
-
-        $initiate = $this->post("/applicant/payments/{$payment->id}/initiate-card");
+        // A payment record should be created only when initiation happens.
+        $initiate = $this->post("/applicant/applications/{$application->id}/payment/initiate-card");
         $initiate->assertRedirect();
 
         $this->get($initiate->headers->get('Location'))->assertRedirect();
 
+        $payment = Payment::query()->where('application_id', $application->id)->latest('id')->firstOrFail();
         $payment->refresh();
         $this->assertSame(PaymentStatus::Confirmed, $payment->status);
 
-        // Once confirmed, method switching should be blocked.
-        $blocked = $this->post("/applicant/applications/{$application->id}/payment/select", [
-            'method' => 'mobile_money',
+        // Once confirmed, further payment initiations should be blocked.
+        $blocked = $this->post("/applicant/applications/{$application->id}/payment/initiate-mobile-money", [
+            'mobile_number' => '0970000000',
         ]);
         $blocked->assertSessionHasErrors(['payment']);
 
@@ -284,9 +288,11 @@ class ApplicantApplicationFlowTest extends TestCase
         $this->post("/applicant/applications/{$application->id}/payment/select", [
             'method' => 'card',
         ])->assertRedirect();
+        $this->assertDatabaseMissing('payments', [
+            'application_id' => $application->id,
+        ]);
 
-        $payment = Payment::query()->where('application_id', $application->id)->latest('id')->firstOrFail();
-        $initiate = $this->post("/applicant/payments/{$payment->id}/initiate-card");
+        $initiate = $this->post("/applicant/applications/{$application->id}/payment/initiate-card");
         $initiate->assertRedirect();
         $this->get($initiate->headers->get('Location'))->assertRedirect();
 
@@ -364,12 +370,15 @@ class ApplicantApplicationFlowTest extends TestCase
         $this->post("/applicant/applications/{$application->id}/payment/select", [
             'method' => 'bank_transfer',
         ])->assertRedirect();
+        $this->assertDatabaseMissing('payments', [
+            'application_id' => $application->id,
+        ]);
 
-        $payment = Payment::query()->where('application_id', $application->id)->latest('id')->firstOrFail();
-
-        $this->post("/applicant/payments/{$payment->id}/upload-proof", [
+        $this->post("/applicant/applications/{$application->id}/payment/upload-proof", [
             'file' => UploadedFile::fake()->create('proof.pdf', 50, 'application/pdf'),
         ])->assertRedirect();
+
+        $payment = Payment::query()->where('application_id', $application->id)->latest('id')->firstOrFail();
 
         $failedSubmit = $this->post("/applicant/applications/{$application->id}/submit");
         $failedSubmit->assertSessionHasErrors(['payment']);

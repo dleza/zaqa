@@ -7,6 +7,7 @@ use App\Domain\Applications\Events\ApplicationSubmitted;
 use App\Enums\ApplicationStatus;
 use App\Enums\ConsentType;
 use App\Enums\DocumentType;
+use App\Enums\InvoiceStatus;
 use App\Enums\LifecycleStage;
 use App\Enums\LifecycleVisibility;
 use App\Enums\PaymentStatus;
@@ -32,7 +33,7 @@ class ApplicationSubmissionService
     {
         return DB::transaction(function () use ($application, $actor) {
             $application->refresh();
-            $application->load(['qualification', 'documents', 'consentForm', 'payments']);
+            $application->load(['qualification', 'documents', 'consentForm', 'invoice', 'payments']);
 
             if (! in_array($application->current_status, [ApplicationStatus::Draft, ApplicationStatus::SentBack], true)) {
                 throw ValidationException::withMessages([
@@ -80,9 +81,10 @@ class ApplicationSubmissionService
 
             $this->assertConsentSatisfied($application);
 
-            $latestPayment = $application->payments->sortByDesc('id')->first();
-            $paymentConfirmed = $latestPayment && $latestPayment->status === PaymentStatus::Confirmed;
+            $invoicePaid = $application->invoice && $application->invoice->status === InvoiceStatus::Paid;
+            $paymentConfirmed = $invoicePaid || $application->payments->contains(fn ($p) => $p->status === PaymentStatus::Confirmed);
             if (! $paymentConfirmed) {
+                $latestPayment = $application->payments->sortByDesc('id')->first();
                 $this->audit->record(
                     eventType: 'applications.submission_blocked_due_to_payment',
                     module: 'Applications',
@@ -91,6 +93,7 @@ class ApplicationSubmissionService
                     entityType: Application::class,
                     entityId: $application->id,
                     metadata: [
+                        'invoice_status' => $application->invoice?->status?->value ?? null,
                         'payment_status' => $latestPayment?->status?->value ?? null,
                         'payment_method' => $latestPayment?->method?->value ?? null,
                     ],

@@ -227,7 +227,15 @@ function money(cents: number, currency: string) {
             <div class="rounded-xl border border-border bg-surface-muted px-4 py-3">
               <div class="text-[11px] font-semibold uppercase tracking-wider text-text-muted">Status</div>
               <div class="mt-1 text-sm font-semibold text-text-primary">
-                {{ application.is_foreign ? (application.consent_form?.uploaded_document_id ? 'Uploaded' : 'Pending') : (application.consent_form?.agreed_at ? 'Accepted' : 'Pending') }}
+                {{
+                  application.is_foreign
+                    ? application.consent_form?.uploaded_document_id && application.consent_form?.zaqa_uploaded_document_id
+                      ? 'Uploaded'
+                      : 'Pending'
+                    : application.consent_form?.agreed_at
+                      ? 'Accepted'
+                      : 'Pending'
+                }}
               </div>
             </div>
             <div class="rounded-xl border border-border bg-surface-muted px-4 py-3">

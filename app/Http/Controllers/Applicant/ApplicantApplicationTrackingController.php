@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Applicant;
 
 use App\Enums\LifecycleVisibility;
+use App\Enums\PaymentStatus;
 use App\Http\Controllers\Controller;
 use App\Models\Application;
 use Illuminate\Http\Request;
@@ -52,7 +53,9 @@ class ApplicantApplicationTrackingController extends Controller
                 'changed_at' => optional($h->changed_at)?->toIso8601String(),
             ]);
 
-        $latestPayment = $application->payments->sortByDesc('id')->first();
+        $paymentsSorted = $application->payments->sortByDesc('id');
+        $displayPayment = $paymentsSorted->first(fn ($p) => $p->status === PaymentStatus::Confirmed)
+            ?? $paymentsSorted->first();
 
         return Inertia::render('Applicant/Applications/Track', [
             'application' => [
@@ -74,11 +77,11 @@ class ApplicantApplicationTrackingController extends Controller
                         'paid_at' => optional($application->invoice->paid_at)?->toIso8601String(),
                       ]
                     : null,
-                'payment' => $latestPayment
+                'payment' => $displayPayment
                     ? [
-                        'method' => $latestPayment->method?->value ?? (string) $latestPayment->method,
-                        'status' => $latestPayment->status?->value ?? (string) $latestPayment->status,
-                        'confirmed_at' => optional($latestPayment->confirmed_at)?->toIso8601String(),
+                        'method' => $displayPayment->method?->value ?? (string) $displayPayment->method,
+                        'status' => $displayPayment->status?->value ?? (string) $displayPayment->status,
+                        'confirmed_at' => optional($displayPayment->confirmed_at)?->toIso8601String(),
                       ]
                     : null,
             ],
@@ -133,4 +136,3 @@ class ApplicantApplicationTrackingController extends Controller
         ]);
     }
 }
-

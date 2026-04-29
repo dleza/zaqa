@@ -6,6 +6,7 @@ use App\Domain\Verification\AssignmentService;
 use App\Domain\Verification\DecisionService;
 use App\Domain\Verification\SendBackService;
 use App\Domain\Verification\VerificationReviewService;
+use App\Enums\PaymentStatus;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Admin\Verification\AssignApplicationRequest;
 use App\Http\Requests\Admin\Verification\DecisionApproveRequest;
@@ -39,6 +40,10 @@ class AdminVerificationApplicationController extends Controller
             'invoice',
             'payments.proofDocument',
         ]);
+
+        $paymentsSorted = $application->payments->sortByDesc('id');
+        $displayPayment = $paymentsSorted->first(fn ($p) => $p->status === PaymentStatus::Confirmed)
+            ?? $paymentsSorted->first();
 
         $level1Users = User::query()
             ->whereNull('applicant_type')
@@ -113,7 +118,7 @@ class AdminVerificationApplicationController extends Controller
                         'paid_at' => optional($application->invoice->paid_at)?->toIso8601String(),
                       ]
                     : null,
-                'latest_payment' => ($application->payments?->sortByDesc('id')->first())
+                'latest_payment' => $displayPayment
                     ? (function ($p) {
                         return [
                             'id' => $p->id,
@@ -134,7 +139,7 @@ class AdminVerificationApplicationController extends Controller
                                   ]
                                 : null,
                         ];
-                    })($application->payments->sortByDesc('id')->first())
+                    })($displayPayment)
                     : null,
                 'assignments' => $application->assignments
                     ->sortByDesc('assigned_at')
@@ -240,4 +245,3 @@ class AdminVerificationApplicationController extends Controller
         return back()->with('success', 'Certificate issued (hook).');
     }
 }
-
