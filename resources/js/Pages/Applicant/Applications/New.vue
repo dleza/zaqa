@@ -100,15 +100,15 @@ watch(
               <label class="zaqa-radio-card" :class="form.submitting_for === 'self' ? 'zaqa-radio-card-active' : ''">
                 <input v-model="form.submitting_for" type="radio" value="self" class="mt-1 rounded border-border text-brand focus:ring-brand/25" />
                 <div>
-                  <div class="text-sm font-semibold text-text-primary">Myself (recommended)</div>
-                  <div class="mt-1 text-xs text-text-muted">We’ll use your authenticated profile details where available.</div>
+                  <div class="text-sm font-semibold text-text-primary">Myself</div>
+                  <div class="mt-1 text-xs text-text-muted">We’ll use your authenticated profile details as the application holder.</div>
                 </div>
               </label>
               <label class="zaqa-radio-card" :class="form.submitting_for === 'other' ? 'zaqa-radio-card-active' : ''">
                 <input v-model="form.submitting_for" type="radio" value="other" class="mt-1 rounded border-border text-brand focus:ring-brand/25" />
                 <div>
                   <div class="text-sm font-semibold text-text-primary">On behalf of someone</div>
-                  <div class="mt-1 text-xs text-text-muted">Enter the verification subject’s biodata below.</div>
+                  <div class="mt-1 text-xs text-text-muted">Enter the biodata for the holder of the qualification to be verified below.</div>
                 </div>
               </label>
             </div>
@@ -116,7 +116,7 @@ watch(
           </div>
 
           <div v-if="form.submitting_for === 'self'" class="sm:col-span-2 rounded-xl border border-border bg-surface-muted p-4">
-            <div class="text-sm font-semibold text-text-primary">Your profile (auto-populated)</div>
+            <div class="text-sm font-semibold text-text-primary">Your profile</div>
             <div class="mt-2 grid grid-cols-1 gap-3 sm:grid-cols-2">
               <div class="text-sm">
                 <div class="text-xs font-semibold text-text-muted">Name</div>

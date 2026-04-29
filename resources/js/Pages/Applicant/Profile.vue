@@ -18,10 +18,24 @@ function labelOrDash(v: any) {
 
 <template>
   <ApplicantLayout>
-    <div>
-      <h2 class="text-xl font-semibold">My Profile</h2>
-      <p class="mt-1 text-sm text-text-muted">Your account details for ZAQA verification services.</p>
+    <template #pageHeader>
+      <div class="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <h1 class="text-2xl font-semibold tracking-tight text-text-primary">My Profile</h1>
+          <p class="mt-1 text-sm text-text-muted">Your account details for ZAQA verification services.</p>
+        </div>
+        <div class="flex flex-wrap gap-2">
+          <Link href="/applicant/profile/edit" class="zaqa-btn zaqa-btn-primary">
+            Update Profile
+          </Link>
+          <Link href="/applicant/change-password" class="zaqa-btn zaqa-btn-secondary">
+            Change Password
+          </Link>
+        </div>
+      </div>
+    </template>
 
+    <div>
       <div class="zaqa-card mt-6">
         <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div>
@@ -139,17 +153,7 @@ function labelOrDash(v: any) {
             </div>
           </div>
         </div>
-
-        <div class="mt-6 flex flex-wrap gap-2">
-          <Link href="/applicant/profile/edit" class="zaqa-btn zaqa-btn-primary">
-            Update Profile
-          </Link>
-          <Link href="/applicant/change-password" class="zaqa-btn zaqa-btn-secondary">
-            Change Password
-          </Link>
-        </div>
       </div>
     </div>
   </ApplicantLayout>
 </template>
-
