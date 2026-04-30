@@ -27,7 +27,7 @@ const isRegisterPage = computed(() => currentPath.value === '/register')
 <template>
   <div class="zaqa-page flex flex-col">
     <header class="zaqa-topbar">
-      <div class="zaqa-topbar-inner">
+      <div class="zaqa-topbar-inner py-5">
         <a href="/" class="zaqa-brand" aria-label="ZAQA Portal">
           <img :src="zaqaLogoUrl" alt="ZAQA logo" class="h-10 w-auto shrink-0 object-contain" />
           <div class="flex flex-col">
@@ -37,25 +37,26 @@ const isRegisterPage = computed(() => currentPath.value === '/register')
         </a>
 
         <nav class="hidden items-center gap-2 sm:flex" aria-label="Primary navigation">
-          <a v-if="!isLoginPage" href="/login" class="zaqa-nav-link" :class="{ 'zaqa-nav-link-active': isLoginPage }">
+          <a v-if="!isLoginPage" href="/login" class="zaqa-btn zaqa-btn-ghost-on-brand h-10 px-4 py-2 text-sm">
             Log in
           </a>
-          <a
-            v-if="!isRegisterPage"
-            href="/register"
-            class="zaqa-nav-link"
-            :class="{ 'zaqa-nav-link-active': isRegisterPage }"
-          >
+          <a v-if="!isRegisterPage" href="/register" class="zaqa-btn zaqa-btn-ghost-on-brand h-10 px-4 py-2 text-sm">
             Create account
           </a>
         </nav>
       </div>
     </header>
 
-    <main class="flex-1 flex">
-      <div class="mx-auto flex w-full flex-1 flex-col px-4 py-10 sm:py-12 sm:justify-center" :class="props.maxWidthClass">
+    <main class="relative flex flex-1">
+      <div aria-hidden="true" class="pointer-events-none absolute inset-0 overflow-hidden">
+        <div class="absolute -top-24 left-1/2 h-96 w-96 -translate-x-1/2 rounded-full bg-brand/15 blur-3xl" />
+        <div class="absolute -bottom-32 -right-24 h-[28rem] w-[28rem] rounded-full bg-accent/10 blur-3xl" />
+        <div class="absolute inset-0 bg-gradient-to-b from-white/40 via-transparent to-white/25" />
+      </div>
+
+      <div class="relative mx-auto flex w-full flex-1 flex-col px-4 py-12 sm:px-6 sm:py-14 lg:py-16 sm:justify-center" :class="props.maxWidthClass">
         <FlashMessages />
-        <div class="zaqa-card sm:translate-y-4">
+        <div class="rounded-2xl border border-border/80 bg-surface p-8 shadow-[0_18px_60px_-45px_rgba(11,58,102,0.25)] sm:p-10">
           <slot />
         </div>
       </div>
@@ -69,4 +70,3 @@ const isRegisterPage = computed(() => currentPath.value === '/register')
     </footer>
   </div>
 </template>
-
