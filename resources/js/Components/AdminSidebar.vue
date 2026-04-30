@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { Link, usePage } from '@inertiajs/vue3'
 import type { AdminNavSection } from '@/Layouts/adminNav'
 
@@ -13,13 +13,31 @@ const zaqaLogoUrl = new URL('../../images/zaqa-logo-tranparent.png', import.meta
 
 const page = usePage()
 const url = computed(() => (page.url ?? '').toString())
-const openGroups = computed<Record<string, boolean>>(() => {
+
+const openSections = ref<Record<string, boolean>>({})
+const openGroups = ref<Record<string, boolean>>({})
+
+function readOpenState(storageKey: string): Record<string, boolean> {
   try {
-    const raw = localStorage.getItem('zaqa_admin_sidebar_groups')
-    return raw ? (JSON.parse(raw) as Record<string, boolean>) : {}
+    const raw = localStorage.getItem(storageKey)
+    if (!raw) return {}
+    const parsed = JSON.parse(raw) as unknown
+    if (!parsed || typeof parsed !== 'object') return {}
+    return parsed as Record<string, boolean>
   } catch {
     return {}
   }
+}
+
+function persistOpenState(storageKey: string, state: Record<string, boolean>) {
+  try {
+    localStorage.setItem(storageKey, JSON.stringify(state))
+  } catch {}
+}
+
+onMounted(() => {
+  openSections.value = readOpenState('zaqa_admin_sidebar_sections')
+  openGroups.value = readOpenState('zaqa_admin_sidebar_groups')
 })
 
 function hasAny(required?: string[]) {
@@ -36,12 +54,49 @@ function itemIsActive(item: any) {
   return children.some((c: any) => itemIsActive(c))
 }
 
-function toggleGroup(key: string) {
-  const current = { ...(openGroups.value ?? {}) }
-  current[key] = !current[key]
-  try {
-    localStorage.setItem('zaqa_admin_sidebar_groups', JSON.stringify(current))
-  } catch {}
+function sectionKey(section: AdminNavSection, index: number) {
+  const label = (section.label ?? '').trim()
+  return label.length > 0 ? label : `__section_${index}`
+}
+
+function domIdFromKey(key: string) {
+  return key
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9_-]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+}
+
+function sectionIsOpen(section: AdminNavSection, index: number) {
+  if (!section.label) return true
+  const key = sectionKey(section, index)
+  const stored = openSections.value[key]
+  return stored ?? section.items.some((item) => itemIsActive(item))
+}
+
+function sectionHasActiveRoute(section: AdminNavSection) {
+  return section.items.some((item) => itemIsActive(item))
+}
+
+function toggleSection(section: AdminNavSection, index: number) {
+  const key = sectionKey(section, index)
+  const next = !sectionIsOpen(section, index)
+  openSections.value = { ...openSections.value, [key]: next }
+  persistOpenState('zaqa_admin_sidebar_sections', openSections.value)
+}
+
+function groupIsOpen(item: any) {
+  const key = (item?.label ?? '').toString()
+  const stored = openGroups.value[key]
+  return stored ?? itemIsActive(item)
+}
+
+function toggleGroup(item: any) {
+  const key = (item?.label ?? '').toString()
+  if (!key) return
+  const next = !groupIsOpen(item)
+  openGroups.value = { ...openGroups.value, [key]: next }
+  persistOpenState('zaqa_admin_sidebar_groups', openGroups.value)
 }
 
 const visibleSections = computed(() => {
@@ -73,27 +128,41 @@ const visibleSections = computed(() => {
     </div>
 
     <nav class="px-3 py-4">
-      <div v-for="section in visibleSections" :key="section.label" class="mb-5">
-        <div v-if="section.label" class="px-2 text-[11px] font-semibold uppercase tracking-wider text-text-muted">
-          {{ section.label }}
-        </div>
-        <div :class="section.label ? 'mt-2 space-y-1' : 'space-y-1'">
+      <div v-for="(section, sectionIndex) in visibleSections" :key="section.label || sectionIndex" class="mb-5">
+        <button
+          v-if="section.label"
+          type="button"
+          class="flex w-full items-center justify-between rounded-lg px-2 py-2 text-left text-[11px] font-semibold uppercase tracking-wider transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-surface"
+          :class="sectionHasActiveRoute(section) ? 'bg-brand/10 text-brand' : 'text-text-muted hover:bg-surface-muted'"
+          :aria-expanded="sectionIsOpen(section, sectionIndex) ? 'true' : 'false'"
+          :aria-controls="`admin-section-${domIdFromKey(sectionKey(section, sectionIndex))}`"
+          @click="toggleSection(section, sectionIndex)"
+        >
+          <span>{{ section.label }}</span>
+          <span class="text-xs font-bold opacity-70">{{ sectionIsOpen(section, sectionIndex) ? '—' : '+' }}</span>
+        </button>
+
+        <div
+          v-show="sectionIsOpen(section, sectionIndex)"
+          :id="`admin-section-${domIdFromKey(sectionKey(section, sectionIndex))}`"
+          :class="section.label ? 'mt-2 space-y-1' : 'space-y-1'"
+        >
           <div v-for="item in section.items" :key="item.href ?? item.label">
             <button
               v-if="(item.children?.length ?? 0) > 0"
               type="button"
               class="group flex w-full items-center justify-between gap-2 rounded-xl px-3 py-2 text-sm font-semibold transition"
               :class="itemIsActive(item) ? 'bg-brand/10 text-brand' : 'text-text-primary hover:bg-surface-muted'"
-              @click="toggleGroup(item.label)"
+              @click="toggleGroup(item)"
             >
               <span class="flex min-w-0 items-center gap-2">
                 <component v-if="item.icon" :is="item.icon" class="h-4 w-4" aria-hidden="true" />
                 <span class="truncate">{{ item.label }}</span>
               </span>
-              <span class="text-xs font-bold opacity-70">{{ (openGroups?.[item.label] ?? itemIsActive(item)) ? '—' : '+' }}</span>
+              <span class="text-xs font-bold opacity-70">{{ groupIsOpen(item) ? '—' : '+' }}</span>
             </button>
 
-            <div v-if="(item.children?.length ?? 0) > 0 && (openGroups?.[item.label] ?? itemIsActive(item))" class="mt-1 space-y-1 pl-3">
+            <div v-if="(item.children?.length ?? 0) > 0 && groupIsOpen(item)" class="mt-1 space-y-1 pl-3">
               <Link
                 v-for="child in item.children"
                 :key="child.href"
