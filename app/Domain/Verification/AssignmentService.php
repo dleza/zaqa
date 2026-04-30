@@ -10,6 +10,7 @@ use App\Enums\LifecycleVisibility;
 use App\Enums\VerificationState;
 use App\Models\Application;
 use App\Models\ApplicationAssignment;
+use App\Models\ApplicationComment;
 use App\Models\User;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
@@ -30,6 +31,11 @@ class AssignmentService
             ]);
         }
 
+        $comment = $comment !== null ? trim($comment) : null;
+        if ($comment === '') {
+            $comment = null;
+        }
+
         return DB::transaction(function () use ($application, $level2Actor, $level1Assignee, $comment) {
             $application->refresh();
 
@@ -48,6 +54,16 @@ class AssignmentService
                 'assigned_at' => now(),
                 'unassigned_at' => null,
             ]);
+
+            if ($comment) {
+                ApplicationComment::create([
+                    'application_id' => $application->id,
+                    'author_user_id' => $level2Actor->id,
+                    'type' => 'assignment_note',
+                    'visibility' => 'internal',
+                    'body' => $comment,
+                ]);
+            }
 
             $before = [
                 'assigned_level1_user_id' => $application->assigned_level1_user_id,
@@ -74,7 +90,7 @@ class AssignmentService
                 title: 'Assigned for review',
                 description: 'Your application has been assigned to a verification officer for review.',
                 visibility: LifecycleVisibility::Both,
-                comment: $comment,
+                comment: null,
                 metadata: [
                     'assigned_to_user_id' => $level1Assignee->id,
                     'assigned_by_user_id' => $level2Actor->id,
@@ -130,4 +146,3 @@ class AssignmentService
         });
     }
 }
-

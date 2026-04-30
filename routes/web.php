@@ -280,6 +280,9 @@ Route::middleware('auth')->group(function () {
             Route::post('/applications/{application}/issue-certificate', [AdminVerificationApplicationController::class, 'issueCertificate'])
                 ->middleware('can:verification.certificate.issue')
                 ->name('applications.issue_certificate');
+            Route::post('/applications/{application}/comments', [AdminVerificationApplicationController::class, 'storeComment'])
+                ->middleware('can:verification.pool.view')
+                ->name('applications.comments.store');
 
             Route::get('/documents/{document}/preview', [AdminVerificationDocumentController::class, 'preview'])
                 ->middleware('can:verification.pool.view')

@@ -59,7 +59,7 @@ class DecisionService
                 title: 'Approved',
                 description: 'Your application was approved. Certificate issuance is in progress.',
                 visibility: LifecycleVisibility::Both,
-                comment: $comment,
+                comment: null,
                 metadata: [
                     'approved_by_user_id' => $actor->id,
                 ],
@@ -206,7 +206,7 @@ class DecisionService
                 title: 'Certificate issued',
                 description: 'Your certificate is ready.',
                 visibility: LifecycleVisibility::Both,
-                comment: $comment,
+                comment: null,
                 metadata: [
                     'issued_by_user_id' => $actor->id,
                 ],
@@ -237,4 +237,3 @@ class DecisionService
         });
     }
 }
-

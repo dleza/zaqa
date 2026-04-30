@@ -20,6 +20,7 @@ const returnOpen = ref(false)
 const approveOpen = ref(false)
 const rejectOpen = ref(false)
 const issueOpen = ref(false)
+const commentOpen = ref(false)
 
 const assignForm = useForm({ assigned_to_user_id: props.application.assigned_level1_user_id ?? '', comment: '' })
 const sendBackForm = useForm({ comment: '' })
@@ -28,6 +29,11 @@ const returnForm = useForm({ comment: '' })
 const approveForm = useForm({ comment: '' })
 const rejectForm = useForm({ reason: '' })
 const issueForm = useForm({ comment: '' })
+const commentForm = useForm<{ body: string; visibility: 'internal' | 'applicant_visible'; type: string }>({
+  body: '',
+  visibility: 'internal',
+  type: 'general',
+})
 
 const isAssignedToSomeone = computed(() => !!props.application.assigned_level1_user_id)
 const state = computed<string>(() => (props.application.verification_state ?? '').toString())
@@ -279,7 +285,12 @@ const slaProgressPct = computed(() => {
         </div>
 
         <div class="rounded-2xl border border-border bg-surface p-6 shadow-sm">
-          <div class="text-sm font-semibold text-text-primary">Comments</div>
+          <div class="flex items-center justify-between gap-4">
+            <div class="text-sm font-semibold text-text-primary">Comments</div>
+            <button type="button" class="zaqa-btn zaqa-btn-secondary h-9 px-3 py-2 text-xs" @click="commentOpen = true">
+              Add comment
+            </button>
+          </div>
           <div class="mt-4 space-y-3">
             <div v-if="application.comments.length === 0" class="text-sm text-text-muted">No comments yet.</div>
             <div v-for="c in application.comments" :key="c.id" class="rounded-xl border border-border bg-surface-muted p-4">
@@ -647,6 +658,50 @@ const slaProgressPct = computed(() => {
       </template>
     </AdminActionModal>
 
+    <AdminActionModal
+      v-model="commentOpen"
+      title="Add comment"
+      description="Choose whether this comment is internal (staff only) or visible to the applicant (it will appear in their tracking timeline)."
+    >
+      <div class="space-y-4">
+        <div>
+          <label class="text-sm font-semibold text-text-primary">Visibility</label>
+          <select v-model="commentForm.visibility" class="zaqa-input mt-2">
+            <option value="internal">Internal (staff only)</option>
+            <option value="applicant_visible">Visible to applicant</option>
+          </select>
+          <div v-if="(commentForm.errors as any).visibility" class="mt-1 text-xs text-danger">{{ (commentForm.errors as any).visibility }}</div>
+        </div>
+
+        <div>
+          <label class="text-sm font-semibold text-text-primary">Comment</label>
+          <textarea v-model="commentForm.body" class="zaqa-input mt-2 h-auto min-h-[8rem] py-3" placeholder="Write a comment…" />
+          <div v-if="(commentForm.errors as any).body" class="mt-1 text-xs text-danger">{{ (commentForm.errors as any).body }}</div>
+        </div>
+      </div>
+
+      <template #footer>
+        <button type="button" class="zaqa-btn zaqa-btn-secondary px-4 py-2 text-sm" @click="commentOpen = false">Cancel</button>
+        <button
+          type="button"
+          class="zaqa-btn zaqa-btn-primary px-4 py-2 text-sm"
+          :disabled="commentForm.processing"
+          @click="
+            commentForm.post(`/admin/verification/applications/${application.id}/comments`, {
+              preserveScroll: true,
+              onSuccess: () => {
+                commentForm.reset()
+                commentForm.clearErrors()
+                commentOpen = false
+              },
+            })
+          "
+        >
+          Save
+        </button>
+      </template>
+    </AdminActionModal>
+
     <AdminActionModal v-model="issueOpen" title="Issue certificate (hook)" description="This marks the certificate as issued for workflow purposes.">
       <div>
         <label class="text-sm font-semibold text-text-primary">Comment (optional)</label>
@@ -666,4 +721,3 @@ const slaProgressPct = computed(() => {
     </AdminActionModal>
   </AdminLayout>
 </template>
-

@@ -6,6 +6,9 @@ use App\Domain\Verification\AssignmentService;
 use App\Domain\Verification\DecisionService;
 use App\Domain\Verification\SendBackService;
 use App\Domain\Verification\VerificationReviewService;
+use App\Domain\Tracking\ApplicationLifecycleService;
+use App\Enums\LifecycleStage;
+use App\Enums\LifecycleVisibility;
 use App\Enums\PaymentStatus;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Admin\Verification\AssignApplicationRequest;
@@ -15,10 +18,13 @@ use App\Http\Requests\Admin\Verification\IssueCertificateRequest;
 use App\Http\Requests\Admin\Verification\Level1CompleteRequest;
 use App\Http\Requests\Admin\Verification\Level2ReturnToLevel1Request;
 use App\Http\Requests\Admin\Verification\SendBackRequest;
+use App\Http\Requests\Admin\Verification\StoreApplicationCommentRequest;
 use App\Models\Application;
+use App\Models\ApplicationComment;
 use App\Models\User;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -243,5 +249,51 @@ class AdminVerificationApplicationController extends Controller
         $decisions->issueCertificate($application, $request->user(), $request->validated('comment'));
 
         return back()->with('success', 'Certificate issued (hook).');
+    }
+
+    public function storeComment(
+        StoreApplicationCommentRequest $request,
+        Application $application,
+        ApplicationLifecycleService $lifecycle,
+    ): RedirectResponse {
+        $body = trim((string) $request->validated('body'));
+        $visibility = (string) $request->validated('visibility');
+        $type = trim((string) ($request->validated('type') ?? 'general'));
+        if ($type === '') {
+            $type = 'general';
+        }
+
+        DB::transaction(function () use ($application, $request, $body, $visibility, $type, $lifecycle) {
+            $application->refresh();
+
+            $comment = ApplicationComment::create([
+                'application_id' => $application->id,
+                'author_user_id' => $request->user()?->id,
+                'type' => $type,
+                'visibility' => $visibility,
+                'body' => $body,
+            ]);
+
+            if ($visibility === 'applicant_visible') {
+                $lifecycle->event(
+                    application: $application,
+                    eventType: 'comment',
+                    eventCodeBase: 'comment.added',
+                    stage: LifecycleStage::Review,
+                    title: 'Comment from ZAQA',
+                    description: 'ZAQA added a comment on your application.',
+                    visibility: LifecycleVisibility::Both,
+                    actor: $request->user(),
+                    comment: $body,
+                    metadata: [
+                        'comment_id' => $comment->id,
+                        'type' => $type,
+                    ],
+                    occurredAt: now(),
+                );
+            }
+        });
+
+        return back()->with('success', $visibility === 'applicant_visible' ? 'Comment sent to applicant.' : 'Internal comment saved.');
     }
 }

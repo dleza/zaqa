@@ -9,6 +9,8 @@ const props = defineProps<{
   isMobile?: boolean
 }>()
 
+const zaqaLogoUrl = new URL('../../images/zaqa-logo-tranparent.png', import.meta.url).href
+
 const page = usePage()
 const url = computed(() => (page.url ?? '').toString())
 const openGroups = computed<Record<string, boolean>>(() => {
@@ -61,8 +63,13 @@ const visibleSections = computed(() => {
 <template>
   <aside class="h-full w-[18rem] border-r border-border bg-surface">
     <div class="border-b border-border px-4 py-4">
-      <div class="text-xs font-semibold text-text-muted">ZAQA</div>
-      <div class="mt-1 text-base font-semibold text-text-primary">Admin portal</div>
+      <Link href="/admin/dashboard" class="flex items-center gap-3 no-underline">
+        <img :src="zaqaLogoUrl" alt="ZAQA logo" class="h-9 w-auto object-contain" />
+        <div class="min-w-0">
+          <div class="truncate text-sm font-semibold text-text-primary">ZAQA Portal</div>
+          <div class="truncate text-xs text-text-muted">Admin Services</div>
+        </div>
+      </Link>
     </div>
 
     <nav class="px-3 py-4">
@@ -114,4 +121,3 @@ const visibleSections = computed(() => {
     </nav>
   </aside>
 </template>
-

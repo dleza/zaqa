@@ -7,6 +7,7 @@ import { adminNavSections } from '@/Layouts/adminNav'
 import { Menu, X } from 'lucide-vue-next'
 
 const page = usePage()
+const zaqaLogoUrl = new URL('../../images/zaqa-logo-tranparent.png', import.meta.url).href
 const mobileSidebarOpen = ref(false)
 
 const user = computed(() => (page.props as any).auth?.user)
@@ -23,6 +24,7 @@ const permissions = computed<string[]>(() => ((page.props as any).auth?.permissi
         </button>
 
         <Link href="/admin/dashboard" class="zaqa-brand">
+          <img :src="zaqaLogoUrl" alt="ZAQA logo" class="h-9 w-auto shrink-0 object-contain" />
           <div class="flex flex-col">
             <span class="zaqa-brand-kicker">ZAQA</span>
             <span class="zaqa-brand-name">Admin</span>
@@ -88,4 +90,3 @@ const permissions = computed<string[]>(() => ((page.props as any).auth?.permissi
     </div>
   </div>
 </template>
-
