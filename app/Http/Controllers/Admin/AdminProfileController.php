@@ -25,7 +25,7 @@ class AdminProfileController extends Controller
                 'phone_primary' => $user?->phone_primary,
                 'phone_secondary' => $user?->phone_secondary,
                 'department' => $user?->department ? ['id' => $user->department->id, 'name' => $user->department->name] : null,
-                'roles' => method_exists($user, 'getRoleNames') ? $user->getRoleNames()->values()->all() : [],
+                'roles' => $user && method_exists($user, 'getRoleNames') ? $user->getRoleNames()->values()->all() : [],
                 'last_login_at' => optional($user?->last_login_at)?->toIso8601String(),
                 'created_at' => optional($user?->created_at)?->toIso8601String(),
             ],
@@ -61,4 +61,3 @@ class AdminProfileController extends Controller
             ->with('success', 'Password updated successfully.');
     }
 }
-

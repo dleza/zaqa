@@ -119,7 +119,7 @@ watch(
       <span class="relative flex items-center gap-2">
         <img
           v-if="hasAvatar"
-          :src="avatarUrl as string"
+          :src="avatarUrl || ''"
           alt="Profile photo"
           class="h-9 w-9 rounded-full object-cover"
           @error="avatarErrored = true"
