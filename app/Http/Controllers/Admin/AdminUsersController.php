@@ -20,10 +20,49 @@ class AdminUsersController extends Controller
     {
         $this->authorize('viewAny', User::class);
 
-        $users = User::query()
-            ->whereNull('applicant_type')
-            ->orderByDesc('id')
+        $q = trim((string) $request->query('q', ''));
+        $sort = (string) $request->query('sort', 'id');
+        $dir = strtolower((string) $request->query('dir', 'desc')) === 'asc' ? 'asc' : 'desc';
+
+        $allowedSorts = [
+            'id' => 'users.id',
+            'name' => 'users.name',
+            'email' => 'users.email',
+            'phone_primary' => 'users.phone_primary',
+            'created_at' => 'users.created_at',
+            'last_login_at' => 'users.last_login_at',
+            'status' => '__status',
+        ];
+
+        $usersQuery = User::query()->whereNull('applicant_type')->with('roles');
+
+        if ($q !== '') {
+            $like = '%'.str_replace(['\\', '%', '_'], ['\\\\', '\\%', '\\_'], $q).'%';
+
+            $usersQuery->where(function ($query) use ($like) {
+                $query
+                    ->where('users.name', 'like', $like)
+                    ->orWhere('users.email', 'like', $like)
+                    ->orWhere('users.phone_primary', 'like', $like);
+            });
+        }
+
+        $sortColumn = $allowedSorts[$sort] ?? null;
+        if (! $sortColumn) {
+            $sort = 'id';
+            $sortColumn = $allowedSorts['id'];
+        }
+        if ($sortColumn === '__status') {
+            $usersQuery->orderByRaw(
+                "CASE WHEN users.disabled_at IS NOT NULL THEN 2 WHEN users.is_active = 1 THEN 0 ELSE 1 END {$dir}"
+            );
+        } else {
+            $usersQuery->orderBy($sortColumn, $dir);
+        }
+
+        $users = $usersQuery
             ->paginate(20)
+            ->withQueryString()
             ->through(fn (User $u) => [
                 'id' => $u->id,
                 'name' => $u->name,
@@ -38,6 +77,11 @@ class AdminUsersController extends Controller
 
         return Inertia::render('Admin/Users/Index', [
             'users' => $users,
+            'filters' => [
+                'q' => $q,
+                'sort' => $sort,
+                'dir' => $dir,
+            ],
         ]);
     }
 
@@ -191,4 +235,3 @@ class AdminUsersController extends Controller
             ->with('generated_password_for', $user->email);
     }
 }
-

@@ -14,10 +14,51 @@ class AdminApplicantsController extends Controller
 {
     public function index(Request $request): Response
     {
-        $applicants = User::query()
-            ->whereNotNull('applicant_type')
-            ->orderByDesc('id')
+        $q = trim((string) $request->query('q', ''));
+        $sort = (string) $request->query('sort', 'id');
+        $dir = strtolower((string) $request->query('dir', 'desc')) === 'asc' ? 'asc' : 'desc';
+
+        $allowedSorts = [
+            'id' => 'users.id',
+            'name' => 'users.name',
+            'email' => 'users.email',
+            'phone_primary' => 'users.phone_primary',
+            'applicant_type' => 'users.applicant_type',
+            'created_at' => 'users.created_at',
+            'status' => '__status',
+        ];
+
+        $applicantsQuery = User::query()->whereNotNull('applicant_type')->with('roles');
+
+        if ($q !== '') {
+            $like = '%'.str_replace(['\\', '%', '_'], ['\\\\', '\\%', '\\_'], $q).'%';
+
+            $applicantsQuery->where(function ($query) use ($like) {
+                $query
+                    ->where('users.name', 'like', $like)
+                    ->orWhere('users.email', 'like', $like)
+                    ->orWhere('users.phone_primary', 'like', $like)
+                    ->orWhere('users.applicant_type', 'like', $like);
+            });
+        }
+
+        $sortColumn = $allowedSorts[$sort] ?? null;
+        if (! $sortColumn) {
+            $sort = 'id';
+            $sortColumn = $allowedSorts['id'];
+        }
+
+        if ($sortColumn === '__status') {
+            $applicantsQuery->orderByRaw(
+                "CASE WHEN users.disabled_at IS NOT NULL THEN 2 WHEN users.is_active = 1 THEN 0 ELSE 1 END {$dir}"
+            );
+        } else {
+            $applicantsQuery->orderBy($sortColumn, $dir);
+        }
+
+        $applicants = $applicantsQuery
             ->paginate(20)
+            ->withQueryString()
             ->through(fn (User $u) => [
                 'id' => $u->id,
                 'name' => $u->name,
@@ -32,6 +73,11 @@ class AdminApplicantsController extends Controller
 
         return Inertia::render('Admin/Applicants/Index', [
             'applicants' => $applicants,
+            'filters' => [
+                'q' => $q,
+                'sort' => $sort,
+                'dir' => $dir,
+            ],
         ]);
     }
 
@@ -138,4 +184,3 @@ class AdminApplicantsController extends Controller
         ]);
     }
 }
-

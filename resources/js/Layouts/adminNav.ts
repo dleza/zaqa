@@ -30,7 +30,7 @@ export type AdminNavSection = {
 
 export const adminNavSections: AdminNavSection[] = [
   {
-    label: 'Overview',
+    label: '',
     items: [
       {
         label: 'Dashboard',
