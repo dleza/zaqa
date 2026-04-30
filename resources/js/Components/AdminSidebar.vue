@@ -2,6 +2,7 @@
 import { computed, onMounted, ref } from 'vue'
 import { Link, usePage } from '@inertiajs/vue3'
 import type { AdminNavSection } from '@/Layouts/adminNav'
+import { ChevronDown } from 'lucide-vue-next'
 
 const props = defineProps<{
   sections: AdminNavSection[]
@@ -139,7 +140,11 @@ const visibleSections = computed(() => {
           @click="toggleSection(section, sectionIndex)"
         >
           <span>{{ section.label }}</span>
-          <span class="text-xs font-bold opacity-70">{{ sectionIsOpen(section, sectionIndex) ? '—' : '+' }}</span>
+          <ChevronDown
+            class="h-4 w-4 shrink-0 opacity-70 transition-transform"
+            :class="sectionIsOpen(section, sectionIndex) ? 'rotate-180' : 'rotate-0'"
+            aria-hidden="true"
+          />
         </button>
 
         <div
@@ -159,7 +164,11 @@ const visibleSections = computed(() => {
                 <component v-if="item.icon" :is="item.icon" class="h-4 w-4" aria-hidden="true" />
                 <span class="truncate">{{ item.label }}</span>
               </span>
-              <span class="text-xs font-bold opacity-70">{{ groupIsOpen(item) ? '—' : '+' }}</span>
+              <ChevronDown
+                class="h-4 w-4 shrink-0 opacity-70 transition-transform"
+                :class="groupIsOpen(item) ? 'rotate-180' : 'rotate-0'"
+                aria-hidden="true"
+              />
             </button>
 
             <div v-if="(item.children?.length ?? 0) > 0 && groupIsOpen(item)" class="mt-1 space-y-1 pl-3">

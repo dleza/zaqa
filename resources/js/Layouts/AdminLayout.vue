@@ -3,6 +3,7 @@ import { computed, ref } from 'vue'
 import { Link, usePage } from '@inertiajs/vue3'
 import FlashMessages from '@/Components/FlashMessages.vue'
 import AdminSidebar from '@/Components/AdminSidebar.vue'
+import TopbarUserMenu from '@/Components/TopbarUserMenu.vue'
 import { adminNavSections } from '@/Layouts/adminNav'
 import { Menu, X } from 'lucide-vue-next'
 
@@ -31,9 +32,7 @@ const permissions = computed<string[]>(() => ((page.props as any).auth?.permissi
           </div>
         </Link>
 
-        <Link href="/logout" method="post" as="button" class="zaqa-btn zaqa-btn-ghost-on-brand px-3 py-2 text-sm">
-          Log out
-        </Link>
+        <TopbarUserMenu :user="user" variant="brand" />
       </div>
     </header>
 
@@ -70,15 +69,7 @@ const permissions = computed<string[]>(() => ((page.props as any).auth?.permissi
               <div class="text-sm font-semibold text-text-primary">Admin Portal</div>
               <div class="mt-0.5 text-xs text-text-muted">ZAQA back-office operations</div>
             </div>
-            <div class="flex items-center gap-3">
-              <div class="text-right">
-                <div class="text-sm font-semibold text-text-primary">{{ user?.name ?? '—' }}</div>
-                <div class="mt-0.5 text-xs text-text-muted">{{ user?.email ?? '' }}</div>
-              </div>
-              <Link href="/logout" method="post" as="button" class="zaqa-btn zaqa-btn-secondary px-3 py-2 text-sm">
-                Log out
-              </Link>
-            </div>
+            <TopbarUserMenu :user="user" />
           </div>
         </header>
 
