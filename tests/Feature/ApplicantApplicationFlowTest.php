@@ -177,6 +177,10 @@ class ApplicantApplicationFlowTest extends TestCase
         $this->assertNotNull($application->submitted_at);
         $this->assertNotNull($application->service_deadline_at);
 
+        $qualification->refresh();
+        $this->assertNotNull($qualification->verification_reference_number);
+        $this->assertStringStartsWith('ZAQA-Q-', $qualification->verification_reference_number);
+
         $this->assertDatabaseHas('audit_logs', [
             'event_type' => 'applications.submitted',
             'module' => 'Applications',

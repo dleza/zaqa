@@ -59,6 +59,10 @@ const appNum = computed(() => props.qualification.application?.application_numbe
               <div class="text-xs font-semibold uppercase tracking-wider text-text-muted">Title</div>
               <div class="mt-1 text-sm font-semibold text-text-primary">{{ qualification.title ?? '—' }}</div>
               <div class="mt-1 text-xs text-text-muted">Type: {{ qualification.qualification_type ?? '—' }}</div>
+              <div v-if="qualification.verification_reference_number" class="mt-3">
+                <div class="text-xs font-semibold uppercase tracking-wider text-text-muted">Verification reference</div>
+                <div class="mt-0.5 font-mono text-sm font-semibold text-text-primary">{{ qualification.verification_reference_number }}</div>
+              </div>
             </div>
             <div>
               <div class="text-xs font-semibold uppercase tracking-wider text-text-muted">Awarding Institution</div>

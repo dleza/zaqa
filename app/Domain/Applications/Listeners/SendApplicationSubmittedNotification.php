@@ -18,8 +18,18 @@ class SendApplicationSubmittedNotification implements ShouldQueue
     public function handle(ApplicationSubmitted $event): void
     {
         $user = $event->actor;
-        $application = $event->application;
+        $application = $event->application->fresh(['qualifications']);
         $trackingUrl = route('applicant.applications.track', ['application' => $application->id]);
+
+        $qualificationReferences = $application->qualifications
+            ->sortBy('id')
+            ->map(fn ($q) => [
+                'title' => (string) ($q->title_of_qualification ?: 'Qualification'),
+                'reference' => (string) ($q->verification_reference_number ?? ''),
+            ])
+            ->filter(fn (array $row) => $row['reference'] !== '')
+            ->values()
+            ->all();
 
         $subject = $event->isResubmission
             ? 'ZAQA application resubmitted'
@@ -41,6 +51,7 @@ class SendApplicationSubmittedNotification implements ShouldQueue
                 applicationNumber: $application->application_number,
                 trackingUrl: $trackingUrl,
                 isResubmission: $event->isResubmission,
+                qualificationReferences: $qualificationReferences,
             ));
 
             $emailLog->forceFill([
@@ -53,8 +64,8 @@ class SendApplicationSubmittedNotification implements ShouldQueue
         }
 
         $message = $event->isResubmission
-            ? sprintf('ZAQA: Your application %s has been resubmitted successfully.', $application->application_number)
-            : sprintf('ZAQA: Your application %s has been submitted successfully.', $application->application_number);
+            ? sprintf('ZAQA: Your application %s has been resubmitted successfully. Qualification reference numbers are in your email.', $application->application_number)
+            : sprintf('ZAQA: Your application %s has been submitted successfully. Qualification reference numbers are in your email.', $application->application_number);
 
         $provider = (string) config('services.sms.provider', 'log');
 

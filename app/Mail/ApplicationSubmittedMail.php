@@ -12,11 +12,15 @@ class ApplicationSubmittedMail extends Mailable
 {
     use Queueable, SerializesModels;
 
+    /**
+     * @param array<int, array{title: string, reference: string}> $qualificationReferences
+     */
     public function __construct(
         public readonly string $recipientName,
         public readonly string $applicationNumber,
         public readonly string $trackingUrl,
         public readonly bool $isResubmission,
+        public readonly array $qualificationReferences = [],
     ) {
     }
 
@@ -36,6 +40,7 @@ class ApplicationSubmittedMail extends Mailable
                 'applicationNumber' => $this->applicationNumber,
                 'trackingUrl' => $this->trackingUrl,
                 'isResubmission' => $this->isResubmission,
+                'qualificationReferences' => $this->qualificationReferences,
             ],
         );
     }

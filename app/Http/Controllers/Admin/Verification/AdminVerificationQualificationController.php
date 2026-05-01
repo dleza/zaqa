@@ -42,6 +42,7 @@ class AdminVerificationQualificationController extends Controller
         return Inertia::render('Admin/Verification/Qualifications/Show', [
             'qualification' => [
                 'id' => $qualification->id,
+                'verification_reference_number' => $qualification->verification_reference_number,
                 'verification_state' => $qualification->verification_state,
                 'is_foreign' => (bool) $qualification->is_foreign_qualification,
                 'assigned_verifier_id' => $qualification->assigned_verifier_id,

@@ -12,6 +12,7 @@ class Qualification extends Model
 {
     protected $fillable = [
         'application_id',
+        'verification_reference_number',
         'awarding_institution_id',
         'awarding_institution_name',
         'awarding_institution_name_other',

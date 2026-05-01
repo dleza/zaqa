@@ -72,15 +72,25 @@ async function confirmDelete(app: any) {
                 <span class="zaqa-badge">{{ app.status_label }}</span>
               </td>
               <td class="px-4 py-4">
-                <span class="zaqa-badge border-brand/15 bg-brand/10 text-brand">
-                  Step {{ app.wizard?.current_step?.index ?? 1 }}/{{ app.wizard?.current_step?.total ?? 6 }} •
-                  {{ app.wizard?.current_step?.label ?? 'Applicant' }}
+                <span
+                  v-if="app.can_edit && app.wizard?.current_step"
+                  class="zaqa-badge border-brand/15 bg-brand/10 text-brand"
+                >
+                  Step {{ app.wizard.current_step.index }}/{{ app.wizard.current_step.total }} •
+                  {{ app.wizard.current_step.label }}
                 </span>
+                <span v-else class="text-sm text-text-muted">—</span>
               </td>
               <td class="px-4 py-4">
                 <div class="flex justify-end gap-2">
                   <Link :href="`/applicant/applications/${app.id}`" class="zaqa-btn zaqa-btn-secondary px-3 py-2 text-xs">View</Link>
-                  <Link v-if="app.can_edit" :href="`/applicant/applications/${app.id}/edit`" class="zaqa-btn zaqa-btn-primary px-3 py-2 text-xs">Edit</Link>
+                  <Link
+                    v-if="app.can_edit"
+                    :href="app.wizard?.edit_href ?? `/applicant/applications/${app.id}/edit`"
+                    class="zaqa-btn zaqa-btn-primary px-3 py-2 text-xs"
+                  >
+                    Edit
+                  </Link>
                   <button
                     v-if="app.can_delete"
                     type="button"
@@ -109,14 +119,23 @@ async function confirmDelete(app: any) {
 
           <div class="mt-3 grid grid-cols-2 gap-3 text-xs">
             <div class="text-text-muted">Current step</div>
-            <div class="text-right font-semibold text-brand">
-              {{ app.wizard?.current_step?.index ?? 1 }}/{{ app.wizard?.current_step?.total ?? 6 }} • {{ app.wizard?.current_step?.label ?? 'Applicant' }}
+            <div class="text-right font-semibold" :class="app.can_edit && app.wizard?.current_step ? 'text-brand' : 'text-text-muted'">
+              <template v-if="app.can_edit && app.wizard?.current_step">
+                {{ app.wizard.current_step.index }}/{{ app.wizard.current_step.total }} • {{ app.wizard.current_step.label }}
+              </template>
+              <template v-else>—</template>
             </div>
           </div>
 
           <div class="mt-4 flex flex-wrap gap-2">
             <Link :href="`/applicant/applications/${app.id}`" class="zaqa-btn zaqa-btn-secondary px-3 py-2 text-xs">View</Link>
-            <Link v-if="app.can_edit" :href="`/applicant/applications/${app.id}/edit`" class="zaqa-btn zaqa-btn-primary px-3 py-2 text-xs">Edit</Link>
+            <Link
+              v-if="app.can_edit"
+              :href="app.wizard?.edit_href ?? `/applicant/applications/${app.id}/edit`"
+              class="zaqa-btn zaqa-btn-primary px-3 py-2 text-xs"
+            >
+              Edit
+            </Link>
             <button
               v-if="app.can_delete"
               type="button"

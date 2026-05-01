@@ -5,7 +5,9 @@ namespace App\Http\Controllers\Applicant;
 use App\Domain\Applications\ApplicationDraftService;
 use App\Domain\Applications\ApplicationSubmissionService;
 use App\Domain\Documents\ApplicantDocumentService;
+use App\Enums\ApplicantType;
 use App\Enums\DocumentType;
+use App\Enums\InvoiceStatus;
 use App\Enums\PaymentStatus;
 use App\Enums\ServiceType;
 use App\Http\Controllers\Controller;
@@ -18,7 +20,9 @@ use App\Models\BillingCategory;
 use App\Models\CertificateSubject;
 use App\Models\Country;
 use App\Models\FeeStructure;
+use App\Models\Qualification;
 use App\Models\QualificationType;
+use App\Models\User;
 use App\Support\CountryIso;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -31,12 +35,24 @@ class ApplicantApplicationController extends Controller
     public function index(Request $request): Response
     {
         $user = $request->user();
+        $user?->loadMissing(['applicantProfile', 'institutionProfile']);
 
         $applications = Application::query()
             ->where('applicant_user_id', $user->id)
             ->with([
+                'qualifications.qualificationTypeMaster',
+                'qualifications.subjectResults',
+                'qualifications.consentForm',
+                'qualifications.awardingInstitution.country',
+                'qualifications.country',
+                'qualification.qualificationTypeMaster',
                 'qualification.subjectResults',
+                'qualification.consentForm',
+                'qualification.awardingInstitution.country',
+                'qualification.country',
                 'documents',
+                'invoice',
+                'payments',
                 'consentForm',
             ])
             ->latest('id')
@@ -54,7 +70,7 @@ class ApplicantApplicationController extends Controller
                 'created_at' => optional($application->created_at)?->toIso8601String(),
                 'can_edit' => $request->user()->can('update', $application),
                 'can_delete' => $request->user()->can('delete', $application),
-                'wizard' => $this->wizardSummary($application),
+                'wizard' => $this->wizardSummary($application, $user),
             ]);
 
         return Inertia::render('Applicant/Applications/Index', [
@@ -62,58 +78,40 @@ class ApplicantApplicationController extends Controller
         ]);
     }
 
-    private function wizardSummary(Application $application): array
+    /**
+     * Mirrors the applicant edit wizard: Applicant → Qualification → Declarations → Payment → Review & submit.
+     * Subjects and per-qualification documents roll into the Qualification step (same as Edit.vue).
+     */
+    private function wizardSummary(Application $application, User $user): array
     {
-        $qualification = $application->qualification;
+        if (! $user->can('update', $application)) {
+            return [
+                'current_step' => null,
+                'edit_href' => null,
+            ];
+        }
 
-        $needsSubjects = (bool) ($qualification?->qualificationTypeMaster?->requires_subject_results ?? false);
-
-        $qualificationOk = (bool) $qualification
-            && trim((string) ($qualification->qualification_holder_name ?? '')) !== ''
-            && trim((string) ($qualification->nrc_passport_number ?? '')) !== ''
-            && (bool) $qualification->country_id
-            && ((bool) $qualification->awarding_institution_id || trim((string) $qualification->awarding_institution_name_other) !== '')
-            && trim((string) $qualification->title_of_qualification) !== ''
-            && ! empty($qualification->award_date)
-            && (int) ($qualification->qualification_type_id ?? 0) > 0
-            && (
-                trim((string) $qualification->certificate_number) !== ''
-                || trim((string) $qualification->student_number) !== ''
-                || trim((string) $qualification->examination_number) !== ''
-            );
-
-        $subjectsOk = ! $needsSubjects
-            || (($qualification?->subjectResults?->count() ?? 0) > 0);
-
-        $hasNrc = $application->documents->contains(fn ($d) => ($d->document_type?->value ?? (string) $d->document_type) === 'nrc_copy' && (bool) $d->is_current_version);
-        $hasCert = $application->documents->contains(fn ($d) => ($d->document_type?->value ?? (string) $d->document_type) === 'certificate_copy' && (bool) $d->is_current_version);
-        $hasTranscript = $application->documents->contains(fn ($d) => ($d->document_type?->value ?? (string) $d->document_type) === 'transcript' && (bool) $d->is_current_version);
-        $documentsOk = $hasNrc && $hasCert && ((bool) $application->is_foreign ? $hasTranscript : true);
-
-        $institutionConsentOk = (bool) $application->is_foreign
-            ? (bool) ($application->consentForm?->uploaded_document_id)
-            : true; // local applications: per-qualification institution consent not required (see applicationPayload)
-
+        $applicantDone = $this->wizardApplicantStepComplete($application, $user);
+        $qualificationDone = $this->wizardQualificationStepComplete($application);
         $wd = (array) (($application->metadata ?? [])['wizard_declarations'] ?? []);
         $termsAt = $wd['terms_accepted_at'] ?? null;
         $confirmedAt = $wd['information_confirmed_at'] ?? null;
-        $declarationsOk = is_string($termsAt) && trim($termsAt) !== ''
+        $declarationsDone = is_string($termsAt) && trim($termsAt) !== ''
             && is_string($confirmedAt) && trim($confirmedAt) !== '';
-
-        $consentStepDone = $institutionConsentOk && $declarationsOk;
+        $paymentDone = $this->wizardPaymentStepComplete($application);
+        // Final checkbox on Review is client-only; treat Review as pending until submit (matches Edit step gating).
+        $reviewDone = false;
 
         $steps = [
-            ['key' => 'applicant', 'label' => 'Applicant', 'done' => true],
-            ['key' => 'qualification', 'label' => 'Qualification', 'done' => $qualificationOk],
-            ['key' => 'subjects', 'label' => 'Subjects', 'done' => $subjectsOk, 'enabled' => $needsSubjects],
-            ['key' => 'documents', 'label' => 'Documents', 'done' => $documentsOk],
-            ['key' => 'consent', 'label' => 'Declarations', 'done' => $consentStepDone],
-            ['key' => 'review', 'label' => 'Review & submit', 'done' => $qualificationOk && $subjectsOk && $documentsOk && $consentStepDone],
+            ['key' => 'applicant', 'label' => 'Applicant', 'done' => $applicantDone],
+            ['key' => 'qualification', 'label' => 'Qualification', 'done' => $qualificationDone],
+            ['key' => 'consent', 'label' => 'Declarations', 'done' => $declarationsDone],
+            ['key' => 'payment', 'label' => 'Payment', 'done' => $paymentDone],
+            ['key' => 'review', 'label' => 'Review & submit', 'done' => $reviewDone],
         ];
 
-        $filtered = array_values(array_filter($steps, fn ($s) => ($s['enabled'] ?? true) === true));
         $currentIndex = 0;
-        foreach ($filtered as $idx => $s) {
+        foreach ($steps as $idx => $s) {
             if (! (bool) $s['done']) {
                 $currentIndex = $idx;
                 break;
@@ -121,17 +119,207 @@ class ApplicantApplicationController extends Controller
             $currentIndex = $idx;
         }
 
-        $current = $filtered[$currentIndex] ?? ['key' => 'review', 'label' => 'Review & submit', 'done' => false];
+        $current = $steps[$currentIndex] ?? $steps[0];
 
         return [
             'current_step' => [
                 'index' => $currentIndex + 1,
-                'total' => count($filtered),
+                'total' => count($steps),
                 'key' => $current['key'],
                 'label' => $current['label'],
                 'done' => (bool) $current['done'],
             ],
+            'edit_href' => route('applicant.applications.edit', [
+                'application' => $application->id,
+                'step' => $current['key'],
+            ]),
         ];
+    }
+
+    private function wizardApplicantStepComplete(Application $application, User $user): bool
+    {
+        if (trim((string) ($user->email ?? '')) === '' || trim((string) ($user->phone_primary ?? '')) === '') {
+            return false;
+        }
+
+        $meta = (array) ($application->metadata ?? []);
+        $submittingFor = trim((string) ($meta['submitting_for'] ?? 'self'));
+        $applicantType = $user->applicant_type?->value ?? '';
+
+        if ($submittingFor === 'other') {
+            $vs = (array) ($meta['verification_subject'] ?? []);
+            $fullName = trim((string) ($vs['full_name'] ?? ''));
+            $nrc = trim((string) ($vs['nrc_number'] ?? ''));
+            $passport = trim((string) ($vs['passport_number'] ?? ''));
+            if ($fullName === '' || ($nrc === '' && $passport === '')) {
+                return false;
+            }
+        } elseif ($applicantType === ApplicantType::Individual->value) {
+            $profile = $user->applicantProfile;
+            $nrc = trim((string) ($profile?->nrc_number ?? ''));
+            $passport = trim((string) ($profile?->passport_number ?? ''));
+            if ($nrc === '' && $passport === '') {
+                return false;
+            }
+        }
+
+        $hasApplicationIdentity = $application->documents->contains(function ($d) {
+            $v = $d->document_type?->value ?? (string) $d->document_type;
+
+            return (bool) $d->is_current_version
+                && in_array($v, [DocumentType::NrcCopy->value, DocumentType::PassportCopy->value], true);
+        });
+
+        if ($hasApplicationIdentity) {
+            return true;
+        }
+
+        if ($submittingFor !== 'other') {
+            $uploadedAt = $user->applicantProfile?->identity_document_uploaded_at ?? null;
+            if ($uploadedAt !== null) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * @return \Illuminate\Support\Collection<int, Qualification>
+     */
+    private function wizardQualifications(Application $application): \Illuminate\Support\Collection
+    {
+        $application->loadMissing([
+            'qualifications.qualificationTypeMaster',
+            'qualifications.subjectResults',
+            'qualifications.consentForm',
+            'qualifications.awardingInstitution.country',
+            'qualifications.country',
+            'qualification.qualificationTypeMaster',
+            'qualification.subjectResults',
+            'qualification.consentForm',
+            'qualification.awardingInstitution.country',
+            'qualification.country',
+        ]);
+
+        $list = $application->qualifications;
+        if ($list->isEmpty() && $application->qualification) {
+            return collect([$application->qualification]);
+        }
+
+        return $list;
+    }
+
+    private function wizardQualificationStepComplete(Application $application): bool
+    {
+        $quals = $this->wizardQualifications($application);
+        if ($quals->isEmpty()) {
+            return false;
+        }
+
+        foreach ($quals as $q) {
+            if (! $this->wizardSingleQualificationComplete($application, $q)) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private function wizardSingleQualificationComplete(Application $application, Qualification $q): bool
+    {
+        if (trim((string) ($q->qualification_holder_name ?? '')) === ''
+            || trim((string) ($q->nrc_passport_number ?? '')) === ''
+            || ! (bool) $q->country_id
+            || (! (bool) $q->awarding_institution_id && trim((string) ($q->awarding_institution_name_other ?? '')) === '')
+            || trim((string) ($q->title_of_qualification ?? '')) === ''
+            || empty($q->award_date)
+            || (int) ($q->qualification_type_id ?? 0) < 1) {
+            return false;
+        }
+
+        $idNum = trim((string) ($q->certificate_number ?? ''))
+            . trim((string) ($q->student_number ?? ''))
+            . trim((string) ($q->examination_number ?? ''));
+        if ($idNum === '') {
+            return false;
+        }
+
+        if (! $this->wizardQualificationSubjectsSatisfied($q)) {
+            return false;
+        }
+
+        $qid = (int) $q->id;
+
+        if (! $this->wizardHasQualificationDocument($application, $qid, DocumentType::CertificateCopy)) {
+            return false;
+        }
+
+        if ((bool) ($q->transcript_required ?? false)
+            && ! $this->wizardHasQualificationDocument($application, $qid, DocumentType::Transcript)) {
+            return false;
+        }
+
+        $foreign = $this->wizardQualificationInstitutionIsForeign($q);
+        if ($foreign) {
+            $consentOk = (bool) ($q->consentForm?->uploaded_document_id ?? false);
+            if (! $consentOk) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private function wizardQualificationSubjectsSatisfied(Qualification $q): bool
+    {
+        $type = $q->qualificationTypeMaster;
+        if (! $type || ! $type->requires_subject_results) {
+            return true;
+        }
+
+        $rows = $q->subjectResults ?? collect();
+        if ($rows->count() === 0) {
+            return false;
+        }
+
+        foreach ($rows as $r) {
+            $gradeOk = trim((string) ($r->grade ?? '')) !== '';
+            $catalogId = (int) ($r->certificate_subject_id ?? 0);
+            $subjectOk = $catalogId > 0 || trim((string) ($r->subject_name ?? '')) !== '';
+            if (! $gradeOk || ! $subjectOk) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private function wizardQualificationInstitutionIsForeign(Qualification $q): bool
+    {
+        $instIso = strtoupper((string) (($q->awardingInstitution?->country?->iso_code) ?: ($q->country?->iso_code) ?: ''));
+
+        return $instIso !== '' && ! CountryIso::isZambia($instIso);
+    }
+
+    private function wizardHasQualificationDocument(Application $application, int $qualificationId, DocumentType $type): bool
+    {
+        $want = $type->value;
+
+        return $application->documents->contains(function ($d) use ($qualificationId, $want) {
+            $v = $d->document_type?->value ?? (string) $d->document_type;
+
+            return (bool) $d->is_current_version
+                && $v === $want
+                && (int) ($d->qualification_id ?? 0) === $qualificationId;
+        });
+    }
+
+    private function wizardPaymentStepComplete(Application $application): bool
+    {
+        $invoicePaid = $application->invoice && $application->invoice->status === InvoiceStatus::Paid;
+
+        return $invoicePaid || $application->payments->contains(fn ($p) => $p->status === PaymentStatus::Confirmed);
     }
 
     public function create(Request $request): Response
@@ -421,6 +609,7 @@ class ApplicantApplicationController extends Controller
 
                 return [
                     'id' => $q->id,
+                    'verification_reference_number' => $q->verification_reference_number,
                     'awarding_institution_id' => $q->awarding_institution_id,
                     'awarding_institution_name' => $q->awarding_institution_name,
                     'awarding_institution_name_other' => $q->awarding_institution_name_other,
@@ -546,6 +735,7 @@ class ApplicantApplicationController extends Controller
             'qualification' => $application->qualification
                 ? [
                     'id' => $application->qualification->id,
+                    'verification_reference_number' => $application->qualification->verification_reference_number,
                     'awarding_institution_id' => $application->qualification->awarding_institution_id,
                     'awarding_institution_name' => $application->qualification->awarding_institution_name,
                     'awarding_institution_name_other' => $application->qualification->awarding_institution_name_other,
