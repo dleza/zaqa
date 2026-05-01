@@ -12,6 +12,9 @@ return new class extends Migration
             $table->id();
             $table->foreignId('country_id')->constrained('countries')->cascadeOnDelete();
             $table->string('name');
+            // Optional template consent form (admin uploaded) that applicants must download/sign/upload
+            // when verifying a foreign qualification from this institution.
+            $table->string('consent_form_path')->nullable();
             $table->boolean('is_active')->default(true);
             $table->unsignedInteger('sort_order')->default(0);
             $table->timestamps();

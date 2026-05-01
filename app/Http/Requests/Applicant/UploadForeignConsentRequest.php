@@ -19,20 +19,17 @@ class UploadForeignConsentRequest extends FormRequest
      */
     public function rules(): array
     {
-        $maxKb = (int) config('documents.max_upload_kb', 10240);
-        $mimeTypes = (array) config('documents.allowed_mimetypes', [
+        $maxKb = (int) config('documents.max_upload_kb', 5120);
+        $mimeTypes = [
             'application/pdf',
-            'image/jpeg',
-            'image/png',
-            'image/webp',
-        ]);
+            'application/msword',
+            'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        ];
 
         return [
             'qualification_id' => ['required', 'integer', 'exists:qualifications,id'],
             // Awarding institution consent file
             'file' => ['required', 'file', 'max:'.$maxKb, 'mimetypes:'.implode(',', $mimeTypes)],
-            // ZAQA consent file (required for foreign applications)
-            'zaqa_file' => ['nullable', 'file', 'max:'.$maxKb, 'mimetypes:'.implode(',', $mimeTypes)],
             // Canonical term
             'source_awarding_institution_name' => ['nullable', 'string', 'max:255'],
             // Back-compat alias for older clients
@@ -52,12 +49,6 @@ class UploadForeignConsentRequest extends FormRequest
             if (! $qualification || ! $application || (int) $qualification->application_id !== (int) $application->id) {
                 $validator->errors()->add('qualification_id', 'Selected qualification is invalid for this application.');
                 return;
-            }
-
-            $isForeign = (bool) ($qualification->is_foreign_qualification ?? false);
-
-            if (! $this->file('zaqa_file')) {
-                $validator->errors()->add('zaqa_file', 'ZAQA consent form is required for foreign applications.');
             }
         });
     }

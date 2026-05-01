@@ -11,6 +11,8 @@ use App\Models\Country;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -84,13 +86,25 @@ class AdminAwardingInstitutionsController extends Controller
     {
         $data = $request->validated();
 
-        $institution = DB::transaction(function () use ($data) {
-            return AwardingInstitution::query()->create([
+        $institution = DB::transaction(function () use ($data, $request) {
+            $inst = AwardingInstitution::query()->create([
                 'country_id' => (int) $data['country_id'],
                 'name' => $data['name'],
                 'is_active' => (bool) $data['is_active'],
                 'sort_order' => (int) ($data['sort_order'] ?? 0),
             ]);
+
+            if ($request->hasFile('consent_form')) {
+                $disk = config('filesystems.default', 'local');
+                $file = $request->file('consent_form');
+                $ext = strtolower($file->getClientOriginalExtension() ?: $file->extension() ?: 'bin');
+                $storedName = 'institution_consent_form_'.Str::random(10).'.'.$ext;
+                $directory = sprintf('private/awarding-institutions/%s/consent-form', $inst->id);
+                $path = $file->storeAs($directory, $storedName, ['disk' => $disk]);
+                $inst->forceFill(['consent_form_path' => $path])->save();
+            }
+
+            return $inst;
         });
 
         $audit->record(
@@ -124,6 +138,8 @@ class AdminAwardingInstitutionsController extends Controller
                 'name' => $awardingInstitution->name,
                 'is_active' => (bool) $awardingInstitution->is_active,
                 'sort_order' => (int) ($awardingInstitution->sort_order ?? 0),
+                'has_consent_form' => (bool) $awardingInstitution->has_consent_form,
+                'consent_form_url' => $awardingInstitution->consent_form_url,
             ],
             'countries' => $countries,
         ]);
@@ -134,12 +150,36 @@ class AdminAwardingInstitutionsController extends Controller
         $before = $awardingInstitution->toArray();
         $data = $request->validated();
 
-        $awardingInstitution->forceFill([
-            'country_id' => (int) $data['country_id'],
-            'name' => $data['name'],
-            'is_active' => (bool) $data['is_active'],
-            'sort_order' => (int) ($data['sort_order'] ?? 0),
-        ])->save();
+        DB::transaction(function () use ($request, $data, $awardingInstitution) {
+            $awardingInstitution->forceFill([
+                'country_id' => (int) $data['country_id'],
+                'name' => $data['name'],
+                'is_active' => (bool) $data['is_active'],
+                'sort_order' => (int) ($data['sort_order'] ?? 0),
+            ])->save();
+
+            $disk = config('filesystems.default', 'local');
+
+            if ((bool) ($data['remove_consent_form'] ?? false)) {
+                if ($awardingInstitution->consent_form_path) {
+                    Storage::disk($disk)->delete($awardingInstitution->consent_form_path);
+                }
+                $awardingInstitution->forceFill(['consent_form_path' => null])->save();
+            }
+
+            if ($request->hasFile('consent_form')) {
+                if ($awardingInstitution->consent_form_path) {
+                    Storage::disk($disk)->delete($awardingInstitution->consent_form_path);
+                }
+
+                $file = $request->file('consent_form');
+                $ext = strtolower($file->getClientOriginalExtension() ?: $file->extension() ?: 'bin');
+                $storedName = 'institution_consent_form_'.Str::random(10).'.'.$ext;
+                $directory = sprintf('private/awarding-institutions/%s/consent-form', $awardingInstitution->id);
+                $path = $file->storeAs($directory, $storedName, ['disk' => $disk]);
+                $awardingInstitution->forceFill(['consent_form_path' => $path])->save();
+            }
+        });
 
         $audit->record(
             eventType: 'settings.awarding_institution_updated',

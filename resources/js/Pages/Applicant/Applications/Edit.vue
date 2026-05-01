@@ -147,6 +147,7 @@ const applicantForm = useForm<any>({
 })
 
 type SubmittingFor = 'self' | 'other'
+const institutionOnlyOnBehalf = computed(() => applicantType.value === 'institution')
 const submittingForForm = useForm<{
   submitting_for: SubmittingFor
   subject_full_name: string
@@ -155,13 +156,24 @@ const submittingForForm = useForm<{
   subject_nrc_number: string
   subject_passport_number: string
 }>({
-  submitting_for: (props.application?.metadata?.submitting_for ?? 'self') as SubmittingFor,
+  submitting_for: (props.application?.metadata?.submitting_for ?? (institutionOnlyOnBehalf.value ? 'other' : 'self')) as SubmittingFor,
   subject_full_name: (props.application?.metadata?.verification_subject?.full_name ?? '').toString(),
   subject_email: (props.application?.metadata?.verification_subject?.email ?? '').toString(),
   subject_phone: (props.application?.metadata?.verification_subject?.phone ?? '').toString(),
   subject_nrc_number: (props.application?.metadata?.verification_subject?.nrc_number ?? '').toString(),
   subject_passport_number: (props.application?.metadata?.verification_subject?.passport_number ?? '').toString(),
 })
+
+watch(
+  institutionOnlyOnBehalf,
+  (isInst) => {
+    if (isInst && submittingForForm.submitting_for !== 'other') {
+      submittingForForm.submitting_for = 'other'
+      submittingForForm.clearErrors()
+    }
+  },
+  { immediate: true },
+)
 
 function saveSubmittingFor() {
   setSaving('Saving verification subject…')
@@ -452,12 +464,10 @@ function acceptLocalConsent() {
 const foreignConsentForm = useForm<{
   qualification_id: number | null
   file: File | null
-  zaqa_file: File | null
   source_awarding_institution_name: string
 }>({
   qualification_id: null,
   file: null,
-  zaqa_file: null,
   source_awarding_institution_name: '',
 })
 
@@ -476,11 +486,6 @@ function onForeignFileChange(event: Event) {
   foreignConsentForm.file = target.files && target.files.length > 0 ? target.files[0] : null
 }
 
-function onZaqaFileChange(event: Event) {
-  const target = event.target as HTMLInputElement
-  foreignConsentForm.zaqa_file = target.files && target.files.length > 0 ? target.files[0] : null
-}
-
 function uploadForeignConsent() {
   setSaving('Uploading consent…')
   foreignConsentForm.qualification_id = selectedQualificationId.value ?? null
@@ -490,7 +495,7 @@ function uploadForeignConsent() {
     preserveScroll: true,
     forceFormData: true,
     onSuccess: () => {
-      foreignConsentForm.reset('file', 'zaqa_file')
+      foreignConsentForm.reset('file')
       setSaved('Consent uploaded.')
       router.reload({ only: ['application'] })
     },
@@ -674,7 +679,7 @@ const qualificationRows = computed(() => {
     const hasForeignConsent =
       typeof q.has_foreign_consent === 'boolean'
         ? q.has_foreign_consent
-        : hasCurrentQualificationDocument(id, 'consent_form_signed') && hasCurrentQualificationDocument(id, 'zaqa_consent_form_signed')
+        : hasCurrentQualificationDocument(id, 'consent_form_signed')
     const hasLocalConsent = typeof q.has_local_consent === 'boolean' ? q.has_local_consent : false
 
     const consentOk = requiresForeignConsent ? hasForeignConsent : hasLocalConsent
@@ -895,7 +900,11 @@ onBeforeUnmount(() => {
             </div>
 
             <div class="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
-              <label class="zaqa-radio-card" :class="submittingForForm.submitting_for === 'self' ? 'zaqa-radio-card-active' : ''">
+              <label
+                v-if="!institutionOnlyOnBehalf"
+                class="zaqa-radio-card"
+                :class="submittingForForm.submitting_for === 'self' ? 'zaqa-radio-card-active' : ''"
+              >
                 <input v-model="submittingForForm.submitting_for" type="radio" value="self" class="mt-1 rounded border-border text-brand focus:ring-brand/25" />
                 <div>
                   <div class="text-sm font-semibold text-text-primary">Myself</div>
@@ -912,7 +921,7 @@ onBeforeUnmount(() => {
             </div>
             <InputError :message="(submittingForForm.errors as any).submitting_for" class="mt-2" />
 
-            <div v-if="submittingForForm.submitting_for === 'self'" class="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <div v-if="submittingForForm.submitting_for === 'self' && !institutionOnlyOnBehalf" class="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
               <div class="rounded-xl border border-border bg-surface px-4 py-3">
                 <div class="text-[11px] font-semibold uppercase tracking-wider text-text-muted">Name</div>
                 <div class="mt-1 text-sm font-semibold text-text-primary">
@@ -1286,20 +1295,49 @@ onBeforeUnmount(() => {
 
                 <div v-if="!selectedQualificationId" class="mt-3 text-sm text-text-muted">Select a qualification item to manage consent.</div>
                 <div v-else class="mt-4">
-                  <div v-if="isForeignBySelection" class="space-y-3">
-                    <div class="text-sm font-semibold text-text-primary">Foreign consent uploads</div>
-                    <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                      <div class="sm:col-span-2">
-                        <label class="text-sm font-medium">Awarding Institution signed consent form</label>
-                        <input type="file" accept="application/pdf,image/*" class="zaqa-input" :disabled="applicationLocked" @change="onForeignFileChange" />
+                  <div v-if="selectedQualification?.requires_foreign_consent" class="space-y-3">
+                    <div class="text-sm font-semibold text-text-primary">Foreign consent upload</div>
+                    <p class="text-sm text-text-muted">
+                      This is a foreign qualification. Please download the consent form for the selected awarding institution, sign it, and upload the signed copy.
+                    </p>
+
+                    <div
+                      v-if="selectedQualification?.institution_has_consent_form === false"
+                      class="rounded-lg border border-warning/20 bg-warning/10 px-4 py-3 text-sm text-warning"
+                    >
+                      No consent form has been configured for this awarding institution. Please contact support or select another institution.
+                    </div>
+
+                    <div class="flex flex-wrap items-center gap-2">
+                      <a
+                        v-if="selectedQualification?.institution_consent_form_url"
+                        :href="selectedQualification.institution_consent_form_url"
+                        target="_blank"
+                        rel="noopener"
+                        class="zaqa-btn zaqa-btn-secondary px-3 py-2 text-xs"
+                      >
+                        Download Institution Consent Form
+                      </a>
+                    </div>
+
+                    <div class="grid grid-cols-1 gap-3">
+                      <div>
+                        <label class="text-sm font-medium">Upload Signed Consent Form</label>
+                        <input
+                          type="file"
+                          accept=".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                          class="zaqa-input"
+                          :disabled="applicationLocked || selectedQualification?.institution_has_consent_form === false"
+                          @change="onForeignFileChange"
+                        />
                         <InputError :message="foreignConsentForm.errors.file" />
                       </div>
-                      <div class="sm:col-span-2">
-                        <label class="text-sm font-medium">ZAQA signed consent form</label>
-                        <input type="file" accept="application/pdf,image/*" class="zaqa-input" :disabled="applicationLocked" @change="onZaqaFileChange" />
-                        <InputError :message="(foreignConsentForm.errors as any).zaqa_file" />
-                      </div>
-                      <button type="button" class="zaqa-btn zaqa-btn-primary sm:col-span-2" :disabled="applicationLocked || foreignConsentForm.processing || !foreignConsentForm.file || !foreignConsentForm.zaqa_file" @click="uploadForeignConsent">
+                      <button
+                        type="button"
+                        class="zaqa-btn zaqa-btn-primary"
+                        :disabled="applicationLocked || foreignConsentForm.processing || !foreignConsentForm.file || selectedQualification?.institution_has_consent_form === false"
+                        @click="uploadForeignConsent"
+                      >
                         Upload signed consent
                       </button>
                     </div>

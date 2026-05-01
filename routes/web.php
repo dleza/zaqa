@@ -108,6 +108,9 @@ Route::middleware('auth')->group(function () {
         Route::post('/applications/{application}/feedback/skip', [ApplicantServiceFeedbackController::class, 'skip'])->name('applications.feedback.skip');
 
         Route::get('/reference/awarding-institutions', [ApplicantReferenceController::class, 'awardingInstitutions'])->name('reference.awarding_institutions');
+        Route::get('/reference/awarding-institutions/{awardingInstitution}/consent-form', '\App\Http\Controllers\Applicant\ApplicantAwardingInstitutionConsentFormController@download')
+            ->name('reference.awarding_institutions.consent_form')
+            ->middleware('signed');
 
         Route::put('/applications/{application}/applicant-details', [ApplicantDetailsController::class, 'update'])->name('applications.applicant_details.update');
 

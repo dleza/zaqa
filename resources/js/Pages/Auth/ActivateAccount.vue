@@ -9,6 +9,9 @@ const props = defineProps<{
   emailVerified: boolean
   phoneVerified: boolean
   isActive: boolean
+  loginIdentifierType?: string | null
+  hasEmail?: boolean
+  hasPhone?: boolean
 }>()
 
 const otpForm = useForm({
@@ -19,8 +22,18 @@ const resendEmailForm = useForm({})
 const resendOtpForm = useForm({})
 
 const activationComplete = computed(() => props.isActive)
-const completedCount = computed(() => (props.emailVerified ? 1 : 0) + (props.phoneVerified ? 1 : 0))
-const totalCount = computed(() => 2)
+const identifierType = computed<'email' | 'phone' | 'legacy'>(() => {
+  const t = (props.loginIdentifierType ?? '').toString()
+  if (t === 'email') return 'email'
+  if (t === 'phone') return 'phone'
+  return 'legacy'
+})
+
+const showEmailStep = computed(() => identifierType.value === 'legacy' ? !!props.hasEmail : identifierType.value === 'email')
+const showPhoneStep = computed(() => identifierType.value === 'legacy' ? !!props.hasPhone : identifierType.value === 'phone')
+
+const completedCount = computed(() => (showEmailStep.value && props.emailVerified ? 1 : 0) + (showPhoneStep.value && props.phoneVerified ? 1 : 0))
+const totalCount = computed(() => (showEmailStep.value ? 1 : 0) + (showPhoneStep.value ? 1 : 0) || 1)
 const progressPercent = computed(() => Math.round((completedCount.value / totalCount.value) * 100))
 
 function verifyOtp() {
@@ -44,7 +57,7 @@ function resendOtp() {
           <div class="min-w-0">
             <h2 class="text-2xl font-semibold tracking-tight text-text-primary">Activate account</h2>
             <p class="mt-2 text-sm text-text-muted">
-              Verify your email and phone number to activate your account and keep your access secure.
+              Verify your {{ identifierType === 'phone' ? 'phone number' : identifierType === 'email' ? 'email address' : 'contact method' }} to activate your account.
             </p>
           </div>
 
@@ -73,14 +86,14 @@ function resendOtp() {
             />
           </div>
           <p class="text-xs text-text-muted">
-            Complete both steps to unlock your dashboard.
+            Complete the step below to unlock your dashboard.
           </p>
         </div>
       </header>
 
       <div class="space-y-6">
         <!-- Email panel -->
-        <section class="rounded-2xl border border-border bg-surface-muted/60 p-6 transition-shadow hover:shadow-sm">
+        <section v-if="showEmailStep" class="rounded-2xl border border-border bg-surface-muted/60 p-6 transition-shadow hover:shadow-sm">
           <div class="grid grid-cols-1 gap-5 lg:grid-cols-[1fr_auto] lg:items-start">
             <div class="flex items-start gap-4">
               <div class="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-brand/10 text-brand">
@@ -124,7 +137,7 @@ function resendOtp() {
         </section>
 
         <!-- Phone panel -->
-        <section class="rounded-2xl border border-border bg-surface-muted/60 p-6 transition-shadow hover:shadow-sm">
+        <section v-if="showPhoneStep" class="rounded-2xl border border-border bg-surface-muted/60 p-6 transition-shadow hover:shadow-sm">
           <div class="grid grid-cols-1 gap-5 lg:grid-cols-[1fr_auto] lg:items-start">
             <div class="flex items-start gap-4">
               <div class="relative inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-accent/10 text-accent-deep">
@@ -222,8 +235,7 @@ function resendOtp() {
           <div class="flex items-start gap-3">
             <Info class="mt-0.5 h-5 w-5 shrink-0 text-brand" aria-hidden="true" />
             <p class="leading-relaxed">
-              Your account becomes active once both <span class="font-semibold text-text-primary">email</span> and
-              <span class="font-semibold text-text-primary">phone</span> verification are completed.
+              Your account becomes active once your selected verification step is completed.
             </p>
           </div>
         </div>

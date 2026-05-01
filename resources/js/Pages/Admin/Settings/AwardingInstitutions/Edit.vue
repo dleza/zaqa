@@ -5,7 +5,15 @@ import { Link, useForm } from '@inertiajs/vue3'
 import { Building2 } from 'lucide-vue-next'
 
 const props = defineProps<{
-  institution: { id: number; country_id: number; name: string; is_active: boolean; sort_order: number }
+  institution: {
+    id: number
+    country_id: number
+    name: string
+    is_active: boolean
+    sort_order: number
+    has_consent_form?: boolean
+    consent_form_url?: string | null
+  }
   countries: Array<{ id: number; name: string; iso_code: string }>
 }>()
 
@@ -14,10 +22,12 @@ const form = useForm({
   name: props.institution.name,
   is_active: props.institution.is_active,
   sort_order: props.institution.sort_order,
+  consent_form: null as File | null,
+  remove_consent_form: false,
 })
 
 function submit() {
-  form.put(`/admin/settings/awarding-institutions/${props.institution.id}`, { preserveScroll: true })
+  form.put(`/admin/settings/awarding-institutions/${props.institution.id}`, { preserveScroll: true, forceFormData: true })
 }
 </script>
 
@@ -70,6 +80,32 @@ function submit() {
             </div>
           </div>
           <div v-if="form.errors.is_active" class="text-xs text-danger">{{ form.errors.is_active }}</div>
+
+          <div class="rounded-xl border border-border bg-surface-muted/50 p-4">
+            <div class="text-sm font-semibold text-text-primary">Institution Consent Form</div>
+            <p class="mt-1 text-xs text-text-muted">
+              Upload the consent form applicants must download, sign, and re-upload when verifying a foreign qualification from this institution.
+            </p>
+
+            <div v-if="institution.has_consent_form && institution.consent_form_url" class="mt-3 flex flex-wrap items-center gap-2">
+              <a :href="institution.consent_form_url" class="zaqa-btn zaqa-btn-secondary px-3 py-2 text-xs" target="_blank" rel="noopener">
+                View / download current form
+              </a>
+              <label class="ml-auto flex items-center gap-2 text-xs font-semibold text-text-primary">
+                <input v-model="form.remove_consent_form" type="checkbox" class="h-4 w-4 rounded border-border" />
+                Remove
+              </label>
+            </div>
+
+            <input
+              type="file"
+              class="mt-3 block w-full text-sm text-text-primary file:mr-4 file:rounded-lg file:border-0 file:bg-surface file:px-4 file:py-2 file:text-sm file:font-semibold file:text-text-primary hover:file:bg-surface/80"
+              accept=".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+              @change="(e) => (form.consent_form = (e.target as HTMLInputElement).files?.[0] ?? null)"
+            />
+            <div v-if="form.errors.consent_form" class="mt-1 text-xs text-danger">{{ form.errors.consent_form }}</div>
+            <div v-if="form.errors.remove_consent_form" class="mt-1 text-xs text-danger">{{ form.errors.remove_consent_form }}</div>
+          </div>
 
           <div class="flex items-center justify-end gap-2 pt-2">
             <button type="submit" class="zaqa-btn zaqa-btn-primary px-4 py-2 text-sm" :disabled="form.processing">

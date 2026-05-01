@@ -181,7 +181,7 @@ class ApplicantApplicationController extends Controller
         $application->load([
             'qualifications.subjectResults',
             'qualifications.country',
-            'qualifications.awardingInstitution',
+            'qualifications.awardingInstitution.country',
             'qualifications.qualificationTypeMaster.billingCategory',
             'qualifications.consentForm',
             'documents',
@@ -342,21 +342,24 @@ class ApplicantApplicationController extends Controller
             ->values()
             ->map(function ($q) use ($currentDocs) {
                 $qid = (int) $q->id;
-                $isForeign = (bool) ($q->is_foreign_qualification ?? false);
+                $instIso = strtoupper((string) (($q->awardingInstitution?->country?->iso_code) ?: ($q->country?->iso_code) ?: ''));
+                $institutionIsForeign = $instIso !== '' && $instIso !== 'ZM';
+                $institutionHasConsentForm = (bool) ($q->awardingInstitution?->has_consent_form ?? false);
+                $institutionConsentFormUrl = $q->awardingInstitution?->consent_form_url;
 
                 $hasCert = $currentDocs->contains(fn ($d) => (int) ($d->qualification_id ?? 0) === $qid && (($d->document_type?->value ?? (string) $d->document_type) === 'certificate_copy'));
                 $hasTranscript = $currentDocs->contains(fn ($d) => (int) ($d->qualification_id ?? 0) === $qid && (($d->document_type?->value ?? (string) $d->document_type) === 'transcript'));
-                $hasForeignConsentInstitution = $currentDocs->contains(fn ($d) => (int) ($d->qualification_id ?? 0) === $qid && (($d->document_type?->value ?? (string) $d->document_type) === 'consent_form_signed'));
-                $hasForeignConsentZaqa = $currentDocs->contains(fn ($d) => (int) ($d->qualification_id ?? 0) === $qid && (($d->document_type?->value ?? (string) $d->document_type) === 'zaqa_consent_form_signed'));
+                $hasForeignConsentSigned = $currentDocs->contains(fn ($d) => (int) ($d->qualification_id ?? 0) === $qid && (($d->document_type?->value ?? (string) $d->document_type) === 'consent_form_signed'));
 
-                $requiresForeignConsent = $isForeign;
-                $hasForeignConsent = $requiresForeignConsent ? ($hasForeignConsentInstitution && $hasForeignConsentZaqa) : false;
-                $hasLocalConsent = ! $isForeign ? (bool) ($q->consentForm?->agreed_at) : false;
+                $requiresForeignConsent = $institutionIsForeign;
+                $hasForeignConsent = $requiresForeignConsent ? $hasForeignConsentSigned : false;
+                $hasLocalConsent = ! $requiresForeignConsent ? (bool) ($q->consentForm?->agreed_at) : false;
 
                 $missing = [];
                 if (! $hasCert) $missing[] = 'certificate_copy';
                 if ((bool) ($q->transcript_required ?? false) && ! $hasTranscript) $missing[] = 'transcript';
-                if ($requiresForeignConsent && ! $hasForeignConsent) $missing[] = 'foreign_consent';
+                if ($requiresForeignConsent && ! $institutionHasConsentForm) $missing[] = 'institution_consent_form_missing';
+                if ($requiresForeignConsent && $institutionHasConsentForm && ! $hasForeignConsent) $missing[] = 'foreign_consent';
                 if (! $requiresForeignConsent && ! $hasLocalConsent) $missing[] = 'local_consent';
 
                 return [
@@ -365,7 +368,17 @@ class ApplicantApplicationController extends Controller
                     'awarding_institution_name' => $q->awarding_institution_name,
                     'awarding_institution_name_other' => $q->awarding_institution_name_other,
                     'awarding_institution' => $q->awardingInstitution
-                        ? ['id' => $q->awardingInstitution->id, 'name' => $q->awardingInstitution->name]
+                        ? [
+                            'id' => $q->awardingInstitution->id,
+                            'name' => $q->awardingInstitution->name,
+                            'country' => $q->awardingInstitution->country
+                                ? ['id' => $q->awardingInstitution->country->id, 'iso_code' => $q->awardingInstitution->country->iso_code, 'name' => $q->awardingInstitution->country->name]
+                                : null,
+                            'is_zambian' => $instIso === 'ZM',
+                            'is_foreign' => $institutionIsForeign,
+                            'has_consent_form' => $institutionHasConsentForm,
+                            'consent_form_url' => $institutionConsentFormUrl,
+                        ]
                         : null,
                     'qualification_holder_name' => $q->qualification_holder_name,
                     'nrc_passport_number' => $q->nrc_passport_number,
@@ -414,6 +427,8 @@ class ApplicantApplicationController extends Controller
                     'requires_foreign_consent' => $requiresForeignConsent,
                     'has_foreign_consent' => $hasForeignConsent,
                     'has_local_consent' => $hasLocalConsent,
+                    'institution_consent_form_url' => $requiresForeignConsent ? $institutionConsentFormUrl : null,
+                    'institution_has_consent_form' => $requiresForeignConsent ? $institutionHasConsentForm : null,
                     'missing_requirements' => $missing,
                 ];
             })

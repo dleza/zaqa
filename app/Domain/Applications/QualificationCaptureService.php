@@ -62,13 +62,23 @@ class QualificationCaptureService
                 }
             }
 
-            // Transcript uploads are optional in the applicant portal. We keep this flag for legacy display/analytics,
-            // but it should not be used to gate submission.
-            $country = null;
-            if (array_key_exists('country_id', $data) && $data['country_id']) {
+            // Determine foreign/local primarily from the selected awarding institution country (business rule),
+            // falling back to the qualification country if institution is not selected yet.
+            $isForeignQualification = (bool) ($qualification?->is_foreign_qualification ?? false);
+            $awardingInstitutionId = $data['awarding_institution_id'] ?? ($data['awarding_body_id'] ?? null);
+            if ($awardingInstitutionId) {
+                $inst = \App\Models\AwardingInstitution::query()->with('country')->find((int) $awardingInstitutionId);
+                $iso = strtoupper((string) ($inst?->country?->iso_code ?? ''));
+                if ($iso !== '') {
+                    $isForeignQualification = $iso !== 'ZM';
+                }
+            } elseif (array_key_exists('country_id', $data) && $data['country_id']) {
                 $country = Country::query()->find((int) $data['country_id']);
+                $iso = strtoupper((string) ($country?->iso_code ?? ''));
+                if ($iso !== '') {
+                    $isForeignQualification = $iso !== 'ZM';
+                }
             }
-            $isForeignQualification = $country ? strtoupper((string) $country->iso_code) !== 'ZMB' : (bool) ($qualification?->is_foreign_qualification ?? false);
             $transcriptRequired = (bool) $isForeignQualification || (bool) $qualificationType->requires_subject_results;
 
             $verificationSubject = null;

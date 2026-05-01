@@ -22,8 +22,8 @@ return new class extends Migration
             $table->string('nrc_number')->nullable();
             $table->string('passport_number')->nullable();
 
-            $table->string('email');
-            $table->string('phone_primary');
+            $table->string('email')->nullable();
+            $table->string('phone_primary')->nullable();
             $table->string('phone_secondary')->nullable();
 
             $table->timestamps();
@@ -34,8 +34,8 @@ return new class extends Migration
             $table->foreignId('user_id')->unique()->constrained('users')->cascadeOnDelete();
 
             $table->string('institution_name');
-            $table->string('email');
-            $table->string('phone_primary');
+            $table->string('email')->nullable();
+            $table->string('phone_primary')->nullable();
             $table->string('phone_secondary')->nullable();
 
             $table->string('tpin');

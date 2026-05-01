@@ -69,6 +69,17 @@ Pool rows represent **one qualification item**. Columns include:
 - parent application payment status
 - submitted date
 
+## Consent forms (institution-specific for foreign qualifications)
+### Admin configuration
+Admins can upload an optional **Institution Consent Form** for each **Awarding Institution**. This is the template applicants must download when verifying a foreign qualification from that institution.
+
+### Applicant behavior (per qualification item)
+- If the selected awarding institution is **Zambian/local**, no signed consent upload is required for that qualification item (local embedded consent applies as normal).
+- If the selected awarding institution is **foreign (non-Zambian)**:
+  - the applicant must **download the institution consent form**, sign it, and **upload the signed copy**
+  - this is enforced **per qualification item** (mixed local + foreign in one application is supported)
+  - if no institution consent form has been configured by admin, the applicant is blocked from submission/payment and shown a clear warning to contact support or select another institution
+
 ## Categorization rules (per qualification)
 ### Foreign qualification items
 Sort/group by:

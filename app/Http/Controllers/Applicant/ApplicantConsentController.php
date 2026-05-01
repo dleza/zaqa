@@ -106,7 +106,6 @@ class ApplicantConsentController extends Controller
         // For foreign applications, this upload may be required by business rules.
 
         $file = $request->file('file');
-        $zaqaFile = $request->file('zaqa_file');
         $qualificationId = (int) ($request->validated()['qualification_id'] ?? 0);
         $qualification = Qualification::query()->whereKey($qualificationId)->firstOrFail();
         if ($qualification->application_id !== $application->id) {
@@ -117,11 +116,8 @@ class ApplicantConsentController extends Controller
 
         $before = $qualification->consentForm?->toArray();
 
-        DB::transaction(function () use ($request, $application, $qualification, $documents, $audit, $lifecycle, $file, $zaqaFile, $before) {
+        DB::transaction(function () use ($request, $application, $qualification, $documents, $audit, $lifecycle, $file, $before) {
             $awardingInstitutionDocument = $documents->upload($application, DocumentType::ConsentFormSigned, $file, $request->user(), $qualification);
-            $zaqaDocument = $zaqaFile
-                ? $documents->upload($application, DocumentType::ZaqaConsentFormSigned, $zaqaFile, $request->user(), $qualification)
-                : null;
 
             $consent = ConsentForm::updateOrCreate(
                 ['qualification_id' => $qualification->id],
@@ -131,7 +127,7 @@ class ApplicantConsentController extends Controller
                     'agreed_by_name' => (string) ($qualification->consentForm?->agreed_by_name ?: $request->user()->name),
                     'agreed_at' => $qualification->consentForm?->agreed_at ?: now(),
                     'uploaded_document_id' => $awardingInstitutionDocument->id,
-                    'zaqa_uploaded_document_id' => $zaqaDocument?->id,
+                    'zaqa_uploaded_document_id' => null,
                     'source_awarding_institution_name' => $request->validated()['source_awarding_institution_name']
                         ?? $request->validated()['source_awarding_body_name']
                         ?? null,
@@ -151,7 +147,6 @@ class ApplicantConsentController extends Controller
                     'application_id' => $application->id,
                     'qualification_id' => $qualification->id,
                     'document_id' => $awardingInstitutionDocument->id,
-                    'zaqa_document_id' => $zaqaDocument?->id,
                 ],
                 actor: $request->user(),
             );
@@ -169,7 +164,6 @@ class ApplicantConsentController extends Controller
                 actor: $request->user(),
                 metadata: [
                     'document_id' => $consent->uploaded_document_id,
-                    'zaqa_document_id' => $consent->zaqa_uploaded_document_id,
                     'qualification_id' => $qualification->id,
                 ],
                 occurredAt: now(),

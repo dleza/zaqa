@@ -4,12 +4,14 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Support\Facades\URL;
 
 class AwardingInstitution extends Model
 {
     protected $fillable = [
         'country_id',
         'name',
+        'consent_form_path',
         'is_active',
         'sort_order',
     ];
@@ -21,6 +23,20 @@ class AwardingInstitution extends Model
     public function country(): BelongsTo
     {
         return $this->belongsTo(Country::class);
+    }
+
+    public function getHasConsentFormAttribute(): bool
+    {
+        return trim((string) ($this->consent_form_path ?? '')) !== '';
+    }
+
+    public function getConsentFormUrlAttribute(): ?string
+    {
+        if (! $this->has_consent_form) {
+            return null;
+        }
+
+        return URL::signedRoute('reference.awarding_institutions.consent_form', ['awardingInstitution' => $this->id]);
     }
 }
 

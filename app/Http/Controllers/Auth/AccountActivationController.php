@@ -25,6 +25,9 @@ class AccountActivationController extends Controller
             'emailVerified' => (bool) $user?->email_verified_at,
             'phoneVerified' => (bool) $user?->phone_verified_at,
             'isActive' => (bool) $user?->is_active,
+            'loginIdentifierType' => $user?->login_identifier_type,
+            'hasEmail' => trim((string) ($user?->email ?? '')) !== '',
+            'hasPhone' => trim((string) ($user?->phone_primary ?? '')) !== '',
         ]);
     }
 

@@ -7,6 +7,7 @@ use App\Enums\ApplicationStatus;
 use App\Enums\PaymentStatus;
 use App\Models\ApplicantProfile;
 use App\Models\Application;
+use App\Models\AwardingInstitution;
 use App\Models\ConsentForm;
 use App\Models\Payment;
 use App\Models\Qualification;
@@ -243,10 +244,22 @@ class ApplicantApplicationFlowTest extends TestCase
             ->where('zqf_level_code', 'L7')
             ->firstOrFail();
 
+        $southAfricaId = (int) (Country::query()->where('iso_code', 'ZAF')->value('id')
+            ?: Country::query()->create(['iso_code' => 'ZAF', 'name' => 'South Africa', 'is_active' => true, 'sort_order' => 0])->id);
+        $awardingInstitution = AwardingInstitution::query()->create([
+            'country_id' => $southAfricaId,
+            'name' => 'Foreign University',
+            'is_active' => true,
+            'sort_order' => 0,
+            'consent_form_path' => 'private/awarding-institutions/seed/consent-form/template.pdf',
+        ]);
+        Storage::disk('local')->put($awardingInstitution->consent_form_path, 'template');
+
         $this->put("/applicant/applications/{$application->id}/qualification", [
             'awarding_institution_name' => 'Foreign University',
+            'awarding_institution_id' => $awardingInstitution->id,
             'qualification_holder_name' => 'John Doe',
-            'country_id' => Country::query()->where('iso_code', 'ZAF')->value('id'),
+            'country_id' => $southAfricaId,
             'country_name_other' => 'South Africa',
             'nrc_passport_number' => 'P1234567',
             'certificate_number' => 'CERT-FOREIGN',
@@ -258,7 +271,11 @@ class ApplicantApplicationFlowTest extends TestCase
 
         $application->refresh()->load('qualifications');
         $qualification = $application->qualifications->firstOrFail();
-        $qualification->forceFill(['is_foreign_qualification' => true, 'transcript_required' => true])->save();
+        $qualification->forceFill([
+            'awarding_institution_id' => $awardingInstitution->id,
+            'is_foreign_qualification' => true,
+            'transcript_required' => true,
+        ])->save();
 
         $this->post("/applicant/applications/{$application->id}/documents", [
             'document_type' => 'certificate_copy',
@@ -283,7 +300,6 @@ class ApplicantApplicationFlowTest extends TestCase
         $this->post("/applicant/applications/{$application->id}/consent/foreign-upload", [
             'qualification_id' => $qualification->id,
             'file' => UploadedFile::fake()->create('consent.pdf', 80, 'application/pdf'),
-            'zaqa_file' => UploadedFile::fake()->create('zaqa-consent.pdf', 80, 'application/pdf'),
             'source_awarding_institution_name' => 'Foreign University',
         ])->assertRedirect();
 
@@ -294,7 +310,7 @@ class ApplicantApplicationFlowTest extends TestCase
 
         $consent = ConsentForm::query()->where('qualification_id', $qualification->id)->firstOrFail();
         $this->assertNotNull($consent->uploaded_document_id);
-        $this->assertNotNull($consent->zaqa_uploaded_document_id);
+        $this->assertNull($consent->zaqa_uploaded_document_id);
 
         $failedPaymentSubmit = $this->post("/applicant/applications/{$application->id}/submit");
         $failedPaymentSubmit->assertSessionHasErrors(['payment']);

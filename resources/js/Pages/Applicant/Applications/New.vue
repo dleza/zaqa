@@ -10,6 +10,8 @@ const props = defineProps<{
   applicant: any
 }>()
 
+const isInstitutionApplicant = computed(() => (props.applicant?.applicant_type ?? '').toString() === 'institution')
+
 const selfNrc = computed(() => (props.applicant?.applicant_profile?.nrc_number ?? '').toString().trim())
 const selfPassport = computed(() => (props.applicant?.applicant_profile?.passport_number ?? '').toString().trim())
 
@@ -21,7 +23,7 @@ const form = useForm({
   service_type: 'verification',
   qualification_category: props.qualificationTypes[0]?.value ?? 'certificate',
   is_foreign: false,
-  submitting_for: 'self',
+  submitting_for: isInstitutionApplicant.value ? 'other' : 'self',
   subject_full_name: '',
   subject_email: '',
   subject_phone: '',
@@ -55,6 +57,14 @@ watch(
       form.clearErrors()
     }
   },
+)
+
+watch(
+  isInstitutionApplicant,
+  (isInst) => {
+    if (isInst) form.submitting_for = 'other'
+  },
+  { immediate: true },
 )
 </script>
 
@@ -97,7 +107,11 @@ watch(
           <div class="sm:col-span-2">
             <div class="text-sm font-medium text-text-primary">Submitting as</div>
             <div class="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
-              <label class="zaqa-radio-card" :class="form.submitting_for === 'self' ? 'zaqa-radio-card-active' : ''">
+              <label
+                v-if="!isInstitutionApplicant"
+                class="zaqa-radio-card"
+                :class="form.submitting_for === 'self' ? 'zaqa-radio-card-active' : ''"
+              >
                 <input v-model="form.submitting_for" type="radio" value="self" class="mt-1 rounded border-border text-brand focus:ring-brand/25" />
                 <div>
                   <div class="text-sm font-semibold text-text-primary">Myself</div>
@@ -115,7 +129,7 @@ watch(
             <InputError :message="(form.errors as any).submitting_for" />
           </div>
 
-          <div v-if="form.submitting_for === 'self'" class="sm:col-span-2 rounded-xl border border-border bg-surface-muted p-4">
+          <div v-if="form.submitting_for === 'self' && !isInstitutionApplicant" class="sm:col-span-2 rounded-xl border border-border bg-surface-muted p-4">
             <div class="text-sm font-semibold text-text-primary">Your profile</div>
             <div class="mt-2 grid grid-cols-1 gap-3 sm:grid-cols-2">
               <div class="text-sm">

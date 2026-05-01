@@ -270,15 +270,24 @@ class ApplicationSubmissionService
 
     private function assertConsentSatisfied(Application $application): void
     {
-        $application->loadMissing('qualifications.consentForm');
+        $application->loadMissing('qualifications.consentForm', 'qualifications.awardingInstitution.country', 'qualifications.country');
 
         foreach ($application->qualifications as $q) {
             /** @var Qualification $q */
             $consent = $q->consentForm;
-            if ((bool) $q->is_foreign_qualification) {
-                if (! $consent || ! $consent->uploaded_document_id || ! $consent->zaqa_uploaded_document_id) {
+            $instIso = strtoupper((string) (($q->awardingInstitution?->country?->iso_code) ?: ($q->country?->iso_code) ?: ''));
+            $institutionIsForeign = $instIso !== '' && $instIso !== 'ZM';
+            $institutionHasConsentForm = (bool) ($q->awardingInstitution?->has_consent_form ?? false);
+
+            if ($institutionIsForeign) {
+                if (! $institutionHasConsentForm) {
                     throw ValidationException::withMessages([
-                        'consent' => 'Each foreign qualification requires both the awarding institution consent and the ZAQA consent uploads before submission.',
+                        'consent' => 'No consent form has been configured for the selected awarding institution. Please contact support or select another institution.',
+                    ]);
+                }
+                if (! $consent || ! $consent->uploaded_document_id) {
+                    throw ValidationException::withMessages([
+                        'consent' => 'Each foreign qualification requires a signed consent upload before submission.',
                     ]);
                 }
                 if ($consent->consent_type !== ConsentType::ForeignUploaded) {
