@@ -163,6 +163,11 @@ class ApplicantApplicationFlowTest extends TestCase
         ]);
         $blocked->assertSessionHasErrors(['payment']);
 
+        $this->patch("/applicant/applications/{$application->id}/wizard-declarations", [
+            'accept_terms' => true,
+            'confirm_information_correct' => true,
+        ])->assertRedirect();
+
         $submitResponse = $this->post("/applicant/applications/{$application->id}/submit");
         $submitResponse->assertRedirect(route('applicant.applications.feedback.show', $application));
 
@@ -313,6 +318,11 @@ class ApplicantApplicationFlowTest extends TestCase
         $consent = ConsentForm::query()->where('qualification_id', $qualification->id)->firstOrFail();
         $this->assertNotNull($consent->uploaded_document_id);
         $this->assertNull($consent->zaqa_uploaded_document_id);
+
+        $this->patch("/applicant/applications/{$application->id}/wizard-declarations", [
+            'accept_terms' => true,
+            'confirm_information_correct' => true,
+        ])->assertRedirect();
 
         $failedPaymentSubmit = $this->post("/applicant/applications/{$application->id}/submit");
         $failedPaymentSubmit->assertSessionHasErrors(['payment']);
@@ -478,6 +488,11 @@ class ApplicantApplicationFlowTest extends TestCase
         ])->assertRedirect();
 
         $payment = Payment::query()->where('application_id', $application->id)->latest('id')->firstOrFail();
+
+        $this->patch("/applicant/applications/{$application->id}/wizard-declarations", [
+            'accept_terms' => true,
+            'confirm_information_correct' => true,
+        ])->assertRedirect();
 
         $failedSubmit = $this->post("/applicant/applications/{$application->id}/submit");
         $failedSubmit->assertSessionHasErrors(['payment']);

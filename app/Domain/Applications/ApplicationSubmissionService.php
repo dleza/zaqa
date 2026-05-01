@@ -91,6 +91,8 @@ class ApplicationSubmissionService
 
             $this->assertConsentSatisfied($application);
 
+            $this->assertWizardDeclarationsComplete($application);
+
             $invoicePaid = $application->invoice && $application->invoice->status === InvoiceStatus::Paid;
             $paymentConfirmed = $invoicePaid || $application->payments->contains(fn ($p) => $p->status === PaymentStatus::Confirmed);
             if (! $paymentConfirmed) {
@@ -314,6 +316,24 @@ class ApplicationSubmissionService
                     ]);
                 }
             }
+        }
+    }
+
+    private function assertWizardDeclarationsComplete(Application $application): void
+    {
+        $meta = (array) ($application->metadata ?? []);
+        $wd = $meta['wizard_declarations'] ?? null;
+        if (! is_array($wd)) {
+            throw ValidationException::withMessages([
+                'declarations' => 'Please complete the Declarations step (terms and accuracy confirmation) before submitting.',
+            ]);
+        }
+        $terms = $wd['terms_accepted_at'] ?? null;
+        $confirmed = $wd['information_confirmed_at'] ?? null;
+        if (! is_string($terms) || trim($terms) === '' || ! is_string($confirmed) || trim($confirmed) === '') {
+            throw ValidationException::withMessages([
+                'declarations' => 'Please complete the Declarations step (terms and accuracy confirmation) before submitting.',
+            ]);
         }
     }
 }

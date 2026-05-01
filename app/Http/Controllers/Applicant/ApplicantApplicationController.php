@@ -10,6 +10,7 @@ use App\Enums\PaymentStatus;
 use App\Enums\ServiceType;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Applicant\CreateApplicationDraftRequest;
+use App\Http\Requests\Applicant\SaveWizardDeclarationsRequest;
 use App\Http\Requests\Applicant\UpdateApplicationDraftRequest;
 use App\Models\Application;
 use App\Models\AwardingInstitution;
@@ -89,17 +90,25 @@ class ApplicantApplicationController extends Controller
         $hasTranscript = $application->documents->contains(fn ($d) => ($d->document_type?->value ?? (string) $d->document_type) === 'transcript' && (bool) $d->is_current_version);
         $documentsOk = $hasNrc && $hasCert && ((bool) $application->is_foreign ? $hasTranscript : true);
 
-        $consentOk = (bool) $application->is_foreign
+        $institutionConsentOk = (bool) $application->is_foreign
             ? (bool) ($application->consentForm?->uploaded_document_id)
             : (bool) ($application->consentForm?->agreed_at);
+
+        $wd = (array) (($application->metadata ?? [])['wizard_declarations'] ?? []);
+        $termsAt = $wd['terms_accepted_at'] ?? null;
+        $confirmedAt = $wd['information_confirmed_at'] ?? null;
+        $declarationsOk = is_string($termsAt) && trim($termsAt) !== ''
+            && is_string($confirmedAt) && trim($confirmedAt) !== '';
+
+        $consentStepDone = $institutionConsentOk && $declarationsOk;
 
         $steps = [
             ['key' => 'applicant', 'label' => 'Applicant', 'done' => true],
             ['key' => 'qualification', 'label' => 'Qualification', 'done' => $qualificationOk],
             ['key' => 'subjects', 'label' => 'Subjects', 'done' => $subjectsOk, 'enabled' => $needsSubjects],
             ['key' => 'documents', 'label' => 'Documents', 'done' => $documentsOk],
-            ['key' => 'consent', 'label' => 'Consent', 'done' => $consentOk],
-            ['key' => 'review', 'label' => 'Review & submit', 'done' => $qualificationOk && $subjectsOk && $documentsOk && $consentOk],
+            ['key' => 'consent', 'label' => 'Declarations', 'done' => $consentStepDone],
+            ['key' => 'review', 'label' => 'Review & submit', 'done' => $qualificationOk && $subjectsOk && $documentsOk && $consentStepDone],
         ];
 
         $filtered = array_values(array_filter($steps, fn ($s) => ($s['enabled'] ?? true) === true));
@@ -284,6 +293,7 @@ class ApplicantApplicationController extends Controller
             'countries' => $this->countryOptions(),
             'awardingInstitutions' => $this->awardingInstitutionOptions(),
             'localConsent' => (array) config('consent.local'),
+            'declarationsCopy' => (array) config('applicant_wizard.declarations'),
             'applicant' => $this->applicantPayload($request),
         ]);
     }
@@ -295,6 +305,15 @@ class ApplicantApplicationController extends Controller
         $drafts->updateDraft($application, $request->user(), $request->validated());
 
         return back()->with('success', 'Draft updated.');
+    }
+
+    public function saveWizardDeclarations(SaveWizardDeclarationsRequest $request, Application $application, ApplicationDraftService $drafts): RedirectResponse
+    {
+        $this->authorize('update', $application);
+
+        $drafts->saveWizardDeclarations($application, $request->user());
+
+        return back()->with('success', 'Declarations saved.');
     }
 
     public function submit(Request $request, Application $application, ApplicationSubmissionService $submission): RedirectResponse
@@ -591,6 +610,20 @@ class ApplicantApplicationController extends Controller
 
             // Multi-qualification payload for the applicant wizard
             'qualifications' => $qualifications,
+
+            'wizard_declarations' => $this->wizardDeclarationsPayload($application),
+        ];
+    }
+
+    private function wizardDeclarationsPayload(Application $application): array
+    {
+        $wd = (array) (($application->metadata ?? [])['wizard_declarations'] ?? []);
+
+        return [
+            'terms_accepted_at' => isset($wd['terms_accepted_at']) && is_string($wd['terms_accepted_at']) ? $wd['terms_accepted_at'] : null,
+            'information_confirmed_at' => isset($wd['information_confirmed_at']) && is_string($wd['information_confirmed_at'])
+                ? $wd['information_confirmed_at']
+                : null,
         ];
     }
 

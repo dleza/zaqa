@@ -30,11 +30,13 @@ const props = withDefaults(
     awardingInstitutions: Array<{ id: number; name: string }>
     /** Admin-managed subject catalog for school-certificate rows */
     certificateSubjects?: Array<{ id: number; name: string }>
-    localConsent: { title: string; text: string; version: string }
     foreignFeePreview?: any | null
+    /** Wizard step 3 — declarations copy (terms / accuracy); separate from qualification consent */
+    declarationsCopy?: Record<string, string>
   }>(),
   {
     certificateSubjects: () => [],
+    declarationsCopy: () => ({}),
   },
 )
 
@@ -43,7 +45,7 @@ type StepKey = 'applicant' | 'qualification' | 'consent' | 'payment' | 'review'
 const steps = computed(() => [
   { key: 'applicant' as const, label: 'Applicant' },
   { key: 'qualification' as const, label: 'Qualification' },
-  { key: 'consent' as const, label: 'Consent' },
+  { key: 'consent' as const, label: 'Declarations' },
   { key: 'payment' as const, label: 'Payment' },
   { key: 'review' as const, label: 'Review & submit' },
 ])
@@ -81,8 +83,29 @@ function goToStep(key: StepKey) {
 
 const prepareInvoiceForm = useForm({})
 
+const declarationsForm = useForm({
+  accept_terms: !!(props.application?.wizard_declarations?.terms_accepted_at),
+  confirm_information_correct: !!(props.application?.wizard_declarations?.information_confirmed_at),
+})
+
+watch(
+  () => props.application?.wizard_declarations,
+  (wd) => {
+    declarationsForm.defaults({
+      accept_terms: !!(wd?.terms_accepted_at),
+      confirm_information_correct: !!(wd?.information_confirmed_at),
+    })
+    if (!(declarationsForm.isDirty ?? false)) {
+      declarationsForm.reset()
+      declarationsForm.clearErrors()
+    }
+  },
+  { deep: true },
+)
+
 function isStepDirty(step: StepKey): boolean {
   if (step === 'applicant') return (applicantForm.isDirty ?? false) === true
+  if (step === 'consent') return (declarationsForm.isDirty ?? false) === true
   return false
 }
 
@@ -166,12 +189,20 @@ function evaluateApplicantStep(): { ok: boolean; missing: string[] } {
   return { ok: missing.length === 0, missing }
 }
 
-const hasUnsavedChanges = computed(() => isStepDirty('applicant'))
+const hasUnsavedChanges = computed(() => isStepDirty(activeStep.value))
 
 function discardChangesForActiveStep() {
   if (activeStep.value === 'applicant') {
     applicantForm.reset()
     applicantForm.clearErrors()
+  }
+  if (activeStep.value === 'consent') {
+    declarationsForm.defaults({
+      accept_terms: !!(props.application?.wizard_declarations?.terms_accepted_at),
+      confirm_information_correct: !!(props.application?.wizard_declarations?.information_confirmed_at),
+    })
+    declarationsForm.reset()
+    declarationsForm.clearErrors()
   }
 }
 
@@ -348,67 +379,27 @@ function removeQualification(id: number) {
   })
 }
 
-const consentName = ref('')
-const localConsentForm = useForm({
-  agreed_by_name: '',
-})
-
-function acceptLocalConsent() {
-  localConsentForm.agreed_by_name = consentName.value
-  setSaving('Saving consent…')
-  localConsentForm.post(`/applicant/applications/${props.application.id}/consent/accept`, {
+function saveDeclarations() {
+  setSaving('Saving declarations…')
+  declarationsForm.patch(`/applicant/applications/${props.application.id}/wizard-declarations`, {
     preserveScroll: true,
     onSuccess: () => {
-      setSaved('Consent saved.')
-      router.reload({ only: ['application'] })
+      setSaved('Declarations saved.')
+      router.reload({
+        only: ['application'],
+        onSuccess: () => {
+          const next = stepNav.value.next
+          if (next) {
+            goToStep(next)
+          }
+        },
+        onFinish: () => {
+          if (saveState.value.state === 'saving') saveState.value = { state: 'idle' }
+        },
+      })
     },
-    onError: () => setError('Consent could not be saved.'),
-    onFinish: () => {
-      if (saveState.value.state === 'saving') saveState.value = { state: 'idle' }
-    },
-  })
-}
-
-const foreignConsentForm = useForm<{
-  qualification_id: number | null
-  file: File | null
-  source_awarding_institution_name: string
-}>({
-  qualification_id: null,
-  file: null,
-  source_awarding_institution_name: '',
-})
-
-const awardingInstitutionLabel = computed(() => {
-  const q = selectedQualification.value ?? null
-  const fromRelation = (q?.awarding_institution?.name ?? '').toString().trim()
-  if (fromRelation) return fromRelation
-  const other = (q?.awarding_institution_name_other ?? '').toString().trim()
-  if (other) return other
-  const legacy = (q?.awarding_institution_name ?? '').toString().trim()
-  return legacy || '—'
-})
-
-function onForeignFileChange(event: Event) {
-  const target = event.target as HTMLInputElement
-  foreignConsentForm.file = target.files && target.files.length > 0 ? target.files[0] : null
-}
-
-function uploadForeignConsent() {
-  setSaving('Uploading consent…')
-  foreignConsentForm.qualification_id = selectedQualificationId.value ?? null
-  // Source awarding institution is already captured on Step 2.
-  foreignConsentForm.source_awarding_institution_name = awardingInstitutionLabel.value !== '—' ? awardingInstitutionLabel.value : ''
-  foreignConsentForm.post(`/applicant/applications/${props.application.id}/consent/foreign-upload`, {
-    preserveScroll: true,
-    forceFormData: true,
-    onSuccess: () => {
-      foreignConsentForm.reset('file')
-      setSaved('Consent uploaded.')
-      router.reload({ only: ['application'] })
-    },
-    onError: () => setError('Consent upload failed.'),
-    onFinish: () => {
+    onError: () => {
+      setError('Declarations could not be saved.')
       if (saveState.value.state === 'saving') saveState.value = { state: 'idle' }
     },
   })
@@ -624,14 +615,17 @@ const stepCompletion = computed(() => {
 
   const qualificationDone =
     qualificationRows.value.length > 0 &&
-    qualificationRows.value.every((q) => q._docsOk && qualificationSubjectsSatisfied(q))
-  const consentDone =
-    qualificationRows.value.length > 0 && qualificationRows.value.every((q) => q._consentOk)
+    qualificationRows.value.every(
+      (q) => q._docsOk && qualificationSubjectsSatisfied(q) && q._consentOk,
+    )
+
+  const wd = props.application?.wizard_declarations
+  const declarationsSaved = !!(wd?.terms_accepted_at && wd?.information_confirmed_at)
 
   return {
     applicant: applicantOk,
     qualification: qualificationDone,
-    consent: consentDone,
+    consent: declarationsSaved,
     payment: invoiceSettled.value,
     review: invoiceSettled.value && declarationAccepted.value,
   } as Record<StepKey, boolean>
@@ -690,29 +684,34 @@ function stepIncompleteHtml(step: StepKey): string | null {
     if (qualifications.value.length === 0) {
       return '<p class="text-sm text-left">Add at least one qualification and complete required documents for each.</p>'
     }
-    const pending = qualificationRows.value.filter((q) => !q._docsOk || !qualificationSubjectsSatisfied(q))
+    const pending = qualificationRows.value.filter(
+      (q) => !q._docsOk || !qualificationSubjectsSatisfied(q) || !q._consentOk,
+    )
     if (pending.length === 0) return null
     const items = pending
       .map((q) => {
         const parts: string[] = []
         if (!q._docsOk) parts.push('documents')
         if (!qualificationSubjectsSatisfied(q)) parts.push('subject grades')
-        return `<li class="mt-1"><span class="font-semibold">${(q.title_of_qualification ?? 'Qualification').toString()}</span>: complete ${parts.join(' and ')}.</li>`
+        if (!q._consentOk) parts.push('institution consent (open the qualification workspace)')
+        return `<li class="mt-1"><span class="font-semibold">${(q.title_of_qualification ?? 'Qualification').toString()}</span>: complete ${parts.join(', ')}.</li>`
       })
       .join('')
     return `<ul class="list-disc pl-5 text-left text-sm">${items}</ul>`
   }
   if (step === 'consent') {
-    const pending = qualificationRows.value.filter((q) => !q._consentOk)
-    if (pending.length === 0) return null
-    const items = pending.map((q) => `<li class="mt-1">${(q.title_of_qualification ?? 'Qualification').toString()} — consent still needed.</li>`).join('')
-    return `<ul class="list-disc pl-5 text-left text-sm">${items}</ul>`
+    const wd = props.application?.wizard_declarations
+    if (wd?.terms_accepted_at && wd?.information_confirmed_at) return null
+    if (!declarationsForm.accept_terms || !declarationsForm.confirm_information_correct) {
+      return '<p class="text-sm text-left">Tick both declaration checkboxes to continue.</p>'
+    }
+    return '<p class="text-sm text-left">Click <strong>Save declarations</strong> to record your confirmation before continuing.</p>'
   }
   if (step === 'payment') {
     return '<p class="text-sm text-left">Confirm payment for this application before continuing.</p>'
   }
   if (step === 'review') {
-    return '<p class="text-sm text-left">Confirm payment and accept the declaration on the review step.</p>'
+    return '<p class="text-sm text-left">Confirm payment and accept the final confirmation on the review step.</p>'
   }
   return null
 }
@@ -791,7 +790,7 @@ onBeforeUnmount(() => {
           <div>
             <h1 class="text-2xl font-semibold tracking-tight text-text-primary">Application</h1>
             <p class="mt-1 text-sm text-text-muted">
-              {{ application.application_number }} • {{ application.status_label }} — work through Applicant, Qualification, Consent, Payment, then review and submit.
+              {{ application.application_number }} • {{ application.status_label }} — work through Applicant, Qualification, Declarations, Payment, then review and submit.
             </p>
           </div>
 
@@ -1187,9 +1186,12 @@ onBeforeUnmount(() => {
         <section v-else-if="activeStep === 'consent'" class="rounded-xl border border-border bg-surface p-5">
           <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
             <div>
-              <h2 class="text-sm font-semibold text-text-primary">Consent</h2>
+              <h2 class="text-sm font-semibold text-text-primary">Declarations</h2>
               <p class="mt-1 text-xs text-text-muted">
-                Complete consent for each qualification. Foreign (non-Zambian) awarding institutions require a signed institution consent form upload; local items use the embedded consent statement.
+                {{
+                  declarationsCopy.page_intro ??
+                  'Confirm the declarations below. Qualification-specific institution consent is completed inside each qualification workspace (previous step), not here.'
+                }}
               </p>
             </div>
           </div>
@@ -1198,110 +1200,66 @@ onBeforeUnmount(() => {
             Payment is confirmed. This application is now read-only.
           </div>
 
-          <div class="mt-4 grid gap-4 lg:grid-cols-3">
-            <div class="lg:col-span-1">
-              <div class="rounded-xl border border-border bg-surface-muted p-4">
-                <div class="text-xs font-semibold uppercase tracking-wider text-text-muted">Your items</div>
-                <div v-if="qualificationRows.length === 0" class="mt-2 text-sm text-text-muted">No qualifications added yet.</div>
-                <div v-else class="mt-3 space-y-2">
-                  <button
-                    v-for="q in qualificationRows"
-                    :key="q.id"
-                    type="button"
-                    class="w-full rounded-xl border px-3 py-3 text-left transition"
-                    :class="Number(selectedQualificationId) === Number(q.id) ? 'border-brand/30 bg-brand/5' : 'border-border bg-surface hover:bg-surface-muted'"
-                    @click="selectedQualificationId = q.id"
-                  >
-                    <div class="truncate text-sm font-semibold text-text-primary">{{ q.title_of_qualification || 'Untitled qualification' }}</div>
-                    <div class="mt-1 text-[11px] text-text-muted">
-                      Consent:
-                      <span class="font-semibold" :class="q._consentOk ? 'text-emerald-700' : 'text-warning'">{{ q._consentOk ? 'OK' : 'Missing' }}</span>
-                    </div>
-                  </button>
-                </div>
+          <div class="mx-auto mt-6 w-full max-w-5xl space-y-6 lg:max-w-6xl">
+            <div class="rounded-xl border border-border bg-surface-muted p-6 sm:p-8">
+              <div class="text-center text-sm font-semibold text-text-primary">
+                {{ declarationsCopy.terms_title ?? 'Terms and use of the service' }}
+              </div>
+              <div class="mt-4 max-h-72 overflow-auto whitespace-pre-wrap text-sm leading-relaxed text-text-primary">
+                {{ declarationsCopy.terms_body ?? '' }}
               </div>
             </div>
 
-            <div class="lg:col-span-2">
-              <div class="rounded-xl border border-border bg-surface p-5">
-                <div class="text-sm font-semibold text-text-primary">Consent for selected qualification</div>
-                <div class="mt-1 text-xs text-text-muted">Select an item on the left if you have more than one.</div>
+            <div class="space-y-4">
+              <label class="flex cursor-pointer items-start gap-3">
+                <input
+                  v-model="declarationsForm.accept_terms"
+                  type="checkbox"
+                  class="mt-1 h-4 w-4 rounded border-border text-brand focus:ring-brand/30"
+                  :disabled="applicationLocked"
+                />
+                <span class="text-sm text-text-primary">{{ declarationsCopy.accept_terms_label ?? 'I accept the terms.' }}</span>
+              </label>
+              <InputError :message="declarationsForm.errors.accept_terms" />
 
-                <div v-if="!selectedQualificationId" class="mt-3 text-sm text-text-muted">Select a qualification item to manage consent.</div>
-                <div v-else class="mt-4">
-                  <div v-if="selectedQualification?.requires_foreign_consent" class="space-y-3">
-                    <div class="text-sm font-semibold text-text-primary">Foreign consent upload</div>
-                    <p class="text-sm text-text-muted">
-                      When we host a template you can download it; otherwise upload a signed consent you obtained from the awarding institution.
-                    </p>
+              <label class="flex cursor-pointer items-start gap-3">
+                <input
+                  v-model="declarationsForm.confirm_information_correct"
+                  type="checkbox"
+                  class="mt-1 h-4 w-4 rounded border-border text-brand focus:ring-brand/30"
+                  :disabled="applicationLocked"
+                />
+                <span class="text-sm text-text-primary">{{
+                  declarationsCopy.confirm_accuracy_label ?? 'I confirm that the information I provided is correct.'
+                }}</span>
+              </label>
+              <InputError :message="declarationsForm.errors.confirm_information_correct" />
+            </div>
 
-                    <div class="flex flex-wrap items-center gap-2">
-                      <a
-                        v-if="selectedQualification?.institution_consent_form_url"
-                        :href="selectedQualification.institution_consent_form_url"
-                        target="_blank"
-                        rel="noopener"
-                        class="zaqa-btn zaqa-btn-secondary px-3 py-2 text-xs"
-                      >
-                        Download institution consent form
-                      </a>
-                      <p v-else class="text-xs text-text-muted">No portal template on file—you may still upload your signed consent below.</p>
-                    </div>
-
-                    <div class="grid grid-cols-1 gap-3">
-                      <div>
-                        <label class="text-sm font-medium">Upload signed consent form</label>
-                        <input
-                          type="file"
-                          accept=".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-                          class="zaqa-input"
-                          :disabled="applicationLocked"
-                          @change="onForeignFileChange"
-                        />
-                        <InputError :message="foreignConsentForm.errors.file" />
-                      </div>
-                      <button
-                        type="button"
-                        class="zaqa-btn zaqa-btn-primary w-fit"
-                        :disabled="applicationLocked || foreignConsentForm.processing || !foreignConsentForm.file"
-                        @click="uploadForeignConsent"
-                      >
-                        Upload signed consent
-                      </button>
-                    </div>
-                  </div>
-                  <div v-else class="space-y-3">
-                    <div class="text-sm font-semibold text-text-primary">Local embedded consent</div>
-                    <div class="rounded-lg border border-border bg-surface-muted p-4">
-                      <div class="text-sm font-semibold">{{ localConsent.title }}</div>
-                      <div class="mt-2 max-h-56 overflow-auto whitespace-pre-wrap text-sm text-text-primary">{{ localConsent.text }}</div>
-                      <div class="mt-2 text-xs text-text-muted">Version: {{ localConsent.version }}</div>
-                    </div>
-                    <p class="text-xs text-text-muted">
-                      Accepting applies your agreement to all local qualifications on this application.
-                    </p>
-                    <div class="grid grid-cols-1 gap-3 sm:grid-cols-3">
-                      <div class="sm:col-span-2">
-                        <label class="text-sm font-medium">Type your full name to confirm</label>
-                        <input v-model="consentName" class="zaqa-input" :disabled="applicationLocked" />
-                        <InputError :message="localConsentForm.errors.agreed_by_name" />
-                      </div>
-                      <button
-                        type="button"
-                        class="zaqa-btn zaqa-btn-primary mt-6 px-4 py-2 text-sm sm:mt-7"
-                        :disabled="applicationLocked || localConsentForm.processing || consentName.trim().length === 0"
-                        @click="acceptLocalConsent"
-                      >
-                        Accept consent
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              </div>
+            <div class="flex flex-wrap items-center gap-3">
+              <button
+                type="button"
+                class="zaqa-btn zaqa-btn-primary"
+                :disabled="
+                  applicationLocked ||
+                  declarationsForm.processing ||
+                  !declarationsForm.accept_terms ||
+                  !declarationsForm.confirm_information_correct
+                "
+                @click="saveDeclarations"
+              >
+                Save declarations
+              </button>
+              <span
+                v-if="application?.wizard_declarations?.terms_accepted_at && application?.wizard_declarations?.information_confirmed_at"
+                class="text-xs font-medium text-emerald-700"
+              >
+                Declarations saved
+              </span>
             </div>
           </div>
 
-          <div class="mt-6">
+          <div class="mt-10">
             <WizardFooterBar
               :show-prev="!!stepNav.prev"
               :show-next="!!stepNav.next"
@@ -1726,13 +1684,13 @@ onBeforeUnmount(() => {
 
               <div class="my-6 h-px bg-border/70" />
 
-              <!-- Consent -->
+              <!-- Qualification (institution) consent -->
               <div class="flex items-start justify-between gap-3">
                 <div>
-                  <div class="text-sm font-semibold text-text-primary">4. Consent</div>
-                  <div class="mt-1 text-xs text-text-muted">Consent status for this application.</div>
+                  <div class="text-sm font-semibold text-text-primary">4. Qualification consent</div>
+                  <div class="mt-1 text-xs text-text-muted">Per-qualification institution consent (foreign upload or local acceptance).</div>
                 </div>
-                <button v-if="application.can_edit" type="button" class="zaqa-btn zaqa-btn-secondary px-3 py-2 text-xs" @click="goToStep('consent')">Edit</button>
+                <button v-if="application.can_edit" type="button" class="zaqa-btn zaqa-btn-secondary px-3 py-2 text-xs" @click="goToStep('qualification')">Edit</button>
               </div>
               <div class="mt-3 space-y-2">
                 <div
@@ -1750,10 +1708,30 @@ onBeforeUnmount(() => {
 
               <div class="my-6 h-px bg-border/70" />
 
+              <!-- Application declarations (terms / accuracy) -->
+              <div class="flex items-start justify-between gap-3">
+                <div>
+                  <div class="text-sm font-semibold text-text-primary">5. Declarations</div>
+                  <div class="mt-1 text-xs text-text-muted">Portal terms and confirmation that your application information is correct.</div>
+                </div>
+                <button v-if="application.can_edit" type="button" class="zaqa-btn zaqa-btn-secondary px-3 py-2 text-xs" @click="goToStep('consent')">Edit</button>
+              </div>
+              <div class="mt-3">
+                <span
+                  class="zaqa-badge"
+                  :class="application.wizard_declarations?.terms_accepted_at ? 'zaqa-badge-success' : 'zaqa-badge-warning'"
+                >
+                  {{ application.wizard_declarations?.terms_accepted_at ? 'Recorded' : 'Not recorded' }}
+                </span>
+              </div>
+              <InputError :message="(submitForm.errors as any).declarations" class="mt-2" />
+
+              <div class="my-6 h-px bg-border/70" />
+
               <!-- Payment -->
               <div class="flex items-start justify-between gap-3">
                 <div>
-                  <div class="text-sm font-semibold text-text-primary">5. Payment</div>
+                  <div class="text-sm font-semibold text-text-primary">6. Payment</div>
                   <div class="mt-1 text-xs text-text-muted">Invoice and payment confirmation.</div>
                 </div>
                 <button v-if="application.can_edit" type="button" class="zaqa-btn zaqa-btn-secondary px-3 py-2 text-xs" @click="goToStep('payment')">Edit</button>
@@ -1784,7 +1762,7 @@ onBeforeUnmount(() => {
 
               <!-- Declaration -->
               <div>
-                <div class="text-sm font-semibold text-text-primary">6. Final declaration</div>
+                <div class="text-sm font-semibold text-text-primary">7. Final declaration</div>
                 <div class="mt-1 text-xs text-text-muted">
                   Please confirm before submitting.
                 </div>

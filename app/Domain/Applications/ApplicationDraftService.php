@@ -352,5 +352,52 @@ class ApplicationDraftService
 
         $profile->save();
     }
+
+    public function saveWizardDeclarations(Application $application, User $actor): Application
+    {
+        return DB::transaction(function () use ($application, $actor) {
+            $application->refresh();
+
+            $meta = (array) ($application->metadata ?? []);
+            $now = now()->toIso8601String();
+            $meta['wizard_declarations'] = array_merge(
+                (array) ($meta['wizard_declarations'] ?? []),
+                [
+                    'terms_accepted_at' => $now,
+                    'information_confirmed_at' => $now,
+                ],
+            );
+            $application->metadata = $meta;
+            $application->save();
+
+            $this->audit->record(
+                eventType: 'applications.wizard_declarations_saved',
+                module: 'Applications',
+                actionName: 'wizard_declarations_saved',
+                message: 'Applicant saved wizard declarations (terms and accuracy confirmation).',
+                entityType: Application::class,
+                entityId: $application->id,
+                afterState: [
+                    'wizard_declarations' => $meta['wizard_declarations'],
+                ],
+                actor: $actor,
+            );
+
+            $this->lifecycle->milestone(
+                application: $application,
+                eventType: 'wizard',
+                eventCode: 'wizard.step3.declarations_saved',
+                stage: LifecycleStage::Wizard,
+                title: 'Declarations saved',
+                description: 'Terms acceptance and accuracy confirmation were recorded.',
+                visibility: LifecycleVisibility::Both,
+                actor: $actor,
+                metadata: [],
+                occurredAt: now(),
+            );
+
+            return $application;
+        });
+    }
 }
 

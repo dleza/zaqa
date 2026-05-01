@@ -103,6 +103,7 @@ Route::middleware('auth')->group(function () {
         Route::get('/applications/{application}/track-summary', [ApplicantApplicationTrackingController::class, 'summary'])->name('applications.track.summary');
         Route::get('/applications/{application}/edit', [ApplicantApplicationController::class, 'edit'])->name('applications.edit');
         Route::patch('/applications/{application}', [ApplicantApplicationController::class, 'update'])->name('applications.update');
+        Route::patch('/applications/{application}/wizard-declarations', [ApplicantApplicationController::class, 'saveWizardDeclarations'])->name('applications.wizard_declarations.update');
         Route::delete('/applications/{application}', [ApplicantApplicationController::class, 'destroy'])->name('applications.destroy');
         Route::post('/applications/{application}/submit', [ApplicantApplicationController::class, 'submit'])->name('applications.submit');
         Route::get('/applications/{application}/feedback', [ApplicantServiceFeedbackController::class, 'show'])->name('applications.feedback.show');
