@@ -3,11 +3,13 @@
 namespace App\Http\Controllers\Applicant;
 
 use App\Http\Controllers\Controller;
+use App\Models\Application;
 use App\Models\Invoice;
 use App\Models\Payment;
+use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
-use Illuminate\Http\Request;
+use Illuminate\Support\Facades\URL;
 
 class ApplicantBillingController extends Controller
 {
@@ -93,6 +95,120 @@ class ApplicantBillingController extends Controller
             'payments' => $payments,
             'summary' => $summary,
         ]);
+    }
+
+    public function showInvoice(Request $request, Invoice $invoice): Response
+    {
+        $invoice->load([
+            'application',
+            'payments' => fn ($q) => $q->latest('id'),
+        ]);
+
+        $this->assertApplicantOwnsApplication($request, $invoice->application);
+
+        return Inertia::render('Applicant/InvoiceShow', [
+            'invoice' => [
+                'id' => $invoice->id,
+                'invoice_number' => $invoice->invoice_number,
+                'currency' => $invoice->currency,
+                'amount_cents' => $invoice->amount_cents,
+                'status' => $invoice->status?->value ?? (string) $invoice->status,
+                'issued_at' => optional($invoice->issued_at)?->toIso8601String(),
+                'due_at' => optional($invoice->due_at)?->toIso8601String(),
+                'paid_at' => optional($invoice->paid_at)?->toIso8601String(),
+                'fee_label_snapshot' => $invoice->fee_label_snapshot,
+                'processing_days_snapshot' => $invoice->processing_days_snapshot,
+                'is_foreign_snapshot' => (bool) $invoice->is_foreign_snapshot,
+                'application' => $invoice->application
+                    ? [
+                        'id' => $invoice->application->id,
+                        'application_number' => $invoice->application->application_number,
+                        'current_status' => $invoice->application->current_status?->value ?? (string) $invoice->application->current_status,
+                        'show_url' => route('applicant.applications.show', $invoice->application->id),
+                        'edit_url' => route('applicant.applications.edit', ['application' => $invoice->application->id]),
+                        'track_url' => route('applicant.applications.track', $invoice->application->id),
+                        'can_edit' => $request->user()->can('update', $invoice->application),
+                    ]
+                    : null,
+                'payments' => $invoice->payments->map(fn (Payment $p) => [
+                    'id' => $p->id,
+                    'method' => $p->method?->value ?? (string) $p->method,
+                    'status' => $p->status?->value ?? (string) $p->status,
+                    'currency' => $p->currency,
+                    'amount_cents' => $p->amount_cents,
+                    'confirmed_at' => optional($p->confirmed_at)?->toIso8601String(),
+                    'created_at' => optional($p->created_at)?->toIso8601String(),
+                    'show_url' => route('applicant.payments.show', $p->id),
+                ])->values()->all(),
+            ],
+        ]);
+    }
+
+    public function showPayment(Request $request, Payment $payment): Response
+    {
+        $payment->load(['application', 'invoice', 'proofDocument']);
+
+        $this->assertApplicantOwnsApplication($request, $payment->application);
+
+        $signedExpiry = now()->addMinutes(30);
+
+        $proof = $payment->proofDocument;
+
+        return Inertia::render('Applicant/PaymentShow', [
+            'payment' => [
+                'id' => $payment->id,
+                'method' => $payment->method?->value ?? (string) $payment->method,
+                'status' => $payment->status?->value ?? (string) $payment->status,
+                'currency' => $payment->currency,
+                'amount_cents' => $payment->amount_cents,
+                'provider' => $payment->provider,
+                'provider_reference' => $payment->provider_reference,
+                'provider_transaction_id' => $payment->provider_transaction_id,
+                'mobile_number' => $payment->mobile_number,
+                'created_at' => optional($payment->created_at)?->toIso8601String(),
+                'initiated_at' => optional($payment->initiated_at)?->toIso8601String(),
+                'confirmed_at' => optional($payment->confirmed_at)?->toIso8601String(),
+                'failed_at' => optional($payment->failed_at)?->toIso8601String(),
+                'rejected_at' => optional($payment->rejected_at)?->toIso8601String(),
+                'rejection_reason' => $payment->rejection_reason,
+                'review_comment' => $payment->review_comment,
+                'application' => $payment->application
+                    ? [
+                        'id' => $payment->application->id,
+                        'application_number' => $payment->application->application_number,
+                        'current_status' => $payment->application->current_status?->value ?? (string) $payment->application->current_status,
+                        'show_url' => route('applicant.applications.show', $payment->application->id),
+                        'edit_url' => route('applicant.applications.edit', ['application' => $payment->application->id]),
+                        'track_url' => route('applicant.applications.track', $payment->application->id),
+                        'can_edit' => $request->user()->can('update', $payment->application),
+                    ]
+                    : null,
+                'invoice' => $payment->invoice
+                    ? [
+                        'id' => $payment->invoice->id,
+                        'invoice_number' => $payment->invoice->invoice_number,
+                        'status' => $payment->invoice->status?->value ?? (string) $payment->invoice->status,
+                        'show_url' => route('applicant.invoices.show', $payment->invoice->id),
+                    ]
+                    : null,
+                'proof_document' => $proof
+                    ? [
+                        'id' => $proof->id,
+                        'original_name' => $proof->original_name,
+                        'preview_url' => URL::temporarySignedRoute('applicant.documents.preview', $signedExpiry, ['document' => $proof->id]),
+                        'download_url' => URL::temporarySignedRoute('applicant.documents.download', $signedExpiry, ['document' => $proof->id]),
+                    ]
+                    : null,
+            ],
+        ]);
+    }
+
+    private function assertApplicantOwnsApplication(Request $request, ?Application $application): void
+    {
+        $userId = (int) $request->user()?->id;
+        if (! $application || (int) $application->applicant_user_id !== $userId) {
+            abort(403);
+        }
     }
 }
 

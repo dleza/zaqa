@@ -163,5 +163,163 @@ class ApplicantPaymentsPageTest extends TestCase
                 ->where('payments.0.provider_reference', $payA->provider_reference)
             );
     }
+
+    public function test_applicant_can_view_payment_detail_for_own_application(): void
+    {
+        $user = User::factory()->activated()->create(['applicant_type' => ApplicantType::Individual]);
+        ApplicantProfile::create([
+            'user_id' => $user->id,
+            'first_name' => 'John',
+            'surname' => 'Doe',
+            'nrc_number' => '111111/11/1',
+            'passport_number' => null,
+            'email' => $user->email,
+            'phone_primary' => $user->phone_primary,
+        ]);
+        $now = Carbon::now();
+        $app = Application::query()->create([
+            'uuid' => (string) Str::uuid(),
+            'application_number' => 'APP-VIEW-PAY-1',
+            'applicant_user_id' => $user->id,
+            'applicant_type' => 'individual',
+            'service_type' => 'verification',
+            'qualification_category' => 'certificate',
+            'current_status' => 'draft',
+            'verification_state' => 'awaiting_assignment',
+            'is_foreign' => false,
+        ]);
+        $inv = Invoice::query()->create([
+            'application_id' => $app->id,
+            'invoice_number' => 'INV-VIEW-1',
+            'currency' => 'ZMW',
+            'amount_cents' => 10000,
+            'status' => 'paid',
+            'issued_at' => $now,
+            'paid_at' => $now,
+        ]);
+        $payment = Payment::query()->create([
+            'application_id' => $app->id,
+            'invoice_id' => $inv->id,
+            'method' => 'card',
+            'status' => 'confirmed',
+            'currency' => 'ZMW',
+            'amount_cents' => 10000,
+            'provider' => 'test',
+            'provider_reference' => 'TX-VIEW',
+            'confirmed_at' => $now,
+            'initiated_at' => $now,
+            'last_status_at' => $now,
+        ]);
+
+        $this->actingAs($user);
+
+        $this->get('/applicant/payments/'.$payment->id)
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->component('Applicant/PaymentShow', false)
+                ->where('payment.id', $payment->id)
+                ->where('payment.application.application_number', $app->application_number)
+                ->where('payment.invoice.invoice_number', $inv->invoice_number)
+            );
+    }
+
+    public function test_applicant_cannot_view_payment_for_another_users_application(): void
+    {
+        $userA = User::factory()->activated()->create(['applicant_type' => ApplicantType::Individual]);
+        $userB = User::factory()->activated()->create(['applicant_type' => ApplicantType::Individual]);
+        foreach ([$userA, $userB] as $u) {
+            ApplicantProfile::create([
+                'user_id' => $u->id,
+                'first_name' => 'X',
+                'surname' => 'Y',
+                'nrc_number' => '111111/11/1',
+                'passport_number' => null,
+                'email' => $u->email,
+                'phone_primary' => $u->phone_primary,
+            ]);
+        }
+        $now = Carbon::now();
+        $appB = Application::query()->create([
+            'uuid' => (string) Str::uuid(),
+            'application_number' => 'APP-OTHER',
+            'applicant_user_id' => $userB->id,
+            'applicant_type' => 'individual',
+            'service_type' => 'verification',
+            'qualification_category' => 'certificate',
+            'current_status' => 'draft',
+            'verification_state' => 'awaiting_assignment',
+            'is_foreign' => false,
+        ]);
+        $invB = Invoice::query()->create([
+            'application_id' => $appB->id,
+            'invoice_number' => 'INV-OTHER',
+            'currency' => 'ZMW',
+            'amount_cents' => 5000,
+            'status' => 'issued',
+            'issued_at' => $now,
+            'paid_at' => null,
+        ]);
+        $payB = Payment::query()->create([
+            'application_id' => $appB->id,
+            'invoice_id' => $invB->id,
+            'method' => 'card',
+            'status' => 'initiated',
+            'currency' => 'ZMW',
+            'amount_cents' => 5000,
+            'provider' => 'test',
+            'provider_reference' => 'TX-OTHER',
+            'initiated_at' => $now,
+            'last_status_at' => $now,
+        ]);
+
+        $this->actingAs($userA);
+
+        $this->get('/applicant/payments/'.$payB->id)->assertForbidden();
+    }
+
+    public function test_applicant_can_view_invoice_detail(): void
+    {
+        $user = User::factory()->activated()->create(['applicant_type' => ApplicantType::Individual]);
+        ApplicantProfile::create([
+            'user_id' => $user->id,
+            'first_name' => 'John',
+            'surname' => 'Doe',
+            'nrc_number' => '111111/11/1',
+            'passport_number' => null,
+            'email' => $user->email,
+            'phone_primary' => $user->phone_primary,
+        ]);
+        $now = Carbon::now();
+        $app = Application::query()->create([
+            'uuid' => (string) Str::uuid(),
+            'application_number' => 'APP-INV-SHOW',
+            'applicant_user_id' => $user->id,
+            'applicant_type' => 'individual',
+            'service_type' => 'verification',
+            'qualification_category' => 'certificate',
+            'current_status' => 'draft',
+            'verification_state' => 'awaiting_assignment',
+            'is_foreign' => false,
+        ]);
+        $inv = Invoice::query()->create([
+            'application_id' => $app->id,
+            'invoice_number' => 'INV-SHOW-1',
+            'currency' => 'ZMW',
+            'amount_cents' => 8000,
+            'status' => 'issued',
+            'issued_at' => $now,
+            'paid_at' => null,
+        ]);
+
+        $this->actingAs($user);
+
+        $this->get('/applicant/invoices/'.$inv->id)
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->component('Applicant/InvoiceShow', false)
+                ->where('invoice.invoice_number', $inv->invoice_number)
+                ->has('invoice.payments')
+            );
+    }
 }
 

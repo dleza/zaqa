@@ -142,7 +142,9 @@ Route::middleware('auth')->group(function () {
         Route::get('/payments/{payment}/return', [ApplicantPaymentController::class, 'returnFromProvider'])->name('payments.return');
 
         Route::get('/invoices', [ApplicantBillingController::class, 'invoices'])->name('invoices');
+        Route::get('/invoices/{invoice}', [ApplicantBillingController::class, 'showInvoice'])->name('invoices.show');
         Route::get('/payments', [ApplicantBillingController::class, 'payments'])->name('payments.index');
+        Route::get('/payments/{payment}', [ApplicantBillingController::class, 'showPayment'])->name('payments.show');
 
         Route::get('/profile', [ApplicantProfileController::class, 'show'])->name('profile.show');
         Route::get('/profile/edit', [ApplicantProfileEditController::class, 'edit'])->name('profile.edit');
