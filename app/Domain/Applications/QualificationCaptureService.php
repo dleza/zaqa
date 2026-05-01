@@ -11,6 +11,7 @@ use App\Models\Application;
 use App\Models\Qualification;
 use App\Models\QualificationType;
 use App\Models\User;
+use App\Support\CountryIso;
 use Illuminate\Support\Facades\DB;
 
 class QualificationCaptureService
@@ -70,13 +71,13 @@ class QualificationCaptureService
                 $inst = \App\Models\AwardingInstitution::query()->with('country')->find((int) $awardingInstitutionId);
                 $iso = strtoupper((string) ($inst?->country?->iso_code ?? ''));
                 if ($iso !== '') {
-                    $isForeignQualification = $iso !== 'ZM';
+                    $isForeignQualification = ! CountryIso::isZambia($iso);
                 }
             } elseif (array_key_exists('country_id', $data) && $data['country_id']) {
                 $country = Country::query()->find((int) $data['country_id']);
                 $iso = strtoupper((string) ($country?->iso_code ?? ''));
                 if ($iso !== '') {
-                    $isForeignQualification = $iso !== 'ZM';
+                    $isForeignQualification = ! CountryIso::isZambia($iso);
                 }
             }
             $transcriptRequired = (bool) $isForeignQualification || (bool) $qualificationType->requires_subject_results;

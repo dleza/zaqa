@@ -18,6 +18,7 @@ use App\Models\ApplicationStatusHistory;
 use App\Models\Qualification;
 use App\Models\QualificationDocument;
 use App\Models\User;
+use App\Support\CountryIso;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
@@ -288,7 +289,7 @@ class ApplicationSubmissionService
             /** @var Qualification $q */
             $consent = $q->consentForm;
             $instIso = strtoupper((string) (($q->awardingInstitution?->country?->iso_code) ?: ($q->country?->iso_code) ?: ''));
-            $institutionIsForeign = $instIso !== '' && $instIso !== 'ZM';
+            $institutionIsForeign = $instIso !== '' && ! CountryIso::isZambia($instIso);
 
             if ($institutionIsForeign) {
                 if (! $consent || ! $consent->uploaded_document_id) {

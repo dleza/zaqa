@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Applicant;
 
 use App\Http\Controllers\Controller;
 use App\Models\AwardingInstitution;
+use App\Support\CountryIso;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 use Illuminate\Http\Resources\Json\JsonResource;
@@ -26,7 +27,7 @@ class ApplicantReferenceController extends Controller
             ->get(['id', 'country_id', 'name', 'consent_form_path'])
             ->map(function (AwardingInstitution $i) {
                 $iso = strtoupper((string) ($i->country?->iso_code ?? ''));
-                $isZambian = $iso === 'ZM';
+                $isZambian = CountryIso::isZambia($iso);
 
                 return [
                     'id' => $i->id,

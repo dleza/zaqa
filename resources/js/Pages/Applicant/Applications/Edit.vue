@@ -584,6 +584,21 @@ const wizardCompletion = computed(() => {
   return { total, completed, percent }
 })
 
+/** Where you are in the stepper (distinct from checklist completion — requirements can be 0% while you browse steps). */
+const wizardStepPosition = computed(() => {
+  const keys = steps.value.map((s) => s.key as StepKey)
+  const idx = Math.max(0, keys.indexOf(activeStep.value))
+  const total = keys.length
+  const percent = total > 0 ? Math.min(100, Math.round(((idx + 1) / total) * 100)) : 0
+  const stepMeta = steps.value[idx]
+  return {
+    current: idx + 1,
+    total,
+    percent,
+    label: (stepMeta?.label ?? '') as string,
+  }
+})
+
 const disabledStepKeys = computed<StepKey[]>(() => {
   const keys = steps.value.map((s) => s.key) as StepKey[]
   // find first incomplete step; allow up to that step (inclusive)
@@ -710,7 +725,10 @@ onBeforeUnmount(() => {
             <div class="min-w-0">
               <div class="text-[11px] font-semibold uppercase tracking-wider text-text-muted">Completion</div>
               <div class="mt-0.5 truncate text-sm font-semibold text-text-primary">
-                {{ wizardCompletion.completed }} / {{ wizardCompletion.total }} steps • {{ wizardCompletion.percent }}%
+                Requirements {{ wizardCompletion.completed }} / {{ wizardCompletion.total }} • {{ wizardCompletion.percent }}%
+              </div>
+              <div class="mt-1 text-xs text-text-muted">
+                Step {{ wizardStepPosition.current }} / {{ wizardStepPosition.total }} — {{ wizardStepPosition.label }}
               </div>
             </div>
             <span v-if="wizardCompletion.percent === 100" class="zaqa-badge zaqa-badge-success">Ready to submit</span>

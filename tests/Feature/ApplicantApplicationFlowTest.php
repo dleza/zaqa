@@ -331,6 +331,70 @@ class ApplicantApplicationFlowTest extends TestCase
         $submit->assertRedirect(route('applicant.applications.feedback.show', $application));
     }
 
+    public function test_zambia_country_iso_alpha3_zmb_is_classified_as_local_not_foreign(): void
+    {
+        $user = User::factory()->activated()->create([
+            'applicant_type' => ApplicantType::Individual,
+        ]);
+
+        ApplicantProfile::create([
+            'user_id' => $user->id,
+            'first_name' => 'Jane',
+            'surname' => 'Doe',
+            'nrc_number' => '222222/22/2',
+            'email' => $user->email,
+            'phone_primary' => $user->phone_primary,
+        ]);
+
+        $this->actingAs($user);
+
+        $this->post('/applicant/applications', [
+            'service_type' => 'verification',
+            'qualification_category' => 'diploma',
+            'is_foreign' => false,
+        ])->assertRedirect();
+
+        $application = Application::query()->firstOrFail();
+
+        $type = QualificationType::query()
+            ->where('zqf_level_code', 'L6')
+            ->firstOrFail();
+
+        $zambiaId = Country::query()->create([
+            'iso_code' => 'ZMB',
+            'name' => 'Zambia',
+            'is_active' => true,
+            'sort_order' => 0,
+        ])->id;
+
+        $institution = AwardingInstitution::query()->create([
+            'country_id' => $zambiaId,
+            'name' => 'Zambian Institution',
+            'is_active' => true,
+            'sort_order' => 0,
+        ]);
+
+        $this->put("/applicant/applications/{$application->id}/qualification", [
+            'awarding_institution_id' => $institution->id,
+            'awarding_institution_name' => 'Zambian Institution',
+            'qualification_holder_name' => 'Jane Doe',
+            'country_id' => $zambiaId,
+            'nrc_passport_number' => '222222/22/2',
+            'certificate_number' => 'CERT-ZMB',
+            'title_of_qualification' => 'Diploma in Zambia',
+            'award_date' => now()->subYear()->toDateString(),
+            'qualification_type_id' => $type->id,
+            'subject_results' => [],
+        ])->assertRedirect();
+
+        $qualification = $application->refresh()->qualifications->firstOrFail();
+
+        $this->assertFalse(
+            (bool) $qualification->is_foreign_qualification,
+            'Seeded countries use ZMB; it must be treated as Zambia (local), not foreign.'
+        );
+    }
+
     public function test_manual_bank_payment_proof_requires_finance_approval_before_submission(): void
     {
         Storage::fake('local');

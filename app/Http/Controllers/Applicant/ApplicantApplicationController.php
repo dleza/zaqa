@@ -17,6 +17,7 @@ use App\Models\BillingCategory;
 use App\Models\Country;
 use App\Models\FeeStructure;
 use App\Models\QualificationType;
+use App\Support\CountryIso;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\URL;
@@ -88,7 +89,7 @@ class ApplicantApplicationController extends Controller
         $documentsOk = $hasNrc && $hasCert && ((bool) $application->is_foreign ? $hasTranscript : true);
 
         $consentOk = (bool) $application->is_foreign
-            ? (bool) ($application->consentForm?->uploaded_document_id) && (bool) ($application->consentForm?->zaqa_uploaded_document_id)
+            ? (bool) ($application->consentForm?->uploaded_document_id)
             : (bool) ($application->consentForm?->agreed_at);
 
         $steps = [
@@ -354,14 +355,16 @@ class ApplicantApplicationController extends Controller
             ->map(function ($q) use ($currentDocs) {
                 $qid = (int) $q->id;
                 $instIso = strtoupper((string) (($q->awardingInstitution?->country?->iso_code) ?: ($q->country?->iso_code) ?: ''));
-                $institutionIsForeign = $instIso !== '' && $instIso !== 'ZM';
+                $institutionIsForeign = $instIso !== '' && ! CountryIso::isZambia($instIso);
                 $institutionHasConsentForm = (bool) ($q->awardingInstitution?->has_consent_form ?? false);
                 $institutionConsentFormUrl = $q->awardingInstitution?->consent_form_url;
 
                 $hasCert = $currentDocs->contains(fn ($d) => (int) ($d->qualification_id ?? 0) === $qid && (($d->document_type?->value ?? (string) $d->document_type) === 'certificate_copy'));
                 $hasTranscript = $currentDocs->contains(fn ($d) => (int) ($d->qualification_id ?? 0) === $qid && (($d->document_type?->value ?? (string) $d->document_type) === 'transcript'));
-                $hasForeignConsentSigned = $currentDocs->contains(fn ($d) => (int) ($d->qualification_id ?? 0) === $qid && (($d->document_type?->value ?? (string) $d->document_type) === 'consent_form_signed'));
+                $hasForeignConsentSigned = $currentDocs->contains(fn ($d) => (int) ($d->qualification_id ?? 0) === $qid && (($d->document_type?->value ?? (string) $d->document_type) === 'consent_form_signed'))
+                    || ($institutionIsForeign && (bool) ($q->consentForm?->uploaded_document_id));
 
+                // Align with Vue modal + QualificationCapture: ZMB and ZM are Zambia (alpha-3 vs alpha-2 drift).
                 $requiresForeignConsent = $institutionIsForeign;
                 $hasForeignConsent = $requiresForeignConsent ? $hasForeignConsentSigned : false;
                 $hasLocalConsent = ! $requiresForeignConsent ? (bool) ($q->consentForm?->agreed_at) : false;
@@ -384,7 +387,7 @@ class ApplicantApplicationController extends Controller
                             'country' => $q->awardingInstitution->country
                                 ? ['id' => $q->awardingInstitution->country->id, 'iso_code' => $q->awardingInstitution->country->iso_code, 'name' => $q->awardingInstitution->country->name]
                                 : null,
-                            'is_zambian' => $instIso === 'ZM',
+                            'is_zambian' => CountryIso::isZambia($instIso),
                             'is_foreign' => $institutionIsForeign,
                             'has_consent_form' => $institutionHasConsentForm,
                             'consent_form_url' => $institutionConsentFormUrl,
@@ -425,7 +428,7 @@ class ApplicantApplicationController extends Controller
                     'transcript_required' => (bool) $q->transcript_required,
                     'transcript_reason' => $q->transcript_reason,
                     'notes' => $q->notes,
-                    'is_foreign_qualification' => (bool) ($q->is_foreign_qualification ?? false),
+                    'is_foreign_qualification' => $institutionIsForeign,
                     'subject_results' => $q->subjectResults
                         ->sortBy('display_order')
                         ->values()
