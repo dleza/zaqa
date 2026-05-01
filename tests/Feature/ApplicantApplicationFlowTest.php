@@ -12,6 +12,7 @@ use App\Models\Payment;
 use App\Models\Qualification;
 use App\Models\QualificationDocument;
 use App\Models\QualificationType;
+use App\Models\Country;
 use App\Models\User;
 use Database\Seeders\BillingCategoriesSeeder;
 use Database\Seeders\FeeStructuresSeeder;
@@ -90,18 +91,21 @@ class ApplicantApplicationFlowTest extends TestCase
         ]);
         $qualificationResponse->assertRedirect();
 
-        $application->refresh()->load('qualification');
-        $this->assertNotNull($application->qualification);
+        $application->refresh()->load('qualifications');
+        $this->assertCount(1, $application->qualifications);
+        $qualification = $application->qualifications->first();
+        $this->assertNotNull($qualification);
 
         $this->assertDatabaseHas('audit_logs', [
             'event_type' => 'qualifications.saved',
             'module' => 'Qualifications',
             'entity_type' => Qualification::class,
-            'entity_id' => $application->qualification->id,
+            'entity_id' => $qualification->id,
         ]);
 
         $this->post("/applicant/applications/{$application->id}/documents", [
             'document_type' => 'certificate_copy',
+            'qualification_id' => $qualification->id,
             'file' => UploadedFile::fake()->create('certificate.pdf', 100, 'application/pdf'),
         ])->assertRedirect();
 
@@ -112,11 +116,13 @@ class ApplicantApplicationFlowTest extends TestCase
 
         $this->post("/applicant/applications/{$application->id}/documents", [
             'document_type' => 'transcript',
+            'qualification_id' => $qualification->id,
             'file' => UploadedFile::fake()->create('transcript.pdf', 120, 'application/pdf'),
         ])->assertRedirect();
 
         $this->assertDatabaseHas('qualification_documents', [
             'application_id' => $application->id,
+            'qualification_id' => $qualification->id,
             'document_type' => 'certificate_copy',
             'is_current_version' => 1,
         ]);
@@ -126,7 +132,7 @@ class ApplicantApplicationFlowTest extends TestCase
         ])->assertRedirect();
 
         $this->assertDatabaseHas('consent_forms', [
-            'application_id' => $application->id,
+            'qualification_id' => $qualification->id,
             'consent_type' => 'local_embedded',
         ]);
 
@@ -240,6 +246,7 @@ class ApplicantApplicationFlowTest extends TestCase
         $this->put("/applicant/applications/{$application->id}/qualification", [
             'awarding_institution_name' => 'Foreign University',
             'qualification_holder_name' => 'John Doe',
+            'country_id' => Country::query()->where('iso_code', 'ZAF')->value('id'),
             'country_name_other' => 'South Africa',
             'nrc_passport_number' => 'P1234567',
             'certificate_number' => 'CERT-FOREIGN',
@@ -249,8 +256,13 @@ class ApplicantApplicationFlowTest extends TestCase
             'subject_results' => [],
         ])->assertRedirect();
 
+        $application->refresh()->load('qualifications');
+        $qualification = $application->qualifications->firstOrFail();
+        $qualification->forceFill(['is_foreign_qualification' => true, 'transcript_required' => true])->save();
+
         $this->post("/applicant/applications/{$application->id}/documents", [
             'document_type' => 'certificate_copy',
+            'qualification_id' => $qualification->id,
             'file' => UploadedFile::fake()->create('certificate.pdf', 100, 'application/pdf'),
         ])->assertRedirect();
 
@@ -261,24 +273,26 @@ class ApplicantApplicationFlowTest extends TestCase
 
         $this->post("/applicant/applications/{$application->id}/documents", [
             'document_type' => 'transcript',
+            'qualification_id' => $qualification->id,
             'file' => UploadedFile::fake()->create('transcript.pdf', 120, 'application/pdf'),
         ])->assertRedirect();
 
         $failedSubmit = $this->post("/applicant/applications/{$application->id}/submit");
-        $failedSubmit->assertSessionHasErrors(['documents']);
+        $failedSubmit->assertSessionHasErrors(['consent']);
 
         $this->post("/applicant/applications/{$application->id}/consent/foreign-upload", [
+            'qualification_id' => $qualification->id,
             'file' => UploadedFile::fake()->create('consent.pdf', 80, 'application/pdf'),
             'zaqa_file' => UploadedFile::fake()->create('zaqa-consent.pdf', 80, 'application/pdf'),
             'source_awarding_institution_name' => 'Foreign University',
         ])->assertRedirect();
 
         $this->assertDatabaseHas('consent_forms', [
-            'application_id' => $application->id,
+            'qualification_id' => $qualification->id,
             'consent_type' => 'foreign_uploaded',
         ]);
 
-        $consent = ConsentForm::query()->where('application_id', $application->id)->firstOrFail();
+        $consent = ConsentForm::query()->where('qualification_id', $qualification->id)->firstOrFail();
         $this->assertNotNull($consent->uploaded_document_id);
         $this->assertNotNull($consent->zaqa_uploaded_document_id);
 
@@ -350,6 +364,7 @@ class ApplicantApplicationFlowTest extends TestCase
 
         $this->post("/applicant/applications/{$application->id}/documents", [
             'document_type' => 'certificate_copy',
+            'qualification_id' => $application->refresh()->qualifications()->firstOrFail()->id,
             'file' => UploadedFile::fake()->create('certificate.pdf', 100, 'application/pdf'),
         ])->assertRedirect();
 
@@ -360,6 +375,7 @@ class ApplicantApplicationFlowTest extends TestCase
 
         $this->post("/applicant/applications/{$application->id}/documents", [
             'document_type' => 'transcript',
+            'qualification_id' => $application->refresh()->qualifications()->firstOrFail()->id,
             'file' => UploadedFile::fake()->create('transcript.pdf', 120, 'application/pdf'),
         ])->assertRedirect();
 
@@ -438,6 +454,7 @@ class ApplicantApplicationFlowTest extends TestCase
 
         $this->post("/applicant/applications/{$application->id}/documents", [
             'document_type' => 'certificate_copy',
+            'qualification_id' => $application->refresh()->qualifications()->firstOrFail()->id,
             'file' => UploadedFile::fake()->create('certificate.pdf', 100, 'application/pdf'),
         ])->assertRedirect();
 

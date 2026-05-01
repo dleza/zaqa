@@ -23,6 +23,7 @@ const props = defineProps<{
   uploadUrl: string
   documents: DocItem[]
   transcriptRequired: boolean
+  qualificationId?: number | null
 }>()
 
 const requiredTypes = computed<DocType[]>(() => {
@@ -78,9 +79,10 @@ const modalMode = ref<'upload' | 'replace'>('upload')
 const modalDropActive = ref(false)
 const fileInput = ref<HTMLInputElement | null>(null)
 
-const form = useForm<{ document_type: string; file: File | null }>({
+const form = useForm<{ document_type: string; file: File | null; qualification_id?: number | null }>({
   document_type: 'nrc_copy',
   file: null,
+  qualification_id: props.qualificationId ?? null,
 })
 
 const selectedPreviewUrl = ref<string | null>(null)
@@ -151,6 +153,8 @@ function onFileChange(type: DocType, e: Event) {
 function upload() {
   if (!modalOpen.value) return
   form.document_type = modalType.value
+  // Only qualification-scoped docs should carry qualification_id (certificate/transcript).
+  form.qualification_id = modalType.value === 'nrc_copy' ? null : (props.qualificationId ?? null)
   form.post(props.uploadUrl, {
     forceFormData: true,
     preserveScroll: true,

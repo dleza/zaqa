@@ -12,6 +12,16 @@ use Illuminate\Http\RedirectResponse;
 
 class ApplicantQualificationController extends Controller
 {
+    public function store(UpsertQualificationRequest $request, Application $application, QualificationCaptureService $service): RedirectResponse
+    {
+        $this->authorize('update', $application);
+
+        $payload = array_merge($request->validated(), ['create_new' => true]);
+        $service->upsertQualification($application, $payload, $request->user());
+
+        return back()->with('success', 'Qualification added.');
+    }
+
     public function upsertDetails(UpsertQualificationDetailsRequest $request, Application $application, QualificationCaptureService $service): RedirectResponse
     {
         $this->authorize('update', $application);
@@ -25,10 +35,9 @@ class ApplicantQualificationController extends Controller
     {
         $this->authorize('update', $application);
 
-        /** @var array<int, array<string, mixed>> $subjectResults */
-        $subjectResults = $request->validated()['subject_results'];
+        $payload = $request->validated();
 
-        $service->upsertSubjectResults($application, $subjectResults, $request->user());
+        $service->upsertSubjectResults($application, $payload, $request->user());
 
         return back()->with('success', 'Subject results saved.');
     }
@@ -40,6 +49,28 @@ class ApplicantQualificationController extends Controller
         $service->upsertQualification($application, $request->validated(), $request->user());
 
         return back()->with('success', 'Qualification details saved.');
+    }
+
+    public function destroy(\Illuminate\Http\Request $request, Application $application, \App\Models\Qualification $qualification): RedirectResponse
+    {
+        $this->authorize('update', $application);
+        if ($qualification->application_id !== $application->id) {
+            abort(404);
+        }
+
+        if ($application->paid_at) {
+            return back()->withErrors(['application' => 'Paid applications cannot be edited.']);
+        }
+
+        \App\Models\Qualification::destroy((int) $qualification->id);
+
+        // Keep aggregate locality correct.
+        $application->refresh()->loadMissing('qualifications');
+        $application->forceFill([
+            'is_foreign' => (bool) $application->qualifications->contains(fn (\App\Models\Qualification $q) => (bool) $q->is_foreign_qualification),
+        ])->save();
+
+        return back()->with('success', 'Qualification removed.');
     }
 }
 

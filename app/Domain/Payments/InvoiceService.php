@@ -10,6 +10,7 @@ use App\Enums\LifecycleStage;
 use App\Enums\LifecycleVisibility;
 use App\Models\Application;
 use App\Models\Invoice;
+use App\Models\Qualification;
 use App\Models\User;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -31,16 +32,58 @@ class InvoiceService
         return DB::transaction(function () use ($application, $actor) {
             $existing = Invoice::query()->where('application_id', $application->id)->lockForUpdate()->first();
 
-            $application->loadMissing('qualification');
+            $application->loadMissing('qualifications');
 
-            $qualificationTypeId = (int) ($application->qualification?->qualification_type_id ?? 0);
-            if ($qualificationTypeId < 1) {
+            if ($application->qualifications->count() < 1) {
                 throw ValidationException::withMessages([
-                    'qualification_type_id' => 'Qualification type must be selected before billing.',
+                    'qualifications' => 'Add at least one qualification before billing.',
                 ]);
             }
 
-            $resolved = $this->fees->resolve($qualificationTypeId, (bool) $application->is_foreign, Carbon::now());
+            $now = Carbon::now();
+            $totalCents = 0;
+            $currency = null;
+            $breakdown = [];
+
+            /** @var Qualification $q */
+            foreach ($application->qualifications as $q) {
+                $typeId = (int) ($q->qualification_type_id ?? 0);
+                if ($typeId < 1) {
+                    throw ValidationException::withMessages([
+                        'qualification_type_id' => 'Each qualification must have a qualification type before billing.',
+                    ]);
+                }
+
+                $resolved = $this->fees->resolve($typeId, (bool) $q->is_foreign_qualification, $now);
+                $lineCurrency = (string) $resolved['currency'];
+                $currency = $currency ?? $lineCurrency;
+                if ($currency !== $lineCurrency) {
+                    throw ValidationException::withMessages([
+                        'currency' => 'Mixed currencies are not supported for a single invoice.',
+                    ]);
+                }
+
+                $feeCents = (int) $resolved['fee_cents'];
+                $totalCents += $feeCents;
+
+                // Snapshot fee on each qualification item (used for immutability + audit).
+                $q->forceFill([
+                    'fee_currency' => $currency,
+                    'fee_amount_cents' => $feeCents,
+                ])->save();
+
+                $breakdown[] = [
+                    'qualification_id' => $q->id,
+                    'qualification_type_id' => $resolved['qualification_type']->id,
+                    'billing_category_id' => $resolved['billing_category']->id,
+                    'fee_structure_id' => $resolved['fee_structure']->id,
+                    'is_foreign_snapshot' => (bool) $q->is_foreign_qualification,
+                    'fee_label_snapshot' => $resolved['billing_category']->name,
+                    'amount_cents' => $feeCents,
+                    'currency' => $currency,
+                    'processing_days_snapshot' => $resolved['processing_days'],
+                ];
+            }
 
             if ($existing) {
                 // Invoice immutability: do not mutate settled invoices. For unpaid/issued invoices (before payment),
@@ -56,12 +99,8 @@ class InvoiceService
                 }
 
                 $needsUpdate =
-                    (int) $existing->billing_category_id !== (int) $resolved['billing_category']->id
-                    || (int) $existing->qualification_type_id !== (int) $resolved['qualification_type']->id
-                    || (int) $existing->fee_structure_id !== (int) $resolved['fee_structure']->id
-                    || (bool) $existing->is_foreign_snapshot !== (bool) $application->is_foreign
-                    || (int) $existing->amount_cents !== (int) $resolved['fee_cents']
-                    || (string) $existing->currency !== (string) $resolved['currency'];
+                    (int) $existing->amount_cents !== (int) $totalCents
+                    || (string) $existing->currency !== (string) $currency;
 
                 if (! $needsUpdate) {
                     return $existing;
@@ -79,14 +118,19 @@ class InvoiceService
                 ]);
 
                 $existing->forceFill([
-                    'billing_category_id' => $resolved['billing_category']->id,
-                    'qualification_type_id' => $resolved['qualification_type']->id,
-                    'fee_structure_id' => $resolved['fee_structure']->id,
+                    // Multi-qualification invoices store the detailed fee snapshot in metadata.breakdown.
+                    'billing_category_id' => null,
+                    'qualification_type_id' => null,
+                    'fee_structure_id' => null,
                     'is_foreign_snapshot' => (bool) $application->is_foreign,
-                    'processing_days_snapshot' => $resolved['processing_days'],
-                    'fee_label_snapshot' => $resolved['billing_category']->name,
-                    'currency' => $resolved['currency'],
-                    'amount_cents' => $resolved['fee_cents'],
+                    'processing_days_snapshot' => null,
+                    'fee_label_snapshot' => 'Multiple qualifications',
+                    'currency' => $currency,
+                    'amount_cents' => $totalCents,
+                    'metadata' => array_merge((array) ($existing->metadata ?? []), [
+                        'breakdown' => $breakdown,
+                        'recalculated_at' => now()->toIso8601String(),
+                    ]),
                 ])->save();
 
                 $after = $existing->only([
@@ -122,7 +166,7 @@ class InvoiceService
                     eventCodeBase: 'payment.invoice_updated',
                     stage: LifecycleStage::Payment,
                     title: 'Invoice updated',
-                    description: 'Invoice was updated to reflect the latest qualification and locality details.',
+                    description: 'Invoice was updated to reflect the latest qualification items before payment.',
                     visibility: LifecycleVisibility::Internal,
                     actor: $actor,
                     metadata: [
@@ -137,22 +181,22 @@ class InvoiceService
 
             $invoice = Invoice::create([
                 'application_id' => $application->id,
-                'billing_category_id' => $resolved['billing_category']->id,
-                'qualification_type_id' => $resolved['qualification_type']->id,
-                'fee_structure_id' => $resolved['fee_structure']->id,
+                'billing_category_id' => null,
+                'qualification_type_id' => null,
+                'fee_structure_id' => null,
                 'is_foreign_snapshot' => (bool) $application->is_foreign,
-                'processing_days_snapshot' => $resolved['processing_days'],
-                'fee_label_snapshot' => $resolved['billing_category']->name,
+                'processing_days_snapshot' => null,
+                'fee_label_snapshot' => 'Multiple qualifications',
                 'invoice_number' => $this->generateInvoiceNumber($application),
-                'currency' => $resolved['currency'],
-                'amount_cents' => $resolved['fee_cents'],
+                'currency' => $currency,
+                'amount_cents' => $totalCents,
                 'status' => InvoiceStatus::Issued,
                 'issued_at' => now(),
                 'due_at' => null,
                 'paid_at' => null,
                 'metadata' => [
                     'generated_by' => 'wizard_payment_step',
-                    'fee_effective_from' => optional($resolved['fee_structure']->effective_from)?->toIso8601String(),
+                    'breakdown' => $breakdown,
                 ],
             ]);
 

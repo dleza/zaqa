@@ -178,7 +178,17 @@ class ApplicantApplicationController extends Controller
             return redirect()->route('applicant.applications.show', $application);
         }
 
-        $application->load(['qualification.subjectResults', 'qualification.country', 'qualification.awardingInstitution', 'qualification.qualificationTypeMaster.billingCategory', 'documents', 'consentForm', 'statusHistories', 'invoice', 'payments.proofDocument']);
+        $application->load([
+            'qualifications.subjectResults',
+            'qualifications.country',
+            'qualifications.awardingInstitution',
+            'qualifications.qualificationTypeMaster.billingCategory',
+            'qualifications.consentForm',
+            'documents',
+            'statusHistories',
+            'invoice',
+            'payments.proofDocument',
+        ]);
         $request->user()?->loadMissing(['applicantProfile', 'institutionProfile']);
 
         $now = now();
@@ -280,7 +290,7 @@ class ApplicantApplicationController extends Controller
         $this->authorize('delete', $application);
 
         $applicationNumber = $application->application_number;
-        $application->delete();
+        Application::destroy((int) $application->id);
 
         return redirect()->route('applicant.applications.index')
             ->with('success', "Application {$applicationNumber} deleted.");
@@ -295,6 +305,7 @@ class ApplicantApplicationController extends Controller
             ->values()
             ->map(fn ($doc) => [
                 'id' => $doc->id,
+                'qualification_id' => $doc->qualification_id,
                 'document_type' => $doc->document_type?->value ?? (string) $doc->document_type,
                 'original_name' => $doc->original_name,
                 'mime_type' => $doc->mime_type,
@@ -322,6 +333,91 @@ class ApplicantApplicationController extends Controller
             ?? $paymentsSorted->first();
 
         $paymentProof = $displayPayment?->proofDocument;
+
+        $currentDocs = $application->documents
+            ->filter(fn ($d) => (bool) $d->is_current_version);
+
+        $qualifications = $application->qualifications
+            ->sortBy('id')
+            ->values()
+            ->map(function ($q) use ($currentDocs) {
+                $qid = (int) $q->id;
+                $isForeign = (bool) ($q->is_foreign_qualification ?? false);
+
+                $hasCert = $currentDocs->contains(fn ($d) => (int) ($d->qualification_id ?? 0) === $qid && (($d->document_type?->value ?? (string) $d->document_type) === 'certificate_copy'));
+                $hasTranscript = $currentDocs->contains(fn ($d) => (int) ($d->qualification_id ?? 0) === $qid && (($d->document_type?->value ?? (string) $d->document_type) === 'transcript'));
+                $hasForeignConsentInstitution = $currentDocs->contains(fn ($d) => (int) ($d->qualification_id ?? 0) === $qid && (($d->document_type?->value ?? (string) $d->document_type) === 'consent_form_signed'));
+                $hasForeignConsentZaqa = $currentDocs->contains(fn ($d) => (int) ($d->qualification_id ?? 0) === $qid && (($d->document_type?->value ?? (string) $d->document_type) === 'zaqa_consent_form_signed'));
+
+                $requiresForeignConsent = $isForeign;
+                $hasForeignConsent = $requiresForeignConsent ? ($hasForeignConsentInstitution && $hasForeignConsentZaqa) : false;
+                $hasLocalConsent = ! $isForeign ? (bool) ($q->consentForm?->agreed_at) : false;
+
+                $missing = [];
+                if (! $hasCert) $missing[] = 'certificate_copy';
+                if ((bool) ($q->transcript_required ?? false) && ! $hasTranscript) $missing[] = 'transcript';
+                if ($requiresForeignConsent && ! $hasForeignConsent) $missing[] = 'foreign_consent';
+                if (! $requiresForeignConsent && ! $hasLocalConsent) $missing[] = 'local_consent';
+
+                return [
+                    'id' => $q->id,
+                    'awarding_institution_id' => $q->awarding_institution_id,
+                    'awarding_institution_name' => $q->awarding_institution_name,
+                    'awarding_institution_name_other' => $q->awarding_institution_name_other,
+                    'awarding_institution' => $q->awardingInstitution
+                        ? ['id' => $q->awardingInstitution->id, 'name' => $q->awardingInstitution->name]
+                        : null,
+                    'qualification_holder_name' => $q->qualification_holder_name,
+                    'nrc_passport_number' => $q->nrc_passport_number,
+                    'country_id' => $q->country_id,
+                    'country_name_other' => $q->country_name_other,
+                    'country' => $q->country
+                        ? ['id' => $q->country->id, 'iso_code' => $q->country->iso_code, 'name' => $q->country->name]
+                        : null,
+                    'certificate_number' => $q->certificate_number,
+                    'student_number' => $q->student_number,
+                    'examination_number' => $q->examination_number,
+                    'title_of_qualification' => $q->title_of_qualification,
+                    'award_date' => optional($q->award_date)?->toDateString(),
+                    'qualification_type' => (string) $q->qualification_type,
+                    'qualification_type_id' => $q->qualification_type_id,
+                    'qualification_type_master' => $q->qualificationTypeMaster
+                        ? [
+                            'id' => $q->qualificationTypeMaster->id,
+                            'zqf_level_code' => $q->qualificationTypeMaster->zqf_level_code,
+                            'level_label' => $q->qualificationTypeMaster->level_label,
+                            'name' => $q->qualificationTypeMaster->name,
+                            'requires_subject_results' => (bool) $q->qualificationTypeMaster->requires_subject_results,
+                            'billing_category' => $q->qualificationTypeMaster->billingCategory
+                                ? [
+                                    'id' => $q->qualificationTypeMaster->billingCategory->id,
+                                    'code' => $q->qualificationTypeMaster->billingCategory->code,
+                                    'name' => $q->qualificationTypeMaster->billingCategory->name,
+                                    'local_processing_days' => $q->qualificationTypeMaster->billingCategory->local_processing_days,
+                                    'foreign_processing_days' => $q->qualificationTypeMaster->billingCategory->foreign_processing_days,
+                                ]
+                                : null,
+                          ]
+                        : null,
+                    'transcript_required' => (bool) $q->transcript_required,
+                    'transcript_reason' => $q->transcript_reason,
+                    'notes' => $q->notes,
+                    'is_foreign_qualification' => (bool) ($q->is_foreign_qualification ?? false),
+                    'subject_results' => $q->subjectResults
+                        ->sortBy('display_order')
+                        ->values()
+                        ->map(fn ($row) => ['subject_name' => $row->subject_name, 'grade' => $row->grade]),
+
+                    // Status flags for UI badges
+                    'has_certificate_document' => $hasCert,
+                    'has_transcript_document' => $hasTranscript,
+                    'requires_foreign_consent' => $requiresForeignConsent,
+                    'has_foreign_consent' => $hasForeignConsent,
+                    'has_local_consent' => $hasLocalConsent,
+                    'missing_requirements' => $missing,
+                ];
+            })
+            ->all();
 
         return [
             'id' => $application->id,
@@ -449,6 +545,9 @@ class ApplicantApplicationController extends Controller
             'status_histories' => $histories,
             'can_edit' => $request->user()->can('update', $application),
             'metadata' => (array) ($application->metadata ?? []),
+
+            // Multi-qualification payload for the applicant wizard
+            'qualifications' => $qualifications,
         ];
     }
 

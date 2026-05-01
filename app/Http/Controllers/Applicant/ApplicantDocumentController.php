@@ -8,6 +8,7 @@ use App\Enums\DocumentType;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Applicant\UploadApplicationDocumentRequest;
 use App\Models\Application;
+use App\Models\Qualification;
 use App\Models\QualificationDocument;
 use Illuminate\Http\Request;
 
@@ -19,8 +20,10 @@ class ApplicantDocumentController extends Controller
 
         $documentType = DocumentType::from((string) $request->validated()['document_type']);
         $file = $request->file('file');
+        $qualificationId = $request->validated()['qualification_id'] ?? null;
+        $qualification = $qualificationId ? Qualification::query()->whereKey((int) $qualificationId)->first() : null;
 
-        $documents->upload($application, $documentType, $file, $request->user());
+        $documents->upload($application, $documentType, $file, $request->user(), $qualification);
 
         return back()->with('success', 'Document uploaded successfully.');
     }

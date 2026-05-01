@@ -62,7 +62,7 @@ function submit() {
 </script>
 
 <template>
-  <GuestLayout max-width-class="max-w-lg sm:max-w-xl lg:max-w-2xl">
+  <GuestLayout max-width-class="max-w-lg sm:max-w-xl md:max-w-2xl lg:max-w-3xl xl:max-w-4xl">
     <div class="transition-all duration-500 ease-out" :class="mounted ? 'translate-y-0 opacity-100' : 'translate-y-2 opacity-0'">
       <div>
         <h2 class="text-2xl font-semibold tracking-tight text-text-primary">Create account</h2>

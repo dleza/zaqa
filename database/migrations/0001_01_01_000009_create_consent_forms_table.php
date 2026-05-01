@@ -13,7 +13,8 @@ return new class extends Migration
     {
         Schema::create('consent_forms', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('application_id')->unique()->constrained('applications')->cascadeOnDelete();
+            // Consent is captured per qualification item. Foreign consent is required per foreign qualification.
+            $table->foreignId('qualification_id')->constrained('qualifications')->cascadeOnDelete();
 
             $table->string('consent_type');
             $table->string('embedded_text_version')->nullable();
@@ -21,9 +22,11 @@ return new class extends Migration
             $table->timestamp('agreed_at')->nullable();
 
             $table->foreignId('uploaded_document_id')->nullable()->constrained('qualification_documents')->nullOnDelete();
-            $table->string('source_awarding_body_name')->nullable();
+            $table->string('source_awarding_institution_name')->nullable();
 
             $table->timestamps();
+
+            $table->index(['qualification_id', 'consent_type']);
         });
     }
 

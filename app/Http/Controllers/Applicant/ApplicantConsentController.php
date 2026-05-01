@@ -14,6 +14,7 @@ use App\Http\Requests\Applicant\AcceptLocalConsentRequest;
 use App\Http\Requests\Applicant\UploadForeignConsentRequest;
 use App\Models\Application;
 use App\Models\ConsentForm;
+use App\Models\Qualification;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
@@ -28,42 +29,49 @@ class ApplicantConsentController extends Controller
     ): RedirectResponse {
         $this->authorize('update', $application);
 
-        if ((bool) $application->is_foreign) {
+        $application->loadMissing('qualifications');
+
+        if ($application->qualifications->count() < 1) {
             throw ValidationException::withMessages([
-                'consent' => 'Local embedded consent is not available for foreign applications.',
+                'consent' => 'Please add at least one qualification before accepting consent.',
             ]);
         }
 
-        $before = $application->consentForm?->toArray();
+        DB::transaction(function () use ($request, $application, $audit, $lifecycle) {
+            // Local embedded consent is recorded per qualification item (even if identical text),
+            // so mixed-local/foreign applications can enforce foreign consent per item independently.
+            foreach ($application->qualifications as $qualification) {
+                /** @var Qualification $qualification */
+                $before = $qualification->consentForm?->toArray();
+                $consent = ConsentForm::updateOrCreate(
+                    ['qualification_id' => $qualification->id],
+                    [
+                        'consent_type' => ConsentType::LocalEmbedded,
+                        'embedded_text_version' => (string) config('consent.local.version'),
+                        'agreed_by_name' => (string) $request->validated()['agreed_by_name'],
+                        'agreed_at' => now(),
+                        'uploaded_document_id' => null,
+                        'source_awarding_institution_name' => null,
+                    ],
+                );
 
-        DB::transaction(function () use ($request, $application, $audit, $lifecycle, $before) {
-            $consent = ConsentForm::updateOrCreate(
-                ['application_id' => $application->id],
-                [
-                    'consent_type' => ConsentType::LocalEmbedded,
-                    'embedded_text_version' => (string) config('consent.local.version'),
-                    'agreed_by_name' => (string) $request->validated()['agreed_by_name'],
-                    'agreed_at' => now(),
-                    'uploaded_document_id' => null,
-                    'source_awarding_body_name' => null,
-                ],
-            );
-
-            $audit->record(
-                eventType: 'consent.local_accepted',
-                module: 'Consent',
-                actionName: 'local_accepted',
-                message: 'Local embedded consent accepted.',
-                entityType: ConsentForm::class,
-                entityId: $consent->id,
-                beforeState: $before,
-                afterState: $consent->toArray(),
-                metadata: [
-                    'application_id' => $application->id,
-                    'embedded_text_version' => $consent->embedded_text_version,
-                ],
-                actor: $request->user(),
-            );
+                $audit->record(
+                    eventType: 'consent.local_accepted',
+                    module: 'Consent',
+                    actionName: 'local_accepted',
+                    message: 'Local embedded consent accepted.',
+                    entityType: ConsentForm::class,
+                    entityId: $consent->id,
+                    beforeState: $before,
+                    afterState: $consent->toArray(),
+                    metadata: [
+                        'application_id' => $application->id,
+                        'qualification_id' => $qualification->id,
+                        'embedded_text_version' => $consent->embedded_text_version,
+                    ],
+                    actor: $request->user(),
+                );
+            }
 
             $lifecycle->milestone(
                 application: $application,
@@ -99,41 +107,49 @@ class ApplicantConsentController extends Controller
 
         $file = $request->file('file');
         $zaqaFile = $request->file('zaqa_file');
+        $qualificationId = (int) ($request->validated()['qualification_id'] ?? 0);
+        $qualification = Qualification::query()->whereKey($qualificationId)->firstOrFail();
+        if ($qualification->application_id !== $application->id) {
+            throw ValidationException::withMessages([
+                'qualification_id' => 'Selected qualification does not belong to this application.',
+            ]);
+        }
 
-        $before = $application->consentForm?->toArray();
+        $before = $qualification->consentForm?->toArray();
 
-        DB::transaction(function () use ($request, $application, $documents, $audit, $lifecycle, $file, $zaqaFile, $before) {
-            $awardingInstitutionDocument = $documents->upload($application, DocumentType::ConsentFormSigned, $file, $request->user());
+        DB::transaction(function () use ($request, $application, $qualification, $documents, $audit, $lifecycle, $file, $zaqaFile, $before) {
+            $awardingInstitutionDocument = $documents->upload($application, DocumentType::ConsentFormSigned, $file, $request->user(), $qualification);
             $zaqaDocument = $zaqaFile
-                ? $documents->upload($application, DocumentType::ZaqaConsentFormSigned, $zaqaFile, $request->user())
+                ? $documents->upload($application, DocumentType::ZaqaConsentFormSigned, $zaqaFile, $request->user(), $qualification)
                 : null;
 
             $consent = ConsentForm::updateOrCreate(
-                ['application_id' => $application->id],
+                ['qualification_id' => $qualification->id],
                 [
-                    'consent_type' => (bool) $application->is_foreign ? ConsentType::ForeignUploaded : ConsentType::LocalEmbedded,
-                    'embedded_text_version' => (bool) $application->is_foreign ? null : (string) config('consent.local.version'),
-                    'agreed_by_name' => (string) ($application->consentForm?->agreed_by_name ?: $request->user()->name),
-                    'agreed_at' => $application->consentForm?->agreed_at ?: now(),
+                    'consent_type' => (bool) $qualification->is_foreign_qualification ? ConsentType::ForeignUploaded : ConsentType::LocalEmbedded,
+                    'embedded_text_version' => (bool) $qualification->is_foreign_qualification ? null : (string) config('consent.local.version'),
+                    'agreed_by_name' => (string) ($qualification->consentForm?->agreed_by_name ?: $request->user()->name),
+                    'agreed_at' => $qualification->consentForm?->agreed_at ?: now(),
                     'uploaded_document_id' => $awardingInstitutionDocument->id,
                     'zaqa_uploaded_document_id' => $zaqaDocument?->id,
-                    'source_awarding_body_name' => $request->validated()['source_awarding_institution_name']
+                    'source_awarding_institution_name' => $request->validated()['source_awarding_institution_name']
                         ?? $request->validated()['source_awarding_body_name']
                         ?? null,
                 ],
             );
 
             $audit->record(
-                eventType: (bool) $application->is_foreign ? 'consent.foreign_uploaded' : 'consent.optional_uploaded',
+                eventType: (bool) $qualification->is_foreign_qualification ? 'consent.foreign_uploaded' : 'consent.optional_uploaded',
                 module: 'Consent',
-                actionName: (bool) $application->is_foreign ? 'foreign_uploaded' : 'optional_uploaded',
-                message: (bool) $application->is_foreign ? 'Foreign signed consent form uploaded.' : 'Optional signed consent form uploaded.',
+                actionName: (bool) $qualification->is_foreign_qualification ? 'foreign_uploaded' : 'optional_uploaded',
+                message: (bool) $qualification->is_foreign_qualification ? 'Foreign signed consent form uploaded.' : 'Optional signed consent form uploaded.',
                 entityType: ConsentForm::class,
                 entityId: $consent->id,
                 beforeState: $before,
                 afterState: $consent->toArray(),
                 metadata: [
                     'application_id' => $application->id,
+                    'qualification_id' => $qualification->id,
                     'document_id' => $awardingInstitutionDocument->id,
                     'zaqa_document_id' => $zaqaDocument?->id,
                 ],
@@ -146,7 +162,7 @@ class ApplicantConsentController extends Controller
                 eventCode: 'wizard.step4.consent_signed_uploaded',
                 stage: LifecycleStage::Wizard,
                 title: 'Signed consent uploaded',
-                description: (bool) $application->is_foreign
+                description: (bool) $qualification->is_foreign_qualification
                     ? 'Applicant uploaded signed consent for foreign application.'
                     : 'Applicant uploaded optional signed consent.',
                 visibility: LifecycleVisibility::Both,
@@ -154,6 +170,7 @@ class ApplicantConsentController extends Controller
                 metadata: [
                     'document_id' => $consent->uploaded_document_id,
                     'zaqa_document_id' => $consent->zaqa_uploaded_document_id,
+                    'qualification_id' => $qualification->id,
                 ],
                 occurredAt: now(),
             );

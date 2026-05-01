@@ -8,9 +8,14 @@ return new class extends Migration
 {
     public function up(): void
     {
-        Schema::table('qualifications', function (Blueprint $table) {
-            $table->foreignId('qualification_type_id')->nullable()->after('qualification_type')->constrained('qualification_types')->nullOnDelete();
-        });
+        if (Schema::hasColumn('qualifications', 'qualification_type_id')) {
+            Schema::table('qualifications', function (Blueprint $table) {
+                $table->foreign('qualification_type_id')
+                    ->references('id')
+                    ->on('qualification_types')
+                    ->nullOnDelete();
+            });
+        }
 
         Schema::table('invoices', function (Blueprint $table) {
             $table->foreignId('billing_category_id')->nullable()->after('application_id')->constrained('billing_categories')->nullOnDelete();
@@ -31,9 +36,11 @@ return new class extends Migration
             $table->dropColumn(['is_foreign_snapshot', 'processing_days_snapshot', 'fee_label_snapshot']);
         });
 
-        Schema::table('qualifications', function (Blueprint $table) {
-            $table->dropConstrainedForeignId('qualification_type_id');
-        });
+        if (Schema::hasColumn('qualifications', 'qualification_type_id')) {
+            Schema::table('qualifications', function (Blueprint $table) {
+                $table->dropForeign(['qualification_type_id']);
+            });
+        }
     }
 };
 

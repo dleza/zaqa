@@ -20,6 +20,7 @@ class UpsertQualificationDetailsRequest extends FormRequest
     public function rules(): array
     {
         return [
+            'qualification_id' => ['nullable', 'integer', 'exists:qualifications,id'],
             'country_id' => ['required', 'integer', 'exists:countries,id'],
             'awarding_institution_id' => ['nullable'],
             'awarding_institution_name_other' => ['nullable', 'string', 'max:255'],

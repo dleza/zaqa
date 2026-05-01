@@ -22,6 +22,7 @@ use App\Http\Controllers\Admin\Verification\AdminVerificationAssignedToMeControl
 use App\Http\Controllers\Admin\Verification\AdminVerificationCategoryController;
 use App\Http\Controllers\Admin\Verification\AdminVerificationDocumentController;
 use App\Http\Controllers\Admin\Verification\AdminVerificationPoolController;
+use App\Http\Controllers\Admin\Verification\AdminVerificationQualificationController;
 use App\Http\Controllers\Applicant\ApplicantApplicationController;
 use App\Http\Controllers\Applicant\ApplicantApplicationTrackingController;
 use App\Http\Controllers\Applicant\ApplicantBillingController;
@@ -113,6 +114,8 @@ Route::middleware('auth')->group(function () {
         Route::put('/applications/{application}/qualification', [ApplicantQualificationController::class, 'upsert'])->name('applications.qualification.upsert');
         Route::put('/applications/{application}/qualification/details', [ApplicantQualificationController::class, 'upsertDetails'])->name('applications.qualification.details.upsert');
         Route::put('/applications/{application}/qualification/subject-results', [ApplicantQualificationController::class, 'upsertSubjectResults'])->name('applications.qualification.subject_results.upsert');
+        Route::post('/applications/{application}/qualifications', [ApplicantQualificationController::class, 'store'])->name('applications.qualifications.store');
+        Route::delete('/applications/{application}/qualifications/{qualification}', [ApplicantQualificationController::class, 'destroy'])->name('applications.qualifications.destroy');
 
         Route::post('/applications/{application}/documents', [ApplicantDocumentController::class, 'store'])->name('applications.documents.store');
         Route::get('/documents/{document}/preview', [ApplicantDocumentController::class, 'preview'])->name('documents.preview')->middleware('signed');
@@ -294,6 +297,13 @@ Route::middleware('auth')->group(function () {
             Route::get('/documents/{document}/download', [AdminVerificationDocumentController::class, 'download'])
                 ->middleware('can:verification.pool.view')
                 ->name('documents.download');
+
+            Route::get('/qualifications/{qualification}', [AdminVerificationQualificationController::class, 'show'])
+                ->middleware('can:verification.pool.view')
+                ->name('qualifications.show');
+            Route::post('/qualifications/{qualification}/assign', [AdminVerificationQualificationController::class, 'assign'])
+                ->middleware('can:verification.assign')
+                ->name('qualifications.assign');
         });
 
         Route::prefix('settings')->name('settings.')->group(function () {

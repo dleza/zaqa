@@ -76,6 +76,11 @@ class Application extends Model
         return $this->hasOne(Qualification::class);
     }
 
+    public function qualifications(): HasMany
+    {
+        return $this->hasMany(Qualification::class);
+    }
+
     public function statusHistories(): HasMany
     {
         return $this->hasMany(ApplicationStatusHistory::class);
@@ -84,11 +89,6 @@ class Application extends Model
     public function lifecycleEvents(): HasMany
     {
         return $this->hasMany(ApplicationLifecycleEvent::class);
-    }
-
-    public function assignments(): HasMany
-    {
-        return $this->hasMany(ApplicationAssignment::class);
     }
 
     public function comments(): HasMany

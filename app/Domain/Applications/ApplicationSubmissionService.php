@@ -15,6 +15,7 @@ use App\Enums\VerificationState;
 use App\Domain\Tracking\ApplicationLifecycleService;
 use App\Models\Application;
 use App\Models\ApplicationStatusHistory;
+use App\Models\Qualification;
 use App\Models\QualificationDocument;
 use App\Models\User;
 use Illuminate\Support\Facades\DB;
@@ -33,7 +34,7 @@ class ApplicationSubmissionService
     {
         return DB::transaction(function () use ($application, $actor) {
             $application->refresh();
-            $application->load(['qualification', 'documents', 'consentForm', 'invoice', 'payments']);
+            $application->load(['qualifications.consentForm', 'documents', 'invoice', 'payments']);
 
             if (! in_array($application->current_status, [ApplicationStatus::Draft, ApplicationStatus::SentBack], true)) {
                 throw ValidationException::withMessages([
@@ -41,15 +42,23 @@ class ApplicationSubmissionService
                 ]);
             }
 
-            if (! $application->qualification) {
+            if ($application->qualifications->count() < 1) {
                 throw ValidationException::withMessages([
                     'qualification' => 'Qualification details are required before submission.',
                 ]);
             }
 
-            $holderName = trim((string) ($application->qualification->qualification_holder_name ?? ''));
-            $holderId = trim((string) ($application->qualification->nrc_passport_number ?? ''));
-            if ($holderName === '' || $holderId === '') {
+            $missingHolderName = false;
+            $missingHolderId = false;
+            foreach ($application->qualifications as $q) {
+                /** @var Qualification $q */
+                $hn = trim((string) ($q->qualification_holder_name ?? ''));
+                $hid = trim((string) ($q->nrc_passport_number ?? ''));
+                $missingHolderName = $missingHolderName || $hn === '';
+                $missingHolderId = $missingHolderId || $hid === '';
+            }
+
+            if ($missingHolderName || $missingHolderId) {
                 $this->audit->record(
                     eventType: 'applications.submission_blocked_due_to_missing_holder_identity',
                     module: 'Applications',
@@ -58,8 +67,8 @@ class ApplicationSubmissionService
                     entityType: Application::class,
                     entityId: $application->id,
                     metadata: [
-                        'missing_holder_name' => $holderName === '',
-                        'missing_holder_identity' => $holderId === '',
+                        'missing_holder_name' => $missingHolderName,
+                        'missing_holder_identity' => $missingHolderId,
                     ],
                     actor: $actor,
                 );
@@ -206,19 +215,9 @@ class ApplicationSubmissionService
      */
     private function requiredDocumentTypes(Application $application): array
     {
-        $required = [
-            DocumentType::CertificateCopy,
-        ];
-
-        if ((bool) $application->is_foreign) {
-            $required[] = DocumentType::Transcript;
-        }
-
-        if ((bool) $application->is_foreign) {
-            $required[] = DocumentType::ConsentFormSigned;
-        }
-
-        return $required;
+        // Application-level required documents are validated in missingDocumentTypes().
+        // Qualification-level requirements depend on each qualification item (local/foreign/type).
+        return [];
     }
 
     /**
@@ -240,9 +239,29 @@ class ApplicationSubmissionService
             $missing[] = 'nrc_copy or passport_copy';
         }
 
-        foreach ($requiredDocumentTypes as $type) {
-            if (! $currentDocsByType->has($type->value)) {
-                $missing[] = $type->value;
+        // Qualification-level documents must be present per qualification item.
+        $application->loadMissing('qualifications');
+        foreach ($application->qualifications as $q) {
+            /** @var Qualification $q */
+            $hasCertificate = $application->documents
+                ->where('is_current_version', true)
+                ->where('document_type', DocumentType::CertificateCopy->value)
+                ->where('qualification_id', $q->id)
+                ->count() > 0;
+            if (! $hasCertificate) {
+                $missing[] = 'certificate_copy (qualification_id='.$q->id.')';
+            }
+
+            $needsTranscript = (bool) ($q->transcript_required ?? false);
+            if ($needsTranscript) {
+                $hasTranscript = $application->documents
+                    ->where('is_current_version', true)
+                    ->where('document_type', DocumentType::Transcript->value)
+                    ->where('qualification_id', $q->id)
+                    ->count() > 0;
+                if (! $hasTranscript) {
+                    $missing[] = 'transcript (qualification_id='.$q->id.')';
+                }
             }
         }
 
@@ -251,36 +270,34 @@ class ApplicationSubmissionService
 
     private function assertConsentSatisfied(Application $application): void
     {
-        if ((bool) $application->is_foreign) {
-            if (
-                ! $application->consentForm
-                || ! $application->consentForm->uploaded_document_id
-                || ! $application->consentForm->zaqa_uploaded_document_id
-            ) {
-                throw ValidationException::withMessages([
-                    'consent' => 'Foreign applications require both the awarding institution consent and the ZAQA consent uploads before submission.',
-                ]);
+        $application->loadMissing('qualifications.consentForm');
+
+        foreach ($application->qualifications as $q) {
+            /** @var Qualification $q */
+            $consent = $q->consentForm;
+            if ((bool) $q->is_foreign_qualification) {
+                if (! $consent || ! $consent->uploaded_document_id || ! $consent->zaqa_uploaded_document_id) {
+                    throw ValidationException::withMessages([
+                        'consent' => 'Each foreign qualification requires both the awarding institution consent and the ZAQA consent uploads before submission.',
+                    ]);
+                }
+                if ($consent->consent_type !== ConsentType::ForeignUploaded) {
+                    throw ValidationException::withMessages([
+                        'consent' => 'Foreign consent form is not recorded correctly. Please re-upload the consent form.',
+                    ]);
+                }
+            } else {
+                if (! $consent || ! $consent->agreed_at) {
+                    throw ValidationException::withMessages([
+                        'consent' => 'You must accept the local embedded consent before submission.',
+                    ]);
+                }
+                if ($consent->consent_type !== ConsentType::LocalEmbedded) {
+                    throw ValidationException::withMessages([
+                        'consent' => 'Local embedded consent is not recorded correctly. Please accept the consent again.',
+                    ]);
+                }
             }
-
-            if ($application->consentForm->consent_type !== ConsentType::ForeignUploaded) {
-                throw ValidationException::withMessages([
-                    'consent' => 'Foreign consent form is not recorded correctly. Please re-upload the consent form.',
-                ]);
-            }
-
-            return;
-        }
-
-        if (! $application->consentForm || ! $application->consentForm->agreed_at) {
-            throw ValidationException::withMessages([
-                'consent' => 'You must accept the local embedded consent before submission.',
-            ]);
-        }
-
-        if ($application->consentForm->consent_type !== ConsentType::LocalEmbedded) {
-            throw ValidationException::withMessages([
-                'consent' => 'Local embedded consent is not recorded correctly. Please accept the consent again.',
-            ]);
         }
     }
 }

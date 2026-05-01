@@ -28,6 +28,7 @@ class UploadForeignConsentRequest extends FormRequest
         ]);
 
         return [
+            'qualification_id' => ['required', 'integer', 'exists:qualifications,id'],
             // Awarding institution consent file
             'file' => ['required', 'file', 'max:'.$maxKb, 'mimetypes:'.implode(',', $mimeTypes)],
             // ZAQA consent file (required for foreign applications)
@@ -43,10 +44,17 @@ class UploadForeignConsentRequest extends FormRequest
     {
         $validator->after(function (Validator $validator) {
             $application = $this->route('application');
-            $isForeign = (bool) ($application?->is_foreign ?? false);
-            if (! $isForeign) {
+            $qualificationId = (int) ($this->input('qualification_id') ?? 0);
+            $qualification = $qualificationId > 0
+                ? \App\Models\Qualification::query()->whereKey($qualificationId)->first()
+                : null;
+
+            if (! $qualification || ! $application || (int) $qualification->application_id !== (int) $application->id) {
+                $validator->errors()->add('qualification_id', 'Selected qualification is invalid for this application.');
                 return;
             }
+
+            $isForeign = (bool) ($qualification->is_foreign_qualification ?? false);
 
             if (! $this->file('zaqa_file')) {
                 $validator->errors()->add('zaqa_file', 'ZAQA consent form is required for foreign applications.');

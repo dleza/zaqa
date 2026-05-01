@@ -13,7 +13,8 @@ return new class extends Migration
     {
         Schema::create('qualifications', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('application_id')->unique()->constrained('applications')->cascadeOnDelete();
+            // One application can have many qualification verification items.
+            $table->foreignId('application_id')->constrained('applications')->cascadeOnDelete();
 
             $table->string('awarding_institution_name');
             $table->string('qualification_holder_name');
@@ -33,6 +34,20 @@ return new class extends Migration
             $table->date('award_date');
 
             $table->string('qualification_type');
+            // FK added later once qualification_types table exists.
+            $table->unsignedBigInteger('qualification_type_id')->nullable()->index();
+
+            // Qualification-level locality + verification workflow (per item).
+            $table->boolean('is_foreign_qualification')->default(false)->index();
+            $table->string('verification_state')->nullable()->index();
+            $table->foreignId('assigned_verifier_id')->nullable()->constrained('users')->nullOnDelete();
+            $table->timestamp('assigned_at')->nullable()->index();
+            $table->timestamp('reviewed_at')->nullable()->index();
+            $table->text('reviewer_notes')->nullable();
+
+            // Fee snapshot per qualification item (invoice aggregates these).
+            $table->string('fee_currency', 3)->nullable();
+            $table->unsignedInteger('fee_amount_cents')->nullable();
 
             $table->boolean('transcript_required')->default(false);
             $table->text('transcript_reason')->nullable();
@@ -41,6 +56,9 @@ return new class extends Migration
             $table->json('raw_subject_results')->nullable();
 
             $table->timestamps();
+
+            $table->index(['application_id', 'created_at']);
+            $table->index(['application_id', 'qualification_type_id']);
         });
 
         Schema::create('qualification_subject_results', function (Blueprint $table) {

@@ -5,9 +5,9 @@ namespace App\Http\Controllers\Admin;
 use App\Enums\ApplicationStatus;
 use App\Http\Controllers\Controller;
 use App\Models\Application;
-use App\Models\ApplicationAssignment;
 use App\Models\ApplicationLifecycleEvent;
 use App\Models\ApplicationStatusHistory;
+use App\Models\QualificationAssignment;
 use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -80,12 +80,12 @@ class AdminSlaReportController extends Controller
 
         // Level 2 performance: use status history actor for approve/reject transitions in window.
         $level2Rows = ApplicationStatusHistory::query()
-            ->whereIn('to_status', [ApplicationStatus::Approved->value, ApplicationStatus::Rejected->value])
+            ->whereIn('to_status', [ApplicationStatus::Approved->value, ApplicationStatus::Rejected->value], 'and', false)
             ->whereBetween('changed_at', [$from, $to])
             ->get(['application_id', 'to_status', 'changed_by_user_id', 'changed_at']);
 
         $appsById = Application::query()
-            ->whereIn('id', $level2Rows->pluck('application_id')->unique()->values())
+            ->whereIn('id', $level2Rows->pluck('application_id')->unique()->values(), 'and', false)
             ->get(['id', 'submitted_at', 'service_deadline_at', 'approved_at', 'rejected_at']);
 
         $appMap = $appsById->keyBy('id');
@@ -127,7 +127,7 @@ class AdminSlaReportController extends Controller
         }
 
         $reviewerUsers = User::query()
-            ->whereIn('id', array_keys($level2Agg))
+            ->whereIn('id', array_keys($level2Agg), 'and', false)
             ->get(['id', 'name', 'email'])
             ->keyBy('id');
 
@@ -145,10 +145,15 @@ class AdminSlaReportController extends Controller
             ->values()
             ->all();
 
-        // Level 1 throughput (assignments in window + completions in window).
-        $assignments = ApplicationAssignment::query()
-            ->whereBetween('assigned_at', [$from, $to])
-            ->get(['application_id', 'assigned_to_user_id', 'assigned_at']);
+        // Level 1 throughput (qualification assignments in window + completions in window).
+        $assignments = QualificationAssignment::query()
+            ->leftJoin('qualifications', 'qualifications.id', '=', 'qualification_assignments.qualification_id')
+            ->whereBetween('qualification_assignments.assigned_at', [$from, $to])
+            ->get([
+                DB::raw('qualifications.application_id as application_id'),
+                DB::raw('qualification_assignments.assigned_to_user_id as assigned_to_user_id'),
+                DB::raw('qualification_assignments.assigned_at as assigned_at'),
+            ]);
 
         $level1Completions = ApplicationLifecycleEvent::query()
             ->where('event_code', 'like', 'review.level1_completed.%')
@@ -190,7 +195,7 @@ class AdminSlaReportController extends Controller
         }
 
         $level1Users = User::query()
-            ->whereIn('id', array_keys($level1Agg))
+            ->whereIn('id', array_keys($level1Agg), 'and', false)
             ->get(['id', 'name', 'email'])
             ->keyBy('id');
 

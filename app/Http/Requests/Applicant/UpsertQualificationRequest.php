@@ -20,6 +20,8 @@ class UpsertQualificationRequest extends FormRequest
     public function rules(): array
     {
         return [
+            'qualification_id' => ['nullable', 'integer', 'exists:qualifications,id'],
+            'create_new' => ['nullable', 'boolean'],
             'awarding_institution_name' => ['required', 'string', 'max:255'],
             'qualification_holder_name' => ['required', 'string', 'max:255'],
             'country_id' => ['nullable', 'integer', 'exists:countries,id'],
@@ -55,9 +57,6 @@ class UpsertQualificationRequest extends FormRequest
             if (! $countryId && $countryOther === '') {
                 $validator->errors()->add('country_id', 'Country of award is required.');
             }
-
-            $application = $this->route('application');
-            $isForeign = (bool) ($application?->is_foreign ?? false);
 
             $qualificationTypeId = (int) $this->input('qualification_type_id', 0);
             $subjectResults = $this->input('subject_results');

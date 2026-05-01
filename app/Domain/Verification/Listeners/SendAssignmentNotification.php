@@ -2,8 +2,8 @@
 
 namespace App\Domain\Verification\Listeners;
 
-use App\Domain\Verification\Events\ApplicationAssignedToLevel1;
-use App\Mail\Verification\ApplicationAssignedToLevel1Mail;
+use App\Domain\Verification\Events\QualificationAssignedToVerifier;
+use App\Mail\Verification\QualificationAssignedToVerifierMail;
 use App\Models\EmailLog;
 use App\Models\SmsLog;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -15,16 +15,17 @@ class SendAssignmentNotification implements ShouldQueue
 {
     use InteractsWithQueue;
 
-    public function handle(ApplicationAssignedToLevel1 $event): void
+    public function handle(QualificationAssignedToVerifier $event): void
     {
         $assignee = $event->assignedTo;
-        $application = $event->application;
+        $qualification = $event->qualification->loadMissing('application', 'country', 'awardingInstitution');
+        $application = $qualification->application;
 
         $emailLog = EmailLog::create([
             'user_id' => $assignee->id,
             'application_id' => $application->id,
             'email' => $assignee->email,
-            'subject' => 'ZAQA: Application assigned for review',
+            'subject' => 'ZAQA: Qualification task assigned for review',
             'template_key' => 'verification_assigned',
             'status' => 'queued',
             'sent_at' => null,
@@ -32,8 +33,8 @@ class SendAssignmentNotification implements ShouldQueue
 
         if ($assignee->email) {
             try {
-                Mail::to($assignee->email)->queue(new ApplicationAssignedToLevel1Mail(
-                    application: $application,
+                Mail::to($assignee->email)->queue(new QualificationAssignedToVerifierMail(
+                    qualification: $qualification,
                     assignedBy: $event->assignedBy,
                     assignedTo: $assignee,
                     comment: $event->comment,
@@ -51,7 +52,10 @@ class SendAssignmentNotification implements ShouldQueue
             $emailLog->forceFill(['status' => 'skipped'])->save();
         }
 
-        $message = sprintf('ZAQA: Application %s has been assigned to you for Level 1 review.', $application->application_number);
+        $message = sprintf(
+            'ZAQA: Qualification task for application %s has been assigned to you for review.',
+            $application->application_number,
+        );
 
         $provider = (string) config('services.sms.provider', 'log');
         $smsLog = SmsLog::create([

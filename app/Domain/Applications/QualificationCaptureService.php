@@ -34,18 +34,19 @@ class QualificationCaptureService
             : null;
 
         return DB::transaction(function () use ($application, $data, $actor, $qualificationType, $qualificationTypeId, $subjectResults) {
-            $qualification = Qualification::query()
-                ->where('application_id', $application->id)
-                ->first();
+            $qualificationId = (int) ($data['qualification_id'] ?? 0);
+            $createNew = (bool) ($data['create_new'] ?? false);
+            $qualification = $qualificationId > 0
+                ? Qualification::query()->whereKey($qualificationId)->where('application_id', $application->id)->first()
+                : null;
 
-            $application->loadMissing('invoice');
-            if ($application->invoice && $qualification) {
-                $existingTypeId = (int) ($qualification->qualification_type_id ?? 0);
-                if ($existingTypeId > 0 && $existingTypeId !== $qualificationTypeId) {
-                    throw \Illuminate\Validation\ValidationException::withMessages([
-                        'qualification_type_id' => 'Qualification type cannot be changed after an invoice has been generated.',
-                    ]);
-                }
+            if (! $createNew && ! $qualification) {
+                // Backward-compatible behavior: if caller doesn't specify a qualification_id,
+                // update the most recently created qualification for this application.
+                $qualification = Qualification::query()
+                    ->where('application_id', $application->id)
+                    ->orderByDesc('id')
+                    ->first();
             }
 
             $beforeQualification = $qualification?->toArray();
@@ -57,14 +58,18 @@ class QualificationCaptureService
             if (array_key_exists('country_id', $data) && $data['country_id']) {
                 $country = Country::query()->find((int) $data['country_id']);
                 if ($country) {
-                    $application->is_foreign = strtoupper((string) $country->iso_code) !== 'ZMB';
-                    $application->save();
+                    // locality is now stored per qualification; application-level is derived after save
                 }
             }
 
             // Transcript uploads are optional in the applicant portal. We keep this flag for legacy display/analytics,
             // but it should not be used to gate submission.
-            $transcriptRequired = (bool) $application->is_foreign || (bool) $qualificationType->requires_subject_results;
+            $country = null;
+            if (array_key_exists('country_id', $data) && $data['country_id']) {
+                $country = Country::query()->find((int) $data['country_id']);
+            }
+            $isForeignQualification = $country ? strtoupper((string) $country->iso_code) !== 'ZMB' : (bool) ($qualification?->is_foreign_qualification ?? false);
+            $transcriptRequired = (bool) $isForeignQualification || (bool) $qualificationType->requires_subject_results;
 
             $verificationSubject = null;
             $meta = $application->metadata;
@@ -98,6 +103,7 @@ class QualificationCaptureService
                 // Legacy string column retained for existing schema reads; stores the ZQF level code.
                 'qualification_type' => $qualificationType->zqf_level_code,
                 'qualification_type_id' => $qualificationTypeId,
+                'is_foreign_qualification' => (bool) $isForeignQualification,
                 'transcript_required' => $transcriptRequired,
                 'transcript_reason' => $data['transcript_reason'] ?? null,
                 'notes' => $data['notes'] ?? null,
@@ -122,10 +128,11 @@ class QualificationCaptureService
                 $payload['nrc_passport_number'] = $qualification->nrc_passport_number;
             }
 
-            $qualification = Qualification::updateOrCreate(
-                ['application_id' => $application->id],
-                $payload,
-            );
+            if ($qualification && ! $createNew) {
+                $qualification->forceFill($payload)->save();
+            } else {
+                $qualification = Qualification::create(array_merge(['application_id' => $application->id], $payload));
+            }
 
             if (is_array($subjectResults)) {
                 $qualification->subjectResults()->delete();
@@ -185,6 +192,12 @@ class QualificationCaptureService
                 occurredAt: now(),
             );
 
+            // Maintain application-level is_foreign as an aggregate for legacy UI and finance gating.
+            $application->loadMissing('qualifications');
+            $application->forceFill([
+                'is_foreign' => (bool) $application->qualifications->contains(fn (Qualification $q) => (bool) $q->is_foreign_qualification),
+            ])->save();
+
             return $qualification;
         });
     }
@@ -209,7 +222,14 @@ class QualificationCaptureService
     public function upsertSubjectResults(Application $application, array $subjectResults, User $actor): Qualification
     {
         return DB::transaction(function () use ($application, $subjectResults, $actor) {
+            $qualificationId = (int) ($subjectResults['qualification_id'] ?? 0);
+            $rows = $subjectResults;
+            if (array_key_exists('subject_results', $subjectResults) && is_array($subjectResults['subject_results'])) {
+                $rows = $subjectResults['subject_results'];
+            }
+
             $qualification = Qualification::query()
+                ->whereKey($qualificationId)
                 ->where('application_id', $application->id)
                 ->firstOrFail();
 
@@ -220,7 +240,7 @@ class QualificationCaptureService
 
             $qualification->subjectResults()->delete();
 
-            foreach (array_values($subjectResults) as $index => $row) {
+            foreach (array_values($rows) as $index => $row) {
                 $qualification->subjectResults()->create([
                     'subject_name' => (string) ($row['subject_name'] ?? ''),
                     'grade' => (string) ($row['grade'] ?? ''),
@@ -265,7 +285,7 @@ class QualificationCaptureService
                 actor: $actor,
                 metadata: [
                     'qualification_id' => $qualification->id,
-                    'rows' => count($subjectResults),
+                    'rows' => count($rows),
                 ],
                 occurredAt: now(),
             );

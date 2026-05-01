@@ -19,6 +19,7 @@ class UpsertSubjectResultsRequest extends FormRequest
     public function rules(): array
     {
         return [
+            'qualification_id' => ['required', 'integer', 'exists:qualifications,id'],
             'subject_results' => ['required', 'array', 'min:1'],
             'subject_results.*.subject_name' => ['required', 'string', 'max:255'],
             'subject_results.*.grade' => ['required', 'string', 'max:50'],

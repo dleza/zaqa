@@ -31,10 +31,13 @@ The system must:
 - allow Level 2 to change status of an issued certificate with a comment
 - notify the applicant when the certificate is issued and process ends
 
-## Intake into applications pool
-Applications enter the pool only when:
+## Intake into verification pool (qualification-based)
+Verification tasks enter the pool only when:
 - submission is valid
 - payment status is confirmed according to business rules
+
+**Important:** the pool is arranged by **qualification verification item**, not by parent application.
+One application can contain many qualification items, and each item is an independent verification task.
 
 ## Lifecycle tracking (required)
 Verification operations must record business-readable lifecycle events per application, including:
@@ -51,29 +54,29 @@ Internal users must have a dedicated tracking view with a full timeline (interna
 ### Pool characteristics
 All verification users may view pool entries, but action permissions differ by role.
 
-Pool columns:
-- application number
+Pool rows represent **one qualification item**. Columns include:
 - applicant name
-- holder name
-- holder NRC / passport number
-- applicant type
-- service type
+- application reference/number
+- qualification type
 - qualification title
-- local or foreign
-- country of award or awarding institution
-- current workflow state
-- SLA deadline
-- assigned reviewer
-- last updated time
+- **Awarding Institution**
+- country of award
+- local/foreign (per qualification)
+- uploaded qualification document indicators (per qualification)
+- foreign consent indicator (per qualification)
+- assigned verifier (per qualification)
+- qualification verification status (per qualification)
+- parent application payment status
+- submitted date
 
-## Categorization rules
-### Foreign applications
-Sort by:
+## Categorization rules (per qualification)
+### Foreign qualification items
+Sort/group by:
 - country of award
 
-### Local applications
-Sort by:
-- awarding institution
+### Local qualification items
+Sort/group by:
+- **Awarding Institution**
 
 ### Country category view (admin)
 The **Category View by Country** groups applications by country of award and **includes Zambia by default**.
@@ -107,10 +110,10 @@ If country or awarding institution is not listed:
 ## Assignment rules
 - only Level 2 can assign to Level 1
 - assignment must record assigner, assignee, timestamp, and optional comment
-- only one active assignment per application
+- only one active assignment per **qualification item**
 - reassignment must preserve previous assignment history
 - Level 1 cannot self-assign
-- unassigned applications remain visible but non-actionable for Level 1
+- unassigned qualification items remain visible but non-actionable for Level 1
 
 ## Workflow states
 Recommended internal workflow states:
@@ -149,10 +152,12 @@ Rules:
 - notify Level 1 assignee
 
 ## Review screen requirements
-Each verification review screen should show:
+Each qualification review screen should show:
 - applicant summary
-- qualification details
-- all uploaded documents with preview
+- parent application reference + payment state
+- qualification item details (type, locality, awarding institution, country)
+- qualification item documents with preview
+- foreign consent documents where applicable
 - status history
 - assignment history
 - internal comments

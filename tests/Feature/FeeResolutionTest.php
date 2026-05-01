@@ -67,7 +67,7 @@ class FeeResolutionTest extends TestCase
 
         $type = QualificationType::query()->where('zqf_level_code', 'L7')->firstOrFail(); // Degree category
 
-        Qualification::query()->create([
+        $qualification = Qualification::query()->create([
             'application_id' => $application->id,
             'awarding_institution_name' => 'Test',
             'qualification_holder_name' => 'John Doe',
@@ -77,6 +77,7 @@ class FeeResolutionTest extends TestCase
             'award_date' => now()->subYear()->toDateString(),
             'qualification_type' => $type->zqf_level_code,
             'qualification_type_id' => $type->id,
+            'is_foreign_qualification' => true,
             'transcript_required' => false,
         ]);
 
@@ -86,10 +87,7 @@ class FeeResolutionTest extends TestCase
 
         $this->assertSame(120000, $invoice->amount_cents);
         $this->assertTrue($invoice->is_foreign_snapshot);
-        $this->assertSame(
-            BillingCategory::query()->where('code', 'FOREIGN_QUALIFICATIONS')->firstOrFail()->id,
-            $invoice->billing_category_id
-        );
+        $this->assertSame(120000, (int) $qualification->refresh()->fee_amount_cents);
     }
 
     public function test_invoice_snapshots_fee_and_remains_historically_correct_after_fee_change(): void
@@ -120,6 +118,7 @@ class FeeResolutionTest extends TestCase
             'award_date' => now()->subYear()->toDateString(),
             'qualification_type' => $type->zqf_level_code,
             'qualification_type_id' => $type->id,
+            'is_foreign_qualification' => false,
             'transcript_required' => false,
         ]);
 
@@ -128,9 +127,11 @@ class FeeResolutionTest extends TestCase
         $invoice = $invoices->ensureInvoice($application, $user);
 
         $this->assertSame(20000, $invoice->amount_cents);
-        $this->assertNotNull($invoice->fee_structure_id);
-
-        $originalFeeStructureId = $invoice->fee_structure_id;
+        $meta = (array) ($invoice->metadata ?? []);
+        $breakdown = (array) ($meta['breakdown'] ?? []);
+        $this->assertNotEmpty($breakdown);
+        $originalFeeStructureId = $breakdown[0]['fee_structure_id'] ?? null;
+        $this->assertNotNull($originalFeeStructureId);
 
         // Change fees by creating a newer effective fee structure for the same category.
         $category = BillingCategory::query()->where('code', 'LOCAL_CERTS_DIPLOMAS')->firstOrFail();
@@ -147,11 +148,15 @@ class FeeResolutionTest extends TestCase
 
         $invoice->refresh();
         $this->assertSame(20000, $invoice->amount_cents);
-        $this->assertSame($originalFeeStructureId, $invoice->fee_structure_id);
+        $meta2 = (array) ($invoice->metadata ?? []);
+        $breakdown2 = (array) ($meta2['breakdown'] ?? []);
+        $this->assertSame($originalFeeStructureId, $breakdown2[0]['fee_structure_id'] ?? null);
 
         $reloaded = Invoice::query()->findOrFail($invoice->id);
         $this->assertSame(20000, $reloaded->amount_cents);
-        $this->assertSame($originalFeeStructureId, $reloaded->fee_structure_id);
+        $meta3 = (array) ($reloaded->metadata ?? []);
+        $breakdown3 = (array) ($meta3['breakdown'] ?? []);
+        $this->assertSame($originalFeeStructureId, $breakdown3[0]['fee_structure_id'] ?? null);
     }
 }
 

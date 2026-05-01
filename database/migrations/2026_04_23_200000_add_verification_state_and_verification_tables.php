@@ -12,9 +12,10 @@ return new class extends Migration
             $table->string('verification_state')->nullable()->index()->after('current_status');
         });
 
-        Schema::create('application_assignments', function (Blueprint $table) {
+        // Assignment history is tracked per qualification item (verification task).
+        Schema::create('qualification_assignments', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('application_id')->constrained('applications')->cascadeOnDelete();
+            $table->foreignId('qualification_id')->constrained('qualifications')->cascadeOnDelete();
             $table->foreignId('assigned_by_user_id')->nullable()->constrained('users')->nullOnDelete();
             $table->foreignId('assigned_to_user_id')->nullable()->constrained('users')->nullOnDelete();
             $table->text('comment')->nullable();
@@ -22,8 +23,8 @@ return new class extends Migration
             $table->timestamp('unassigned_at')->nullable()->index();
             $table->timestamps();
 
-            $table->index(['application_id', 'unassigned_at']);
-            $table->index(['assigned_to_user_id', 'unassigned_at']);
+            $table->index(['qualification_id', 'unassigned_at']);
+            $table->index(['assigned_to_user_id', 'unassigned_at'], 'qa_assignee_active_idx');
         });
 
         Schema::create('application_comments', function (Blueprint $table) {
@@ -42,7 +43,7 @@ return new class extends Migration
     public function down(): void
     {
         Schema::dropIfExists('application_comments');
-        Schema::dropIfExists('application_assignments');
+        Schema::dropIfExists('qualification_assignments');
 
         Schema::table('applications', function (Blueprint $table) {
             $table->dropColumn('verification_state');

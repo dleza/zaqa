@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\Casts\AsArrayObject;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 
 class Qualification extends Model
 {
@@ -27,6 +28,14 @@ class Qualification extends Model
         'award_date',
         'qualification_type',
         'qualification_type_id',
+        'is_foreign_qualification',
+        'verification_state',
+        'assigned_verifier_id',
+        'assigned_at',
+        'reviewed_at',
+        'reviewer_notes',
+        'fee_currency',
+        'fee_amount_cents',
         'transcript_required',
         'transcript_reason',
         'notes',
@@ -36,6 +45,10 @@ class Qualification extends Model
     protected $casts = [
         'award_date' => 'date',
         'transcript_required' => 'bool',
+        'is_foreign_qualification' => 'bool',
+        'assigned_at' => 'datetime',
+        'reviewed_at' => 'datetime',
+        'fee_amount_cents' => 'int',
         'raw_subject_results' => AsArrayObject::class,
         'created_at' => 'datetime',
         'updated_at' => 'datetime',
@@ -66,9 +79,29 @@ class Qualification extends Model
         return $this->belongsTo(QualificationType::class, 'qualification_type_id');
     }
 
+    public function assignedVerifier(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'assigned_verifier_id');
+    }
+
+    public function consentForm(): HasOne
+    {
+        return $this->hasOne(ConsentForm::class);
+    }
+
+    public function assignments(): HasMany
+    {
+        return $this->hasMany(QualificationAssignment::class);
+    }
+
     public function subjectResults(): HasMany
     {
         return $this->hasMany(QualificationSubjectResult::class);
+    }
+
+    public function documents(): HasMany
+    {
+        return $this->hasMany(QualificationDocument::class);
     }
 }
 

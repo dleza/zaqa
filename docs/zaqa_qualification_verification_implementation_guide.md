@@ -81,11 +81,11 @@ Fees must be configured and resolved using master data:
 Invoice rule:
 - when invoicing/billing, resolve the fee structure effective at that time and snapshot the reference + billed amount so later fee changes do not affect old invoices.
 
-### Verification workflow
+### Verification workflow (qualification-based)
 - Verification team accounts created by administrators
-- Receive all applications into an applications pool
-- Categorize foreign applications by country of award
-- Categorize local applications by awarding institution
+- Receive all **qualification verification items** into a verification pool (one application can contain many items)
+- Categorize foreign **qualification items** by country of award
+- Categorize local **qualification items** by **Awarding Institution**
 - Support “Other” option where country or awarding institution is not listed
 - At least 2 verification levels:
   - Level 1
@@ -221,12 +221,13 @@ Use **spatie/laravel-permission** with:
 10. On successful payment, application moves to **Submitted**
 
 ## 6.3 Verification process
-1. Submitted application enters **Applications Pool**
-2. System categorizes it by:
-   - local awarding institution, or
+1. Paid/submitted application creates one or more **qualification verification items**
+2. Each qualification item enters the **Verification Pool** as a separate row/task
+3. System categorizes each item by:
+   - local **Awarding Institution**, or
    - foreign country of award
-3. Level 2 reviews and assigns to Level 1
-4. Level 1 reviews and updates notes/status
+4. Level 2 assigns **qualification items** to Level 1 (items can be assigned to different verifiers)
+5. Level 1 reviews and updates status/notes per qualification item
 5. If amendments needed, Level 1 sends back to applicant with comments
 6. Applicant updates and resubmits
 7. Level 2 performs final review

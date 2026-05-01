@@ -9,6 +9,7 @@ use App\Enums\DocumentVisibility;
 use App\Enums\LifecycleStage;
 use App\Enums\LifecycleVisibility;
 use App\Models\Application;
+use App\Models\Qualification;
 use App\Models\QualificationDocument;
 use App\Models\User;
 use Illuminate\Http\UploadedFile;
@@ -26,13 +27,26 @@ class ApplicantDocumentService
     {
     }
 
-    public function upload(Application $application, DocumentType $documentType, UploadedFile $file, User $actor): QualificationDocument
+    public function upload(
+        Application $application,
+        DocumentType $documentType,
+        UploadedFile $file,
+        User $actor,
+        ?Qualification $qualification = null,
+    ): QualificationDocument
     {
         $disk = config('filesystems.default', 'local');
 
-        return DB::transaction(function () use ($application, $documentType, $file, $actor, $disk) {
+        return DB::transaction(function () use ($application, $documentType, $file, $actor, $disk, $qualification) {
+            if ($qualification && $qualification->application_id !== $application->id) {
+                throw \Illuminate\Validation\ValidationException::withMessages([
+                    'qualification_id' => 'Selected qualification does not belong to this application.',
+                ]);
+            }
+
             $existing = QualificationDocument::query()
                 ->where('application_id', $application->id)
+                ->where('qualification_id', $qualification?->id)
                 ->where('document_type', $documentType->value)
                 ->lockForUpdate()
                 ->get();
@@ -42,6 +56,7 @@ class ApplicantDocumentService
 
             QualificationDocument::query()
                 ->where('application_id', $application->id)
+                ->where('qualification_id', $qualification?->id)
                 ->where('document_type', $documentType->value)
                 ->where('is_current_version', true)
                 ->update(['is_current_version' => false]);
@@ -62,7 +77,7 @@ class ApplicantDocumentService
 
             $document = QualificationDocument::create([
                 'application_id' => $application->id,
-                'qualification_id' => $application->qualification?->id,
+                'qualification_id' => $qualification?->id,
                 'document_type' => $documentType,
                 'original_name' => $file->getClientOriginalName(),
                 'stored_name' => $storedName,
@@ -106,7 +121,7 @@ class ApplicantDocumentService
                 ],
                 metadata: [
                     'application_id' => $application->id,
-                    'qualification_id' => $application->qualification?->id,
+                    'qualification_id' => $qualification?->id,
                 ],
                 actor: $actor,
             );
@@ -210,7 +225,8 @@ class ApplicantDocumentService
                 ]);
             }
 
-            $document->delete();
+            $documentId = (int) $document->id;
+            QualificationDocument::destroy($documentId);
 
             $this->audit->record(
                 eventType: 'documents.deleted',

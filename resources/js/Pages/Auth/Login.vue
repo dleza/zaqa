@@ -116,7 +116,7 @@ function submit() {
 
     <div class="mt-6 flex items-center justify-between text-sm">
       <Link href="/forgot-password" class="zaqa-link">Forgot password?</Link>
-      <Link href="/register" class="zaqa-link">Create account</Link>
+      <Link href="/register" class="zaqa-link">New here? Register and Apply</Link>
     </div>
   </GuestLayout>
 </template>

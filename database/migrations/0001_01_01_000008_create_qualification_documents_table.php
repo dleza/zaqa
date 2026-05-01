@@ -34,8 +34,10 @@ return new class extends Migration
 
             $table->timestamps();
 
-            $table->unique(['application_id', 'document_type', 'version_number'], 'uq_document_version');
-            $table->index(['application_id', 'document_type', 'is_current_version'], 'idx_document_current');
+            // Versioning must be qualification-aware so that one application can upload
+            // multiple certificate/transcript sets (one per qualification item).
+            $table->unique(['application_id', 'qualification_id', 'document_type', 'version_number'], 'uq_document_version');
+            $table->index(['application_id', 'qualification_id', 'document_type', 'is_current_version'], 'idx_document_current');
         });
     }
 

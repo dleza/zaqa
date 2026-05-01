@@ -387,11 +387,7 @@ class AdminDashboardService
                 'icon' => 'scroll',
             ];
 
-            $queues[] = [
-                'key' => 'audit_recent',
-                'title' => 'Recent audit events',
-                'items' => $this->auditQueuePreview(12),
-            ];
+
         }
 
         // ——— Charts (permission gated) ———
@@ -547,13 +543,7 @@ class AdminDashboardService
             ];
         }
 
-        if ($user->can('admin.audit.view') && $user->can('admin.verification.view')) {
-            $queues[] = [
-                'key' => 'lifecycle_recent',
-                'title' => 'Recent lifecycle events',
-                'items' => $this->lifecycleQueuePreview(10),
-            ];
-        }
+
 
         // Receipt documents (generated receipt type) created today
         if ($user->can('admin.finance.view')) {

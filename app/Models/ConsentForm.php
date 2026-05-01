@@ -9,14 +9,14 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 class ConsentForm extends Model
 {
     protected $fillable = [
-        'application_id',
+        'qualification_id',
         'consent_type',
         'embedded_text_version',
         'agreed_by_name',
         'agreed_at',
         'uploaded_document_id',
         'zaqa_uploaded_document_id',
-        'source_awarding_body_name',
+        'source_awarding_institution_name',
     ];
 
     protected $casts = [
@@ -26,9 +26,9 @@ class ConsentForm extends Model
         'updated_at' => 'datetime',
     ];
 
-    public function application(): BelongsTo
+    public function qualification(): BelongsTo
     {
-        return $this->belongsTo(Application::class);
+        return $this->belongsTo(Qualification::class);
     }
 
     public function uploadedDocument(): BelongsTo

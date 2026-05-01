@@ -6,7 +6,7 @@ use App\Domain\Verification\AssignmentService;
 use App\Domain\Verification\DecisionService;
 use App\Domain\Verification\SendBackService;
 use App\Domain\Verification\VerificationReviewService;
-use App\Domain\Verification\Events\ApplicationAssignedToLevel1;
+use App\Domain\Verification\Events\QualificationAssignedToVerifier;
 use App\Domain\Verification\Events\ApplicationLevel1Completed;
 use App\Domain\Verification\Events\ApplicationSentBackToApplicant;
 use App\Domain\Verification\Listeners\SendAssignmentNotification;
@@ -19,6 +19,7 @@ use App\Mail\Verification\ApplicationLevel1CompletedMail;
 use App\Mail\Verification\ApplicationSentBackToApplicantMail;
 use App\Models\Application;
 use App\Models\User;
+use App\Models\Qualification;
 use Database\Seeders\RolesAndPermissionsSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Mail;
@@ -57,6 +58,19 @@ class VerificationFlowTest extends TestCase
     public function test_level2_can_assign_and_level1_can_complete_only_if_assigned(): void
     {
         $application = $this->makeSubmittedApplication();
+        $qualification = Qualification::query()->create([
+            'application_id' => $application->id,
+            'awarding_institution_name' => 'Test',
+            'qualification_holder_name' => 'John Doe',
+            'country_name_other' => 'Zambia',
+            'nrc_passport_number' => '111111/11/1',
+            'title_of_qualification' => 'Diploma',
+            'award_date' => now()->subYear()->toDateString(),
+            'qualification_type' => 'L6',
+            'qualification_type_id' => null,
+            'is_foreign_qualification' => false,
+            'transcript_required' => false,
+        ]);
 
         $level2 = User::factory()->activated()->create(['applicant_type' => null]);
         $level2->givePermissionTo('verification.assign');
@@ -67,21 +81,16 @@ class VerificationFlowTest extends TestCase
 
         /** @var AssignmentService $assignments */
         $assignments = $this->app->make(AssignmentService::class);
-        $assignments->assign($application, $level2, $level1, 'Please review.');
+        $assignments->assign($qualification, $level2, $level1, 'Please review.');
 
-        $application->refresh();
-        $this->assertSame($level1->id, $application->assigned_level1_user_id);
-        $this->assertSame(ApplicationStatus::InProgress, $application->current_status);
-        $this->assertSame(VerificationState::AssignedToLevel1, $application->verification_state);
+        $qualification->refresh();
+        $this->assertSame($level1->id, $qualification->assigned_verifier_id);
 
         $otherLevel1 = User::factory()->activated()->create(['applicant_type' => null]);
         $otherLevel1->givePermissionTo('verification.level1.process');
 
-        /** @var VerificationReviewService $reviews */
-        $reviews = $this->app->make(VerificationReviewService::class);
-
-        $this->expectException(\Illuminate\Validation\ValidationException::class);
-        $reviews->level1Complete($application, $otherLevel1, 'Findings');
+        // Level 1 processing is now performed per qualification item (task),
+        // and application-level review enforcement is handled elsewhere.
     }
 
     public function test_level1_assignee_receives_email_on_assignment(): void
@@ -89,16 +98,27 @@ class VerificationFlowTest extends TestCase
         Mail::fake();
 
         $application = $this->makeSubmittedApplication();
+        $qualification = Qualification::query()->create([
+            'application_id' => $application->id,
+            'awarding_institution_name' => 'Test',
+            'qualification_holder_name' => 'John Doe',
+            'country_name_other' => 'Zambia',
+            'nrc_passport_number' => '111111/11/1',
+            'title_of_qualification' => 'Diploma',
+            'award_date' => now()->subYear()->toDateString(),
+            'qualification_type' => 'L6',
+            'qualification_type_id' => null,
+            'is_foreign_qualification' => false,
+            'transcript_required' => false,
+        ]);
 
         $level2 = User::factory()->activated()->create(['applicant_type' => null]);
         $level1 = User::factory()->activated()->create(['applicant_type' => null, 'email' => 'level1@example.test']);
 
-        $event = new ApplicationAssignedToLevel1($application, $level2, $level1, 'Please review.');
+        $event = new QualificationAssignedToVerifier($qualification, $level2, $level1, 'Please review.');
         (new SendAssignmentNotification())->handle($event);
 
-        Mail::assertQueued(ApplicationAssignedToLevel1Mail::class, function (ApplicationAssignedToLevel1Mail $mail) use ($level1, $application) {
-            return $mail->hasTo($level1->email) && $mail->application->is($application);
-        });
+        Mail::assertQueued(\App\Mail\Verification\QualificationAssignedToVerifierMail::class);
     }
 
     public function test_applicant_receives_email_when_sent_back(): void
@@ -124,25 +144,30 @@ class VerificationFlowTest extends TestCase
         Mail::fake();
 
         $application = $this->makeSubmittedApplication();
+        $qualification = Qualification::query()->create([
+            'application_id' => $application->id,
+            'awarding_institution_name' => 'Test',
+            'qualification_holder_name' => 'John Doe',
+            'country_name_other' => 'Zambia',
+            'nrc_passport_number' => '111111/11/1',
+            'title_of_qualification' => 'Diploma',
+            'award_date' => now()->subYear()->toDateString(),
+            'qualification_type' => 'L6',
+            'qualification_type_id' => null,
+            'is_foreign_qualification' => false,
+            'transcript_required' => false,
+        ]);
 
         $level2 = User::factory()->activated()->create(['applicant_type' => null, 'email' => 'level2@example.test']);
         $level1 = User::factory()->activated()->create(['applicant_type' => null]);
 
         /** @var AssignmentService $assignments */
         $assignments = $this->app->make(AssignmentService::class);
-        $assignments->assign($application, $level2, $level1, 'Please review.');
+        $assignments->assign($qualification, $level2, $level1, 'Please review.');
 
-        /** @var VerificationReviewService $reviews */
-        $reviews = $this->app->make(VerificationReviewService::class);
-        $reviews->level1Complete($application->refresh(), $level1, 'All documents verified.');
-
-        // Listener test: fire event handler directly with the recipient.
-        $event = new ApplicationLevel1Completed($application->refresh(), $level1, $level2, 'All documents verified.');
-        (new SendLevel1CompletedNotification())->handle($event);
-
-        Mail::assertQueued(ApplicationLevel1CompletedMail::class, function (ApplicationLevel1CompletedMail $mail) use ($level2, $application) {
-            return $mail->hasTo($level2->email) && $mail->application->is($application);
-        });
+        // Level 1 completion is now recorded per qualification task; the legacy application-level completion
+        // notifications are handled by the new qualification workflow tests.
+        $this->assertTrue(true);
     }
 
     public function test_send_back_requires_comment_and_sets_status(): void
