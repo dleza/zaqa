@@ -92,7 +92,7 @@ class ApplicantApplicationController extends Controller
 
         $institutionConsentOk = (bool) $application->is_foreign
             ? (bool) ($application->consentForm?->uploaded_document_id)
-            : (bool) ($application->consentForm?->agreed_at);
+            : true; // local applications: per-qualification institution consent not required (see applicationPayload)
 
         $wd = (array) (($application->metadata ?? [])['wizard_declarations'] ?? []);
         $termsAt = $wd['terms_accepted_at'] ?? null;
@@ -396,13 +396,13 @@ class ApplicantApplicationController extends Controller
                 // Align with Vue modal + QualificationCapture: ZMB and ZM are Zambia (alpha-3 vs alpha-2 drift).
                 $requiresForeignConsent = $institutionIsForeign;
                 $hasForeignConsent = $requiresForeignConsent ? $hasForeignConsentSigned : false;
-                $hasLocalConsent = ! $requiresForeignConsent ? (bool) ($q->consentForm?->agreed_at) : false;
+                // Local (Zambian awarding): institution consent upload / embedded acceptance not required per qualification.
+                $hasLocalConsent = ! $requiresForeignConsent;
 
                 $missing = [];
                 if (! $hasCert) $missing[] = 'certificate_copy';
                 if ((bool) ($q->transcript_required ?? false) && ! $hasTranscript) $missing[] = 'transcript';
                 if ($requiresForeignConsent && ! $hasForeignConsent) $missing[] = 'foreign_consent';
-                if (! $requiresForeignConsent && ! $hasLocalConsent) $missing[] = 'local_consent';
 
                 return [
                     'id' => $q->id,

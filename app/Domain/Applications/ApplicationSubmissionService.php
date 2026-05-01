@@ -304,18 +304,8 @@ class ApplicationSubmissionService
                         'consent' => 'Foreign consent form is not recorded correctly. Please re-upload the consent form.',
                     ]);
                 }
-            } else {
-                if (! $consent || ! $consent->agreed_at) {
-                    throw ValidationException::withMessages([
-                        'consent' => 'You must accept the local embedded consent before submission.',
-                    ]);
-                }
-                if ($consent->consent_type !== ConsentType::LocalEmbedded) {
-                    throw ValidationException::withMessages([
-                        'consent' => 'Local embedded consent is not recorded correctly. Please accept the consent again.',
-                    ]);
-                }
             }
+            // Zambian / local awarding: no per-qualification institution consent (wizard declarations cover the applicant).
         }
     }
 
