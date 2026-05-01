@@ -4,8 +4,7 @@ import { Link, useForm } from '@inertiajs/vue3'
 import GuestLayout from '@/Layouts/GuestLayout.vue'
 import InputError from '@/Components/InputError.vue'
 import { ArrowRight, Lock, Mail, ShieldCheck, User } from 'lucide-vue-next'
-
-const zaqaLogoUrl = new URL('../../../images/zaqa-logo-tranparent.png', import.meta.url).href
+import AuthTopBar from '@/Components/AuthTopBar.vue'
 
 const form = useForm({
   identifier: '',
@@ -21,9 +20,11 @@ function submit() {
 </script>
 
 <template>
-  <GuestLayout :card="false" max-width-class="max-w-none" content-padding-class="p-0" :hide-header="true">
-    <div class="relative min-h-[calc(100vh-3.5rem)] w-full lg:min-h-[calc(100vh-3.5rem)]">
-      <div class="grid w-full lg:min-h-[calc(100vh-3.5rem)] lg:grid-cols-2">
+  <GuestLayout :card="false" max-width-class="max-w-none" content-padding-class="p-0" :hide-header="true" :center-content="false">
+    <div class="relative min-h-screen w-full">
+      <AuthTopBar right-href="/register" right-label="Register and Apply" />
+
+      <div class="grid w-full lg:min-h-[calc(100vh-56px)] lg:grid-cols-2">
         <aside class="relative overflow-hidden bg-gradient-to-br from-[#061a3a] via-[#0b3a66] to-[#092a48] px-10 py-10 text-white sm:px-14 sm:py-14 lg:px-16 lg:py-16">
             <div aria-hidden="true" class="pointer-events-none absolute inset-0">
               <div class="absolute -top-20 -left-20 h-72 w-72 rounded-full bg-white/10 blur-3xl" />
@@ -36,15 +37,6 @@ function submit() {
             </div>
 
             <div class="relative">
-              <div class="flex items-start gap-4">
-                <img :src="zaqaLogoUrl" alt="ZAQA logo" class="h-12 w-auto shrink-0 object-contain drop-shadow-sm" />
-                <div class="leading-tight">
-                  <div class="text-sm font-semibold text-white/90">Zambia</div>
-                  <div class="text-sm font-semibold text-white/90">Qualifications</div>
-                  <div class="text-sm font-semibold text-white/90">Authority</div>
-                </div>
-              </div>
-
               <div class="mt-10">
                 <div class="text-xs font-semibold uppercase tracking-wider text-white/55">
                   Zambia Qualifications Authority
@@ -109,17 +101,6 @@ function submit() {
           </div>
 
           <div class="relative flex h-full flex-col">
-            <div class="flex items-center justify-end">
-              <Link
-                href="/register"
-                class="inline-flex items-center gap-2 rounded-xl border border-border bg-white/70 px-4 py-2 text-sm font-semibold text-text-primary shadow-sm transition hover:bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
-              >
-                <User class="h-4 w-4 text-text-muted" aria-hidden="true" />
-                Register and Apply
-                <ArrowRight class="h-4 w-4 text-text-muted" aria-hidden="true" />
-              </Link>
-            </div>
-
             <div class="flex flex-1 items-center justify-center py-6 lg:py-10">
               <div class="w-full max-w-[560px] rounded-3xl border border-border/70 bg-white/70 px-8 py-10 text-center shadow-2xl backdrop-blur-sm sm:px-10">
               <div class="flex h-16 w-16 items-center justify-center rounded-2xl bg-brand/10">

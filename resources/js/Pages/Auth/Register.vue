@@ -3,7 +3,8 @@ import { computed, onMounted, ref } from 'vue'
 import { Link, useForm } from '@inertiajs/vue3'
 import GuestLayout from '@/Layouts/GuestLayout.vue'
 import InputError from '@/Components/InputError.vue'
-import { Building2, Eye, EyeOff, Hash, Lock, Mail, Phone, User } from 'lucide-vue-next'
+import { ArrowRight, Building2, Eye, EyeOff, Hash, Lock, Mail, Phone, ShieldCheck, User } from 'lucide-vue-next'
+import AuthTopBar from '@/Components/AuthTopBar.vue'
 
 type Mode = 'individual' | 'institution'
 const mode = ref<Mode>('individual')
@@ -84,8 +85,77 @@ function submit() {
 </script>
 
 <template>
-  <GuestLayout max-width-class="max-w-lg sm:max-w-xl md:max-w-2xl lg:max-w-3xl xl:max-w-4xl">
-    <div class="transition-all duration-500 ease-out" :class="mounted ? 'translate-y-0 opacity-100' : 'translate-y-2 opacity-0'">
+  <GuestLayout :card="false" max-width-class="max-w-none" content-padding-class="p-0" :hide-header="true" :center-content="false">
+    <div class="relative min-h-screen w-full">
+      <AuthTopBar right-href="/login" right-label="Log in" />
+
+      <div class="grid w-full lg:min-h-[calc(100vh-56px)] lg:grid-cols-2">
+        <aside class="relative overflow-hidden bg-gradient-to-br from-[#061a3a] via-[#0b3a66] to-[#092a48] px-10 py-10 text-white sm:px-14 sm:py-14 lg:px-16 lg:py-16">
+          <div aria-hidden="true" class="pointer-events-none absolute inset-0">
+            <div class="absolute -top-20 -left-20 h-72 w-72 rounded-full bg-white/10 blur-3xl" />
+            <div class="absolute -bottom-28 -right-20 h-[26rem] w-[26rem] rounded-full bg-amber-400/10 blur-3xl" />
+            <div class="absolute inset-0 bg-[radial-gradient(circle_at_12%_18%,rgba(255,255,255,0.18),transparent_55%),radial-gradient(circle_at_80%_70%,rgba(255,255,255,0.12),transparent_55%)]" />
+            <div class="absolute right-10 top-16 h-20 w-20 rounded-2xl bg-white/5 ring-1 ring-white/10" />
+            <div class="absolute right-20 top-24 h-2 w-2 rounded-full bg-white/30" />
+            <div class="absolute right-28 top-28 h-2 w-2 rounded-full bg-white/20" />
+            <div class="absolute inset-0 opacity-[0.08] [background-image:radial-gradient(rgba(255,255,255,0.8)_1px,transparent_1px)] [background-size:18px_18px]" />
+          </div>
+
+          <div class="relative">
+            <div class="mt-10">
+              <div class="text-xs font-semibold uppercase tracking-wider text-white/55">Zambia Qualifications Authority</div>
+              <h1 class="mt-3 text-5xl font-semibold tracking-tight">Create account</h1>
+              <div class="mt-4 h-0.5 w-10 rounded-full bg-amber-300/80" />
+              <p class="mt-6 max-w-md text-sm leading-relaxed text-white/75">
+                Register to submit verification applications and track your qualification verification progress securely.
+              </p>
+            </div>
+
+            <div class="mt-10 space-y-5">
+              <div class="flex gap-4">
+                <span class="inline-flex h-11 w-11 items-center justify-center rounded-full bg-white/10 ring-1 ring-white/15">
+                  <ShieldCheck class="h-5 w-5 text-white/90" aria-hidden="true" />
+                </span>
+                <div>
+                  <div class="text-sm font-semibold">Trusted & Official</div>
+                  <div class="mt-1 text-xs leading-relaxed text-white/70">
+                    Official ZAQA verification workflow with secure access and audit trails.
+                  </div>
+                </div>
+              </div>
+              <div class="flex gap-4">
+                <span class="inline-flex h-11 w-11 items-center justify-center rounded-full bg-white/10 ring-1 ring-white/15">
+                  <ArrowRight class="h-5 w-5 text-white/90" aria-hidden="true" />
+                </span>
+                <div>
+                  <div class="text-sm font-semibold">Fast & Reliable</div>
+                  <div class="mt-1 text-xs leading-relaxed text-white/70">Start an application in minutes and track it end-to-end.</div>
+                </div>
+              </div>
+              <div class="flex gap-4">
+                <span class="inline-flex h-11 w-11 items-center justify-center rounded-full bg-white/10 ring-1 ring-white/15">
+                  <Lock class="h-5 w-5 text-white/90" aria-hidden="true" />
+                </span>
+                <div>
+                  <div class="text-sm font-semibold">Secure & Protected</div>
+                  <div class="mt-1 text-xs leading-relaxed text-white/70">Your documents and data are protected.</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </aside>
+
+        <section class="relative overflow-hidden bg-[#eef4fb] px-6 py-8 sm:px-10 sm:py-10 lg:px-16 lg:py-12">
+          <div aria-hidden="true" class="pointer-events-none absolute inset-0">
+            <div class="absolute -top-28 left-1/2 h-[46rem] w-[46rem] -translate-x-1/2 rounded-full bg-brand/18 blur-3xl" />
+            <div class="absolute -bottom-28 -right-28 h-[40rem] w-[40rem] rounded-full bg-accent/10 blur-3xl" />
+            <div class="absolute inset-0 bg-[radial-gradient(circle_at_65%_35%,rgba(11,58,102,0.08),transparent_55%)]" />
+          </div>
+
+          <div class="relative flex h-full flex-col">
+            <div class="flex flex-1 items-center justify-center py-6 lg:py-10">
+              <div class="w-full max-w-[780px] rounded-3xl border border-border/70 bg-white/70 px-8 py-10 shadow-2xl backdrop-blur-sm sm:px-10">
+                <div class="transition-all duration-500 ease-out" :class="mounted ? 'translate-y-0 opacity-100' : 'translate-y-2 opacity-0'">
       <div>
         <h2 class="text-2xl font-semibold tracking-tight text-text-primary">Create account</h2>
         <p class="mt-2 text-sm text-text-muted">Register as an individual applicant or an institution.</p>
@@ -316,6 +386,12 @@ function submit() {
         <Link href="/login" class="zaqa-btn zaqa-btn-secondary h-10 px-4 py-2 text-sm">
           Log in
         </Link>
+      </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
       </div>
     </div>
 

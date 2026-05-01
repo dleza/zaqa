@@ -10,6 +10,7 @@ const props = withDefaults(
     contentPaddingClass?: string
     headerCompact?: boolean
     hideHeader?: boolean
+    centerContent?: boolean
   }>(),
   {
     maxWidthClass: 'max-w-lg',
@@ -17,6 +18,7 @@ const props = withDefaults(
     contentPaddingClass: 'px-4 py-12 sm:px-6 sm:py-14 lg:py-16',
     headerCompact: false,
     hideHeader: false,
+    centerContent: true,
   },
 )
 
@@ -63,8 +65,8 @@ const isRegisterPage = computed(() => currentPath.value === '/register')
       </div>
 
       <div
-        class="relative mx-auto flex w-full flex-1 flex-col sm:justify-center"
-        :class="[props.maxWidthClass, props.contentPaddingClass]"
+        class="relative mx-auto flex w-full flex-1 flex-col"
+        :class="[props.maxWidthClass, props.contentPaddingClass, props.centerContent ? 'sm:justify-center' : '']"
       >
         <FlashMessages />
         <div
