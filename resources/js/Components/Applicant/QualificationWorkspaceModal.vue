@@ -2,8 +2,8 @@
 import { computed, nextTick, ref, watch } from 'vue'
 import { router, useForm } from '@inertiajs/vue3'
 import InstitutionCombobox from '@/Components/InstitutionCombobox.vue'
-import DocumentManager from '@/Components/DocumentManager.vue'
 import InputError from '@/Components/InputError.vue'
+import Swal from 'sweetalert2'
 import { Building2, FileStack, GraduationCap, MapPin, Shield, Sparkles, X } from 'lucide-vue-next'
 
 const props = defineProps<{
@@ -47,15 +47,11 @@ const form = useForm({
   subject_results: [] as Array<{ subject_name: string; grade: string }>,
 })
 
-const foreignConsentForm = useForm<{
-  qualification_id: number | null
-  file: File | null
-  source_awarding_institution_name: string
-}>({
-  qualification_id: null,
-  file: null,
-  source_awarding_institution_name: '',
-})
+/** Staged files uploaded in the same action as qualification save */
+const pendingCertificateFile = ref<File | null>(null)
+const pendingTranscriptFile = ref<File | null>(null)
+const pendingConsentFile = ref<File | null>(null)
+const savingAll = ref(false)
 
 function syncIdentifierFromForm() {
   const cert = (form.certificate_number ?? '').toString().trim()
@@ -147,14 +143,6 @@ const institutionConsentUrl = computed(() => {
   return institutionMeta.value?.consent_form_url ?? null
 })
 
-const institutionHasConsentTemplate = computed(() => {
-  if (form.awarding_institution_id === 'other') return true
-  const q = freshQualification.value
-  if (typeof q?.institution_has_consent_form === 'boolean') return q.institution_has_consent_form
-  if (institutionMeta.value?.has_consent_form === false) return false
-  return !!institutionConsentUrl.value
-})
-
 function resetSubjectRows() {
   form.subject_results = []
 }
@@ -206,8 +194,10 @@ async function loadFromQualification(q: any) {
 
 async function openModalState() {
   form.clearErrors()
-  foreignConsentForm.clearErrors()
-  foreignConsentForm.reset('file')
+  pendingCertificateFile.value = null
+  pendingTranscriptFile.value = null
+  pendingConsentFile.value = null
+  savingAll.value = false
   institutionMeta.value = null
 
   if (props.mode === 'edit' && props.editingQualification) {
@@ -248,29 +238,135 @@ function close() {
   emit('update:modelValue', false)
 }
 
-function submitDetails() {
-  applyIdentifierToForm()
-  form.awarding_institution_name = awardingDisplayName() || '—'
+function extractQualificationIdFromPage(page: any): number {
+  if (props.mode === 'edit' && form.qualification_id) {
+    return Number(form.qualification_id)
+  }
+  const app = page?.props?.application
+  const list = (app?.qualifications ?? []) as any[]
+  const ids = list.map((q) => Number(q.id)).filter(Boolean)
+  return ids.length ? Math.max(...ids) : 0
+}
 
-  const finishSync = () => {
-    void nextTick(() => {
-      const list = (props.application?.qualifications ?? []) as any[]
-      const ids = list.map((q) => Number(q.id)).filter(Boolean)
-      if (props.mode === 'add') {
-        modalQualId.value = ids.length ? Math.max(...ids) : modalQualId.value
-      } else {
-        modalQualId.value = form.qualification_id ? Number(form.qualification_id) : null
-      }
-      emit('saved', { qualificationId: modalQualId.value })
+/** Inertia router.post uses callbacks — wrap for async/await sequencing. */
+function routerPostMultipart(url: string, data: Record<string, unknown>): Promise<void> {
+  return new Promise((resolve, reject) => {
+    router.post(url, data, {
+      forceFormData: true,
+      preserveScroll: true,
+      onSuccess: () => resolve(),
+      onError: () => reject(new Error('request_failed')),
+    })
+  })
+}
+
+function hasExistingDoc(docType: string): boolean {
+  const qid = modalQualId.value
+  if (!qid) return false
+  return (props.application?.documents ?? []).some(
+    (d: any) =>
+      d.document_type === docType &&
+      d.is_current_version &&
+      Number(d.qualification_id ?? 0) === Number(qid),
+  )
+}
+
+function hasPendingUploads(): boolean {
+  return !!(pendingCertificateFile.value || pendingTranscriptFile.value || pendingConsentFile.value)
+}
+
+function onPendingCertificateChange(e: Event) {
+  const t = e.target as HTMLInputElement
+  pendingCertificateFile.value = t.files?.[0] ?? null
+}
+
+function onPendingTranscriptChange(e: Event) {
+  const t = e.target as HTMLInputElement
+  pendingTranscriptFile.value = t.files?.[0] ?? null
+}
+
+function onPendingConsentChange(e: Event) {
+  const t = e.target as HTMLInputElement
+  pendingConsentFile.value = t.files?.[0] ?? null
+}
+
+async function runPendingUploads(qid: number): Promise<void> {
+  const base = `/applicant/applications/${props.applicationId}`
+
+  if (pendingCertificateFile.value) {
+    await routerPostMultipart(`${base}/documents`, {
+      document_type: 'certificate_copy',
+      qualification_id: qid,
+      file: pendingCertificateFile.value,
     })
   }
 
-  const reloadAfterSave = () =>
-    router.reload({
-      only: ['application'],
-      preserveScroll: true,
-      onFinish: finishSync,
+  if (pendingTranscriptFile.value) {
+    await routerPostMultipart(`${base}/documents`, {
+      document_type: 'transcript',
+      qualification_id: qid,
+      file: pendingTranscriptFile.value,
     })
+  }
+
+  if (isForeignAwarding.value && pendingConsentFile.value) {
+    await routerPostMultipart(`${base}/consent/foreign-upload`, {
+      qualification_id: qid,
+      file: pendingConsentFile.value,
+      source_awarding_institution_name: awardingDisplayName() || '',
+    })
+  }
+}
+
+function submitQualificationAndDocuments() {
+  if (props.locked || savingAll.value || form.processing) return
+  applyIdentifierToForm()
+  form.awarding_institution_name = awardingDisplayName() || '—'
+
+  const afterQualificationSaved = async (page: any) => {
+    const qid = extractQualificationIdFromPage(page)
+    if (!qid) {
+      await Swal.fire({
+        icon: 'error',
+        title: 'Could not resolve qualification',
+        text: 'Save succeeded but the qualification id was missing. Please refresh and try again.',
+      })
+      return
+    }
+
+    modalQualId.value = qid
+
+    if (!hasPendingUploads()) {
+      await router.reload({ only: ['application'], preserveScroll: true })
+      emit('saved', { qualificationId: qid })
+      close()
+      return
+    }
+
+    savingAll.value = true
+    try {
+      await runPendingUploads(qid)
+      await router.reload({ only: ['application'], preserveScroll: true })
+      emit('saved', { qualificationId: qid })
+      close()
+    } catch {
+      await Swal.fire({
+        icon: 'error',
+        title: 'Upload failed',
+        text: 'Qualification was saved. Fix the file upload issue or try smaller files, then use Edit to add documents.',
+      })
+      await router.reload({ only: ['application'], preserveScroll: true })
+    } finally {
+      savingAll.value = false
+    }
+  }
+
+  const visitOpts = {
+    preserveScroll: true,
+    onSuccess: (page: any) => {
+      void afterQualificationSaved(page)
+    },
+  }
 
   if (props.mode === 'add') {
     form
@@ -281,10 +377,7 @@ function submitDetails() {
         if (!needsSubjects.value) delete o.subject_results
         return o
       })
-      .post(`/applicant/applications/${props.applicationId}/qualifications`, {
-        preserveScroll: true,
-        onSuccess: reloadAfterSave,
-      })
+      .post(`/applicant/applications/${props.applicationId}/qualifications`, visitOpts)
   } else {
     form
       .transform((data) => {
@@ -293,42 +386,14 @@ function submitDetails() {
         if (!needsSubjects.value) delete o.subject_results
         return o
       })
-      .put(`/applicant/applications/${props.applicationId}/qualification`, {
-        preserveScroll: true,
-        onSuccess: reloadAfterSave,
-      })
+      .put(`/applicant/applications/${props.applicationId}/qualification`, visitOpts)
   }
 }
 
-function onForeignFileChange(event: Event) {
-  const target = event.target as HTMLInputElement
-  foreignConsentForm.file = target.files && target.files.length > 0 ? target.files[0] : null
-}
+/** Foreign awarding: show consent file slot whenever country is foreign (same pass uploads after save for add mode). */
+const showConsentUpload = computed(() => isForeignAwarding.value)
 
-function uploadForeignConsent() {
-  const qid = modalQualId.value
-  if (!qid) return
-  foreignConsentForm.qualification_id = qid
-  foreignConsentForm.source_awarding_institution_name = awardingDisplayName() || ''
-  foreignConsentForm.post(`/applicant/applications/${props.applicationId}/consent/foreign-upload`, {
-    preserveScroll: true,
-    forceFormData: true,
-    onSuccess: () => {
-      foreignConsentForm.reset('file')
-      router.reload({ only: ['application'] })
-    },
-  })
-}
-
-const docFilterForQual = computed(() => {
-  const id = modalQualId.value
-  if (!id) return []
-  return (props.application?.documents ?? []).filter((d: any) => Number(d.qualification_id ?? 0) === Number(id))
-})
-
-const showConsentUpload = computed(() => isForeignAwarding.value && !!modalQualId.value)
-
-const canSaveDetails = computed(() => !props.locked && !form.processing)
+const canSubmitAll = computed(() => !props.locked && !form.processing && !savingAll.value)
 
 /** Holder identity is captured on the Applicant step / new application — single source of truth. */
 const verificationSubject = computed(() => {
@@ -395,7 +460,7 @@ function stripHolderFields(data: Record<string, unknown>) {
                     {{ mode === 'add' ? 'Add qualification' : 'Edit qualification' }}
                   </h2>
                   <p class="mt-2 max-w-2xl text-sm leading-relaxed text-white/85">
-                    Capture where the award was issued, then upload the correct documents. Fields must match your certificate exactly.
+                    Enter qualification details, attach documents below, then save once at the bottom. Fields must match your certificate exactly.
                   </p>
                 </div>
               </div>
@@ -535,39 +600,48 @@ function stripHolderFields(data: Record<string, unknown>) {
                   </div>
                   <InputError :message="form.errors.subject_results" class="mt-2" />
                 </div>
-
-                <div class="mt-6 flex flex-wrap gap-3">
-                  <button type="button" class="zaqa-btn zaqa-btn-primary px-6" :disabled="!canSaveDetails" @click="submitDetails">
-                    {{ modalQualId ? 'Save changes' : 'Save & continue to documents' }}
-                  </button>
-                  <button type="button" class="zaqa-btn zaqa-btn-secondary" @click="close">Cancel</button>
-                </div>
               </section>
 
-              <!-- Documents -->
-              <section
-                v-if="modalQualId"
-                class="rounded-2xl border border-border bg-surface p-5 ring-1 ring-black/[0.03]"
-              >
+              <!-- Documents (staged — uploaded together with qualification via footer Save) -->
+              <section class="rounded-2xl border border-border bg-surface p-5 ring-1 ring-black/[0.03]">
                 <div class="flex items-center gap-2 text-text-primary">
                   <FileStack class="h-5 w-5 shrink-0 text-brand" aria-hidden="true" />
                   <h3 class="text-base font-semibold">Qualification documents</h3>
                 </div>
                 <p class="mt-1 text-sm text-text-muted">
-                  <template v-if="!isForeignAwarding">Upload your certificate (and transcript if applicable) for this qualification.</template>
-                  <template v-else>
-                    Upload certificate and transcript. You will also confirm the awarding institution consent below.
-                  </template>
+                  Choose files here first, then press <span class="font-semibold text-text-primary">Save qualification & documents</span> below—everything is submitted in one step.
+                </p>
+                <p v-if="modalQualId && hasExistingDoc('certificate_copy')" class="mt-2 text-xs text-success">
+                  Certificate already on file — upload again only if you want to replace it.
+                </p>
+                <p v-if="modalQualId && transcriptRequiredForDocs && hasExistingDoc('transcript')" class="mt-1 text-xs text-success">
+                  Transcript already on file — upload again only if you want to replace it.
                 </p>
 
-                <div class="mt-5">
-                  <DocumentManager
-                    :upload-url="`/applicant/applications/${applicationId}/documents`"
-                    :documents="docFilterForQual"
-                    :transcript-required="transcriptRequiredForDocs"
-                    :qualification-id="modalQualId"
-                    documents-scope="qualification_only"
-                  />
+                <div class="mt-5 grid grid-cols-1 gap-4 sm:grid-cols-2">
+                  <div class="sm:col-span-2">
+                    <label class="text-sm font-medium">Certificate or qualification document</label>
+                    <input
+                      type="file"
+                      class="zaqa-input"
+                      accept=".pdf,.jpg,.jpeg,.png,.webp,application/pdf,image/jpeg,image/png,image/webp"
+                      :disabled="locked"
+                      @change="onPendingCertificateChange"
+                    />
+                  </div>
+                  <div v-if="transcriptRequiredForDocs" class="sm:col-span-2">
+                    <label class="text-sm font-medium">
+                      Transcript
+                      <span v-if="!isForeignAwarding" class="font-normal text-text-muted">(if applicable)</span>
+                    </label>
+                    <input
+                      type="file"
+                      class="zaqa-input"
+                      accept=".pdf,.jpg,.jpeg,.png,.webp,application/pdf,image/jpeg,image/png,image/webp"
+                      :disabled="locked"
+                      @change="onPendingTranscriptChange"
+                    />
+                  </div>
                 </div>
               </section>
 
@@ -583,19 +657,12 @@ function stripHolderFields(data: Record<string, unknown>) {
                   <div class="min-w-0">
                     <h3 class="text-base font-semibold text-text-primary">Awarding institution consent</h3>
                     <p class="mt-1 text-sm text-text-muted">
-                      This institution sits outside Zambia. Download its consent template, sign it, then upload the signed file here.
+                      This institution sits outside Zambia. When available, download our template below—otherwise use your own signed consent from the institution and attach it here. Everything uploads when you save at the bottom.
                     </p>
                   </div>
                 </div>
 
-                <div
-                  v-if="institutionHasConsentTemplate === false"
-                  class="mt-4 rounded-xl border border-warning/30 bg-warning/10 px-4 py-3 text-sm text-warning"
-                >
-                  No consent template is on file for this institution. Choose another institution or contact support.
-                </div>
-
-                <div v-else class="mt-4 flex flex-wrap gap-2">
+                <div class="mt-4 flex flex-wrap items-center gap-3">
                   <a
                     v-if="institutionConsentUrl"
                     :href="institutionConsentUrl"
@@ -606,6 +673,9 @@ function stripHolderFields(data: Record<string, unknown>) {
                     <Building2 class="h-4 w-4" aria-hidden="true" />
                     Download consent template
                   </a>
+                  <p v-else class="text-xs leading-relaxed text-text-muted">
+                    No portal-hosted template for this institution—you can still upload a signed consent you obtained from them.
+                  </p>
                 </div>
 
                 <div class="mt-5 grid grid-cols-1 gap-3 sm:max-w-lg">
@@ -613,21 +683,12 @@ function stripHolderFields(data: Record<string, unknown>) {
                     <label class="text-sm font-medium">Signed consent file</label>
                     <input
                       type="file"
-                      accept=".pdf,.doc,.docx,application/pdf"
+                      accept=".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
                       class="zaqa-input"
-                      :disabled="locked || institutionHasConsentTemplate === false"
-                      @change="onForeignFileChange"
+                      :disabled="locked"
+                      @change="onPendingConsentChange"
                     />
-                    <InputError :message="foreignConsentForm.errors.file" />
                   </div>
-                  <button
-                    type="button"
-                    class="zaqa-btn zaqa-btn-primary w-fit"
-                    :disabled="locked || foreignConsentForm.processing || !foreignConsentForm.file || institutionHasConsentTemplate === false"
-                    @click="uploadForeignConsent"
-                  >
-                    Upload signed consent
-                  </button>
                 </div>
               </section>
             </div>
@@ -635,8 +696,22 @@ function stripHolderFields(data: Record<string, unknown>) {
 
           <div class="shrink-0 border-t border-border bg-surface-muted/60 px-6 py-4 sm:px-8">
             <div class="flex flex-wrap items-center justify-between gap-3">
-              <p class="text-xs text-text-muted">Saved details unlock uploads. You can return anytime via Edit on the list.</p>
-              <button type="button" class="zaqa-btn zaqa-btn-secondary" @click="close">Done</button>
+              <p class="max-w-xl text-xs text-text-muted">
+                Review details and files, then save once. You can reopen this workspace anytime from the list.
+              </p>
+              <div class="flex flex-wrap gap-2">
+                <button type="button" class="zaqa-btn zaqa-btn-secondary" @click="close">Cancel</button>
+                <button
+                  type="button"
+                  class="zaqa-btn zaqa-btn-primary px-6"
+                  :disabled="!canSubmitAll"
+                  @click="submitQualificationAndDocuments"
+                >
+                  {{
+                    savingAll ? 'Uploading…' : form.processing ? 'Saving…' : 'Save qualification & documents'
+                  }}
+                </button>
+              </div>
             </div>
           </div>
         </div>

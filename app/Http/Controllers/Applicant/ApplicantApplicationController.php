@@ -369,8 +369,7 @@ class ApplicantApplicationController extends Controller
                 $missing = [];
                 if (! $hasCert) $missing[] = 'certificate_copy';
                 if ((bool) ($q->transcript_required ?? false) && ! $hasTranscript) $missing[] = 'transcript';
-                if ($requiresForeignConsent && ! $institutionHasConsentForm) $missing[] = 'institution_consent_form_missing';
-                if ($requiresForeignConsent && $institutionHasConsentForm && ! $hasForeignConsent) $missing[] = 'foreign_consent';
+                if ($requiresForeignConsent && ! $hasForeignConsent) $missing[] = 'foreign_consent';
                 if (! $requiresForeignConsent && ! $hasLocalConsent) $missing[] = 'local_consent';
 
                 return [

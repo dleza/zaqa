@@ -289,14 +289,8 @@ class ApplicationSubmissionService
             $consent = $q->consentForm;
             $instIso = strtoupper((string) (($q->awardingInstitution?->country?->iso_code) ?: ($q->country?->iso_code) ?: ''));
             $institutionIsForeign = $instIso !== '' && $instIso !== 'ZM';
-            $institutionHasConsentForm = (bool) ($q->awardingInstitution?->has_consent_form ?? false);
 
             if ($institutionIsForeign) {
-                if (! $institutionHasConsentForm) {
-                    throw ValidationException::withMessages([
-                        'consent' => 'No consent form has been configured for the selected awarding institution. Please contact support or select another institution.',
-                    ]);
-                }
                 if (! $consent || ! $consent->uploaded_document_id) {
                     throw ValidationException::withMessages([
                         'consent' => 'Each foreign qualification requires a signed consent upload before submission.',

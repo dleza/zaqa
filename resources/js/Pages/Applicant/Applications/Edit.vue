@@ -1116,15 +1116,8 @@ onBeforeUnmount(() => {
                   <div v-if="selectedQualification?.requires_foreign_consent" class="space-y-3">
                     <div class="text-sm font-semibold text-text-primary">Foreign consent upload</div>
                     <p class="text-sm text-text-muted">
-                      Download the consent form for the selected awarding institution, sign it, and upload the signed copy.
+                      When we host a template you can download it; otherwise upload a signed consent you obtained from the awarding institution.
                     </p>
-
-                    <div
-                      v-if="selectedQualification?.institution_has_consent_form === false"
-                      class="rounded-lg border border-warning/20 bg-warning/10 px-4 py-3 text-sm text-warning"
-                    >
-                      No consent form has been configured for this awarding institution. Please contact support or select another institution.
-                    </div>
 
                     <div class="flex flex-wrap items-center gap-2">
                       <a
@@ -1136,6 +1129,7 @@ onBeforeUnmount(() => {
                       >
                         Download institution consent form
                       </a>
+                      <p v-else class="text-xs text-text-muted">No portal template on file—you may still upload your signed consent below.</p>
                     </div>
 
                     <div class="grid grid-cols-1 gap-3">
@@ -1145,7 +1139,7 @@ onBeforeUnmount(() => {
                           type="file"
                           accept=".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
                           class="zaqa-input"
-                          :disabled="applicationLocked || selectedQualification?.institution_has_consent_form === false"
+                          :disabled="applicationLocked"
                           @change="onForeignFileChange"
                         />
                         <InputError :message="foreignConsentForm.errors.file" />
@@ -1153,7 +1147,7 @@ onBeforeUnmount(() => {
                       <button
                         type="button"
                         class="zaqa-btn zaqa-btn-primary w-fit"
-                        :disabled="applicationLocked || foreignConsentForm.processing || !foreignConsentForm.file || selectedQualification?.institution_has_consent_form === false"
+                        :disabled="applicationLocked || foreignConsentForm.processing || !foreignConsentForm.file"
                         @click="uploadForeignConsent"
                       >
                         Upload signed consent
