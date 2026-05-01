@@ -549,13 +549,19 @@ function stripHolderFields(data: Record<string, unknown>) {
                 <div class="mt-5 grid grid-cols-1 gap-4 sm:grid-cols-2">
                   <div class="sm:col-span-2">
                     <label class="text-sm font-medium">Qualification type (ZQF)</label>
-                    <select v-model="form.qualification_type_id" class="zaqa-input" :disabled="locked || !!application?.invoice">
+                    <select v-model="form.qualification_type_id" class="zaqa-input" :disabled="locked">
                       <option value="" disabled>Select type…</option>
                       <option v-for="t in qualificationTypes" :key="t.id" :value="t.id">{{ t.name }}</option>
                     </select>
                     <InputError :message="form.errors.qualification_type_id" />
-                    <div v-if="application?.invoice" class="mt-2 rounded-lg border border-warning/25 bg-warning/10 px-3 py-2 text-xs text-warning">
-                      Qualification type is locked after billing has been prepared (Payment step).
+                    <div v-if="locked" class="mt-2 rounded-lg border border-warning/25 bg-warning/10 px-3 py-2 text-xs text-warning">
+                      Qualification details cannot be changed after payment has been confirmed for this application.
+                    </div>
+                    <div
+                      v-else-if="application?.invoice"
+                      class="mt-2 rounded-lg border border-border bg-surface-muted px-3 py-2 text-xs text-text-muted"
+                    >
+                      An invoice exists—the total will update automatically when you save changes, until payment is completed.
                     </div>
                   </div>
                   <div class="sm:col-span-2">

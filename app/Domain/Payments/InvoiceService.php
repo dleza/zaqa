@@ -8,8 +8,10 @@ use App\Domain\Tracking\ApplicationLifecycleService;
 use App\Enums\InvoiceStatus;
 use App\Enums\LifecycleStage;
 use App\Enums\LifecycleVisibility;
+use App\Enums\PaymentStatus;
 use App\Models\Application;
 use App\Models\Invoice;
+use App\Models\Payment;
 use App\Models\Qualification;
 use App\Models\User;
 use Illuminate\Support\Carbon;
@@ -132,6 +134,14 @@ class InvoiceService
                         'recalculated_at' => now()->toIso8601String(),
                     ]),
                 ])->save();
+
+                Payment::query()
+                    ->where('invoice_id', $existing->id)
+                    ->where('status', '!=', PaymentStatus::Confirmed)
+                    ->update([
+                        'amount_cents' => $totalCents,
+                        'currency' => $currency,
+                    ]);
 
                 $after = $existing->only([
                     'billing_category_id',

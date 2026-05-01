@@ -1309,8 +1309,9 @@ onBeforeUnmount(() => {
               </div>
             </div>
 
-            <div class="mt-3 rounded-lg border border-warning/20 bg-warning/10 px-3 py-2 text-xs text-warning">
-              Generating an invoice locks qualification types. Change qualification details on the Qualification step before generating an invoice if needed.
+            <div class="mt-3 rounded-lg border border-border bg-surface-muted px-3 py-2 text-xs text-text-muted">
+              You can add or edit qualifications and change types until payment is confirmed. If an invoice already exists, its amount is recalculated when you save
+              qualification changes.
             </div>
 
             <div v-if="!invoice && !applicationLocked" class="mt-4 flex flex-col gap-3 border-t border-border/60 pt-4 sm:flex-row sm:items-end sm:justify-between">
