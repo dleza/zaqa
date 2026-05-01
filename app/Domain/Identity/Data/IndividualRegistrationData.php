@@ -8,9 +8,10 @@ class IndividualRegistrationData
         public readonly string $firstName,
         public readonly ?string $middleName,
         public readonly string $surname,
-        public readonly string $phonePrimary,
+        public readonly ?string $phonePrimary,
         public readonly ?string $phoneSecondary,
-        public readonly string $email,
+        public readonly ?string $email,
+        public readonly string $loginIdentifierType,
         public readonly string $password,
     ) {
     }
@@ -24,9 +25,10 @@ class IndividualRegistrationData
             firstName: (string) $input['first_name'],
             middleName: isset($input['middle_name']) && $input['middle_name'] !== '' ? (string) $input['middle_name'] : null,
             surname: (string) $input['surname'],
-            phonePrimary: (string) $input['phone_primary'],
+            phonePrimary: isset($input['phone_primary']) && $input['phone_primary'] !== '' ? (string) $input['phone_primary'] : null,
             phoneSecondary: isset($input['phone_secondary']) && $input['phone_secondary'] !== '' ? (string) $input['phone_secondary'] : null,
-            email: (string) $input['email'],
+            email: isset($input['email']) && $input['email'] !== '' ? (string) $input['email'] : null,
+            loginIdentifierType: (string) ($input['login_identifier_type'] ?? 'email'),
             password: (string) $input['password'],
         );
     }

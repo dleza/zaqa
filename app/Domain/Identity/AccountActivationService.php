@@ -23,8 +23,28 @@ class AccountActivationService
 
     public function issueActivationChallenges(User $user): void
     {
-        $this->issueEmailActivationToken($user);
-        $this->issuePhoneOtp($user);
+        // Only issue the challenge(s) for the chosen primary contact method.
+        // Fallback (null/unknown) keeps legacy behavior for existing accounts.
+        if ($user->login_identifier_type === 'email') {
+            if ($user->email) {
+                $this->issueEmailActivationToken($user);
+            }
+            return;
+        }
+
+        if ($user->login_identifier_type === 'phone') {
+            if ($user->phone_primary) {
+                $this->issuePhoneOtp($user);
+            }
+            return;
+        }
+
+        if ($user->email) {
+            $this->issueEmailActivationToken($user);
+        }
+        if ($user->phone_primary) {
+            $this->issuePhoneOtp($user);
+        }
     }
 
     public function issueEmailActivationToken(User $user): string
@@ -213,8 +233,19 @@ class AccountActivationService
             return true;
         }
 
-        if (! $user->email_verified_at || ! $user->phone_verified_at) {
-            return false;
+        if ($user->login_identifier_type === 'email') {
+            if (! $user->email_verified_at) {
+                return false;
+            }
+        } elseif ($user->login_identifier_type === 'phone') {
+            if (! $user->phone_verified_at) {
+                return false;
+            }
+        } else {
+            // Legacy / admin accounts: require both if present.
+            if (! $user->email_verified_at || ! $user->phone_verified_at) {
+                return false;
+            }
         }
 
         $user->forceFill(['is_active' => true])->save();

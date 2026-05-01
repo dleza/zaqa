@@ -29,8 +29,8 @@ class ApplicantAuthFlowTest extends TestCase
             'first_name' => 'Jane',
             'middle_name' => 'M',
             'surname' => 'Doe',
+            'login_identifier_type' => 'email',
             'phone_primary' => '+260955000111',
-            'phone_secondary' => null,
             'email' => 'jane.doe@example.test',
             'password' => 'VeryStrongPassword123',
             'password_confirmation' => 'VeryStrongPassword123',
@@ -65,20 +65,9 @@ class ApplicantAuthFlowTest extends TestCase
             'type' => 'email_activation',
         ]);
 
-        $this->assertDatabaseHas('user_phone_otps', [
-            'user_id' => $user->id,
-            'phone_number' => $payload['phone_primary'],
-        ]);
-
         $this->assertDatabaseHas('email_logs', [
             'user_id' => $user->id,
             'template_key' => 'activation_email',
-            'status' => 'sent',
-        ]);
-
-        $this->assertDatabaseHas('sms_logs', [
-            'user_id' => $user->id,
-            'message_type' => 'activation_otp',
             'status' => 'sent',
         ]);
     }

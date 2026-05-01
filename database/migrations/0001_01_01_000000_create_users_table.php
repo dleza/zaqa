@@ -15,8 +15,10 @@ return new class extends Migration
             $table->id();
             $table->uuid('uuid')->unique();
             $table->string('name');
-            $table->string('email')->unique();
-            $table->string('phone_primary')->unique();
+            // Applicants may register with a single primary contact method (email OR phone).
+            $table->string('login_identifier_type')->nullable()->index(); // email|phone
+            $table->string('email')->nullable()->unique();
+            $table->string('phone_primary')->nullable()->unique();
             $table->string('phone_secondary')->nullable();
             $table->timestamp('email_verified_at')->nullable();
             $table->timestamp('phone_verified_at')->nullable();

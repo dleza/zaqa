@@ -6,9 +6,17 @@ import FlashMessages from '@/Components/FlashMessages.vue'
 const props = withDefaults(
   defineProps<{
     maxWidthClass?: string
+    card?: boolean
+    contentPaddingClass?: string
+    headerCompact?: boolean
+    hideHeader?: boolean
   }>(),
   {
     maxWidthClass: 'max-w-lg',
+    card: true,
+    contentPaddingClass: 'px-4 py-12 sm:px-6 sm:py-14 lg:py-16',
+    headerCompact: false,
+    hideHeader: false,
   },
 )
 
@@ -26,8 +34,8 @@ const isRegisterPage = computed(() => currentPath.value === '/register')
 
 <template>
   <div class="zaqa-page flex flex-col">
-    <header class="zaqa-topbar">
-      <div class="zaqa-topbar-inner py-5">
+    <header v-if="!props.hideHeader" class="zaqa-topbar">
+      <div class="zaqa-topbar-inner" :class="props.headerCompact ? 'py-3' : 'py-5'">
         <a href="/" class="zaqa-brand" aria-label="ZAQA Portal">
           <img :src="zaqaLogoUrl" alt="ZAQA logo" class="h-10 w-auto shrink-0 object-contain" />
           <div class="flex flex-col">
@@ -54,11 +62,18 @@ const isRegisterPage = computed(() => currentPath.value === '/register')
         <div class="absolute inset-0 bg-gradient-to-b from-white/40 via-transparent to-white/25" />
       </div>
 
-      <div class="relative mx-auto flex w-full flex-1 flex-col px-4 py-12 sm:px-6 sm:py-14 lg:py-16 sm:justify-center" :class="props.maxWidthClass">
+      <div
+        class="relative mx-auto flex w-full flex-1 flex-col sm:justify-center"
+        :class="[props.maxWidthClass, props.contentPaddingClass]"
+      >
         <FlashMessages />
-        <div class="rounded-2xl border border-border/80 bg-surface p-8 shadow-[0_18px_60px_-45px_rgba(11,58,102,0.25)] sm:p-10">
+        <div
+          v-if="props.card"
+          class="rounded-2xl border border-border/80 bg-surface p-8 shadow-[0_18px_60px_-45px_rgba(11,58,102,0.25)] sm:p-10"
+        >
           <slot />
         </div>
+        <slot v-else />
       </div>
     </main>
 

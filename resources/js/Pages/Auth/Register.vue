@@ -8,14 +8,16 @@ import { Building2, Eye, EyeOff, Hash, Lock, Mail, Phone, User } from 'lucide-vu
 type Mode = 'individual' | 'institution'
 const mode = ref<Mode>('individual')
 
+type ContactMethod = 'email' | 'phone'
+
 const mounted = ref(false)
 
 const individualForm = useForm({
   first_name: '',
   middle_name: '',
   surname: '',
+  login_identifier_type: 'email' as ContactMethod,
   phone_primary: '',
-  phone_secondary: '',
   email: '',
   password: '',
   password_confirmation: '',
@@ -25,14 +27,34 @@ const institutionForm = useForm({
   institution_name: '',
   tpin: '',
   contact_person_name: '',
+  login_identifier_type: 'email' as ContactMethod,
   phone_primary: '',
-  phone_secondary: '',
   email: '',
   password: '',
   password_confirmation: '',
 })
 
 const activeForm = computed(() => (mode.value === 'individual' ? individualForm : institutionForm))
+const contactMethod = computed<ContactMethod>({
+  get: () => (activeForm.value.login_identifier_type as ContactMethod) ?? 'email',
+  set: (value) => {
+    activeForm.value.login_identifier_type = value
+  },
+})
+
+function setContactMethod(method: ContactMethod) {
+  contactMethod.value = method
+
+  // Keep the UI clean by clearing the non-primary field (and its errors).
+  if (method === 'email') {
+    activeForm.value.phone_primary = ''
+    activeForm.value.clearErrors('phone_primary')
+    return
+  }
+
+  activeForm.value.email = ''
+  activeForm.value.clearErrors('email')
+}
 
 const showPassword = ref(false)
 const showConfirmPassword = ref(false)
@@ -160,33 +182,58 @@ function submit() {
           </div>
         </template>
 
-        <div class="space-y-5">
-          <div>
-            <label class="text-xs font-semibold uppercase tracking-wider text-text-muted">Primary phone</label>
-            <div class="relative">
-              <Phone class="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-text-muted" aria-hidden="true" />
-              <input v-model="activeForm.phone_primary" class="zaqa-input h-12 rounded-lg pl-10" autocomplete="tel" />
-            </div>
-            <InputError :message="activeForm.errors.phone_primary" />
-          </div>
-          <div>
-            <label class="text-xs font-semibold uppercase tracking-wider text-text-muted">Secondary phone (optional)</label>
-            <div class="relative">
-              <Phone class="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-text-muted" aria-hidden="true" />
-              <input v-model="activeForm.phone_secondary" class="zaqa-input h-12 rounded-lg pl-10" autocomplete="tel" />
-            </div>
-            <InputError :message="activeForm.errors.phone_secondary" />
+        <div>
+          <div class="text-xs font-semibold uppercase tracking-wider text-text-muted">Contact method</div>
+          <div class="relative mt-3 flex rounded-full border border-border bg-surface-muted p-1">
+            <span
+              class="absolute inset-y-1 left-1 w-[calc(50%-0.25rem)] rounded-full bg-surface shadow-sm transition-transform duration-300"
+              :class="contactMethod === 'phone' ? 'translate-x-full' : 'translate-x-0'"
+              aria-hidden="true"
+            />
+            <button
+              type="button"
+              class="relative z-10 inline-flex flex-1 items-center justify-center gap-2 rounded-full px-3 py-2.5 text-sm font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
+              :class="contactMethod === 'email' ? 'text-text-primary' : 'text-text-muted hover:text-text-primary'"
+              @click="setContactMethod('email')"
+            >
+              <Mail class="h-4 w-4" aria-hidden="true" />
+              Email
+            </button>
+            <button
+              type="button"
+              class="relative z-10 inline-flex flex-1 items-center justify-center gap-2 rounded-full px-3 py-2.5 text-sm font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
+              :class="contactMethod === 'phone' ? 'text-text-primary' : 'text-text-muted hover:text-text-primary'"
+              @click="setContactMethod('phone')"
+            >
+              <Phone class="h-4 w-4" aria-hidden="true" />
+              Phone
+            </button>
           </div>
         </div>
 
-        <div>
-          <label class="text-xs font-semibold uppercase tracking-wider text-text-muted">Email</label>
-          <div class="relative">
-            <Mail class="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-text-muted" aria-hidden="true" />
-            <input v-model="activeForm.email" type="email" class="zaqa-input h-12 rounded-lg pl-10" autocomplete="email" />
+        <Transition name="fade" mode="out-in">
+          <div v-if="contactMethod === 'email'" key="contact-email">
+            <label class="text-xs font-semibold uppercase tracking-wider text-text-muted">Email</label>
+            <div class="relative">
+              <Mail class="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-text-muted" aria-hidden="true" />
+              <input v-model="activeForm.email" type="email" class="zaqa-input h-12 rounded-lg pl-10" autocomplete="email" />
+            </div>
+            <p class="mt-2 text-xs text-text-muted">We will send a verification link to your email.</p>
+            <InputError :message="activeForm.errors.email" />
           </div>
-          <InputError :message="activeForm.errors.email" />
-        </div>
+
+          <div v-else key="contact-phone" class="space-y-5">
+            <div>
+              <label class="text-xs font-semibold uppercase tracking-wider text-text-muted">Primary phone</label>
+              <div class="relative">
+                <Phone class="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-text-muted" aria-hidden="true" />
+                <input v-model="activeForm.phone_primary" class="zaqa-input h-12 rounded-lg pl-10" autocomplete="tel" />
+              </div>
+              <p class="mt-2 text-xs text-text-muted">We will send a one-time code (OTP) to your phone.</p>
+              <InputError :message="activeForm.errors.phone_primary" />
+            </div>
+          </div>
+        </Transition>
 
         <div class="grid grid-cols-1 gap-5 sm:grid-cols-2">
           <div>
@@ -383,3 +430,14 @@ function submit() {
     </div>
   </GuestLayout>
 </template>
+
+<style scoped>
+.fade-enter-active,
+.fade-leave-active {
+  transition: opacity 180ms ease;
+}
+.fade-enter-from,
+.fade-leave-to {
+  opacity: 0;
+}
+</style>

@@ -4,6 +4,7 @@ namespace App\Http\Requests\Auth;
 
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rules\Password;
+use Illuminate\Validation\Rule;
 
 class RegisterInstitutionRequest extends FormRequest
 {
@@ -16,9 +17,9 @@ class RegisterInstitutionRequest extends FormRequest
             'institution_name' => ['required', 'string', 'max:255'],
             'tpin' => ['required', 'string', 'max:50'],
             'contact_person_name' => ['nullable', 'string', 'max:255'],
-            'phone_primary' => ['required', 'string', 'max:30', 'unique:users,phone_primary'],
-            'phone_secondary' => ['nullable', 'string', 'max:30'],
-            'email' => ['required', 'string', 'email:rfc', 'max:255', 'unique:users,email'],
+            'login_identifier_type' => ['required', 'string', Rule::in(['email', 'phone'])],
+            'phone_primary' => ['nullable', 'string', 'max:30', 'required_if:login_identifier_type,phone', 'unique:users,phone_primary'],
+            'email' => ['nullable', 'string', 'email:rfc', 'max:255', 'required_if:login_identifier_type,email', 'unique:users,email'],
             'password' => ['required', 'confirmed', Password::min(8)],
         ];
     }
