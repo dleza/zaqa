@@ -22,11 +22,15 @@ class UpsertQualificationRequest extends FormRequest
         return [
             'qualification_id' => ['nullable', 'integer', 'exists:qualifications,id'],
             'create_new' => ['nullable', 'boolean'],
+            'awarding_institution_id' => ['nullable'],
+            'awarding_institution_name_other' => ['nullable', 'string', 'max:255'],
             'awarding_institution_name' => ['required', 'string', 'max:255'],
-            'qualification_holder_name' => ['required', 'string', 'max:255'],
+            // Ignored for persistence — holder identity comes from the application verification subject.
+            'qualification_holder_name' => ['sometimes', 'nullable', 'string', 'max:255'],
             'country_id' => ['nullable', 'integer', 'exists:countries,id'],
             'country_name_other' => ['nullable', 'string', 'max:255'],
-            'nrc_passport_number' => ['required', 'string', 'max:100'],
+            // Ignored for persistence — holder identity comes from the application verification subject.
+            'nrc_passport_number' => ['sometimes', 'nullable', 'string', 'max:100'],
             'certificate_number' => ['nullable', 'string', 'max:100'],
             'student_number' => ['nullable', 'string', 'max:100'],
             'examination_number' => ['nullable', 'string', 'max:100'],
@@ -56,6 +60,38 @@ class UpsertQualificationRequest extends FormRequest
             $countryOther = trim((string) $this->input('country_name_other', ''));
             if (! $countryId && $countryOther === '') {
                 $validator->errors()->add('country_id', 'Country of award is required.');
+            }
+
+            $awardingInstitutionId = $this->input('awarding_institution_id');
+            $awardingInstitutionOther = trim((string) $this->input('awarding_institution_name_other', ''));
+
+            if (! $awardingInstitutionId && $awardingInstitutionOther === '') {
+                $validator->errors()->add('awarding_institution_id', 'Awarding institution is required (select one or choose “Other”).');
+            }
+
+            if ((string) $awardingInstitutionId === 'other' && $awardingInstitutionOther === '') {
+                $validator->errors()->add('awarding_institution_name_other', 'Please type the awarding institution name.');
+            }
+
+            if ($awardingInstitutionId && (string) $awardingInstitutionId !== 'other' && $awardingInstitutionOther !== '') {
+                $validator->errors()->add('awarding_institution_name_other', 'Remove the manual institution name when selecting from the list.');
+            }
+
+            if ($awardingInstitutionId && (string) $awardingInstitutionId !== 'other') {
+                if (! is_numeric($awardingInstitutionId) || (int) $awardingInstitutionId < 1) {
+                    $validator->errors()->add('awarding_institution_id', 'Select a valid awarding institution.');
+                }
+
+                if ($countryId) {
+                    $exists = \App\Models\AwardingInstitution::query()
+                        ->whereKey((int) $awardingInstitutionId)
+                        ->where('country_id', (int) $countryId)
+                        ->exists();
+
+                    if (! $exists) {
+                        $validator->errors()->add('awarding_institution_id', 'Selected institution does not match the selected country.');
+                    }
+                }
             }
 
             $qualificationTypeId = (int) $this->input('qualification_type_id', 0);

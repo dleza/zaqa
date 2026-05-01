@@ -6,10 +6,10 @@ import InputError from '@/Components/InputError.vue'
 import WizardStepper from '@/Components/WizardStepper.vue'
 import WizardShell from '@/Components/WizardShell.vue'
 import WizardFooterBar from '@/Components/WizardFooterBar.vue'
-import InstitutionCombobox from '@/Components/InstitutionCombobox.vue'
 import DocumentManager from '@/Components/DocumentManager.vue'
+import QualificationWorkspaceModal from '@/Components/Applicant/QualificationWorkspaceModal.vue'
 import Swal from 'sweetalert2'
-import { AlertCircle, CheckCircle2, CreditCard, Landmark, Smartphone, Upload } from 'lucide-vue-next'
+import { AlertCircle, CheckCircle2, CreditCard, GraduationCap, Landmark, PenLine, PlusCircle, Smartphone, Upload } from 'lucide-vue-next'
 
 type ApplicantPayload = {
   applicant_type?: string
@@ -31,15 +31,15 @@ const props = defineProps<{
   foreignFeePreview?: any | null
 }>()
 
-type StepKey = 'applicant' | 'qualification'
+type StepKey = 'applicant' | 'qualification' | 'consent' | 'payment' | 'review'
 
-const qualificationTypeForSteps = computed(() => props.application.qualification_category)
-const steps = computed(() => {
-  return [
-    { key: 'applicant' as const, label: 'Bio' },
-    { key: 'qualification' as const, label: 'Qualifications' },
-  ]
-})
+const steps = computed(() => [
+  { key: 'applicant' as const, label: 'Applicant' },
+  { key: 'qualification' as const, label: 'Qualification' },
+  { key: 'consent' as const, label: 'Consent' },
+  { key: 'payment' as const, label: 'Payment' },
+  { key: 'review' as const, label: 'Review & submit' },
+])
 
 const activeStep = ref<StepKey>('applicant')
 const saveState = ref<{ state: 'idle' | 'saving' | 'saved' | 'error'; message?: string }>({ state: 'idle' })
@@ -64,6 +64,9 @@ function goToStep(key: StepKey) {
   activeStep.value = key
   try {
     localStorage.setItem(`zaqa:wizard:${props.application.id}:step`, key)
+    const url = new URL(window.location.href)
+    url.searchParams.set('step', key)
+    window.history.replaceState({}, '', url.toString())
   } catch {
     // ignore
   }
@@ -73,26 +76,26 @@ const prepareInvoiceForm = useForm({})
 
 function isStepDirty(step: StepKey): boolean {
   if (step === 'applicant') return (applicantForm.isDirty ?? false) === true
-  if (step === 'qualification') return (qualificationDetailsForm.isDirty ?? false) === true
   return false
 }
 
-const hasUnsavedChanges = computed(() => {
-  // page-level guard: any step dirty
-  return isStepDirty('applicant') || isStepDirty('qualification')
-})
+function qualificationSubjectsSatisfied(q: any): boolean {
+  const typeId = Number(q.qualification_type_id ?? 0)
+  const type = (props.qualificationTypes ?? []).find((t: any) => Number(t.id) === typeId)
+  if (!type?.requires_subject_results) return true
+  const rows = (q.subject_results ?? []) as Array<{ subject_name?: string; grade?: string }>
+  if (rows.length === 0) return false
+  return rows.every(
+    (r) => (r.subject_name ?? '').toString().trim() !== '' && (r.grade ?? '').toString().trim() !== '',
+  )
+}
+
+const hasUnsavedChanges = computed(() => isStepDirty('applicant'))
 
 function discardChangesForActiveStep() {
   if (activeStep.value === 'applicant') {
     applicantForm.reset()
     applicantForm.clearErrors()
-    return
-  }
-  if (activeStep.value === 'qualification') {
-    qualificationDetailsForm.reset()
-    qualificationDetailsForm.clearErrors()
-    syncIdentifierFromForm()
-    return
   }
 }
 
@@ -116,13 +119,17 @@ onMounted(() => {
     const requested = (url.searchParams.get('step') ?? '').toString().trim() as StepKey
     if (requested && (steps.value as any[]).some((s) => s.key === requested)) {
       goToStep(requested)
-      return
+    } else {
+      const stored = localStorage.getItem(`zaqa:wizard:${props.application.id}:step`) as StepKey | null
+      if (stored && (steps.value as any[]).some((s) => s.key === stored)) activeStep.value = stored
     }
-
-    const stored = localStorage.getItem(`zaqa:wizard:${props.application.id}:step`) as StepKey | null
-    if (stored && (steps.value as any[]).some((s) => s.key === stored)) activeStep.value = stored
   } catch {
     // ignore
+  }
+
+  const quals = (props.application as any)?.qualifications ?? []
+  if (Array.isArray(quals) && quals.length > 0 && !selectedQualificationId.value) {
+    selectedQualificationId.value = quals[0].id
   }
 })
 
@@ -155,6 +162,8 @@ const submittingForForm = useForm<{
   subject_phone: string
   subject_nrc_number: string
   subject_passport_number: string
+  profile_nrc_number: string
+  profile_passport_number: string
 }>({
   submitting_for: (props.application?.metadata?.submitting_for ?? (institutionOnlyOnBehalf.value ? 'other' : 'self')) as SubmittingFor,
   subject_full_name: (props.application?.metadata?.verification_subject?.full_name ?? '').toString(),
@@ -162,6 +171,8 @@ const submittingForForm = useForm<{
   subject_phone: (props.application?.metadata?.verification_subject?.phone ?? '').toString(),
   subject_nrc_number: (props.application?.metadata?.verification_subject?.nrc_number ?? '').toString(),
   subject_passport_number: (props.application?.metadata?.verification_subject?.passport_number ?? '').toString(),
+  profile_nrc_number: (props.applicant?.applicant_profile?.nrc_number ?? '').toString(),
+  profile_passport_number: (props.applicant?.applicant_profile?.passport_number ?? '').toString(),
 })
 
 watch(
@@ -205,26 +216,6 @@ function saveApplicantDetails(nextStep?: StepKey) {
   })
 }
 
-const qualificationDetailsForm = useForm({
-  qualification_id: null as number | null,
-  qualification_holder_name: '',
-  nrc_passport_number: '',
-  country_id: '',
-  country_name_other: '',
-  awarding_institution_id: '',
-  awarding_institution_name_other: '',
-  // legacy name retained on record; UI uses institution selector + "Other"
-  awarding_institution_name: '',
-  certificate_number: '',
-  student_number: '',
-  examination_number: '',
-  title_of_qualification: '',
-  award_date: '',
-  qualification_type_id: '',
-  transcript_reason: '',
-  notes: '',
-})
-
 const applicationLocked = computed(() => invoiceSettled.value || !!props.application?.paid_at)
 
 const qualifications = computed<any[]>(() => {
@@ -240,79 +231,6 @@ const selectedQualification = computed<any | null>(() => {
   return qualifications.value.find((q) => Number(q.id) === Number(selectedQualificationId.value)) ?? null
 })
 
-function loadSelectedQualificationIntoForm() {
-  const q = selectedQualification.value
-  if (!q) return
-  qualificationDetailsForm.qualification_id = q.id
-  qualificationDetailsForm.qualification_holder_name = q.qualification_holder_name ?? ''
-  qualificationDetailsForm.nrc_passport_number = q.nrc_passport_number ?? ''
-  qualificationDetailsForm.country_id = q.country_id ?? ''
-  qualificationDetailsForm.country_name_other = q.country_name_other ?? ''
-  qualificationDetailsForm.awarding_institution_id = q.awarding_institution_id ?? ''
-  qualificationDetailsForm.awarding_institution_name_other = q.awarding_institution_name_other ?? ''
-  qualificationDetailsForm.awarding_institution_name = q.awarding_institution_name ?? ''
-  qualificationDetailsForm.certificate_number = q.certificate_number ?? ''
-  qualificationDetailsForm.student_number = q.student_number ?? ''
-  qualificationDetailsForm.examination_number = q.examination_number ?? ''
-  qualificationDetailsForm.title_of_qualification = q.title_of_qualification ?? ''
-  qualificationDetailsForm.award_date = q.award_date ?? ''
-  qualificationDetailsForm.qualification_type_id = q.qualification_type_id ?? ''
-  qualificationDetailsForm.transcript_reason = q.transcript_reason ?? ''
-  qualificationDetailsForm.notes = q.notes ?? ''
-  syncIdentifierFromForm()
-  // subject results editor is loaded separately below
-}
-
-watch(
-  () => selectedQualificationId.value,
-  () => {
-    qualificationDetailsForm.reset()
-    qualificationDetailsForm.clearErrors()
-    loadSelectedQualificationIntoForm()
-    loadSubjectsIntoForm()
-  },
-)
-
-onMounted(() => {
-  if (!selectedQualificationId.value && qualifications.value.length > 0) {
-    selectedQualificationId.value = qualifications.value[0].id
-  }
-  loadSelectedQualificationIntoForm()
-  loadSubjectsIntoForm()
-})
-
-// Transcript is mandatory for foreign qualifications (per selected item).
-const transcriptRequired = computed(() => isForeignBySelection.value === true)
-const selectedQualificationType = computed(() => {
-  const id = Number(qualificationDetailsForm.qualification_type_id || 0)
-  return (props.qualificationTypes ?? []).find((t: any) => Number(t.id) === id) ?? null
-})
-
-const selectedCountry = computed(() => {
-  const id = Number(qualificationDetailsForm.country_id || 0)
-  return (props.countries ?? []).find((c: any) => Number(c.id) === id) ?? null
-})
-
-const isForeignBySelection = computed(() => {
-  const iso = (selectedCountry.value?.iso_code ?? '').toString().trim().toUpperCase()
-  if (!iso) return (selectedQualification.value?.is_foreign_qualification ?? false) === true
-  return iso !== 'ZMB'
-})
-
-const effectiveBillingCategory = computed(() => {
-  if (isForeignBySelection.value) return props.foreignFeePreview?.billing_category ?? null
-  return selectedQualificationType.value?.billing_category ?? null
-})
-
-const effectiveFeePreview = computed(() => {
-  if (isForeignBySelection.value) return props.foreignFeePreview?.fee_preview ?? null
-  return selectedQualificationType.value?.fee_preview ?? null
-})
-const needsSubjects = computed(() => !!selectedQualificationType.value?.requires_subject_results)
-const qualificationSaved = computed(() => !!selectedQualification.value?.id)
-
-const institutionIsOther = computed(() => qualificationDetailsForm.awarding_institution_id === 'other')
-
 const zambiaCountryId = computed(() => {
   const byIso = props.countries?.find((c: any) => (c.iso_code ?? '').toString().toUpperCase() === 'ZMB')
   if (byIso?.id) return byIso.id
@@ -320,79 +238,20 @@ const zambiaCountryId = computed(() => {
   return byName?.id ?? null
 })
 
-type IdentifierType = 'certificate_number' | 'student_number' | 'examination_number'
-const identifierType = ref<IdentifierType>('certificate_number')
-const identifierValue = ref('')
+const qualificationWorkspaceOpen = ref(false)
+const qualificationWorkspaceMode = ref<'add' | 'edit'>('add')
+const qualificationWorkspaceQual = ref<any | null>(null)
 
-function syncIdentifierFromForm() {
-  const cert = (qualificationDetailsForm.certificate_number ?? '').toString().trim()
-  const stud = (qualificationDetailsForm.student_number ?? '').toString().trim()
-  const exam = (qualificationDetailsForm.examination_number ?? '').toString().trim()
-
-  if (cert) {
-    identifierType.value = 'certificate_number'
-    identifierValue.value = cert
-    return
-  }
-  if (stud) {
-    identifierType.value = 'student_number'
-    identifierValue.value = stud
-    return
-  }
-  if (exam) {
-    identifierType.value = 'examination_number'
-    identifierValue.value = exam
-    return
-  }
-
-  identifierType.value = 'certificate_number'
-  identifierValue.value = ''
+function openQualificationWorkspace(mode: 'add' | 'edit', qual?: any) {
+  if (applicationLocked.value && mode === 'add') return
+  qualificationWorkspaceMode.value = mode
+  qualificationWorkspaceQual.value = qual ?? null
+  if (qual?.id) selectedQualificationId.value = qual.id
+  qualificationWorkspaceOpen.value = true
 }
 
-function applyIdentifierToForm() {
-  const value = identifierValue.value.toString()
-  const nextCert = identifierType.value === 'certificate_number' ? value : ''
-  const nextStud = identifierType.value === 'student_number' ? value : ''
-  const nextExam = identifierType.value === 'examination_number' ? value : ''
-
-  if (qualificationDetailsForm.certificate_number !== nextCert) qualificationDetailsForm.certificate_number = nextCert
-  if (qualificationDetailsForm.student_number !== nextStud) qualificationDetailsForm.student_number = nextStud
-  if (qualificationDetailsForm.examination_number !== nextExam) qualificationDetailsForm.examination_number = nextExam
-}
-
-watch(identifierType, () => {
-  applyIdentifierToForm()
-})
-
-watch(identifierValue, () => {
-  applyIdentifierToForm()
-})
-
-// default country fallback happens when loading a qualification; for new items we default to Zambia
-
-function saveQualificationDetails() {
-  setSaving('Saving qualification details…')
-  qualificationDetailsForm.put(`/applicant/applications/${props.application.id}/qualification`, {
-    preserveScroll: true,
-    onSuccess: () => {
-      setSaved('Qualification details saved.')
-      router.reload({ only: ['application'] })
-    },
-    onError: () => setError('Qualification details could not be saved.'),
-    onFinish: () => {
-      if (saveState.value.state === 'saving') saveState.value = { state: 'idle' }
-    },
-  })
-}
-
-function startAddQualification() {
-  if (applicationLocked.value) return
-  qualificationDetailsForm.reset()
-  qualificationDetailsForm.clearErrors()
-  qualificationDetailsForm.qualification_id = null
-  if (zambiaCountryId.value) qualificationDetailsForm.country_id = zambiaCountryId.value
-  selectedQualificationId.value = null
-  syncIdentifierFromForm()
+function onQualificationWorkspaceSaved(payload: { qualificationId: number | null }) {
+  if (payload.qualificationId) selectedQualificationId.value = payload.qualificationId
 }
 
 function removeQualification(id: number) {
@@ -400,43 +259,6 @@ function removeQualification(id: number) {
   router.delete(`/applicant/applications/${props.application.id}/qualifications/${id}`, {
     preserveScroll: true,
     onSuccess: () => router.reload({ only: ['application'] }),
-  })
-}
-
-const subjectResultsForm = useForm<{ qualification_id: number | null; subject_results: Array<{ subject_name: string; grade: string }> }>({
-  qualification_id: null,
-  subject_results: [],
-})
-
-function loadSubjectsIntoForm() {
-  const q = selectedQualification.value
-  subjectResultsForm.qualification_id = q?.id ?? null
-  subjectResultsForm.subject_results = (q?.subject_results ?? []).map((r: any) => ({
-    subject_name: r.subject_name ?? '',
-    grade: r.grade ?? '',
-  }))
-}
-
-function addSubject() {
-  subjectResultsForm.subject_results.push({ subject_name: '', grade: '' })
-}
-
-function removeSubject(index: number) {
-  subjectResultsForm.subject_results.splice(index, 1)
-}
-
-function saveSubjectResults() {
-  setSaving('Saving subject results…')
-  subjectResultsForm.put(`/applicant/applications/${props.application.id}/qualification/subject-results`, {
-    preserveScroll: true,
-    onSuccess: () => {
-      setSaved('Subject results saved.')
-      router.reload({ only: ['application'] })
-    },
-    onError: () => setError('Subject results could not be saved.'),
-    onFinish: () => {
-      if (saveState.value.state === 'saving') saveState.value = { state: 'idle' }
-    },
   })
 }
 
@@ -660,6 +482,13 @@ function hasCurrentDocumentType(type: string) {
   return (props.application?.documents ?? []).some((d: any) => d.document_type === type && d.is_current_version)
 }
 
+function hasApplicationIdentityDoc(): boolean {
+  return (
+    hasCurrentDocumentType('nrc_copy') ||
+    hasCurrentDocumentType('passport_copy')
+  )
+}
+
 function hasCurrentQualificationDocument(qualificationId: number, type: string) {
   return (props.application?.documents ?? []).some(
     (d: any) => d.document_type === type && d.is_current_version && Number(d.qualification_id ?? 0) === Number(qualificationId),
@@ -718,14 +547,31 @@ const stepCompletion = computed(() => {
       : applicantType === 'individual'
         ? selfNrc.length > 0 || selfPassport.length > 0
         : true
+
+  const profileIdentityStored = !!(props.applicant?.applicant_profile?.identity_document_uploaded_at ?? false)
+  const identityUploadOk =
+    submittingFor === 'other'
+      ? hasApplicationIdentityDoc()
+      : hasApplicationIdentityDoc() || profileIdentityStored
+
   const applicantOk =
     (props.applicant?.email ?? '').toString().trim().length > 0 &&
     (props.applicant?.phone_primary ?? '').toString().trim().length > 0 &&
-    identityOk
+    identityOk &&
+    identityUploadOk
+
+  const qualificationDone =
+    qualificationRows.value.length > 0 &&
+    qualificationRows.value.every((q) => q._docsOk && qualificationSubjectsSatisfied(q))
+  const consentDone =
+    qualificationRows.value.length > 0 && qualificationRows.value.every((q) => q._consentOk)
 
   return {
     applicant: applicantOk,
-    qualification: qualifications.value.length > 0,
+    qualification: qualificationDone,
+    consent: consentDone,
+    payment: invoiceSettled.value,
+    review: invoiceSettled.value && declarationAccepted.value,
   } as Record<StepKey, boolean>
 })
 
@@ -821,12 +667,14 @@ onBeforeUnmount(() => {
 <template>
   <ApplicantLayout>
     <template #pageHeader>
-      <div class="zaqa-wizard-shell">
+      <div
+        class="w-full max-w-none mx-auto -mx-4 px-4 sm:-mx-6 sm:px-6 lg:-mx-6 lg:px-8 2xl:-mx-10 2xl:px-10"
+      >
         <div class="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
           <div>
-            <h1 class="text-2xl font-semibold tracking-tight text-text-primary">Application wizard</h1>
+            <h1 class="text-2xl font-semibold tracking-tight text-text-primary">Application</h1>
             <p class="mt-1 text-sm text-text-muted">
-              {{ application.application_number }} • {{ application.status_label }}
+              {{ application.application_number }} • {{ application.status_label }} — work through Applicant, Qualification, Consent, Payment, then review and submit.
             </p>
           </div>
 
@@ -883,6 +731,9 @@ onBeforeUnmount(() => {
       </div>
     </template>
 
+    <div
+      class="w-full max-w-none mx-auto -mx-4 px-4 sm:-mx-6 sm:px-6 lg:-mx-6 lg:px-8 2xl:-mx-10 2xl:px-10"
+    >
     <WizardShell class="zaqa-wizard-shell" :show-sidebar="showSidebar">
         <section v-if="activeStep === 'applicant'" class="rounded-xl border border-border bg-surface p-5">
           <h2 class="text-sm font-semibold text-text-primary">Applicant details</h2>
@@ -921,17 +772,28 @@ onBeforeUnmount(() => {
             </div>
             <InputError :message="(submittingForForm.errors as any).submitting_for" class="mt-2" />
 
-            <div v-if="submittingForForm.submitting_for === 'self' && !institutionOnlyOnBehalf" class="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
-              <div class="rounded-xl border border-border bg-surface px-4 py-3">
-                <div class="text-[11px] font-semibold uppercase tracking-wider text-text-muted">Name</div>
-                <div class="mt-1 text-sm font-semibold text-text-primary">
-                  {{ props.applicant?.name ?? '—' }}
+            <div v-if="submittingForForm.submitting_for === 'self' && !institutionOnlyOnBehalf" class="mt-4 space-y-3">
+              <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <div class="rounded-xl border border-border bg-surface px-4 py-3">
+                  <div class="text-[11px] font-semibold uppercase tracking-wider text-text-muted">Name</div>
+                  <div class="mt-1 text-sm font-semibold text-text-primary">
+                    {{ props.applicant?.name ?? '—' }}
+                  </div>
                 </div>
               </div>
-              <div class="rounded-xl border border-border bg-surface px-4 py-3">
-                <div class="text-[11px] font-semibold uppercase tracking-wider text-text-muted">NRC / Passport</div>
-                <div class="mt-1 text-sm font-semibold text-text-primary">
-                  {{ props.applicant?.applicant_profile?.nrc_number || props.applicant?.applicant_profile?.passport_number || '—' }}
+              <div v-if="applicantType === 'individual'" class="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <div>
+                  <label class="text-sm font-medium">NRC number</label>
+                  <input v-model="submittingForForm.profile_nrc_number" class="zaqa-input" autocomplete="off" />
+                  <InputError :message="(submittingForForm.errors as any).profile_nrc_number" />
+                </div>
+                <div>
+                  <label class="text-sm font-medium">Passport number</label>
+                  <input v-model="submittingForForm.profile_passport_number" class="zaqa-input" autocomplete="off" />
+                  <InputError :message="(submittingForForm.errors as any).profile_passport_number" />
+                </div>
+                <div class="sm:col-span-2 text-xs text-text-muted">
+                  Provide <span class="font-semibold text-text-primary">either NRC or Passport</span> (or both). Saved to your profile when you click Save.
                 </div>
               </div>
             </div>
@@ -964,6 +826,49 @@ onBeforeUnmount(() => {
               </div>
               <div class="sm:col-span-2 text-xs text-text-muted">
                 You must provide <span class="font-semibold text-text-primary">either NRC or Passport</span> (or both).
+              </div>
+            </div>
+          </div>
+
+          <div class="mt-6 rounded-2xl border border-border bg-surface-muted/40 p-5">
+            <div class="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+              <div>
+                <div class="text-sm font-semibold text-text-primary">Holder identity document</div>
+                <p class="mt-1 text-xs text-text-muted">
+                  A clear copy of the holder’s NRC or passport is required before you can submit. If you apply for yourself and already uploaded an identity document on your profile, you do not need to upload again here.
+                </p>
+              </div>
+            </div>
+
+            <div
+              v-if="
+                (props.application?.metadata?.submitting_for ?? 'self') === 'other'
+                  ? !hasApplicationIdentityDoc()
+                  : !hasApplicationIdentityDoc() && !props.applicant?.applicant_profile?.identity_document_uploaded_at
+              "
+              class="mt-4"
+            >
+              <DocumentManager
+                :upload-url="`/applicant/applications/${application.id}/documents`"
+                :documents="application.documents"
+                :transcript-required="false"
+                documents-scope="identity_only"
+              />
+            </div>
+            <div
+              v-else
+              class="mt-4 flex items-start gap-3 rounded-xl border border-success/25 bg-success/10 px-4 py-3 text-sm text-text-primary"
+            >
+              <CheckCircle2 class="mt-0.5 h-5 w-5 shrink-0 text-success" aria-hidden="true" />
+              <div>
+                <div class="font-semibold">Identity document on file</div>
+                <p class="mt-1 text-xs text-text-muted">
+                  {{
+                    hasApplicationIdentityDoc()
+                      ? 'Stored on this application.'
+                      : 'Using the identity document saved on your applicant profile.'
+                  }}
+                </p>
               </div>
             </div>
           </div>
@@ -1052,15 +957,125 @@ onBeforeUnmount(() => {
           </form>
         </section>
 
-        <section v-else-if="activeStep === 'qualification'" class="rounded-xl border border-border bg-surface p-5">
-          <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-            <div>
-              <h2 class="text-sm font-semibold text-text-primary">Qualifications</h2>
-              <p class="mt-1 text-xs text-text-muted">Add one or more qualifications for verification. Each item is verified separately.</p>
+        <section v-else-if="activeStep === 'qualification'" class="rounded-2xl border border-border bg-gradient-to-b from-surface to-surface-muted/25 p-6 shadow-sm ring-1 ring-black/[0.04] sm:p-8">
+          <div class="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
+            <div class="max-w-2xl">
+              <div class="inline-flex items-center gap-2 rounded-full border border-brand/20 bg-brand/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-wider text-brand">
+                <GraduationCap class="h-3.5 w-3.5" aria-hidden="true" />
+                Qualifications
+              </div>
+              <h2 class="mt-3 text-2xl font-semibold tracking-tight text-text-primary">Verification portfolio</h2>
+              <p class="mt-2 text-sm leading-relaxed text-text-muted">
+                Each qualification opens in a dedicated workspace: awarding country and institution, programme details, certificate uploads, and — when the award is outside Zambia — the institution consent template.
+              </p>
             </div>
-            <button type="button" class="zaqa-btn zaqa-btn-secondary px-3 py-2 text-xs" :disabled="applicationLocked" @click="startAddQualification">
+            <button
+              type="button"
+              class="zaqa-btn zaqa-btn-primary inline-flex h-11 shrink-0 items-center gap-2 px-5 text-sm font-semibold shadow-md shadow-brand/15"
+              :disabled="applicationLocked"
+              @click="openQualificationWorkspace('add')"
+            >
+              <PlusCircle class="h-4 w-4" aria-hidden="true" />
               Add qualification
             </button>
+          </div>
+
+          <div v-if="applicationLocked" class="mt-6 rounded-xl border border-warning/25 bg-warning/10 px-4 py-3 text-sm text-warning">
+            Payment is confirmed. This application is read-only.
+          </div>
+
+          <div class="mt-8 grid gap-8">
+            <div class="space-y-4">
+              <div v-if="qualificationRows.length === 0" class="rounded-2xl border border-dashed border-border bg-surface-muted/30 px-6 py-14 text-center">
+                <div class="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-brand/10 text-brand">
+                  <GraduationCap class="h-7 w-7" aria-hidden="true" />
+                </div>
+                <p class="mt-4 text-base font-semibold text-text-primary">No qualifications yet</p>
+                <p class="mt-2 max-w-md mx-auto text-sm text-text-muted">
+                  Add each programme or certificate you want verified. You can manage documents and institution consent inside the workspace.
+                </p>
+                <button
+                  type="button"
+                  class="zaqa-btn zaqa-btn-primary mt-6 inline-flex items-center gap-2 px-6"
+                  :disabled="applicationLocked"
+                  @click="openQualificationWorkspace('add')"
+                >
+                  <PlusCircle class="h-4 w-4" aria-hidden="true" />
+                  Add qualification
+                </button>
+              </div>
+
+              <div v-else class="grid gap-4">
+                <article
+                  v-for="q in qualificationRows"
+                  :key="q.id"
+                  class="overflow-hidden rounded-2xl border border-border bg-surface p-5 shadow-sm transition hover:border-brand/20 hover:shadow-md"
+                  :class="Number(selectedQualificationId) === Number(q.id) ? 'ring-2 ring-brand/20' : ''"
+                >
+                  <div class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                    <button type="button" class="min-w-0 text-left" @click="selectedQualificationId = q.id">
+                      <div class="flex flex-wrap items-center gap-2">
+                        <h3 class="text-lg font-semibold text-text-primary">{{ q.title_of_qualification || 'Untitled qualification' }}</h3>
+                        <span class="zaqa-badge text-xs" :class="q._isForeign ? 'zaqa-badge-warning' : 'zaqa-badge-success'">
+                          {{ q._isForeign ? 'Outside Zambia' : 'Zambia' }}
+                        </span>
+                      </div>
+                      <p class="mt-1 text-sm text-text-muted">Award date {{ q.award_date || '—' }}</p>
+                      <div class="mt-3 flex flex-wrap gap-2 text-xs font-medium">
+                        <span class="inline-flex items-center gap-1.5 rounded-full border border-border bg-surface-muted px-2.5 py-1 text-text-primary">
+                          Documents
+                          <span :class="q._docsOk ? 'text-emerald-700' : 'text-warning'">{{ q._docsOk ? 'Ready' : 'Needed' }}</span>
+                        </span>
+                        <span class="inline-flex items-center gap-1.5 rounded-full border border-border bg-surface-muted px-2.5 py-1 text-text-primary">
+                          Consent
+                          <span :class="q._consentOk ? 'text-emerald-700' : 'text-warning'">{{ q._consentOk ? 'Ready' : 'Needed' }}</span>
+                        </span>
+                      </div>
+                    </button>
+                    <div class="flex shrink-0 flex-wrap gap-2">
+                      <button
+                        type="button"
+                        class="zaqa-btn zaqa-btn-secondary inline-flex items-center gap-2 px-4 py-2 text-sm"
+                        @click="openQualificationWorkspace('edit', q)"
+                      >
+                        <PenLine class="h-4 w-4" aria-hidden="true" />
+                        Open workspace
+                      </button>
+                      <button
+                        v-if="!applicationLocked"
+                        type="button"
+                        class="zaqa-btn border border-danger/25 bg-danger/10 px-4 py-2 text-sm font-semibold text-danger hover:bg-danger/15"
+                        @click="removeQualification(q.id)"
+                      >
+                        Remove
+                      </button>
+                    </div>
+                  </div>
+                </article>
+              </div>
+            </div>
+          </div>
+
+          <div class="mt-10">
+            <WizardFooterBar
+              :show-prev="!!stepNav.prev"
+              :show-next="!!stepNav.next"
+              prev-label="Previous"
+              next-label="Next"
+              :on-prev="() => stepNav.prev && requestStepChange(stepNav.prev)"
+              :on-next="() => goNext('qualification')"
+            />
+          </div>
+        </section>
+
+        <section v-else-if="activeStep === 'consent'" class="rounded-xl border border-border bg-surface p-5">
+          <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+            <div>
+              <h2 class="text-sm font-semibold text-text-primary">Consent</h2>
+              <p class="mt-1 text-xs text-text-muted">
+                Complete consent for each qualification. Foreign (non-Zambian) awarding institutions require a signed institution consent form upload; local items use the embedded consent statement.
+              </p>
+            </div>
           </div>
 
           <div v-if="applicationLocked" class="mt-4 rounded-xl border border-warning/20 bg-warning/10 px-4 py-3 text-sm text-warning">
@@ -1068,7 +1083,6 @@ onBeforeUnmount(() => {
           </div>
 
           <div class="mt-4 grid gap-4 lg:grid-cols-3">
-            <!-- List -->
             <div class="lg:col-span-1">
               <div class="rounded-xl border border-border bg-surface-muted p-4">
                 <div class="text-xs font-semibold uppercase tracking-wider text-text-muted">Your items</div>
@@ -1082,223 +1096,27 @@ onBeforeUnmount(() => {
                     :class="Number(selectedQualificationId) === Number(q.id) ? 'border-brand/30 bg-brand/5' : 'border-border bg-surface hover:bg-surface-muted'"
                     @click="selectedQualificationId = q.id"
                   >
-                    <div class="flex items-start justify-between gap-3">
-                      <div class="min-w-0">
-                        <div class="truncate text-sm font-semibold text-text-primary">{{ q.title_of_qualification || 'Untitled qualification' }}</div>
-                        <div class="mt-1 text-xs text-text-muted">
-                          {{ q._isForeign ? 'Foreign' : 'Local' }} • {{ q.award_date || '—' }}
-                        </div>
-                        <div class="mt-1 text-[11px] text-text-muted">
-                          Docs: <span class="font-semibold" :class="q._docsOk ? 'text-emerald-700' : 'text-warning'">{{ q._docsOk ? 'OK' : 'Missing' }}</span>
-                          <span v-if="q._isForeign"> • Consent: <span class="font-semibold" :class="q._consentOk ? 'text-emerald-700' : 'text-warning'">{{ q._consentOk ? 'OK' : 'Missing' }}</span></span>
-                        </div>
-                      </div>
-                      <button
-                        v-if="!applicationLocked"
-                        type="button"
-                        class="zaqa-btn border border-danger/20 bg-danger/10 px-2 py-1 text-[11px] font-semibold text-danger hover:bg-danger/15"
-                        @click.stop="removeQualification(q.id)"
-                      >
-                        Remove
-                      </button>
+                    <div class="truncate text-sm font-semibold text-text-primary">{{ q.title_of_qualification || 'Untitled qualification' }}</div>
+                    <div class="mt-1 text-[11px] text-text-muted">
+                      Consent:
+                      <span class="font-semibold" :class="q._consentOk ? 'text-emerald-700' : 'text-warning'">{{ q._consentOk ? 'OK' : 'Missing' }}</span>
                     </div>
                   </button>
                 </div>
               </div>
-
-              <!-- Invoice total -->
-              <div class="mt-4 rounded-xl border border-border bg-surface p-4">
-                <div class="text-xs font-semibold uppercase tracking-wider text-text-muted">Invoice total</div>
-                <div class="mt-2 text-lg font-semibold text-text-primary">
-                  <span v-if="invoice">{{ ((invoice.amount_cents ?? 0) / 100).toFixed(2) }} {{ invoice.currency ?? 'ZMW' }}</span>
-                  <span v-else>{{ (invoiceTotalPreview.amountCents / 100).toFixed(2) }} {{ invoiceTotalPreview.currency }}</span>
-                </div>
-                <div class="mt-1 text-xs text-text-muted">
-                  {{ invoice ? `Invoice ${invoice.invoice_number} (${invoice.status})` : 'Preview (final invoice is generated before payment).' }}
-                </div>
-                <button
-                  v-if="!invoice && !applicationLocked"
-                  type="button"
-                  class="zaqa-btn zaqa-btn-primary mt-3 w-full"
-                  :disabled="prepareInvoiceForm.processing || qualificationRows.length === 0"
-                  @click="
-                    prepareInvoiceForm.post(`/applicant/applications/${application.id}/payment/prepare`, {
-                      preserveScroll: true,
-                      onSuccess: () => router.reload({ only: ['application'] }),
-                    })
-                  "
-                >
-                  Generate invoice
-                </button>
-              </div>
             </div>
 
-            <!-- Editor -->
-            <div class="lg:col-span-2 space-y-4">
+            <div class="lg:col-span-2">
               <div class="rounded-xl border border-border bg-surface p-5">
-                <div class="flex items-start justify-between gap-4">
-                  <div>
-                    <div class="text-sm font-semibold text-text-primary">Edit qualification</div>
-                    <div class="mt-1 text-xs text-text-muted">All fields must match the uploaded documents.</div>
-                  </div>
-                </div>
-
-                <form class="mt-4 space-y-4" @submit.prevent="saveQualificationDetails">
-                  <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                    <div>
-                      <label class="text-sm font-medium">Holder name</label>
-                      <input v-model="qualificationDetailsForm.qualification_holder_name" class="zaqa-input" :disabled="applicationLocked" />
-                      <InputError :message="(qualificationDetailsForm.errors as any).qualification_holder_name" />
-                    </div>
-                    <div>
-                      <label class="text-sm font-medium">Holder NRC / Passport</label>
-                      <input v-model="qualificationDetailsForm.nrc_passport_number" class="zaqa-input" :disabled="applicationLocked" />
-                      <InputError :message="(qualificationDetailsForm.errors as any).nrc_passport_number" />
-                    </div>
-                  </div>
-
-                  <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                    <div>
-                      <label class="text-sm font-medium">Country of award</label>
-                      <select v-model="qualificationDetailsForm.country_id" class="zaqa-input" :disabled="applicationLocked">
-                        <option value="">Select country</option>
-                        <option v-for="c in countries" :key="c.id" :value="c.id">{{ c.name }}</option>
-                      </select>
-                      <InputError :message="qualificationDetailsForm.errors.country_id" />
-                    </div>
-                    <div>
-                      <InstitutionCombobox
-                        :country-id="qualificationDetailsForm.country_id"
-                        v-model="qualificationDetailsForm.awarding_institution_id"
-                        query-endpoint="/applicant/reference/awarding-institutions"
-                        :error="qualificationDetailsForm.errors.awarding_institution_id"
-                        :disabled="applicationLocked"
-                      />
-                    </div>
-                    <div v-if="institutionIsOther" class="sm:col-span-2">
-                      <label class="text-sm font-medium">Other Awarding Institution name</label>
-                      <input v-model="qualificationDetailsForm.awarding_institution_name_other" class="zaqa-input" :disabled="applicationLocked" />
-                      <InputError :message="qualificationDetailsForm.errors.awarding_institution_name_other" />
-                    </div>
-                  </div>
-
-                  <div>
-                    <label class="text-sm font-medium">Qualification type (ZQF level)</label>
-                    <select v-model="qualificationDetailsForm.qualification_type_id" class="zaqa-input" :disabled="applicationLocked || !!application.invoice">
-                      <option value="" disabled>Select a qualification type…</option>
-                      <option v-for="t in qualificationTypes" :key="t.id" :value="t.id">{{ t.name }}</option>
-                    </select>
-                    <InputError :message="(qualificationDetailsForm.errors as any).qualification_type_id" />
-                    <div v-if="application.invoice" class="mt-2 rounded-lg border border-warning/20 bg-warning/10 px-3 py-2 text-xs text-warning">
-                      An invoice has been generated. Qualification type is now locked and cannot be changed.
-                    </div>
-                  </div>
-
-                  <div>
-                    <label class="text-sm font-medium">Title of qualification</label>
-                    <input v-model="qualificationDetailsForm.title_of_qualification" class="zaqa-input" :disabled="applicationLocked" />
-                    <InputError :message="qualificationDetailsForm.errors.title_of_qualification" />
-                  </div>
-
-                  <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                    <div>
-                      <label class="text-sm font-medium">Identifier type</label>
-                      <select v-model="identifierType" class="zaqa-input" :disabled="applicationLocked">
-                        <option value="certificate_number">Certificate number</option>
-                        <option value="student_number">Student number</option>
-                        <option value="examination_number">Examination number</option>
-                      </select>
-                    </div>
-                    <div>
-                      <label class="text-sm font-medium">Identifier value</label>
-                      <input v-model="identifierValue" class="zaqa-input" :disabled="applicationLocked" />
-                      <InputError :message="qualificationDetailsForm.errors.certificate_number" />
-                    </div>
-                  </div>
-
-                  <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                    <div>
-                      <label class="text-sm font-medium">Award date</label>
-                      <input v-model="qualificationDetailsForm.award_date" type="date" class="zaqa-input" :disabled="applicationLocked" />
-                      <InputError :message="qualificationDetailsForm.errors.award_date" />
-                    </div>
-                  </div>
-
-                  <div>
-                    <label class="text-sm font-medium">Notes (optional)</label>
-                    <textarea v-model="qualificationDetailsForm.notes" class="zaqa-input min-h-[90px]" :disabled="applicationLocked" />
-                    <InputError :message="qualificationDetailsForm.errors.notes" />
-                  </div>
-
-                  <div class="flex gap-2">
-                    <button type="button" class="zaqa-btn zaqa-btn-primary" :disabled="applicationLocked || qualificationDetailsForm.processing" @click="saveQualificationDetails()">
-                      Save qualification
-                    </button>
-                  </div>
-                </form>
-              </div>
-
-              <!-- Subjects (when required) -->
-              <div v-if="needsSubjects" class="rounded-xl border border-border bg-surface p-5">
-                <div class="text-sm font-semibold text-text-primary">Subject results</div>
-                <div class="mt-1 text-xs text-text-muted">Required for school certificates.</div>
-                <div v-if="!selectedQualificationId" class="mt-3 text-sm text-text-muted">Select a qualification first.</div>
-                <form v-else class="mt-4 space-y-3" @submit.prevent="saveSubjectResults">
-                  <div class="flex items-center justify-between">
-                    <div class="text-sm font-semibold text-text-primary">Subjects</div>
-                    <button type="button" class="zaqa-btn zaqa-btn-secondary px-3 py-2 text-sm" :disabled="applicationLocked" @click="addSubject">Add subject</button>
-                  </div>
-                  <div class="space-y-3">
-                    <div v-for="(row, idx) in subjectResultsForm.subject_results" :key="idx" class="grid grid-cols-1 gap-3 sm:grid-cols-7">
-                      <div class="sm:col-span-4">
-                        <label class="text-xs font-medium">Subject</label>
-                        <input v-model="row.subject_name" class="zaqa-input" :disabled="applicationLocked" />
-                      </div>
-                      <div class="sm:col-span-2">
-                        <label class="text-xs font-medium">Grade</label>
-                        <input v-model="row.grade" class="zaqa-input" :disabled="applicationLocked" />
-                      </div>
-                      <div class="sm:col-span-1 sm:flex sm:items-end">
-                        <button type="button" class="zaqa-btn zaqa-btn-ghost w-full px-3 py-2 text-sm" :disabled="applicationLocked" @click="removeSubject(idx)">Remove</button>
-                      </div>
-                    </div>
-                  </div>
-                  <button type="button" class="zaqa-btn zaqa-btn-secondary" :disabled="applicationLocked" @click="saveSubjectResults()">Save subject results</button>
-                </form>
-              </div>
-
-              <!-- Documents -->
-              <div class="rounded-xl border border-border bg-surface p-5">
-                <div class="text-sm font-semibold text-text-primary">Documents</div>
-                <div class="mt-1 text-xs text-text-muted">Upload identity once, and upload qualification documents per item.</div>
-
-                <div class="mt-4">
-                  <div class="text-xs font-semibold uppercase tracking-wider text-text-muted">Identity document</div>
-                  <DocumentManager :upload-url="`/applicant/applications/${application.id}/documents`" :documents="application.documents" :transcript-required="false" />
-                </div>
-
-                <div class="mt-6" v-if="selectedQualificationId">
-                  <div class="text-xs font-semibold uppercase tracking-wider text-text-muted">Selected qualification documents</div>
-                  <DocumentManager
-                    :upload-url="`/applicant/applications/${application.id}/documents`"
-                    :documents="application.documents.filter((d: any) => Number(d.qualification_id ?? 0) === Number(selectedQualificationId))"
-                    :transcript-required="transcriptRequired"
-                    :qualification-id="selectedQualificationId"
-                  />
-                </div>
-              </div>
-
-              <!-- Consent -->
-              <div class="rounded-xl border border-border bg-surface p-5">
-                <div class="text-sm font-semibold text-text-primary">Consent</div>
-                <div class="mt-1 text-xs text-text-muted">Consent requirements apply per qualification item.</div>
+                <div class="text-sm font-semibold text-text-primary">Consent for selected qualification</div>
+                <div class="mt-1 text-xs text-text-muted">Select an item on the left if you have more than one.</div>
 
                 <div v-if="!selectedQualificationId" class="mt-3 text-sm text-text-muted">Select a qualification item to manage consent.</div>
                 <div v-else class="mt-4">
                   <div v-if="selectedQualification?.requires_foreign_consent" class="space-y-3">
                     <div class="text-sm font-semibold text-text-primary">Foreign consent upload</div>
                     <p class="text-sm text-text-muted">
-                      This is a foreign qualification. Please download the consent form for the selected awarding institution, sign it, and upload the signed copy.
+                      Download the consent form for the selected awarding institution, sign it, and upload the signed copy.
                     </p>
 
                     <div
@@ -1316,13 +1134,13 @@ onBeforeUnmount(() => {
                         rel="noopener"
                         class="zaqa-btn zaqa-btn-secondary px-3 py-2 text-xs"
                       >
-                        Download Institution Consent Form
+                        Download institution consent form
                       </a>
                     </div>
 
                     <div class="grid grid-cols-1 gap-3">
                       <div>
-                        <label class="text-sm font-medium">Upload Signed Consent Form</label>
+                        <label class="text-sm font-medium">Upload signed consent form</label>
                         <input
                           type="file"
                           accept=".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
@@ -1334,7 +1152,7 @@ onBeforeUnmount(() => {
                       </div>
                       <button
                         type="button"
-                        class="zaqa-btn zaqa-btn-primary"
+                        class="zaqa-btn zaqa-btn-primary w-fit"
                         :disabled="applicationLocked || foreignConsentForm.processing || !foreignConsentForm.file || selectedQualification?.institution_has_consent_form === false"
                         @click="uploadForeignConsent"
                       >
@@ -1349,253 +1167,40 @@ onBeforeUnmount(() => {
                       <div class="mt-2 max-h-56 overflow-auto whitespace-pre-wrap text-sm text-text-primary">{{ localConsent.text }}</div>
                       <div class="mt-2 text-xs text-text-muted">Version: {{ localConsent.version }}</div>
                     </div>
+                    <p class="text-xs text-text-muted">
+                      Accepting applies your agreement to all local qualifications on this application.
+                    </p>
                     <div class="grid grid-cols-1 gap-3 sm:grid-cols-3">
                       <div class="sm:col-span-2">
                         <label class="text-sm font-medium">Type your full name to confirm</label>
                         <input v-model="consentName" class="zaqa-input" :disabled="applicationLocked" />
                         <InputError :message="localConsentForm.errors.agreed_by_name" />
                       </div>
-                      <button type="button" class="zaqa-btn zaqa-btn-primary mt-6 px-4 py-2 text-sm sm:mt-7" :disabled="applicationLocked || localConsentForm.processing || consentName.trim().length === 0" @click="acceptLocalConsent">
+                      <button
+                        type="button"
+                        class="zaqa-btn zaqa-btn-primary mt-6 px-4 py-2 text-sm sm:mt-7"
+                        :disabled="applicationLocked || localConsentForm.processing || consentName.trim().length === 0"
+                        @click="acceptLocalConsent"
+                      >
                         Accept consent
                       </button>
                     </div>
                   </div>
                 </div>
               </div>
-
-              <!-- Payment + Submit (kept here to preserve 2-step UX) -->
-              <div class="rounded-xl border border-border bg-surface p-5">
-                <div class="text-sm font-semibold text-text-primary">Payment & submission</div>
-                <div class="mt-1 text-xs text-text-muted">Generate invoice, complete payment, then submit.</div>
-                <div class="mt-3 rounded-xl border border-border bg-surface-muted p-4">
-                  <div class="flex items-start justify-between gap-4">
-                    <div>
-                      <div class="text-xs font-semibold uppercase tracking-wider text-text-muted">Invoice</div>
-                      <div class="mt-1 text-sm font-semibold text-text-primary">{{ invoice?.invoice_number ?? '—' }}</div>
-                      <div class="mt-1 text-xs text-text-muted">Status: {{ invoice?.status ?? 'not generated' }}</div>
-                    </div>
-                    <div class="text-right">
-                      <div class="text-xs font-semibold uppercase tracking-wider text-text-muted">Total</div>
-                      <div class="mt-1 text-lg font-semibold text-text-primary">
-                        {{ (((invoice?.amount_cents ?? invoiceTotalPreview.amountCents) || 0) / 100).toFixed(2) }} {{ invoice?.currency ?? invoiceTotalPreview.currency }}
-                      </div>
-                    </div>
-                  </div>
-                  <div class="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                    <button
-                      v-if="!invoice && !applicationLocked"
-                      type="button"
-                      class="zaqa-btn zaqa-btn-primary"
-                      :disabled="prepareInvoiceForm.processing || qualificationRows.length === 0"
-                      @click="
-                        prepareInvoiceForm.post(`/applicant/applications/${application.id}/payment/prepare`, {
-                          preserveScroll: true,
-                          onSuccess: () => router.reload({ only: ['application'] }),
-                        })
-                      "
-                    >
-                      Generate invoice
-                    </button>
-                    <button v-else type="button" class="zaqa-btn zaqa-btn-secondary" @click="refreshPaymentStatus">
-                      Refresh status
-                    </button>
-                  </div>
-                </div>
-
-                <div class="mt-4">
-                  <button type="button" class="zaqa-btn zaqa-btn-primary w-full" :disabled="!canSubmitNow" @click="submitApplication">Submit application</button>
-                  <div v-if="submissionBlockReasons.length" class="mt-2 text-xs text-text-muted">
-                    <div v-for="(r, i) in submissionBlockReasons" :key="i">- {{ r }}</div>
-                  </div>
-                </div>
-              </div>
             </div>
           </div>
-        </section>
 
-        <section v-else-if="activeStep === 'subjects'" class="rounded-xl border border-border bg-surface p-5">
-          <h2 class="text-sm font-semibold text-text-primary">Subject results</h2>
-          <p class="mt-1 text-xs text-text-muted">Add subjects and grades as they appear on the certificate.</p>
-
-          <div v-if="!qualificationSaved" class="mt-4 rounded-lg border border-warning/20 bg-warning/10 px-4 py-3 text-sm text-warning">
-            Save qualification details first, then add subject results.
-          </div>
-
-          <form v-else class="mt-4 space-y-4" @submit.prevent="saveSubjectResults">
-            <div class="flex items-center justify-between">
-              <div class="text-sm font-semibold text-text-primary">Subjects</div>
-              <button type="button" class="zaqa-btn zaqa-btn-secondary px-3 py-2 text-sm" @click="addSubject">Add subject</button>
-            </div>
-
-            <div class="space-y-3">
-              <div v-for="(row, idx) in subjectResultsForm.subject_results" :key="idx" class="grid grid-cols-1 gap-3 sm:grid-cols-7">
-                <div class="sm:col-span-4">
-                  <label class="text-xs font-medium">Subject</label>
-                  <input v-model="row.subject_name" class="zaqa-input" />
-                  <InputError :message="(subjectResultsForm.errors as any)[`subject_results.${idx}.subject_name`]" />
-                </div>
-                <div class="sm:col-span-2">
-                  <label class="text-xs font-medium">Grade</label>
-                  <input v-model="row.grade" class="zaqa-input" />
-                  <InputError :message="(subjectResultsForm.errors as any)[`subject_results.${idx}.grade`]" />
-                </div>
-                <div class="sm:col-span-1 sm:flex sm:items-end">
-                  <button type="button" class="zaqa-btn zaqa-btn-ghost w-full px-3 py-2 text-sm" @click="removeSubject(idx)">
-                    Remove
-                  </button>
-                </div>
-              </div>
-            </div>
-
-            <InputError :message="(subjectResultsForm.errors as any).subject_results" />
-
+          <div class="mt-6">
             <WizardFooterBar
               :show-prev="!!stepNav.prev"
               :show-next="!!stepNav.next"
+              prev-label="Previous"
+              next-label="Next"
               :on-prev="() => stepNav.prev && requestStepChange(stepNav.prev)"
-              :on-next="() => goNext('subjects')"
-            />
-          </form>
-        </section>
-
-        <section v-else-if="activeStep === 'documents'" class="rounded-xl border border-border bg-surface p-5">
-          <h2 class="text-sm font-semibold text-text-primary">Documents</h2>
-          <p class="mt-1 text-xs text-text-muted">Upload clear, readable copies. PDF is preferred.</p>
-
-          <div class="mt-4">
-            <DocumentManager
-              :upload-url="`/applicant/applications/${application.id}/documents`"
-              :documents="application.documents"
-              :transcript-required="transcriptRequired"
+              :on-next="() => goNext('consent')"
             />
           </div>
-
-          <WizardFooterBar
-            :show-prev="!!stepNav.prev"
-            :show-next="!!stepNav.next"
-            :on-prev="() => stepNav.prev && requestStepChange(stepNav.prev)"
-            :on-next="() => goNext('documents')"
-          />
-        </section>
-
-        <section v-else-if="activeStep === 'consent'" class="rounded-xl border border-border bg-surface p-5">
-          <h2 class="text-sm font-semibold text-text-primary">Consent</h2>
-
-          <div v-if="application.is_foreign" class="mt-3">
-            <p class="text-sm text-text-muted">
-              Foreign applications require two consent uploads:
-              <span class="font-semibold text-text-primary">Awarding Institution consent</span> and
-              <span class="font-semibold text-text-primary">ZAQA consent</span>.
-            </p>
-
-            <div class="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
-              <div
-                class="rounded-lg border px-4 py-3 text-sm"
-                :class="application.consent_form?.uploaded_document_id ? 'border-success/20 bg-success/10 text-success' : 'border-warning/20 bg-warning/10 text-warning'"
-              >
-                <div class="font-semibold">Awarding Institution consent</div>
-                <div class="mt-1 text-xs opacity-90">
-                  {{ application.consent_form?.uploaded_document_id ? 'Uploaded' : 'Missing' }}
-                </div>
-              </div>
-              <div
-                class="rounded-lg border px-4 py-3 text-sm"
-                :class="application.consent_form?.zaqa_uploaded_document_id ? 'border-success/20 bg-success/10 text-success' : 'border-warning/20 bg-warning/10 text-warning'"
-              >
-                <div class="font-semibold">ZAQA consent</div>
-                <div class="mt-1 text-xs opacity-90">
-                  {{ application.consent_form?.zaqa_uploaded_document_id ? 'Uploaded' : 'Missing' }}
-                </div>
-              </div>
-            </div>
-
-            <div class="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <div class="sm:col-span-2">
-                <div class="text-xs font-semibold uppercase tracking-wider text-text-muted">Awarding institution</div>
-                <div class="mt-2 rounded-xl border border-border bg-surface-muted px-4 py-3 text-sm font-semibold text-text-primary">
-                  {{ awardingInstitutionLabel }}
-                </div>
-                <div class="mt-1 text-xs text-text-muted">This is pulled from Step 2 and saved with your application.</div>
-              </div>
-
-              <div class="sm:col-span-2">
-                <label class="text-sm font-medium">Awarding Institution signed consent form</label>
-                <input type="file" accept="application/pdf,image/*" class="zaqa-input" @change="onForeignFileChange" />
-                <InputError :message="foreignConsentForm.errors.file" />
-              </div>
-
-              <div class="sm:col-span-2">
-                <label class="text-sm font-medium">ZAQA signed consent form</label>
-                <input type="file" accept="application/pdf,image/*" class="zaqa-input" @change="onZaqaFileChange" />
-                <InputError :message="(foreignConsentForm.errors as any).zaqa_file" />
-              </div>
-
-              <button
-                type="button"
-                class="zaqa-btn zaqa-btn-primary sm:col-span-2"
-                :disabled="foreignConsentForm.processing || !foreignConsentForm.file || !foreignConsentForm.zaqa_file"
-                @click="uploadForeignConsent"
-              >
-                Upload signed consent
-              </button>
-            </div>
-          </div>
-
-          <div v-else class="mt-3">
-            <p class="text-sm text-text-muted">Read the consent statement below and accept it before submitting.</p>
-
-            <div class="mt-4 rounded-lg border border-border bg-surface-muted p-4">
-              <div class="text-sm font-semibold">{{ localConsent.title }}</div>
-              <div class="mt-2 max-h-56 overflow-auto whitespace-pre-wrap text-sm text-text-primary">{{ localConsent.text }}</div>
-              <div class="mt-2 text-xs text-text-muted">Version: {{ localConsent.version }}</div>
-            </div>
-
-            <div v-if="application.consent_form?.agreed_at" class="mt-3 rounded-lg border border-success/20 bg-success/10 px-4 py-3 text-sm text-success">
-              Accepted on {{ application.consent_form.agreed_at }} by {{ application.consent_form.agreed_by_name }}.
-            </div>
-
-            <div v-if="!application.consent_form?.agreed_at" class="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
-              <div class="sm:col-span-2">
-                <label class="text-sm font-medium">Type your full name to confirm</label>
-                <input v-model="consentName" class="zaqa-input" />
-                <InputError :message="localConsentForm.errors.agreed_by_name" />
-              </div>
-
-              <button type="button" class="zaqa-btn zaqa-btn-primary mt-6 px-4 py-2 text-sm sm:mt-7" :disabled="localConsentForm.processing || consentName.trim().length === 0" @click="acceptLocalConsent">
-                Accept consent
-              </button>
-            </div>
-
-            <div class="mt-4 rounded-xl border border-border bg-surface p-4">
-              <div class="text-sm font-semibold text-text-primary">Upload signed consent form (optional)</div>
-              <div class="mt-1 text-xs text-text-muted">
-                If you already have a signed consent form, you may upload it here for reference. This is optional for now.
-              </div>
-
-              <div class="mt-3 grid grid-cols-1 gap-4 sm:grid-cols-2">
-                <div class="sm:col-span-2">
-                  <label class="text-sm font-medium">Signed consent form file</label>
-                  <input type="file" accept="application/pdf,image/*" class="zaqa-input" @change="onForeignFileChange" />
-                  <InputError :message="foreignConsentForm.errors.file" />
-                </div>
-                <button
-                  type="button"
-                  class="zaqa-btn zaqa-btn-secondary sm:col-span-2"
-                  :disabled="foreignConsentForm.processing || !foreignConsentForm.file"
-                  @click="uploadForeignConsent"
-                >
-                  Upload signed consent (optional)
-                </button>
-              </div>
-            </div>
-          </div>
-
-          <WizardFooterBar
-            :show-prev="!!stepNav.prev"
-            :show-next="!!stepNav.next"
-            :on-prev="() => stepNav.prev && requestStepChange(stepNav.prev)"
-            :on-next="() => goNext('consent')"
-          />
         </section>
 
         <section v-else-if="activeStep === 'payment'" class="rounded-xl border border-border bg-surface p-5">
@@ -1626,8 +1231,8 @@ onBeforeUnmount(() => {
                 <div class="text-right">
                   <div class="text-xs font-semibold text-text-muted uppercase tracking-wider">Amount</div>
                   <div class="mt-1 text-2xl font-semibold tracking-tight text-text-primary">
-                    {{ ((invoice?.amount_cents ?? 0) / 100).toFixed(2) }}
-                    <span class="text-sm font-semibold text-text-muted">{{ invoice?.currency ?? 'ZMW' }}</span>
+                    {{ ((invoice?.amount_cents ?? (invoice ? 0 : invoiceTotalPreview.amountCents)) / 100).toFixed(2) }}
+                    <span class="text-sm font-semibold text-text-muted">{{ invoice?.currency ?? invoiceTotalPreview.currency }}</span>
                   </div>
                 </div>
                 <span class="zaqa-badge" :class="invoice?.status === 'paid' ? 'zaqa-badge-success' : 'zaqa-badge-warning'">
@@ -1637,7 +1242,28 @@ onBeforeUnmount(() => {
             </div>
 
             <div class="mt-3 rounded-lg border border-warning/20 bg-warning/10 px-3 py-2 text-xs text-warning">
-              Reaching this step generates an invoice and locks the qualification type. Change it before Payment if needed.
+              Generating an invoice locks qualification types. Change qualification details on the Qualification step before generating an invoice if needed.
+            </div>
+
+            <div v-if="!invoice && !applicationLocked" class="mt-4 flex flex-col gap-3 border-t border-border/60 pt-4 sm:flex-row sm:items-end sm:justify-between">
+              <div class="text-sm text-text-muted">
+                Estimated total
+                <span class="font-semibold text-text-primary">{{ (invoiceTotalPreview.amountCents / 100).toFixed(2) }} {{ invoiceTotalPreview.currency }}</span>
+                — generate the invoice to enable payment.
+              </div>
+              <button
+                type="button"
+                class="zaqa-btn zaqa-btn-primary shrink-0"
+                :disabled="prepareInvoiceForm.processing || qualificationRows.length === 0"
+                @click="
+                  prepareInvoiceForm.post(`/applicant/applications/${application.id}/payment/prepare`, {
+                    preserveScroll: true,
+                    onSuccess: () => router.reload({ only: ['application'] }),
+                  })
+                "
+              >
+                Generate invoice
+              </button>
             </div>
           </div>
 
@@ -1681,7 +1307,7 @@ onBeforeUnmount(() => {
               </div>
             </div>
 
-            <div v-else>
+            <div v-else-if="invoice">
             <div class="flex gap-2 overflow-x-auto rounded-xl border border-border bg-surface p-2">
 	              <button
 	                type="button"
@@ -1798,17 +1424,23 @@ onBeforeUnmount(() => {
 	              </div>
             </div>
             </div>
+
+            <div v-else class="rounded-xl border border-border bg-surface-muted px-4 py-4 text-sm text-text-muted">
+              Generate an invoice using the button in the summary card above. Payment methods unlock once an invoice exists.
+            </div>
           </div>
 
           <WizardFooterBar
             :show-prev="!!stepNav.prev"
             :show-next="!!stepNav.next"
+            prev-label="Previous"
+            next-label="Next"
             :on-prev="() => stepNav.prev && requestStepChange(stepNav.prev)"
             :on-next="() => goNext('payment')"
           />
         </section>
 
-        <section v-else class="rounded-xl border border-border bg-surface p-5">
+        <section v-else-if="activeStep === 'review'" class="rounded-xl border border-border bg-surface p-5">
           <div class="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
             <div>
               <h2 class="text-base font-semibold text-text-primary">Final review</h2>
@@ -1899,61 +1531,56 @@ onBeforeUnmount(() => {
                 <button v-if="application.can_edit" type="button" class="zaqa-btn zaqa-btn-secondary px-3 py-2 text-xs" @click="goToStep('qualification')">Edit</button>
               </div>
 
-              <div v-if="!application.qualification" class="mt-3 rounded-xl border border-danger/20 bg-danger/10 px-4 py-3 text-sm text-danger">
+              <div v-if="qualifications.length === 0" class="mt-3 rounded-xl border border-danger/20 bg-danger/10 px-4 py-3 text-sm text-danger">
                 Qualification details are missing.
                 <InputError :message="(submitForm.errors as any).qualification" class="mt-2" />
               </div>
-              <div v-else class="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
-                <div class="rounded-xl border border-border bg-surface-muted px-4 py-3">
-                  <div class="text-[11px] font-semibold uppercase tracking-wider text-text-muted">Qualification type</div>
-                  <div class="mt-1 text-sm font-semibold text-text-primary">
-                    {{ application.qualification.qualification_type_master?.level_label }} — {{ application.qualification.qualification_type_master?.name }}
+              <div v-else class="mt-3 space-y-5">
+                <div
+                  v-for="q in qualifications"
+                  :key="q.id"
+                  class="rounded-xl border border-border bg-surface-muted/60 p-4"
+                >
+                  <div class="text-xs font-semibold uppercase tracking-wider text-text-muted">Qualification</div>
+                  <div class="mt-1 text-sm font-semibold text-text-primary">{{ q.title_of_qualification || 'Untitled qualification' }}</div>
+                  <div class="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
+                    <div class="rounded-xl border border-border bg-surface-muted px-4 py-3">
+                      <div class="text-[11px] font-semibold uppercase tracking-wider text-text-muted">Qualification type</div>
+                      <div class="mt-1 text-sm font-semibold text-text-primary">
+                        {{ q.qualification_type_master?.level_label }} — {{ q.qualification_type_master?.name }}
+                      </div>
+                    </div>
+                    <div class="rounded-xl border border-border bg-surface-muted px-4 py-3">
+                      <div class="text-[11px] font-semibold uppercase tracking-wider text-text-muted">Award scope</div>
+                      <div class="mt-1 text-sm font-semibold text-text-primary">{{ q.is_foreign_qualification ? 'Foreign' : 'Local' }}</div>
+                    </div>
+                    <div class="rounded-xl border border-border bg-surface-muted px-4 py-3">
+                      <div class="text-[11px] font-semibold uppercase tracking-wider text-text-muted">Country of award</div>
+                      <div class="mt-1 text-sm font-semibold text-text-primary">
+                        {{ countries.find((c) => c.id === q.country_id)?.name ?? q.country?.name ?? '—' }}
+                      </div>
+                    </div>
+                    <div class="rounded-xl border border-border bg-surface-muted px-4 py-3">
+                      <div class="text-[11px] font-semibold uppercase tracking-wider text-text-muted">Awarding institution</div>
+                      <div class="mt-1 text-sm font-semibold text-text-primary">
+                        {{ q.awarding_institution_name_other || q.awarding_institution?.name || q.awarding_institution_name || '—' }}
+                      </div>
+                    </div>
+                    <div class="rounded-xl border border-border bg-surface-muted px-4 py-3">
+                      <div class="text-[11px] font-semibold uppercase tracking-wider text-text-muted">Award date</div>
+                      <div class="mt-1 text-sm font-semibold text-text-primary">{{ q.award_date || '—' }}</div>
+                    </div>
+                    <div class="rounded-xl border border-border bg-surface-muted px-4 py-3">
+                      <div class="text-[11px] font-semibold uppercase tracking-wider text-text-muted">Certificate / student / exam ID</div>
+                      <div class="mt-1 text-sm font-semibold text-text-primary">
+                        {{ q.certificate_number || q.student_number || q.examination_number || '—' }}
+                      </div>
+                    </div>
+                    <div class="rounded-xl border border-border bg-surface-muted px-4 py-3 sm:col-span-2">
+                      <div class="text-[11px] font-semibold uppercase tracking-wider text-text-muted">Notes</div>
+                      <div class="mt-1 whitespace-pre-wrap text-sm font-semibold text-text-primary">{{ q.notes || '—' }}</div>
+                    </div>
                   </div>
-                </div>
-                <div class="rounded-xl border border-border bg-surface-muted px-4 py-3">
-                  <div class="text-[11px] font-semibold uppercase tracking-wider text-text-muted">Local / foreign</div>
-                  <div class="mt-1 text-sm font-semibold text-text-primary">{{ application.is_foreign ? 'Foreign' : 'Local' }}</div>
-                </div>
-                <div class="rounded-xl border border-border bg-surface-muted px-4 py-3">
-                  <div class="text-[11px] font-semibold uppercase tracking-wider text-text-muted">Country of award</div>
-                  <div class="mt-1 text-sm font-semibold text-text-primary">
-                    {{ countries.find((c) => c.id === application.qualification.country_id)?.name ?? '—' }}
-                  </div>
-                </div>
-                <div class="rounded-xl border border-border bg-surface-muted px-4 py-3">
-                  <div class="text-[11px] font-semibold uppercase tracking-wider text-text-muted">Awarding institution</div>
-                  <div class="mt-1 text-sm font-semibold text-text-primary">
-                    {{
-                      application.qualification.awarding_institution_name_other ||
-                      application.qualification.awarding_institution?.name ||
-                      application.qualification.awarding_institution_name ||
-                      '—'
-                    }}
-                  </div>
-                </div>
-                <div class="rounded-xl border border-border bg-surface-muted px-4 py-3">
-                  <div class="text-[11px] font-semibold uppercase tracking-wider text-text-muted">Title of qualification</div>
-                  <div class="mt-1 text-sm font-semibold text-text-primary">{{ application.qualification.title_of_qualification || '—' }}</div>
-                </div>
-                <div class="rounded-xl border border-border bg-surface-muted px-4 py-3">
-                  <div class="text-[11px] font-semibold uppercase tracking-wider text-text-muted">Award date</div>
-                  <div class="mt-1 text-sm font-semibold text-text-primary">{{ application.qualification.award_date || '—' }}</div>
-                </div>
-                <div class="rounded-xl border border-border bg-surface-muted px-4 py-3">
-                  <div class="text-[11px] font-semibold uppercase tracking-wider text-text-muted">Certificate number</div>
-                  <div class="mt-1 text-sm font-semibold text-text-primary">{{ application.qualification.certificate_number || '—' }}</div>
-                </div>
-                <div class="rounded-xl border border-border bg-surface-muted px-4 py-3">
-                  <div class="text-[11px] font-semibold uppercase tracking-wider text-text-muted">Student number</div>
-                  <div class="mt-1 text-sm font-semibold text-text-primary">{{ application.qualification.student_number || '—' }}</div>
-                </div>
-                <div class="rounded-xl border border-border bg-surface-muted px-4 py-3">
-                  <div class="text-[11px] font-semibold uppercase tracking-wider text-text-muted">Examination number</div>
-                  <div class="mt-1 text-sm font-semibold text-text-primary">{{ application.qualification.examination_number || '—' }}</div>
-                </div>
-                <div class="rounded-xl border border-border bg-surface-muted px-4 py-3 sm:col-span-2">
-                  <div class="text-[11px] font-semibold uppercase tracking-wider text-text-muted">Notes</div>
-                  <div class="mt-1 whitespace-pre-wrap text-sm font-semibold text-text-primary">{{ application.qualification.notes || '—' }}</div>
                 </div>
               </div>
 
@@ -1965,7 +1592,7 @@ onBeforeUnmount(() => {
                   <div class="text-sm font-semibold text-text-primary">3. Supporting documents</div>
                   <div class="mt-1 text-xs text-text-muted">Uploaded documents required for processing.</div>
                 </div>
-                <button v-if="application.can_edit" type="button" class="zaqa-btn zaqa-btn-secondary px-3 py-2 text-xs" @click="goToStep('documents')">Edit</button>
+                <button v-if="application.can_edit" type="button" class="zaqa-btn zaqa-btn-secondary px-3 py-2 text-xs" @click="goToStep('qualification')">Edit</button>
               </div>
 
               <div class="mt-3 overflow-hidden rounded-xl border border-border">
@@ -1997,24 +1624,16 @@ onBeforeUnmount(() => {
                 </div>
                 <button v-if="application.can_edit" type="button" class="zaqa-btn zaqa-btn-secondary px-3 py-2 text-xs" @click="goToStep('consent')">Edit</button>
               </div>
-              <div class="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
-                <div class="rounded-xl border border-border bg-surface-muted px-4 py-3">
-                  <div class="text-[11px] font-semibold uppercase tracking-wider text-text-muted">Consent type</div>
-                  <div class="mt-1 text-sm font-semibold text-text-primary">{{ application.consent_form?.consent_type ?? '—' }}</div>
-                </div>
-                <div class="rounded-xl border border-border bg-surface-muted px-4 py-3">
-                  <div class="text-[11px] font-semibold uppercase tracking-wider text-text-muted">Status</div>
-                  <div class="mt-1 text-sm font-semibold text-text-primary">
-                    {{
-                      application.is_foreign
-                        ? application.consent_form?.uploaded_document_id && application.consent_form?.zaqa_uploaded_document_id
-                          ? 'Uploaded'
-                          : 'Pending'
-                        : application.consent_form?.agreed_at
-                          ? 'Accepted'
-                          : 'Pending'
-                    }}
-                  </div>
+              <div class="mt-3 space-y-2">
+                <div
+                  v-for="row in qualificationRows"
+                  :key="row.id"
+                  class="flex flex-col gap-1 rounded-xl border border-border bg-surface-muted px-4 py-3 sm:flex-row sm:items-center sm:justify-between"
+                >
+                  <div class="min-w-0 text-sm font-semibold text-text-primary">{{ row.title_of_qualification || 'Untitled qualification' }}</div>
+                  <span class="zaqa-badge shrink-0" :class="row._consentOk ? 'zaqa-badge-success' : 'zaqa-badge-warning'">
+                    {{ row._consentOk ? 'Consent complete' : 'Consent pending' }}
+                  </span>
                 </div>
               </div>
               <InputError :message="(submitForm.errors as any).consent" class="mt-2" />
@@ -2089,7 +1708,7 @@ onBeforeUnmount(() => {
             :show-next="false"
             :on-prev="() => stepNav.prev && requestStepChange(stepNav.prev)"
           >
-            <button type="button" class="zaqa-btn zaqa-btn-secondary w-full sm:w-auto" @click="goToStep('context')">Back to start</button>
+            <button type="button" class="zaqa-btn zaqa-btn-secondary w-full sm:w-auto" @click="goToStep('applicant')">Back to start</button>
             <button
               type="button"
               class="zaqa-btn zaqa-btn-primary w-full sm:w-auto"
@@ -2104,5 +1723,19 @@ onBeforeUnmount(() => {
         </section>
       <!-- Sidebar intentionally removed from applicant wizard -->
     </WizardShell>
+
+    <QualificationWorkspaceModal
+      v-model="qualificationWorkspaceOpen"
+      :mode="qualificationWorkspaceMode"
+      :application-id="application.id"
+      :application="application"
+      :countries="countries"
+      :qualification-types="qualificationTypes"
+      :editing-qualification="qualificationWorkspaceMode === 'edit' ? qualificationWorkspaceQual : null"
+      :locked="applicationLocked"
+      :zambia-country-id="zambiaCountryId"
+      @saved="onQualificationWorkspaceSaved"
+    />
+    </div>
   </ApplicantLayout>
 </template>

@@ -2,7 +2,13 @@
 import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import InputError from '@/Components/InputError.vue'
 
-type Option = { id: number | 'other'; name: string; country_id?: number }
+type Option = {
+  id: number | 'other'
+  name: string
+  country_id?: number
+  has_consent_form?: boolean
+  consent_form_url?: string | null
+}
 
 const props = defineProps<{
   countryId: number | string | null
@@ -43,7 +49,13 @@ async function load() {
     const json = await res.json()
     const data = Array.isArray(json?.data) ? json.data : []
     options.value = [
-      ...data.map((r: any) => ({ id: r.id, name: r.name, country_id: r.country_id })),
+      ...data.map((r: any) => ({
+        id: r.id,
+        name: r.name,
+        country_id: r.country_id,
+        has_consent_form: r.has_consent_form,
+        consent_form_url: r.consent_form_url ?? null,
+      })),
       { id: 'other', name: 'Other (not listed)' },
     ]
     activeIndex.value = 0

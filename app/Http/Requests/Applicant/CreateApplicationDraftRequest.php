@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests\Applicant;
 
+use App\Enums\ApplicantType;
 use App\Enums\QualificationType;
 use App\Enums\ServiceType;
 use Illuminate\Foundation\Http\FormRequest;
@@ -30,6 +31,15 @@ class CreateApplicationDraftRequest extends FormRequest
             'subject_phone' => ['nullable', 'string', 'max:30'],
             'subject_nrc_number' => ['nullable', 'string', 'max:100'],
             'subject_passport_number' => ['nullable', 'string', 'max:100'],
+            'profile_nrc_number' => ['nullable', 'string', 'max:100'],
+            'profile_passport_number' => ['nullable', 'string', 'max:100'],
+            'identity_document_type' => ['nullable', 'string', 'in:nrc_copy,passport_copy'],
+            'identity_file' => ['nullable', 'file', 'max:'.((int) config('documents.max_upload_kb', 10240)), 'mimetypes:'.implode(',', (array) config('documents.allowed_mimetypes', [
+                'application/pdf',
+                'image/jpeg',
+                'image/png',
+                'image/webp',
+            ]))],
         ];
     }
 
@@ -45,16 +55,19 @@ class CreateApplicationDraftRequest extends FormRequest
 
                 // When submitting as self, require the authenticated profile to have NRC or Passport.
                 // (We enforce this for individual applicants; institutions don't have these fields.)
-                if (($user->applicant_type?->value ?? null) !== 'individual') {
+                if (($user->applicant_type?->value ?? null) !== ApplicantType::Individual->value) {
                     return;
                 }
 
                 $user->loadMissing('applicantProfile');
-                $nrc = trim((string) ($user->applicantProfile?->nrc_number ?? ''));
-                $passport = trim((string) ($user->applicantProfile?->passport_number ?? ''));
+                $nrcIn = trim((string) $this->input('profile_nrc_number', ''));
+                $passIn = trim((string) $this->input('profile_passport_number', ''));
+                $nrcEff = $nrcIn !== '' ? $nrcIn : trim((string) ($user->applicantProfile?->nrc_number ?? ''));
+                $passEff = $passIn !== '' ? $passIn : trim((string) ($user->applicantProfile?->passport_number ?? ''));
 
-                if ($nrc === '' && $passport === '') {
-                    $validator->errors()->add('submitting_for', 'Please update your profile with an NRC or Passport number before submitting as yourself.');
+                if ($nrcEff === '' && $passEff === '') {
+                    $validator->errors()->add('profile_nrc_number', 'Provide NRC or passport number.');
+                    $validator->errors()->add('profile_passport_number', 'Provide NRC or passport number.');
                 }
 
                 return;
@@ -71,6 +84,10 @@ class CreateApplicationDraftRequest extends FormRequest
             $fullName = trim((string) $this->input('subject_full_name', ''));
             if ($fullName === '') {
                 $validator->errors()->add('subject_full_name', 'Full name is required when submitting on behalf of someone.');
+            }
+
+            if (! $this->hasFile('identity_file')) {
+                $validator->errors()->add('identity_file', 'Upload a clear copy of the holder’s NRC or passport.');
             }
         });
     }

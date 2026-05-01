@@ -62,6 +62,7 @@ class ApplicantApplicationFlowTest extends TestCase
             'service_type' => 'verification',
             'qualification_category' => 'diploma',
             'is_foreign' => false,
+            'submitting_for' => 'self',
         ]);
 
         $application = Application::query()->firstOrFail();
@@ -368,6 +369,7 @@ class ApplicantApplicationFlowTest extends TestCase
 
         $this->put("/applicant/applications/{$application->id}/qualification", [
             'awarding_institution_name' => 'Test Institute',
+            'awarding_institution_name_other' => 'Test Institute',
             'qualification_holder_name' => 'John Doe',
             'country_name_other' => 'Zambia',
             'nrc_passport_number' => '111111/11/1',
@@ -491,5 +493,38 @@ class ApplicantApplicationFlowTest extends TestCase
             'entity_id' => $document->id,
             'actor_user_id' => $user->id,
         ]);
+    }
+
+    public function test_create_draft_saves_inline_nrc_to_applicant_profile_when_missing(): void
+    {
+        $user = User::factory()->activated()->create([
+            'applicant_type' => ApplicantType::Individual,
+        ]);
+
+        ApplicantProfile::create([
+            'user_id' => $user->id,
+            'first_name' => 'Jane',
+            'surname' => 'Doe',
+            'nrc_number' => null,
+            'passport_number' => null,
+            'email' => $user->email,
+            'phone_primary' => $user->phone_primary,
+        ]);
+
+        $this->actingAs($user);
+
+        $response = $this->post('/applicant/applications', [
+            'service_type' => 'verification',
+            'qualification_category' => 'diploma',
+            'is_foreign' => false,
+            'submitting_for' => 'self',
+            'profile_nrc_number' => '888888/88/8',
+            'profile_passport_number' => '',
+        ]);
+
+        $response->assertRedirect();
+
+        $user->refresh();
+        $this->assertSame('888888/88/8', $user->applicantProfile?->nrc_number);
     }
 }

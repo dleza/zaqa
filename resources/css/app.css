@@ -72,7 +72,7 @@
     }
 
     .zaqa-container {
-        @apply mx-auto w-full max-w-6xl px-4;
+        @apply mx-auto w-full max-w-none px-4 lg:px-6 2xl:px-10;
     }
 
     .zaqa-topbar {
@@ -80,7 +80,7 @@
     }
 
     .zaqa-topbar-inner {
-        @apply mx-auto flex w-full max-w-6xl items-center justify-between px-4 py-4;
+        @apply mx-auto flex w-full max-w-none items-center justify-between px-4 py-4 lg:px-6 2xl:px-10;
     }
 
     .zaqa-brand {
@@ -108,7 +108,7 @@
     }
 
     .zaqa-footer-inner {
-        @apply mx-auto flex w-full max-w-6xl flex-col gap-2 px-4 py-8 text-sm sm:flex-row sm:items-center sm:justify-between;
+        @apply mx-auto flex w-full max-w-none flex-col gap-2 px-4 py-8 text-sm sm:flex-row sm:items-center sm:justify-between lg:px-6 2xl:px-10;
     }
 
     .zaqa-card {
@@ -124,7 +124,7 @@
     }
 
     .zaqa-wizard-shell {
-        @apply mx-auto w-full max-w-7xl;
+        @apply mx-auto w-full max-w-none;
     }
 
     .zaqa-wizard-stepper {

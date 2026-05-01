@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests\Applicant;
 
+use App\Enums\ApplicantType;
 use App\Enums\ServiceType;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rules\Enum;
@@ -31,6 +32,8 @@ class UpdateApplicationDraftRequest extends FormRequest
             'subject_phone' => ['sometimes', 'nullable', 'string', 'max:30'],
             'subject_nrc_number' => ['sometimes', 'nullable', 'string', 'max:100'],
             'subject_passport_number' => ['sometimes', 'nullable', 'string', 'max:100'],
+            'profile_nrc_number' => ['sometimes', 'nullable', 'string', 'max:100'],
+            'profile_passport_number' => ['sometimes', 'nullable', 'string', 'max:100'],
         ];
     }
 
@@ -48,16 +51,19 @@ class UpdateApplicationDraftRequest extends FormRequest
                     return;
                 }
 
-                if (($user->applicant_type?->value ?? null) !== 'individual') {
+                if (($user->applicant_type?->value ?? null) !== ApplicantType::Individual->value) {
                     return;
                 }
 
                 $user->loadMissing('applicantProfile');
-                $nrc = trim((string) ($user->applicantProfile?->nrc_number ?? ''));
-                $passport = trim((string) ($user->applicantProfile?->passport_number ?? ''));
+                $nrcIn = trim((string) $this->input('profile_nrc_number', ''));
+                $passIn = trim((string) $this->input('profile_passport_number', ''));
+                $nrcEff = $nrcIn !== '' ? $nrcIn : trim((string) ($user->applicantProfile?->nrc_number ?? ''));
+                $passEff = $passIn !== '' ? $passIn : trim((string) ($user->applicantProfile?->passport_number ?? ''));
 
-                if ($nrc === '' && $passport === '') {
-                    $validator->errors()->add('submitting_for', 'Please update your profile with an NRC or Passport number before submitting as yourself.');
+                if ($nrcEff === '' && $passEff === '') {
+                    $validator->errors()->add('profile_nrc_number', 'Provide NRC or passport number.');
+                    $validator->errors()->add('profile_passport_number', 'Provide NRC or passport number.');
                 }
 
                 return;

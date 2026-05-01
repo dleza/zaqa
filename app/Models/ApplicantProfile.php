@@ -23,6 +23,16 @@ class ApplicantProfile extends Model
         'province',
         'postal_code',
         'country',
+        'identity_document_disk',
+        'identity_document_path',
+        'identity_document_original_name',
+        'identity_document_size_bytes',
+        'identity_document_uploaded_at',
+    ];
+
+    protected $casts = [
+        'identity_document_uploaded_at' => 'datetime',
+        'identity_document_size_bytes' => 'integer',
     ];
 
     public function user(): BelongsTo

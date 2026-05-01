@@ -141,6 +141,9 @@ class ApplicantProfileEditController extends Controller
                 'province',
                 'postal_code',
                 'country',
+                'identity_document_original_name',
+                'identity_document_uploaded_at',
+                'identity_document_size_bytes',
             ]),
             'institution_profile' => $user->institutionProfile?->only([
                 'institution_name',

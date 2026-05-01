@@ -24,14 +24,31 @@ const props = defineProps<{
   documents: DocItem[]
   transcriptRequired: boolean
   qualificationId?: number | null
+  /** qualification_only: certificate + transcript for one qualification. identity_only: NRC/passport only (application-level). */
+  documentsScope?: 'full' | 'qualification_only' | 'identity_only'
 }>()
 
+const documentsScope = computed(() => props.documentsScope ?? 'full')
+
 const requiredTypes = computed<DocType[]>(() => {
+  if (documentsScope.value === 'identity_only') {
+    return ['nrc_copy']
+  }
+  if (documentsScope.value === 'qualification_only') {
+    const base: DocType[] = ['certificate_copy']
+    if (props.transcriptRequired) base.push('transcript')
+    return base
+  }
   const base: DocType[] = ['nrc_copy', 'certificate_copy']
   if (props.transcriptRequired) base.push('transcript')
   return base
 })
-const allTypes = computed<DocType[]>(() => ['nrc_copy', 'certificate_copy', 'transcript'])
+
+const allTypes = computed<DocType[]>(() => {
+  if (documentsScope.value === 'identity_only') return ['nrc_copy']
+  if (documentsScope.value === 'qualification_only') return ['certificate_copy', 'transcript']
+  return ['nrc_copy', 'certificate_copy', 'transcript']
+})
 
 function typeMeta(type: DocType) {
   if (type === 'nrc_copy')

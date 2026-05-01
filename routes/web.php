@@ -32,6 +32,7 @@ use App\Http\Controllers\Applicant\ApplicantDocumentController;
 use App\Http\Controllers\Applicant\ApplicantPaymentController;
 use App\Http\Controllers\Applicant\ApplicantProfileController;
 use App\Http\Controllers\Applicant\ApplicantProfileEditController;
+use App\Http\Controllers\Applicant\ApplicantProfileIdentityDocumentController;
 use App\Http\Controllers\Applicant\ApplicantQualificationController;
 use App\Http\Controllers\Applicant\ApplicantReferenceController;
 use App\Http\Controllers\Applicant\ApplicantServiceFeedbackController;
@@ -139,11 +140,13 @@ Route::middleware('auth')->group(function () {
         Route::get('/payments/{payment}/return', [ApplicantPaymentController::class, 'returnFromProvider'])->name('payments.return');
 
         Route::get('/invoices', [ApplicantBillingController::class, 'invoices'])->name('invoices');
-        Route::get('/statement', [ApplicantBillingController::class, 'statement'])->name('statement');
+        Route::get('/payments', [ApplicantBillingController::class, 'payments'])->name('payments.index');
 
         Route::get('/profile', [ApplicantProfileController::class, 'show'])->name('profile.show');
         Route::get('/profile/edit', [ApplicantProfileEditController::class, 'edit'])->name('profile.edit');
         Route::put('/profile', [ApplicantProfileEditController::class, 'update'])->name('profile.update');
+        Route::post('/profile/identity-document', [ApplicantProfileIdentityDocumentController::class, 'store'])->name('profile.identity_document.store');
+        Route::delete('/profile/identity-document', [ApplicantProfileIdentityDocumentController::class, 'destroy'])->name('profile.identity_document.destroy');
         Route::get('/change-password', [ApplicantProfileController::class, 'editPassword'])->name('profile.password.edit');
         Route::post('/change-password', [ApplicantProfileController::class, 'updatePassword'])->name('profile.password.update');
     });

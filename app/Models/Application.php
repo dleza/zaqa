@@ -11,6 +11,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
+use Illuminate\Database\Eloquent\Relations\HasOneThrough;
 
 class Application extends Model
 {
@@ -101,9 +102,20 @@ class Application extends Model
         return $this->hasMany(QualificationDocument::class);
     }
 
-    public function consentForm(): HasOne
+    /**
+     * Consent rows are stored per qualification. Expose the first linked consent form for legacy payloads
+     * (single-qualification flows). Prefer qualification-specific access when multiple items exist.
+     */
+    public function consentForm(): HasOneThrough
     {
-        return $this->hasOne(ConsentForm::class);
+        return $this->hasOneThrough(
+            ConsentForm::class,
+            Qualification::class,
+            'application_id',
+            'qualification_id',
+            'id',
+            'id'
+        );
     }
 
     public function invoice(): HasOne

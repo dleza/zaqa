@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import { Link, useForm } from '@inertiajs/vue3'
+import { Link, router, useForm } from '@inertiajs/vue3'
 import ApplicantLayout from '@/Layouts/ApplicantLayout.vue'
 import InputError from '@/Components/InputError.vue'
 
@@ -39,6 +39,25 @@ const form = useForm<any>({
 
 function save() {
   form.put('/applicant/profile', { preserveScroll: true })
+}
+
+const identityForm = useForm<{ file: File | null }>({ file: null })
+
+function onIdentityFile(e: Event) {
+  const t = e.target as HTMLInputElement
+  identityForm.file = t.files?.[0] ?? null
+}
+
+function uploadIdentityDocument() {
+  identityForm.post('/applicant/profile/identity-document', {
+    preserveScroll: true,
+    forceFormData: true,
+    onSuccess: () => identityForm.reset('file'),
+  })
+}
+
+function removeIdentityDocument() {
+  router.delete('/applicant/profile/identity-document', { preserveScroll: true })
 }
 </script>
 
@@ -135,6 +154,42 @@ function save() {
             <div class="sm:col-span-2 text-xs text-text-muted">
               You must provide <span class="font-semibold text-text-primary">either NRC or Passport</span> (or both).
             </div>
+          </div>
+        </div>
+
+        <div v-if="!isInstitution" class="mt-8 border-t border-border pt-6">
+          <h2 class="text-base font-semibold text-text-primary">Identity document copy</h2>
+          <p class="mt-1 text-sm text-text-muted">
+            Upload once—future verification applications can reuse this file when you apply for yourself (unless you upload a different copy on a specific application).
+          </p>
+
+          <div v-if="profile?.applicant_profile?.identity_document_uploaded_at" class="mt-4 rounded-lg border border-success/25 bg-success/10 px-4 py-3 text-sm">
+            <div class="font-semibold text-text-primary">On file</div>
+            <div class="mt-1 text-xs text-text-muted">
+              {{ profile?.applicant_profile?.identity_document_original_name ?? 'Uploaded document' }}
+              <span v-if="profile?.applicant_profile?.identity_document_size_bytes" class="ml-1 font-mono">
+                ({{ Math.round(Number(profile.applicant_profile.identity_document_size_bytes) / 1024) }} KB)
+              </span>
+            </div>
+            <button type="button" class="zaqa-btn zaqa-btn-secondary mt-3 px-3 py-2 text-xs" @click="removeIdentityDocument">
+              Remove file
+            </button>
+          </div>
+
+          <div v-else class="mt-4 grid grid-cols-1 gap-3 sm:max-w-lg">
+            <div>
+              <label class="text-sm font-medium text-text-primary">NRC or passport scan</label>
+              <input type="file" class="zaqa-input" accept=".pdf,.jpg,.jpeg,.png,.webp" @change="onIdentityFile" />
+              <InputError :message="identityForm.errors.file" />
+            </div>
+            <button
+              type="button"
+              class="zaqa-btn zaqa-btn-primary w-fit"
+              :disabled="identityForm.processing || !identityForm.file"
+              @click="uploadIdentityDocument"
+            >
+              Upload identity document
+            </button>
           </div>
         </div>
 

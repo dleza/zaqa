@@ -26,7 +26,7 @@ class ApplicantDashboardService
         $apps = Application::query()
             ->where('applicant_user_id', $user->id)
             ->with([
-                'qualification.qualificationTypeMaster',
+                'qualifications.qualificationTypeMaster',
                 'invoice',
                 'payments',
             ])
@@ -47,6 +47,25 @@ class ApplicantDashboardService
             $displayPayment = $paymentsSorted->first(fn ($p) => $p->status === PaymentStatus::Confirmed)
                 ?? $paymentsSorted->first();
 
+            $quals = $a->qualifications
+                ->sortBy('id')
+                ->values()
+                ->map(fn ($q) => [
+                    'id' => $q->id,
+                    'title_of_qualification' => $q->title_of_qualification,
+                    'verification_state' => $q->verification_state?->value ?? (string) $q->verification_state,
+                    'is_foreign_qualification' => (bool) ($q->is_foreign_qualification ?? false),
+                    'qualification_type' => $q->qualificationTypeMaster
+                        ? [
+                            'level_label' => $q->qualificationTypeMaster->level_label,
+                            'name' => $q->qualificationTypeMaster->name,
+                          ]
+                        : null,
+                ])
+                ->all();
+
+            $firstQualificationType = $a->qualifications->first()?->qualificationTypeMaster;
+
             return [
                 'id' => $a->id,
                 'application_number' => $a->application_number,
@@ -57,12 +76,10 @@ class ApplicantDashboardService
                 'updated_at' => optional($a->updated_at)?->toIso8601String(),
                 'created_at' => optional($a->created_at)?->toIso8601String(),
                 'submitted_at' => optional($a->submitted_at)?->toIso8601String(),
-                'qualification_type' => $a->qualification?->qualificationTypeMaster
-                    ? [
-                        'level_label' => $a->qualification->qualificationTypeMaster->level_label,
-                        'name' => $a->qualification->qualificationTypeMaster->name,
-                      ]
+                'qualification_type' => $firstQualificationType
+                    ? ['level_label' => $firstQualificationType->level_label, 'name' => $firstQualificationType->name]
                     : null,
+                'qualifications' => $quals,
                 'invoice' => $a->invoice
                     ? [
                         'invoice_number' => $a->invoice->invoice_number,
@@ -187,7 +204,7 @@ class ApplicantDashboardService
         }
 
         return ApplicationStatusHistory::query()
-            ->whereIn('application_id', $ids)
+            ->whereIn('application_id', $ids, 'and', false)
             ->latest('changed_at')
             ->limit(12)
             ->get()

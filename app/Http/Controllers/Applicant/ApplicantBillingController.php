@@ -42,7 +42,7 @@ class ApplicantBillingController extends Controller
         ]);
     }
 
-    public function statement(Request $request): Response
+    public function payments(Request $request): Response
     {
         $user = $request->user();
 
@@ -89,7 +89,7 @@ class ApplicantBillingController extends Controller
             'count' => (int) $payments->count(),
         ];
 
-        return Inertia::render('Applicant/Statement', [
+        return Inertia::render('Applicant/Payments', [
             'payments' => $payments,
             'summary' => $summary,
         ]);

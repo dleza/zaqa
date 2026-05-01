@@ -81,30 +81,16 @@ class QualificationCaptureService
             }
             $transcriptRequired = (bool) $isForeignQualification || (bool) $qualificationType->requires_subject_results;
 
-            $verificationSubject = null;
-            $meta = $application->metadata;
-            if (is_array($meta)) {
-                $candidate = $meta['verification_subject'] ?? null;
-                $verificationSubject = is_array($candidate) ? $candidate : null;
-            } elseif ($meta instanceof \ArrayAccess) {
-                $candidate = $meta['verification_subject'] ?? null;
-                $verificationSubject = is_array($candidate) ? $candidate : null;
-            }
-
-            $defaultHolderName = is_array($verificationSubject) ? (string) ($verificationSubject['full_name'] ?? '') : '';
-            $defaultHolderName = trim($defaultHolderName) !== '' ? $defaultHolderName : $actor->name;
-            $defaultIdNumber = is_array($verificationSubject)
-                ? trim((string) (($verificationSubject['nrc_number'] ?? '') ?: ($verificationSubject['passport_number'] ?? '')))
-                : '';
+            $holderIdentity = $this->holderIdentityFromApplication($application, $actor);
 
             $payload = [
                 'awarding_institution_id' => $data['awarding_institution_id'] ?? ($data['awarding_body_id'] ?? null),
                 'awarding_institution_name_other' => $data['awarding_institution_name_other'] ?? ($data['awarding_body_name_other'] ?? null),
                 'awarding_institution_name' => (string) ($data['awarding_institution_name'] ?? ''),
-                'qualification_holder_name' => (string) ($data['qualification_holder_name'] ?? $defaultHolderName),
+                'qualification_holder_name' => $holderIdentity['holder_name'],
                 'country_id' => $data['country_id'] ?? null,
                 'country_name_other' => $data['country_name_other'] ?? null,
-                'nrc_passport_number' => (string) ($data['nrc_passport_number'] ?? $defaultIdNumber),
+                'nrc_passport_number' => $holderIdentity['nrc_passport_number'],
                 'certificate_number' => $data['certificate_number'] ?? null,
                 'student_number' => $data['student_number'] ?? null,
                 'examination_number' => $data['examination_number'] ?? null,
@@ -116,7 +102,9 @@ class QualificationCaptureService
                 'is_foreign_qualification' => (bool) $isForeignQualification,
                 'transcript_required' => $transcriptRequired,
                 'transcript_reason' => $data['transcript_reason'] ?? null,
-                'notes' => $data['notes'] ?? null,
+                'notes' => array_key_exists('notes', $data)
+                    ? (($data['notes'] ?? '') !== '' ? (string) $data['notes'] : null)
+                    : ($qualification?->notes),
                 'raw_subject_results' => $subjectResults,
             ];
 
@@ -128,14 +116,6 @@ class QualificationCaptureService
                 $payload['awarding_institution_name'] = (string) $payload['awarding_institution_name_other'];
             } else {
                 $payload['awarding_institution_name'] = $payload['awarding_institution_name'] ?: ($qualification?->awarding_institution_name ?? '');
-            }
-
-            // Preserve existing values if this step does not post these fields anymore.
-            if (! array_key_exists('qualification_holder_name', $data) && $qualification?->qualification_holder_name) {
-                $payload['qualification_holder_name'] = $qualification->qualification_holder_name;
-            }
-            if (! array_key_exists('nrc_passport_number', $data) && $qualification?->nrc_passport_number) {
-                $payload['nrc_passport_number'] = $qualification->nrc_passport_number;
             }
 
             if ($qualification && ! $createNew) {
@@ -210,6 +190,39 @@ class QualificationCaptureService
 
             return $qualification;
         });
+    }
+
+    /**
+     * Holder name and primary identity number always come from the application “verification subject”
+     * (new application + applicant step), not per qualification row.
+     *
+     * @return array{holder_name: string, nrc_passport_number: string}
+     */
+    private function holderIdentityFromApplication(Application $application, User $actor): array
+    {
+        $verificationSubject = null;
+        $meta = $application->metadata;
+        if (is_array($meta)) {
+            $candidate = $meta['verification_subject'] ?? null;
+            $verificationSubject = is_array($candidate) ? $candidate : null;
+        } elseif ($meta instanceof \ArrayAccess) {
+            $candidate = $meta['verification_subject'] ?? null;
+            $verificationSubject = is_array($candidate) ? $candidate : null;
+        }
+
+        $holderName = is_array($verificationSubject) ? trim((string) ($verificationSubject['full_name'] ?? '')) : '';
+        if ($holderName === '') {
+            $holderName = trim((string) $actor->name);
+        }
+
+        $idNumber = is_array($verificationSubject)
+            ? trim((string) (($verificationSubject['nrc_number'] ?? '') ?: ($verificationSubject['passport_number'] ?? '')))
+            : '';
+
+        return [
+            'holder_name' => $holderName,
+            'nrc_passport_number' => $idNumber,
+        ];
     }
 
     /**

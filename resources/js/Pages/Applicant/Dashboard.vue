@@ -8,7 +8,9 @@ import {
   CircleAlert,
   ClipboardList,
   CreditCard,
+  Eye,
   FileText,
+  History,
   LayoutDashboard,
   RefreshCcw,
   Send,
@@ -37,46 +39,39 @@ function money(cents: number, currency: string) {
 
 const hasApplications = computed(() => (props.applications?.length ?? 0) > 0)
 
+const activityRows = computed(() => {
+  const byId = Object.fromEntries((props.applications ?? []).map((a: any) => [a.id, a]))
+  return (props.activity ?? []).map((row: any) => ({
+    ...row,
+    application_number: byId[row.application_id]?.application_number ?? `Application #${row.application_id}`,
+  }))
+})
+
+function formatActivityWhen(iso: string | undefined) {
+  if (!iso) return '—'
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return '—'
+  return new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(d)
+}
+
+function humanizeStatus(raw: string | null | undefined) {
+  const s = (raw ?? '').toString().trim()
+  if (!s) return '—'
+  return s.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())
+}
+
 const trackModalOpen = ref(false)
 const trackSelectedId = ref<number | ''>('')
-const trackLoading = ref(false)
-const trackError = ref<string | null>(null)
-const trackSummary = ref<{ application: any; events: any[] } | null>(null)
+const trackSelected = computed(() => props.applications.find((a: any) => Number(a.id) === Number(trackSelectedId.value || 0)) ?? null)
 
 function openTrackModal() {
   trackModalOpen.value = true
   trackSelectedId.value = ''
-  trackSummary.value = null
-  trackError.value = null
 }
 
 function closeTrackModal() {
   trackModalOpen.value = false
-  trackLoading.value = false
   trackSelectedId.value = ''
-  trackSummary.value = null
-  trackError.value = null
-}
-
-async function loadTrackSummary() {
-  trackError.value = null
-  trackSummary.value = null
-
-  const id = Number(trackSelectedId.value || 0)
-  if (!id) return
-
-  trackLoading.value = true
-  try {
-    const res = await fetch(`/applicant/applications/${id}/track-summary`, {
-      headers: { Accept: 'application/json' },
-    })
-    if (!res.ok) throw new Error(`Request failed (${res.status})`)
-    trackSummary.value = await res.json()
-  } catch (e: any) {
-    trackError.value = e?.message ? String(e.message) : 'Could not load activity.'
-  } finally {
-    trackLoading.value = false
-  }
 }
 
 function onKeydown(e: KeyboardEvent) {
@@ -95,74 +90,101 @@ function badgeClass(status: string) {
   if (s === 'rejected') return 'zaqa-badge zaqa-badge-danger'
   return 'zaqa-badge'
 }
+
+function qualBadgeClass(state: string) {
+  const s = (state ?? '').toString()
+  if (['awaiting_assignment', 'unassigned', 'submitted'].includes(s)) return 'zaqa-badge zaqa-badge-info'
+  if (['assigned', 'in_review', 'under_review'].includes(s)) return 'zaqa-badge zaqa-badge-warning'
+  if (['sent_back', 'returned'].includes(s)) return 'zaqa-badge zaqa-badge-warning'
+  if (['approved', 'verified', 'completed'].includes(s)) return 'zaqa-badge zaqa-badge-success'
+  if (['rejected', 'failed'].includes(s)) return 'zaqa-badge zaqa-badge-danger'
+  return 'zaqa-badge'
+}
 </script>
 
 <template>
   <ApplicantLayout>
-    <div class="zaqa-wizard-shell">
+    <div
+      class="w-full max-w-none mx-auto -mx-4 px-4 sm:-mx-6 sm:px-6 lg:-mx-6 lg:px-8 2xl:-mx-10 2xl:px-10"
+    >
       <div class="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-        <div>
-          <div class="inline-flex items-center gap-2 text-xs font-semibold text-text-muted">
+        <div class="max-w-4xl">
+          <div class="inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-text-muted">
             <LayoutDashboard class="h-4 w-4" aria-hidden="true" />
             Applicant portal
           </div>
-          <h2 class="mt-2 text-2xl font-semibold tracking-tight text-text-primary">Dashboard</h2>
-          <p class="mt-1 text-sm text-text-muted">
-            {{ greeting }}{{ authUserName ? ` ${authUserName}` : '' }}. Track your verification applications, payments, and next actions.
+          <h2 class="mt-3 text-3xl font-semibold tracking-tight text-text-primary sm:text-4xl">Dashboard</h2>
+          <p class="mt-2 text-base leading-relaxed text-text-muted">
+            {{ greeting }}{{ authUserName ? ` ${authUserName}` : '' }}. Track verification applications, invoices, and what to do next—all in one place.
           </p>
         </div>
       </div>
 
       <!-- Summary cards -->
-      <div class="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5">
-        <Link href="/applicant/applications" class="rounded-2xl border border-border bg-surface p-4 shadow-sm transition hover:bg-surface-muted">
+      <div class="mt-8 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
+        <Link
+          href="/applicant/applications"
+          class="flex min-h-[7.5rem] flex-col justify-between rounded-2xl border border-border bg-surface p-5 shadow-sm ring-1 ring-black/5 transition hover:border-brand/25 hover:bg-surface-muted hover:shadow-md sm:p-6"
+        >
           <div class="flex items-center justify-between">
             <div class="text-[11px] font-semibold uppercase tracking-wider text-text-muted">Total</div>
-            <FileText class="h-4 w-4 text-brand" aria-hidden="true" />
+            <FileText class="h-5 w-5 text-brand" aria-hidden="true" />
           </div>
-          <div class="mt-2 text-2xl font-semibold text-text-primary">{{ counts.total ?? 0 }}</div>
+          <div class="mt-3 text-3xl font-semibold tabular-nums tracking-tight text-text-primary">{{ counts.total ?? 0 }}</div>
         </Link>
-        <Link href="/applicant/applications" class="rounded-2xl border border-border bg-surface p-4 shadow-sm transition hover:bg-surface-muted">
+        <Link
+          href="/applicant/applications"
+          class="flex min-h-[7.5rem] flex-col justify-between rounded-2xl border border-border bg-surface p-5 shadow-sm ring-1 ring-black/5 transition hover:border-brand/25 hover:bg-surface-muted hover:shadow-md sm:p-6"
+        >
           <div class="flex items-center justify-between">
             <div class="text-[11px] font-semibold uppercase tracking-wider text-text-muted">Draft</div>
-            <RefreshCcw class="h-4 w-4 text-accent" aria-hidden="true" />
+            <RefreshCcw class="h-5 w-5 text-accent" aria-hidden="true" />
           </div>
-          <div class="mt-2 text-2xl font-semibold text-text-primary">{{ counts.draft ?? 0 }}</div>
+          <div class="mt-3 text-3xl font-semibold tabular-nums tracking-tight text-text-primary">{{ counts.draft ?? 0 }}</div>
         </Link>
-        <Link href="/applicant/applications" class="rounded-2xl border border-border bg-surface p-4 shadow-sm transition hover:bg-surface-muted">
+        <Link
+          href="/applicant/applications"
+          class="flex min-h-[7.5rem] flex-col justify-between rounded-2xl border border-border bg-surface p-5 shadow-sm ring-1 ring-black/5 transition hover:border-brand/25 hover:bg-surface-muted hover:shadow-md sm:p-6"
+        >
           <div class="flex items-center justify-between">
             <div class="text-[11px] font-semibold uppercase tracking-wider text-text-muted">Submitted</div>
-            <Send class="h-4 w-4 text-brand" aria-hidden="true" />
+            <Send class="h-5 w-5 text-brand" aria-hidden="true" />
           </div>
-          <div class="mt-2 text-2xl font-semibold text-text-primary">{{ counts.submitted ?? 0 }}</div>
+          <div class="mt-3 text-3xl font-semibold tabular-nums tracking-tight text-text-primary">{{ counts.submitted ?? 0 }}</div>
         </Link>
-        <Link href="/applicant/applications" class="rounded-2xl border border-border bg-surface p-4 shadow-sm transition hover:bg-surface-muted">
+        <Link
+          href="/applicant/applications"
+          class="flex min-h-[7.5rem] flex-col justify-between rounded-2xl border border-border bg-surface p-5 shadow-sm ring-1 ring-black/5 transition hover:border-brand/25 hover:bg-surface-muted hover:shadow-md sm:p-6"
+        >
           <div class="flex items-center justify-between">
             <div class="text-[11px] font-semibold uppercase tracking-wider text-text-muted">Sent back</div>
-            <CircleAlert class="h-4 w-4 text-warning" aria-hidden="true" />
+            <CircleAlert class="h-5 w-5 text-warning" aria-hidden="true" />
           </div>
-          <div class="mt-2 text-2xl font-semibold text-text-primary">{{ counts.sent_back ?? 0 }}</div>
+          <div class="mt-3 text-3xl font-semibold tabular-nums tracking-tight text-text-primary">{{ counts.sent_back ?? 0 }}</div>
         </Link>
-        <Link href="/applicant/applications" class="rounded-2xl border border-border bg-surface p-4 shadow-sm transition hover:bg-surface-muted">
+        <Link
+          href="/applicant/applications"
+          class="flex min-h-[7.5rem] flex-col justify-between rounded-2xl border border-border bg-surface p-5 shadow-sm ring-1 ring-black/5 transition hover:border-brand/25 hover:bg-surface-muted hover:shadow-md sm:p-6"
+        >
           <div class="flex items-center justify-between">
             <div class="text-[11px] font-semibold uppercase tracking-wider text-text-muted">Approved</div>
-            <BadgeCheck class="h-4 w-4 text-success" aria-hidden="true" />
+            <BadgeCheck class="h-5 w-5 text-success" aria-hidden="true" />
           </div>
-          <div class="mt-2 text-2xl font-semibold text-text-primary">{{ counts.approved ?? 0 }}</div>
+          <div class="mt-3 text-3xl font-semibold tabular-nums tracking-tight text-text-primary">{{ counts.approved ?? 0 }}</div>
         </Link>
       </div>
 
       <!-- Alerts + Quick actions -->
-      <div class="mt-6 grid grid-cols-1 gap-4 lg:grid-cols-3">
-        <div class="lg:col-span-2 space-y-4">
-          <div v-if="alerts.length > 0" class="rounded-2xl border border-border bg-surface p-5 shadow-sm">
+      <div class="mt-8 grid grid-cols-1 gap-6 xl:grid-cols-12">
+        <div class="space-y-6 xl:col-span-8">
+          <div v-if="alerts.length > 0" class="rounded-2xl border border-border bg-surface p-6 shadow-sm ring-1 ring-black/5 sm:p-7">
             <div class="flex items-center justify-between">
               <div>
-                <div class="text-sm font-semibold text-text-primary">Important</div>
-                <div class="mt-1 text-xs text-text-muted">Items that may require your attention.</div>
+                <div class="text-base font-semibold text-text-primary">Important</div>
+                <div class="mt-1 text-sm text-text-muted">Items that may require your attention.</div>
               </div>
             </div>
-            <div class="mt-4 space-y-2">
+            <div class="mt-5 space-y-3">
               <Link
                 v-for="a in alerts"
                 :key="a.title + a.message"
@@ -181,94 +203,98 @@ function badgeClass(status: string) {
           </div>
 
           <!-- Applications overview -->
-          <div class="rounded-2xl border border-border bg-surface shadow-sm">
-            <div class="border-b border-border bg-surface-muted px-5 py-4">
-              <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <div class="rounded-2xl border border-border bg-surface shadow-sm ring-1 ring-black/5">
+            <div class="border-b border-border bg-surface-muted px-6 py-5 sm:px-7">
+              <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <div>
-                  <div class="text-sm font-semibold text-text-primary">Applications overview</div>
-                  <div class="mt-1 text-xs text-text-muted">Your applications with status and payment context.</div>
+                  <div class="text-base font-semibold text-text-primary">Applications overview</div>
+                  <div class="mt-1 text-sm text-text-muted">Status, qualifications, and quick actions for each application.</div>
                 </div>
-                <Link href="/applicant/applications" class="zaqa-link text-sm">View all</Link>
+                <Link href="/applicant/applications" class="zaqa-link shrink-0 text-sm font-medium">View all</Link>
               </div>
             </div>
 
-            <div v-if="!hasApplications" class="px-5 py-6">
-              <div class="rounded-2xl border border-border bg-surface-muted p-6 text-center">
-                <div class="mx-auto inline-flex h-12 w-12 items-center justify-center rounded-2xl border border-brand/20 bg-brand/10">
-                  <ClipboardList class="h-5 w-5 text-brand" aria-hidden="true" />
+            <div v-if="!hasApplications" class="px-6 py-10 sm:px-8">
+              <div class="rounded-2xl border border-border bg-surface-muted p-8 text-center sm:p-10">
+                <div class="mx-auto inline-flex h-14 w-14 items-center justify-center rounded-2xl border border-brand/20 bg-brand/10">
+                  <ClipboardList class="h-6 w-6 text-brand" aria-hidden="true" />
                 </div>
-                <div class="mt-3 text-sm font-semibold text-text-primary">Start your first application</div>
-                <div class="mt-1 text-xs text-text-muted">Create a verification request and track progress end-to-end.</div>
-                <div class="mt-4">
-                  <Link href="/applicant/applications/new" class="zaqa-btn zaqa-btn-primary">New application</Link>
+                <div class="mt-4 text-lg font-semibold text-text-primary">Start your first application</div>
+                <div class="mt-2 max-w-md mx-auto text-sm leading-relaxed text-text-muted">
+                  Create a verification request and track progress from submission through payment and decision.
+                </div>
+                <div class="mt-6">
+                  <Link href="/applicant/applications/new" class="zaqa-btn zaqa-btn-primary h-11 px-8">New application</Link>
                 </div>
               </div>
             </div>
 
-            <div v-else class="overflow-x-auto">
-              <table class="min-w-full text-sm">
-                <thead class="bg-surface-muted text-xs font-semibold text-text-muted">
-                  <tr>
-                    <th class="px-5 py-3 text-left">Reference</th>
-                    <th class="px-5 py-3 text-left">Qualification</th>
-                    <th class="px-5 py-3 text-left">Status</th>
-                    <th class="px-5 py-3 text-left">Payment</th>
-                    <th class="px-5 py-3 text-right">Action</th>
-                  </tr>
-                </thead>
-                <tbody class="divide-y divide-border/60">
-                  <tr v-for="app in applications.slice(0, 8)" :key="app.id" class="hover:bg-surface-muted/60">
-                    <td class="px-5 py-3">
-                      <div class="font-semibold text-text-primary">{{ app.application_number }}</div>
-                      <div class="mt-0.5 text-xs text-text-muted">Updated {{ app.updated_at ?? app.created_at ?? '—' }}</div>
-                    </td>
-                    <td class="px-5 py-3">
-                      <div class="text-text-primary">
-                        {{ app.qualification_type ? `${app.qualification_type.level_label} — ${app.qualification_type.name}` : '—' }}
-                      </div>
-                    </td>
-                    <td class="px-5 py-3">
+            <div v-else class="space-y-4 px-6 py-6 sm:px-7 sm:py-7">
+              <div
+                v-for="app in applications.slice(0, 6)"
+                :key="app.id"
+                class="rounded-2xl border border-border bg-surface-muted/50 p-5 transition hover:border-brand/20 hover:bg-surface-muted sm:p-6"
+              >
+                <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                  <div class="min-w-0">
+                    <div class="flex flex-wrap items-center gap-2">
+                      <div class="text-sm font-semibold text-text-primary">{{ app.application_number }}</div>
                       <span :class="badgeClass(app.current_status)">{{ app.status_label }}</span>
-                    </td>
-                    <td class="px-5 py-3">
-                      <div v-if="app.invoice" class="text-xs">
-                        <div class="font-semibold text-text-primary">{{ money(app.invoice.amount_cents, app.invoice.currency) }}</div>
-                        <div class="mt-0.5 text-text-muted">
-                          {{ app.payment?.status ?? '—' }}
+                      <span v-if="(app.qualifications?.length ?? 0) > 0" class="zaqa-badge">
+                        {{ app.qualifications.length }} qualification{{ app.qualifications.length === 1 ? '' : 's' }}
+                      </span>
+                    </div>
+                    <div class="mt-1 text-xs text-text-muted">Updated {{ app.updated_at ?? app.created_at ?? '—' }}</div>
+                  </div>
+
+                  <div class="flex flex-wrap gap-2 sm:justify-end">
+                    <button type="button" class="zaqa-btn zaqa-btn-secondary h-10 px-4 text-sm" @click="openTrackModal(); trackSelectedId = app.id">
+                      <Eye class="mr-2 h-4 w-4" aria-hidden="true" />
+                      Track
+                    </button>
+                    <Link :href="app.primary_action.href" class="zaqa-btn zaqa-btn-secondary h-10 px-4 text-sm">
+                      {{ app.primary_action.label }}
+                    </Link>
+                  </div>
+                </div>
+
+                <div v-if="(app.qualifications?.length ?? 0) > 0" class="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                  <div v-for="q in app.qualifications.slice(0, 6)" :key="q.id" class="rounded-xl border border-border bg-surface px-4 py-3">
+                    <div class="flex items-start justify-between gap-2">
+                      <div class="min-w-0">
+                        <div class="truncate text-xs font-semibold text-text-primary">
+                          {{ q.qualification_type ? `${q.qualification_type.level_label} — ${q.qualification_type.name}` : 'Qualification' }}
                         </div>
+                        <div class="mt-0.5 truncate text-xs text-text-muted">{{ q.title_of_qualification || '—' }}</div>
                       </div>
-                      <div v-else class="text-xs text-text-muted">—</div>
-                    </td>
-                    <td class="px-5 py-3 text-right">
-                      <div class="flex flex-col items-end gap-1">
-                        <Link :href="app.primary_action.href" class="zaqa-link text-sm">
-                          {{ app.primary_action.label }}
-                        </Link>
-                        <Link :href="`/applicant/applications/${app.id}/track`" class="zaqa-link text-xs">
-                          Track
-                        </Link>
-                      </div>
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
+                      <span :class="qualBadgeClass(q.verification_state)">{{ q.verification_state || '—' }}</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
         </div>
 
         <!-- Quick actions -->
-        <aside class="space-y-4">
-          <div class="rounded-2xl border border-border bg-surface p-5 shadow-sm">
-            <div class="text-sm font-semibold text-text-primary">Quick actions</div>
-            <div class="mt-1 text-xs text-text-muted">Shortcuts to key areas.</div>
+        <aside class="space-y-6 xl:col-span-4">
+          <div class="rounded-2xl border border-border bg-surface p-6 shadow-sm ring-1 ring-black/5 sm:p-7">
+            <div class="text-base font-semibold text-text-primary">Quick actions</div>
+            <div class="mt-1 text-sm text-text-muted">Shortcuts to verification workflow and billing.</div>
 
-            <div class="mt-4 grid grid-cols-1 gap-2">
-              <Link href="/applicant/applications/new" class="zaqa-btn zaqa-btn-primary w-full">
+            <div class="mt-6 grid grid-cols-1 gap-3">
+              <Link href="/applicant/applications/new" class="zaqa-btn zaqa-btn-primary h-11 w-full justify-center">
                 <ClipboardList class="mr-2 h-4 w-4" aria-hidden="true" />
                 New application
               </Link>
 
-              <button type="button" class="zaqa-btn zaqa-btn-secondary w-full" :disabled="applications.length === 0" @click="openTrackModal">
+              <button
+                type="button"
+                class="zaqa-btn zaqa-btn-secondary h-11 w-full justify-center border border-brand/20 bg-brand/5 text-brand hover:bg-brand/10"
+                :disabled="applications.length === 0"
+                @click="openTrackModal"
+              >
+                <Eye class="mr-2 h-4 w-4" aria-hidden="true" />
                 Track application
               </button>
 
@@ -277,12 +303,12 @@ function badgeClass(status: string) {
                 {{ continueDraft.label }}
               </Link>
 
-              <Link href="/applicant/applications" class="zaqa-btn zaqa-btn-secondary w-full">
+              <Link href="/applicant/applications" class="zaqa-btn zaqa-btn-secondary h-11 w-full justify-center">
                 <FileText class="mr-2 h-4 w-4" aria-hidden="true" />
                 My applications
               </Link>
 
-              <Link href="/applicant/invoices" class="zaqa-btn zaqa-btn-secondary w-full">
+              <Link href="/applicant/invoices" class="zaqa-btn zaqa-btn-secondary h-11 w-full justify-center">
                 <CreditCard class="mr-2 h-4 w-4" aria-hidden="true" />
                 View invoices
               </Link>
@@ -290,13 +316,63 @@ function badgeClass(status: string) {
           </div>
         </aside>
       </div>
+
+      <!-- Recent activity -->
+      <div v-if="hasApplications" class="mt-8 rounded-2xl border border-border bg-surface shadow-sm ring-1 ring-black/5">
+        <div class="border-b border-border bg-surface-muted px-6 py-5 sm:px-7">
+          <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div class="flex items-start gap-4">
+              <div class="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border border-border bg-surface shadow-sm">
+                <History class="h-6 w-6 text-brand" aria-hidden="true" />
+              </div>
+              <div>
+                <div class="text-base font-semibold text-text-primary">Recent activity</div>
+                <div class="mt-1 text-sm text-text-muted">Latest status changes recorded on your applications.</div>
+              </div>
+            </div>
+            <Link href="/applicant/applications" class="zaqa-btn zaqa-btn-secondary h-11 shrink-0 px-5">All applications</Link>
+          </div>
+        </div>
+
+        <div v-if="activityRows.length === 0" class="px-6 py-12 text-center sm:px-8">
+          <p class="mx-auto max-w-lg text-sm leading-relaxed text-text-muted">
+            No status history yet. When ZAQA updates an application status, it will appear here with a timestamp.
+          </p>
+        </div>
+
+        <ul v-else class="divide-y divide-border">
+          <li v-for="row in activityRows" :key="row.id">
+            <Link
+              :href="`/applicant/applications/${row.application_id}`"
+              class="flex flex-col gap-3 px-6 py-5 transition hover:bg-surface-muted/80 sm:flex-row sm:items-center sm:justify-between sm:px-7 sm:py-5"
+            >
+              <div class="min-w-0 flex-1">
+                <div class="flex flex-wrap items-center gap-2">
+                  <span class="font-semibold text-text-primary">{{ row.application_number }}</span>
+                  <span class="text-sm text-text-muted">·</span>
+                  <span class="text-sm text-text-muted">{{ formatActivityWhen(row.changed_at) }}</span>
+                </div>
+                <div class="mt-2 text-sm">
+                  <span class="font-medium text-text-primary">{{ humanizeStatus(row.from_status) }}</span>
+                  <span class="mx-2 text-text-muted">→</span>
+                  <span class="font-medium text-text-primary">{{ humanizeStatus(row.to_status) }}</span>
+                </div>
+                <p v-if="row.comment" class="mt-2 text-sm leading-relaxed text-text-muted line-clamp-2">
+                  {{ row.comment }}
+                </p>
+              </div>
+              <ArrowRight class="h-5 w-5 shrink-0 text-text-muted sm:ml-4" aria-hidden="true" />
+            </Link>
+          </li>
+        </ul>
+      </div>
     </div>
 
     <!-- Track modal -->
     <div v-if="trackModalOpen" class="fixed inset-0 z-50">
       <div class="absolute inset-0 bg-black/50" @click="closeTrackModal" />
       <div class="absolute inset-0 flex items-end justify-center p-4 sm:items-center">
-        <div class="w-full max-w-2xl overflow-hidden rounded-2xl border border-border bg-surface shadow-xl">
+        <div class="w-full max-w-4xl overflow-hidden rounded-2xl border border-border bg-surface shadow-xl">
           <div class="border-b border-border bg-surface-muted px-5 py-4">
             <div class="flex items-start justify-between gap-3">
               <div>
@@ -311,7 +387,7 @@ function badgeClass(status: string) {
             <div class="grid grid-cols-1 gap-3 sm:grid-cols-3">
               <div class="sm:col-span-2">
                 <label class="text-sm font-medium">Application</label>
-                <select v-model="trackSelectedId" class="zaqa-input mt-1" @change="loadTrackSummary">
+                <select v-model="trackSelectedId" class="zaqa-input mt-1">
                   <option value="">Select application…</option>
                   <option v-for="a in applications" :key="a.id" :value="a.id">
                     {{ a.application_number }} — {{ a.status_label }}
@@ -319,43 +395,43 @@ function badgeClass(status: string) {
                 </select>
               </div>
               <div class="flex items-end">
-                <button type="button" class="zaqa-btn zaqa-btn-secondary w-full" :disabled="!trackSelectedId || trackLoading" @click="loadTrackSummary">
-                  {{ trackLoading ? 'Loading…' : 'Load activity' }}
-                </button>
+                <Link v-if="trackSelectedId" :href="`/applicant/applications/${trackSelectedId}/track`" class="zaqa-btn zaqa-btn-secondary w-full">
+                  Open tracking
+                </Link>
+                <button v-else type="button" class="zaqa-btn zaqa-btn-secondary w-full" disabled>Open tracking</button>
               </div>
             </div>
 
-            <div v-if="trackError" class="rounded-xl border border-danger/20 bg-danger/10 px-4 py-3 text-sm text-danger">
-              {{ trackError }}
-            </div>
-
-            <div v-if="trackSummary" class="overflow-hidden rounded-2xl border border-border">
+            <div v-if="trackSelected" class="overflow-hidden rounded-2xl border border-border">
               <div class="border-b border-border bg-surface-muted px-4 py-3">
                 <div class="flex flex-wrap items-center justify-between gap-2">
                   <div class="text-sm font-semibold text-text-primary">
-                    {{ trackSummary.application.application_number }}
+                    {{ trackSelected.application_number }}
                   </div>
-                  <Link :href="`/applicant/applications/${trackSummary.application.id}/track`" class="zaqa-link text-sm">
-                    Open full tracking
-                  </Link>
+                  <span :class="badgeClass(trackSelected.current_status)">{{ trackSelected.status_label }}</span>
                 </div>
               </div>
-              <div class="divide-y divide-border/60">
-                <div v-for="ev in trackSummary.events" :key="ev.id" class="px-4 py-3 bg-surface">
-                  <div class="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
-                    <div class="text-sm font-semibold text-text-primary">{{ ev.title }}</div>
-                    <div class="text-[11px] text-text-muted">{{ ev.occurred_at ?? '—' }}</div>
-                  </div>
-                  <div v-if="ev.description" class="mt-1 text-xs text-text-muted">{{ ev.description }}</div>
-                  <div v-if="ev.comment" class="mt-2 rounded-xl border border-border bg-surface-muted px-3 py-2 text-xs text-text-primary">
-                    {{ ev.comment }}
+              <div class="p-4 bg-surface space-y-3">
+                <div class="text-xs font-semibold uppercase tracking-wider text-text-muted">Qualifications</div>
+                <div v-if="(trackSelected.qualifications?.length ?? 0) === 0" class="text-sm text-text-muted">No qualifications found.</div>
+                <div v-else class="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                  <div v-for="q in trackSelected.qualifications" :key="q.id" class="rounded-xl border border-border bg-surface-muted/40 px-3 py-2">
+                    <div class="flex items-start justify-between gap-2">
+                      <div class="min-w-0">
+                        <div class="truncate text-xs font-semibold text-text-primary">
+                          {{ q.qualification_type ? `${q.qualification_type.level_label} — ${q.qualification_type.name}` : 'Qualification' }}
+                        </div>
+                        <div class="mt-0.5 truncate text-xs text-text-muted">{{ q.title_of_qualification || '—' }}</div>
+                      </div>
+                      <span :class="qualBadgeClass(q.verification_state)">{{ q.verification_state || '—' }}</span>
+                    </div>
                   </div>
                 </div>
               </div>
             </div>
 
             <div v-else class="rounded-xl border border-border bg-surface-muted px-4 py-3 text-sm text-text-muted">
-              Select an application to see activity here.
+              Select an application to see its qualifications here.
             </div>
           </div>
 

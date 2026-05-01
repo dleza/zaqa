@@ -4,6 +4,8 @@ namespace App\Http\Controllers\Applicant;
 
 use App\Domain\Applications\ApplicationDraftService;
 use App\Domain\Applications\ApplicationSubmissionService;
+use App\Domain\Documents\ApplicantDocumentService;
+use App\Enums\DocumentType;
 use App\Enums\PaymentStatus;
 use App\Enums\ServiceType;
 use App\Http\Controllers\Controller;
@@ -143,15 +145,24 @@ class ApplicantApplicationController extends Controller
         ]);
     }
 
-    public function store(CreateApplicationDraftRequest $request, ApplicationDraftService $drafts): RedirectResponse
+    public function store(CreateApplicationDraftRequest $request, ApplicationDraftService $drafts, ApplicantDocumentService $documents): RedirectResponse
     {
         $validated = $request->validated();
         $validated['service_type'] = ServiceType::Verification->value;
 
         $application = $drafts->createDraft($request->user(), $validated);
 
+        if ($request->hasFile('identity_file')) {
+            $raw = (string) $request->input('identity_document_type', DocumentType::NrcCopy->value);
+            $type = DocumentType::tryFrom($raw) ?? DocumentType::NrcCopy;
+            if (! in_array($type, [DocumentType::NrcCopy, DocumentType::PassportCopy], true)) {
+                $type = DocumentType::NrcCopy;
+            }
+            $documents->upload($application, $type, $request->file('identity_file'), $request->user(), null);
+        }
+
         return redirect()->route('applicant.applications.edit', ['application' => $application, 'step' => 'qualification'])
-            ->with('success', 'Draft created. Please complete the application details.');
+            ->with('success', 'Your application is ready. Add qualifications below—you can return to the Applicant step anytime to update holder documents.');
     }
 
     public function show(Request $request, Application $application): Response
@@ -551,9 +562,9 @@ class ApplicantApplicationController extends Controller
                     'agreed_at' => optional($application->consentForm->agreed_at)?->toIso8601String(),
                     'uploaded_document_id' => $application->consentForm->uploaded_document_id,
                     'zaqa_uploaded_document_id' => $application->consentForm->zaqa_uploaded_document_id,
-                    'source_awarding_institution_name' => $application->consentForm->source_awarding_body_name,
+                    'source_awarding_institution_name' => $application->consentForm->source_awarding_institution_name,
                     // Back-compat
-                    'source_awarding_body_name' => $application->consentForm->source_awarding_body_name,
+                    'source_awarding_body_name' => $application->consentForm->source_awarding_institution_name,
                 ]
                 : null,
             'documents' => $documents,
@@ -590,6 +601,9 @@ class ApplicantApplicationController extends Controller
                     'email',
                     'phone_primary',
                     'phone_secondary',
+                    'identity_document_original_name',
+                    'identity_document_uploaded_at',
+                    'identity_document_size_bytes',
                 ])
                 : null,
             'institution_profile' => $user->institutionProfile

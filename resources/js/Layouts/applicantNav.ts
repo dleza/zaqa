@@ -5,7 +5,7 @@ import {
   FilePlus,
   Files,
   ReceiptText,
-  ScrollText,
+  CreditCard,
   UserCircle,
   KeyRound,
 } from 'lucide-vue-next'
@@ -43,7 +43,7 @@ export const applicantNavSections: ApplicantNavSection[] = [
     label: 'Payments',
     items: [
       { key: 'invoices', label: 'Invoices', href: '/applicant/invoices', icon: ReceiptText, badgeKey: 'invoices' },
-      { key: 'statement', label: 'Statement', href: '/applicant/statement', icon: ScrollText },
+      { key: 'payments', label: 'Payments', href: '/applicant/payments', icon: CreditCard },
     ],
   },
   {
@@ -54,5 +54,5 @@ export const applicantNavSections: ApplicantNavSection[] = [
       { key: 'change-password', label: 'Change Password', href: '/applicant/change-password', icon: KeyRound },
     ],
   },
-]
+];
 

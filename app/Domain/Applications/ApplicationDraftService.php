@@ -4,6 +4,7 @@ namespace App\Domain\Applications;
 
 use App\Domain\Audit\AuditLogService;
 use App\Domain\Tracking\ApplicationLifecycleService;
+use App\Enums\ApplicantType;
 use App\Enums\ApplicationStatus;
 use App\Enums\LifecycleStage;
 use App\Enums\LifecycleVisibility;
@@ -25,7 +26,7 @@ class ApplicationDraftService
     }
 
     /**
-     * @param array{service_type:string, qualification_category:string, is_foreign:bool, submitting_for?:string, subject_full_name?:string, subject_email?:string, subject_phone?:string, subject_nrc_number?:string, subject_passport_number?:string} $data
+     * @param array{service_type:string, qualification_category:string, is_foreign:bool, submitting_for?:string, subject_full_name?:string, subject_email?:string, subject_phone?:string, subject_nrc_number?:string, subject_passport_number?:string, profile_nrc_number?:string, profile_passport_number?:string} $data
      */
     public function createDraft(User $user, array $data): Application
     {
@@ -38,6 +39,8 @@ class ApplicationDraftService
 
             $submittingFor = (string) ($data['submitting_for'] ?? 'self');
             $user->loadMissing(['applicantProfile', 'institutionProfile']);
+            $this->persistApplicantIdentityFromWizard($user, $data);
+            $user->load(['applicantProfile', 'institutionProfile']);
 
             $metadata['verification_subject'] = $submittingFor === 'other'
                 ? array_filter([
@@ -141,6 +144,9 @@ class ApplicationDraftService
      */
     public function updateDraft(Application $application, User $actor, array $data): Application
     {
+        $this->persistApplicantIdentityFromWizard($actor, $data);
+        $actor->load(['applicantProfile', 'institutionProfile']);
+
         $before = [
             'service_type' => $application->service_type?->value ?? (string) $application->service_type,
             'qualification_category' => $application->qualification_category,
@@ -188,26 +194,25 @@ class ApplicationDraftService
 
         $application->save();
 
-        // Keep the qualification holder details aligned with the selected verification subject (self vs other).
-        // This ensures admin/verification views always have holder identity data available even if the applicant
-        // does not revisit the qualification step after changing the subject selection.
+        // Keep qualification holder details aligned with the verification subject for every qualification row.
         if (array_key_exists('submitting_for', $data)) {
-            $application->loadMissing('qualification');
-            if ($application->qualification) {
-                $subject = $application->metadata['verification_subject'] ?? null;
-                $holderName = is_array($subject) ? trim((string) ($subject['full_name'] ?? '')) : '';
-                $holderId = is_array($subject)
-                    ? trim((string) (($subject['nrc_number'] ?? '') ?: ($subject['passport_number'] ?? '')))
-                    : '';
+            $application->loadMissing('qualifications');
+            $subject = $application->metadata['verification_subject'] ?? null;
+            $holderName = is_array($subject) ? trim((string) ($subject['full_name'] ?? '')) : '';
+            $holderId = is_array($subject)
+                ? trim((string) (($subject['nrc_number'] ?? '') ?: ($subject['passport_number'] ?? '')))
+                : '';
 
+            foreach ($application->qualifications as $qualification) {
                 if ($holderName !== '') {
-                    $application->qualification->qualification_holder_name = $holderName;
+                    $qualification->qualification_holder_name = $holderName;
                 }
                 if ($holderId !== '') {
-                    $application->qualification->nrc_passport_number = $holderId;
+                    $qualification->nrc_passport_number = $holderId;
                 }
-
-                $application->qualification->save();
+                if ($holderName !== '' || $holderId !== '') {
+                    $qualification->save();
+                }
             }
         }
 
@@ -308,6 +313,44 @@ class ApplicationDraftService
         $driverCode = $e->errorInfo[1] ?? null;
 
         return $sqlState === '23000' && in_array((int) $driverCode, [1062], true);
+    }
+
+    /**
+     * When an individual applicant submits as "self", merge optional inline NRC/passport into their profile
+     * so they do not need a separate profile edit first.
+     *
+     * @param array<string, mixed> $data
+     */
+    private function persistApplicantIdentityFromWizard(User $user, array $data): void
+    {
+        if (($user->applicant_type?->value ?? null) !== ApplicantType::Individual->value) {
+            return;
+        }
+
+        $submittingFor = (string) ($data['submitting_for'] ?? '');
+        if ($submittingFor === 'other') {
+            return;
+        }
+
+        $nrcIn = trim((string) ($data['profile_nrc_number'] ?? ''));
+        $passIn = trim((string) ($data['profile_passport_number'] ?? ''));
+        if ($nrcIn === '' && $passIn === '') {
+            return;
+        }
+
+        $profile = $user->applicantProfile;
+        if (! $profile) {
+            return;
+        }
+
+        if ($nrcIn !== '') {
+            $profile->nrc_number = $nrcIn;
+        }
+        if ($passIn !== '') {
+            $profile->passport_number = $passIn;
+        }
+
+        $profile->save();
     }
 }
 

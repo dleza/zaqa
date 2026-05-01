@@ -6,6 +6,15 @@ import ApplicantSidebar from '@/Components/ApplicantSidebar.vue'
 import { applicantNavSections } from '@/Layouts/applicantNav'
 import { Menu, X } from 'lucide-vue-next'
 
+const props = withDefaults(
+  defineProps<{
+    containerMaxWidthClass?: string
+  }>(),
+  {
+    containerMaxWidthClass: 'max-w-none',
+  },
+)
+
 const page = usePage()
 
 const zaqaLogoUrl = new URL('../../images/zaqa-logo-tranparent.png', import.meta.url).href
@@ -111,7 +120,7 @@ const applicantTypeLabel = computed(() => {
       <div class="flex min-w-0 flex-1 flex-col">
         <!-- Desktop header (minimal, no horizontal nav) -->
         <header class="hidden border-b border-border bg-surface lg:block">
-          <div class="mx-auto flex w-full max-w-6xl items-center justify-between px-6 py-4">
+          <div class="mx-auto flex w-full items-center justify-between px-4 py-4 lg:px-6 2xl:px-10" :class="props.containerMaxWidthClass">
             <div>
               <div class="text-sm font-semibold text-text-primary">Applicant Portal</div>
               <div class="mt-0.5 text-xs text-text-muted">Qualification verification services</div>
@@ -133,14 +142,14 @@ const applicantTypeLabel = computed(() => {
           </div>
         </header>
 
-        <main class="zaqa-container flex-1 py-6">
+        <main class="mx-auto w-full flex-1 px-4 py-6 lg:px-6 2xl:px-10" :class="props.containerMaxWidthClass">
           <FlashMessages />
           <slot name="pageHeader" />
           <slot />
         </main>
 
         <footer class="zaqa-footer">
-          <div class="zaqa-footer-inner">
+          <div class="zaqa-footer-inner" :class="props.containerMaxWidthClass">
             <span class="text-text-on-dark/90">© {{ new Date().getFullYear() }} Zambia Qualifications Authority (ZAQA)</span>
             <span class="text-text-on-dark/75">Applicant services • Verification workflow • Secure downloads</span>
           </div>

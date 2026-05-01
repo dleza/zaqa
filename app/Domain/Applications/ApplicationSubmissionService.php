@@ -236,6 +236,18 @@ class ApplicationSubmissionService
             || $currentDocsByType->has(DocumentType::PassportCopy->value);
 
         if (! $hasIdentity) {
+            $meta = (array) ($application->metadata ?? []);
+            $submittingFor = (string) ($meta['submitting_for'] ?? 'self');
+            if ($submittingFor === 'self') {
+                $application->loadMissing('applicant.applicantProfile');
+                $path = $application->applicant?->applicantProfile?->identity_document_path;
+                if (is_string($path) && trim($path) !== '') {
+                    $hasIdentity = true;
+                }
+            }
+        }
+
+        if (! $hasIdentity) {
             $missing[] = 'nrc_copy or passport_copy';
         }
 
