@@ -90,11 +90,80 @@ function qualificationSubjectsSatisfied(q: any): boolean {
   const typeId = Number(q.qualification_type_id ?? 0)
   const type = (props.qualificationTypes ?? []).find((t: any) => Number(t.id) === typeId)
   if (!type?.requires_subject_results) return true
-  const rows = (q.subject_results ?? []) as Array<{ subject_name?: string; grade?: string }>
+  const rows = (q.subject_results ?? []) as Array<{
+    subject_name?: string
+    grade?: string
+    certificate_subject_id?: number | null
+  }>
   if (rows.length === 0) return false
-  return rows.every(
-    (r) => (r.subject_name ?? '').toString().trim() !== '' && (r.grade ?? '').toString().trim() !== '',
+  return rows.every((r) => {
+    const gradeOk = (r.grade ?? '').toString().trim() !== ''
+    const catalogId = Number(r.certificate_subject_id ?? 0)
+    const subjectOk =
+      catalogId > 0 || (r.subject_name ?? '').toString().trim() !== ''
+    return gradeOk && subjectOk
+  })
+}
+
+function trimStr(v: unknown): string {
+  return (v ?? '').toString().trim()
+}
+
+/**
+ * Gate rules match server-side checks but merge live form values + saved props
+ * so applicants are not blocked after upload or while editing before save.
+ */
+function evaluateApplicantStep(): { ok: boolean; missing: string[] } {
+  const missing: string[] = []
+  const submittingFor = (
+    submittingForForm.submitting_for ??
+    props.application?.metadata?.submitting_for ??
+    'self'
   )
+    .toString()
+    .trim()
+
+  const emailEff = trimStr(applicantForm.email) || trimStr(props.applicant?.email)
+  const phoneEff = trimStr(applicantForm.phone_primary) || trimStr(props.applicant?.phone_primary)
+  if (!emailEff) missing.push('Enter your email address in the Communication section.')
+  if (!phoneEff) missing.push('Enter your primary phone number.')
+
+  const applicantTypeStr = trimStr(props.applicant?.applicant_type ?? props.application?.applicant_type)
+
+  if (submittingFor === 'other') {
+    const fullName =
+      trimStr(props.application?.metadata?.verification_subject?.full_name) ||
+      trimStr(submittingForForm.subject_full_name)
+    const nrc =
+      trimStr(props.application?.metadata?.verification_subject?.nrc_number) ||
+      trimStr(submittingForForm.subject_nrc_number)
+    const passport =
+      trimStr(props.application?.metadata?.verification_subject?.passport_number) ||
+      trimStr(submittingForForm.subject_passport_number)
+    if (!fullName) missing.push('Enter the verification subject’s full name.')
+    if (!nrc && !passport) missing.push('Enter the subject’s NRC or passport number (at least one).')
+  } else if (applicantTypeStr === 'individual') {
+    const nrc =
+      trimStr(props.applicant?.applicant_profile?.nrc_number) ||
+      trimStr(applicantForm.nrc_number) ||
+      trimStr(submittingForForm.profile_nrc_number)
+    const passport =
+      trimStr(props.applicant?.applicant_profile?.passport_number) ||
+      trimStr(applicantForm.passport_number) ||
+      trimStr(submittingForForm.profile_passport_number)
+    if (!nrc && !passport) missing.push('Enter your NRC or passport number under Biodata (at least one).')
+  }
+
+  const identityUploadOk =
+    submittingFor === 'other'
+      ? hasApplicationIdentityDoc()
+      : hasApplicationIdentityDoc() || !!(props.applicant?.applicant_profile?.identity_document_uploaded_at ?? false)
+
+  if (!identityUploadOk) {
+    missing.push('Upload a clear copy of the holder’s NRC or passport in the Identity document section.')
+  }
+
+  return { ok: missing.length === 0, missing }
 }
 
 const hasUnsavedChanges = computed(() => isStepDirty('applicant'))
@@ -189,6 +258,16 @@ watch(
       submittingForForm.submitting_for = 'other'
       submittingForForm.clearErrors()
     }
+  },
+  { immediate: true },
+)
+
+/** Keep PATCH payloads aligned when “Myself” uses only the main biodata fields (no duplicate NRC inputs). */
+watch(
+  () => [applicantForm.nrc_number, applicantForm.passport_number],
+  ([nrc, passport]) => {
+    submittingForForm.profile_nrc_number = (nrc ?? '').toString()
+    submittingForForm.profile_passport_number = (passport ?? '').toString()
   },
   { immediate: true },
 )
@@ -538,34 +617,10 @@ const invoiceTotalPreview = computed(() => {
   return { currency, amountCents }
 })
 
+const applicantStepGate = computed(() => evaluateApplicantStep())
+
 const stepCompletion = computed(() => {
-  const applicantType = (props.applicant?.applicant_type ?? '').toString()
-  const selfNrc = (props.applicant?.applicant_profile?.nrc_number ?? '').toString().trim()
-  const selfPassport = (props.applicant?.applicant_profile?.passport_number ?? '').toString().trim()
-  const submittingFor = ((props.application?.metadata?.submitting_for ?? 'self') as string).toString()
-  const subject = props.application?.metadata?.verification_subject ?? null
-  const otherFullName = (subject?.full_name ?? '').toString().trim()
-  const otherNrc = (subject?.nrc_number ?? '').toString().trim()
-  const otherPassport = (subject?.passport_number ?? '').toString().trim()
-
-  const identityOk =
-    submittingFor === 'other'
-      ? otherFullName.length > 0 && (otherNrc.length > 0 || otherPassport.length > 0)
-      : applicantType === 'individual'
-        ? selfNrc.length > 0 || selfPassport.length > 0
-        : true
-
-  const profileIdentityStored = !!(props.applicant?.applicant_profile?.identity_document_uploaded_at ?? false)
-  const identityUploadOk =
-    submittingFor === 'other'
-      ? hasApplicationIdentityDoc()
-      : hasApplicationIdentityDoc() || profileIdentityStored
-
-  const applicantOk =
-    (props.applicant?.email ?? '').toString().trim().length > 0 &&
-    (props.applicant?.phone_primary ?? '').toString().trim().length > 0 &&
-    identityOk &&
-    identityUploadOk
+  const applicantOk = applicantStepGate.value.ok
 
   const qualificationDone =
     qualificationRows.value.length > 0 &&
@@ -624,6 +679,44 @@ const stepNav = computed(() => {
   } as { prev: StepKey | null; next: StepKey | null }
 })
 
+function stepIncompleteHtml(step: StepKey): string | null {
+  if (step === 'applicant') {
+    const { missing } = evaluateApplicantStep()
+    if (missing.length === 0) return null
+    const items = missing.map((m) => `<li class="mt-1">${m}</li>`).join('')
+    return `<ul class="list-disc pl-5 text-left text-sm text-text-primary">${items}</ul><p class="mt-3 text-xs text-text-muted">Save your details when you change them — use <strong>Save &amp; continue</strong> or your browser may still show old checks until the page refreshes.</p>`
+  }
+  if (step === 'qualification') {
+    if (qualifications.value.length === 0) {
+      return '<p class="text-sm text-left">Add at least one qualification and complete required documents for each.</p>'
+    }
+    const pending = qualificationRows.value.filter((q) => !q._docsOk || !qualificationSubjectsSatisfied(q))
+    if (pending.length === 0) return null
+    const items = pending
+      .map((q) => {
+        const parts: string[] = []
+        if (!q._docsOk) parts.push('documents')
+        if (!qualificationSubjectsSatisfied(q)) parts.push('subject grades')
+        return `<li class="mt-1"><span class="font-semibold">${(q.title_of_qualification ?? 'Qualification').toString()}</span>: complete ${parts.join(' and ')}.</li>`
+      })
+      .join('')
+    return `<ul class="list-disc pl-5 text-left text-sm">${items}</ul>`
+  }
+  if (step === 'consent') {
+    const pending = qualificationRows.value.filter((q) => !q._consentOk)
+    if (pending.length === 0) return null
+    const items = pending.map((q) => `<li class="mt-1">${(q.title_of_qualification ?? 'Qualification').toString()} — consent still needed.</li>`).join('')
+    return `<ul class="list-disc pl-5 text-left text-sm">${items}</ul>`
+  }
+  if (step === 'payment') {
+    return '<p class="text-sm text-left">Confirm payment for this application before continuing.</p>'
+  }
+  if (step === 'review') {
+    return '<p class="text-sm text-left">Confirm payment and accept the declaration on the review step.</p>'
+  }
+  return null
+}
+
 function goNext(from: StepKey) {
   const keys = steps.value.map((s) => s.key) as StepKey[]
   const idx = keys.indexOf(from)
@@ -631,10 +724,11 @@ function goNext(from: StepKey) {
   if (!next) return
 
   if (!stepCompletion.value[from]) {
+    const detailHtml = stepIncompleteHtml(from)
     void Swal.fire({
       icon: 'warning',
-      title: 'Incomplete step',
-      text: 'Please complete and save this step before continuing.',
+      title: from === 'applicant' ? 'Finish applicant details first' : 'Incomplete step',
+      html: detailHtml ?? '<p class="text-sm">Complete the requirements for this step before continuing.</p>',
       showDenyButton: isStepDirty(from),
       confirmButtonText: 'Stay',
       denyButtonText: 'Discard changes',
@@ -652,7 +746,8 @@ function goNext(from: StepKey) {
     void Swal.fire({
       icon: 'info',
       title: 'Unsaved changes',
-      text: 'Please save your changes before continuing.',
+      html:
+        '<p class="text-sm text-left">You edited this step but have not saved. Save with <strong>Save &amp; continue</strong> (Applicant step) or your changes may be lost.</p>',
       showDenyButton: true,
       confirmButtonText: 'Stay',
       denyButtonText: 'Discard & continue',
@@ -806,21 +901,12 @@ onBeforeUnmount(() => {
                   </div>
                 </div>
               </div>
-              <div v-if="applicantType === 'individual'" class="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                <div>
-                  <label class="text-sm font-medium">NRC number</label>
-                  <input v-model="submittingForForm.profile_nrc_number" class="zaqa-input" autocomplete="off" />
-                  <InputError :message="(submittingForForm.errors as any).profile_nrc_number" />
-                </div>
-                <div>
-                  <label class="text-sm font-medium">Passport number</label>
-                  <input v-model="submittingForForm.profile_passport_number" class="zaqa-input" autocomplete="off" />
-                  <InputError :message="(submittingForForm.errors as any).profile_passport_number" />
-                </div>
-                <div class="sm:col-span-2 text-xs text-text-muted">
-                  Provide <span class="font-semibold text-text-primary">either NRC or Passport</span> (or both). Saved to your profile when you click Save.
-                </div>
-              </div>
+              <p
+                v-if="applicantType === 'individual'"
+                class="mt-3 rounded-lg border border-border bg-surface px-3 py-2 text-xs text-text-muted"
+              >
+                Your NRC or passport number is entered once under <span class="font-semibold text-text-primary">Biodata</span> below — the same values apply to this application.
+              </p>
             </div>
 
             <div v-else class="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -974,7 +1060,12 @@ onBeforeUnmount(() => {
                 :on-prev="() => stepNav.prev && requestStepChange(stepNav.prev)"
                 :on-next="() => goNext('applicant')"
               >
-                <button type="button" class="zaqa-btn zaqa-btn-secondary w-full sm:w-auto" @click="saveApplicantDetails('qualification')" :disabled="applicantForm.processing || !applicantForm.isDirty">
+                <button
+                  type="button"
+                  class="zaqa-btn zaqa-btn-secondary w-full sm:w-auto"
+                  :disabled="applicantForm.processing || (!applicantForm.isDirty && applicantStepGate.ok)"
+                  @click="saveApplicantDetails('qualification')"
+                >
                   Save & continue
                 </button>
               </WizardFooterBar>
