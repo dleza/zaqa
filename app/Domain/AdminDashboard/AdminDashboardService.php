@@ -619,6 +619,7 @@ class AdminDashboardService
         $push('SLA performance', '/admin/reports/sla', 'activity', 'reports.sla.view');
         $push('Certificates', '/admin/certificates', 'award', 'admin.certificates.view');
         $push('Countries', '/admin/settings/countries', 'globe', 'settings.countries.view');
+        $push('Certificate subjects', '/admin/settings/certificate-subjects', 'list', 'settings.certificate_subjects.view');
         $push('Awarding institutions', '/admin/settings/awarding-institutions', 'building', 'settings.awarding_institutions.view');
         $push('Qualification types', '/admin/settings/qualification-types', 'book', 'settings.qualification_types.view');
         $push('Fees', '/admin/settings/fees', 'coins', 'settings.fees.view');

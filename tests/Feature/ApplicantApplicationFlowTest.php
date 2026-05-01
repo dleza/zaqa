@@ -8,6 +8,7 @@ use App\Enums\PaymentStatus;
 use App\Models\ApplicantProfile;
 use App\Models\Application;
 use App\Models\AwardingInstitution;
+use App\Models\CertificateSubject;
 use App\Models\ConsentForm;
 use App\Models\Payment;
 use App\Models\Qualification;
@@ -557,6 +558,76 @@ class ApplicantApplicationFlowTest extends TestCase
             'entity_id' => $document->id,
             'actor_user_id' => $user->id,
         ]);
+    }
+
+    public function test_school_certificate_qualification_stores_catalog_subject_results(): void
+    {
+        Storage::fake('local');
+
+        $user = User::factory()->activated()->create([
+            'applicant_type' => ApplicantType::Individual,
+        ]);
+
+        ApplicantProfile::create([
+            'user_id' => $user->id,
+            'first_name' => 'John',
+            'surname' => 'Doe',
+            'nrc_number' => '111111/11/1',
+            'email' => $user->email,
+            'phone_primary' => $user->phone_primary,
+        ]);
+
+        $this->actingAs($user);
+
+        $math = CertificateSubject::query()->create([
+            'name' => 'Mathematics '.uniqid(),
+            'sort_order' => 10,
+            'is_active' => true,
+        ]);
+        $english = CertificateSubject::query()->create([
+            'name' => 'English '.uniqid(),
+            'sort_order' => 20,
+            'is_active' => true,
+        ]);
+
+        $this->post('/applicant/applications', [
+            'service_type' => 'verification',
+            'qualification_category' => 'certificate',
+            'is_foreign' => false,
+        ])->assertRedirect();
+
+        $application = Application::query()->firstOrFail();
+
+        $type = QualificationType::query()
+            ->where('zqf_level_code', 'L1')
+            ->firstOrFail();
+
+        $this->assertTrue((bool) $type->requires_subject_results);
+
+        $this->put("/applicant/applications/{$application->id}/qualification", [
+            'awarding_institution_name' => 'School',
+            'qualification_holder_name' => 'John Doe',
+            'country_name_other' => 'Zambia',
+            'awarding_institution_name_other' => 'Test School',
+            'nrc_passport_number' => '111111/11/1',
+            'certificate_number' => 'CERT-G7',
+            'title_of_qualification' => 'Grade 7 Certificate',
+            'award_date' => now()->subYear()->toDateString(),
+            'qualification_type_id' => $type->id,
+            'subject_results' => [
+                ['certificate_subject_id' => $math->id, 'grade' => '1'],
+                ['certificate_subject_id' => $english->id, 'grade' => '2'],
+            ],
+        ])->assertRedirect();
+
+        $qualification = $application->refresh()->qualifications()->firstOrFail();
+        $rows = $qualification->subjectResults()->orderBy('display_order')->get();
+
+        $this->assertCount(2, $rows);
+        $this->assertSame($math->id, (int) $rows[0]->certificate_subject_id);
+        $this->assertSame($math->name, $rows[0]->subject_name);
+        $this->assertSame('1', $rows[0]->grade);
+        $this->assertSame($english->id, (int) $rows[1]->certificate_subject_id);
     }
 
     public function test_create_draft_saves_inline_nrc_to_applicant_profile_when_missing(): void

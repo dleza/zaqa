@@ -179,6 +179,7 @@ export const adminNavSections: AdminNavSection[] = [
     label: 'System settings',
     requiredAnyPermissions: [
       'settings.countries.view',
+      'settings.certificate_subjects.view',
       'settings.awarding_institutions.view',
       'settings.qualification_types.view',
       'settings.fees.view',
@@ -191,6 +192,13 @@ export const adminNavSections: AdminNavSection[] = [
         icon: Globe,
         activeStartsWith: '/admin/settings/countries',
         requiredAnyPermissions: ['settings.countries.view'],
+      },
+      {
+        label: 'Certificate subjects',
+        href: '/admin/settings/certificate-subjects',
+        icon: ClipboardList,
+        activeStartsWith: '/admin/settings/certificate-subjects',
+        requiredAnyPermissions: ['settings.certificate_subjects.view'],
       },
       {
         label: 'Awarding Institutions',

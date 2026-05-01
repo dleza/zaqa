@@ -62,6 +62,11 @@ class RolesAndPermissionsSeeder extends Seeder
         'settings.countries.edit',
         'settings.countries.delete',
 
+        'settings.certificate_subjects.view',
+        'settings.certificate_subjects.create',
+        'settings.certificate_subjects.edit',
+        'settings.certificate_subjects.delete',
+
         'settings.awarding_institutions.view',
         'settings.awarding_institutions.create',
         'settings.awarding_institutions.edit',
@@ -198,6 +203,11 @@ class RolesAndPermissionsSeeder extends Seeder
         'settings.countries.edit',
         'settings.countries.delete',
 
+        'settings.certificate_subjects.view',
+        'settings.certificate_subjects.create',
+        'settings.certificate_subjects.edit',
+        'settings.certificate_subjects.delete',
+
         'settings.awarding_institutions.view',
         'settings.awarding_institutions.create',
         'settings.awarding_institutions.edit',
@@ -306,6 +316,11 @@ class RolesAndPermissionsSeeder extends Seeder
         'settings.countries.create',
         'settings.countries.edit',
         'settings.countries.delete',
+
+        'settings.certificate_subjects.view',
+        'settings.certificate_subjects.create',
+        'settings.certificate_subjects.edit',
+        'settings.certificate_subjects.delete',
 
         'settings.awarding_institutions.view',
         'settings.awarding_institutions.create',
@@ -419,6 +434,11 @@ class RolesAndPermissionsSeeder extends Seeder
         'settings.countries.create',
         'settings.countries.edit',
         'settings.countries.delete',
+
+        'settings.certificate_subjects.view',
+        'settings.certificate_subjects.create',
+        'settings.certificate_subjects.edit',
+        'settings.certificate_subjects.delete',
 
         'settings.awarding_institutions.view',
         'settings.awarding_institutions.create',
@@ -532,6 +552,11 @@ class RolesAndPermissionsSeeder extends Seeder
         'settings.countries.create',
         'settings.countries.edit',
         'settings.countries.delete',
+
+        'settings.certificate_subjects.view',
+        'settings.certificate_subjects.create',
+        'settings.certificate_subjects.edit',
+        'settings.certificate_subjects.delete',
 
         'settings.awarding_institutions.view',
         'settings.awarding_institutions.create',

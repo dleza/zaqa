@@ -14,6 +14,7 @@ use App\Http\Requests\Applicant\UpdateApplicationDraftRequest;
 use App\Models\Application;
 use App\Models\AwardingInstitution;
 use App\Models\BillingCategory;
+use App\Models\CertificateSubject;
 use App\Models\Country;
 use App\Models\FeeStructure;
 use App\Models\QualificationType;
@@ -234,8 +235,17 @@ class ApplicantApplicationController extends Controller
             ]
             : null;
 
+        $certificateSubjects = CertificateSubject::query()
+            ->active()
+            ->orderBy('sort_order')
+            ->orderBy('name')
+            ->get(['id', 'name'])
+            ->map(fn (CertificateSubject $s) => ['id' => $s->id, 'name' => $s->name])
+            ->all();
+
         return Inertia::render('Applicant/Applications/Edit', [
             'application' => $this->applicationPayload($request, $application),
+            'certificateSubjects' => $certificateSubjects,
             'serviceTypes' => array_map(
                 fn (ServiceType $type) => ['value' => $type->value, 'label' => ucfirst($type->value)],
                 ServiceType::cases(),
@@ -432,7 +442,11 @@ class ApplicantApplicationController extends Controller
                     'subject_results' => $q->subjectResults
                         ->sortBy('display_order')
                         ->values()
-                        ->map(fn ($row) => ['subject_name' => $row->subject_name, 'grade' => $row->grade]),
+                        ->map(fn ($row) => [
+                            'certificate_subject_id' => $row->certificate_subject_id,
+                            'subject_name' => $row->subject_name,
+                            'grade' => $row->grade,
+                        ]),
 
                     // Status flags for UI badges
                     'has_certificate_document' => $hasCert,
@@ -550,6 +564,7 @@ class ApplicantApplicationController extends Controller
                         ->sortBy('display_order')
                         ->values()
                         ->map(fn ($row) => [
+                            'certificate_subject_id' => $row->certificate_subject_id,
                             'subject_name' => $row->subject_name,
                             'grade' => $row->grade,
                         ]),

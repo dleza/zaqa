@@ -13,6 +13,7 @@ use App\Http\Controllers\Admin\Finance\AdminFinanceDashboardController;
 use App\Http\Controllers\Admin\Finance\AdminFinancePaymentProofController;
 use App\Http\Controllers\Admin\Finance\AdminFinancePaymentsController;
 use App\Http\Controllers\Admin\Settings\AdminAwardingInstitutionsController;
+use App\Http\Controllers\Admin\Settings\AdminCertificateSubjectsController;
 use App\Http\Controllers\Admin\Settings\AdminCountriesController;
 use App\Http\Controllers\Admin\Settings\AdminDepartmentsController;
 use App\Http\Controllers\Admin\Settings\AdminFeesController;
@@ -331,6 +332,25 @@ Route::middleware('auth')->group(function () {
             Route::delete('/countries/{country}', [AdminCountriesController::class, 'destroy'])
                 ->middleware('can:settings.countries.delete')
                 ->name('countries.destroy');
+
+            Route::get('/certificate-subjects', [AdminCertificateSubjectsController::class, 'index'])
+                ->middleware('can:settings.certificate_subjects.view')
+                ->name('certificate_subjects.index');
+            Route::get('/certificate-subjects/create', [AdminCertificateSubjectsController::class, 'create'])
+                ->middleware('can:settings.certificate_subjects.create')
+                ->name('certificate_subjects.create');
+            Route::post('/certificate-subjects', [AdminCertificateSubjectsController::class, 'store'])
+                ->middleware('can:settings.certificate_subjects.create')
+                ->name('certificate_subjects.store');
+            Route::get('/certificate-subjects/{certificate_subject}/edit', [AdminCertificateSubjectsController::class, 'edit'])
+                ->middleware('can:settings.certificate_subjects.edit')
+                ->name('certificate_subjects.edit');
+            Route::put('/certificate-subjects/{certificate_subject}', [AdminCertificateSubjectsController::class, 'update'])
+                ->middleware('can:settings.certificate_subjects.edit')
+                ->name('certificate_subjects.update');
+            Route::delete('/certificate-subjects/{certificate_subject}', [AdminCertificateSubjectsController::class, 'destroy'])
+                ->middleware('can:settings.certificate_subjects.delete')
+                ->name('certificate_subjects.destroy');
 
             Route::get('/awarding-institutions', [AdminAwardingInstitutionsController::class, 'index'])
                 ->middleware('can:settings.awarding_institutions.view')

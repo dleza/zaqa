@@ -9,10 +9,12 @@ use App\Enums\LifecycleVisibility;
 use App\Models\Country;
 use App\Models\Application;
 use App\Models\Qualification;
+use App\Models\CertificateSubject;
 use App\Models\QualificationType;
 use App\Models\User;
 use App\Support\CountryIso;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
 
 class QualificationCaptureService
 {
@@ -126,14 +128,7 @@ class QualificationCaptureService
             }
 
             if (is_array($subjectResults)) {
-                $qualification->subjectResults()->delete();
-                foreach (array_values($subjectResults) as $index => $row) {
-                    $qualification->subjectResults()->create([
-                        'subject_name' => (string) ($row['subject_name'] ?? ''),
-                        'grade' => (string) ($row['grade'] ?? ''),
-                        'display_order' => $index,
-                    ]);
-                }
+                $this->replaceQualificationSubjectResults($qualification, $subjectResults);
             }
 
             $qualification->load('subjectResults');
@@ -262,15 +257,7 @@ class QualificationCaptureService
                 ->values()
                 ->all();
 
-            $qualification->subjectResults()->delete();
-
-            foreach (array_values($rows) as $index => $row) {
-                $qualification->subjectResults()->create([
-                    'subject_name' => (string) ($row['subject_name'] ?? ''),
-                    'grade' => (string) ($row['grade'] ?? ''),
-                    'display_order' => $index,
-                ]);
-            }
+            $this->replaceQualificationSubjectResults($qualification, $rows);
 
             $qualification->load('subjectResults');
 
@@ -316,5 +303,40 @@ class QualificationCaptureService
 
             return $qualification;
         });
+    }
+
+    /**
+     * Persist subject rows from the managed catalog (certificate_subjects).
+     *
+     * @param  array<int, array<string, mixed>>  $rows
+     */
+    private function replaceQualificationSubjectResults(Qualification $qualification, array $rows): void
+    {
+        $qualification->subjectResults()->delete();
+
+        foreach (array_values($rows) as $index => $row) {
+            $certificateSubjectId = (int) ($row['certificate_subject_id'] ?? 0);
+            if ($certificateSubjectId < 1) {
+                continue;
+            }
+
+            $catalog = CertificateSubject::query()
+                ->whereKey($certificateSubjectId)
+                ->where('is_active', true)
+                ->first();
+
+            if (! $catalog) {
+                throw ValidationException::withMessages([
+                    'subject_results' => 'One or more selected subjects are invalid or inactive.',
+                ]);
+            }
+
+            $qualification->subjectResults()->create([
+                'certificate_subject_id' => $catalog->id,
+                'subject_name' => $catalog->name,
+                'grade' => trim((string) ($row['grade'] ?? '')),
+                'display_order' => $index,
+            ]);
+        }
     }
 }

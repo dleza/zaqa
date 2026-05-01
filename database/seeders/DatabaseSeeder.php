@@ -23,6 +23,7 @@ class DatabaseSeeder extends Seeder
             AwardingInstitutionsSeeder::class,
             BillingCategoriesSeeder::class,
             QualificationTypesSeeder::class,
+            CertificateSubjectsSeeder::class,
             FeeStructuresSeeder::class,
         ]);
     }

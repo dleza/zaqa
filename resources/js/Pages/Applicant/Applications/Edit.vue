@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch, withDefaults } from 'vue'
 import { Link, router, useForm, usePage } from '@inertiajs/vue3'
 import ApplicantLayout from '@/Layouts/ApplicantLayout.vue'
 import InputError from '@/Components/InputError.vue'
@@ -20,16 +20,23 @@ type ApplicantPayload = {
   institution_profile?: any | null
 }
 
-const props = defineProps<{
-  application: any
-  applicant: ApplicantPayload
-  serviceTypes: Array<{ value: string; label: string }>
-  qualificationTypes: Array<any>
-  countries: Array<{ id: number; name: string; iso_code?: string | null }>
-  awardingInstitutions: Array<{ id: number; name: string }>
-  localConsent: { title: string; text: string; version: string }
-  foreignFeePreview?: any | null
-}>()
+const props = withDefaults(
+  defineProps<{
+    application: any
+    applicant: ApplicantPayload
+    serviceTypes: Array<{ value: string; label: string }>
+    qualificationTypes: Array<any>
+    countries: Array<{ id: number; name: string; iso_code?: string | null }>
+    awardingInstitutions: Array<{ id: number; name: string }>
+    /** Admin-managed subject catalog for school-certificate rows */
+    certificateSubjects?: Array<{ id: number; name: string }>
+    localConsent: { title: string; text: string; version: string }
+    foreignFeePreview?: any | null
+  }>(),
+  {
+    certificateSubjects: () => [],
+  },
+)
 
 type StepKey = 'applicant' | 'qualification' | 'consent' | 'payment' | 'review'
 
@@ -1743,6 +1750,7 @@ onBeforeUnmount(() => {
       :application="application"
       :countries="countries"
       :qualification-types="qualificationTypes"
+      :certificate-subjects="certificateSubjects"
       :editing-qualification="qualificationWorkspaceMode === 'edit' ? qualificationWorkspaceQual : null"
       :locked="applicationLocked"
       :zambia-country-id="zambiaCountryId"

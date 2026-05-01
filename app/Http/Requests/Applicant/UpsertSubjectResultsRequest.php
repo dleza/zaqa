@@ -3,6 +3,7 @@
 namespace App\Http\Requests\Applicant;
 
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Validation\Rule;
 
 class UpsertSubjectResultsRequest extends FormRequest
 {
@@ -21,7 +22,11 @@ class UpsertSubjectResultsRequest extends FormRequest
         return [
             'qualification_id' => ['required', 'integer', 'exists:qualifications,id'],
             'subject_results' => ['required', 'array', 'min:1'],
-            'subject_results.*.subject_name' => ['required', 'string', 'max:255'],
+            'subject_results.*.certificate_subject_id' => [
+                'required',
+                'integer',
+                Rule::exists('certificate_subjects', 'id')->where(fn ($q) => $q->where('is_active', true)),
+            ],
             'subject_results.*.grade' => ['required', 'string', 'max:50'],
         ];
     }

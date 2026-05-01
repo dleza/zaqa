@@ -1,22 +1,29 @@
 <script setup lang="ts">
-import { computed, nextTick, ref, watch } from 'vue'
+import { computed, nextTick, ref, watch, withDefaults } from 'vue'
 import { router, useForm } from '@inertiajs/vue3'
 import InstitutionCombobox from '@/Components/InstitutionCombobox.vue'
 import InputError from '@/Components/InputError.vue'
 import Swal from 'sweetalert2'
 import { Building2, FileStack, GraduationCap, MapPin, Shield, Sparkles, X } from 'lucide-vue-next'
 
-const props = defineProps<{
-  modelValue: boolean
-  mode: 'add' | 'edit'
-  applicationId: number
-  application: any
-  countries: Array<{ id: number; name: string; iso_code?: string | null }>
-  qualificationTypes: Array<any>
-  editingQualification: any | null
-  locked: boolean
-  zambiaCountryId: number | null
-}>()
+const props = withDefaults(
+  defineProps<{
+    modelValue: boolean
+    mode: 'add' | 'edit'
+    applicationId: number
+    application: any
+    countries: Array<{ id: number; name: string; iso_code?: string | null }>
+    qualificationTypes: Array<any>
+    /** Active rows from `certificate_subjects` (admin-managed). */
+    certificateSubjects: Array<{ id: number; name: string }>
+    editingQualification: any | null
+    locked: boolean
+    zambiaCountryId: number | null
+  }>(),
+  {
+    certificateSubjects: () => [],
+  },
+)
 
 const emit = defineEmits<{
   'update:modelValue': [boolean]
@@ -44,7 +51,7 @@ const form = useForm({
   award_date: '',
   qualification_type_id: '' as number | string | '',
   transcript_reason: '',
-  subject_results: [] as Array<{ subject_name: string; grade: string }>,
+  subject_results: [] as Array<{ certificate_subject_id: number | ''; grade: string }>,
 })
 
 /** Staged files uploaded in the same action as qualification save */
@@ -148,7 +155,7 @@ function resetSubjectRows() {
 }
 
 function addSubjectRow() {
-  form.subject_results.push({ subject_name: '', grade: '' })
+  form.subject_results.push({ certificate_subject_id: '', grade: '' })
 }
 
 function removeSubjectRow(idx: number) {
@@ -168,7 +175,7 @@ async function loadFromQualification(q: any) {
   form.qualification_type_id = q.qualification_type_id ?? ''
   form.transcript_reason = q.transcript_reason ?? ''
   form.subject_results = (q.subject_results ?? []).map((r: any) => ({
-    subject_name: r.subject_name ?? '',
+    certificate_subject_id: r.certificate_subject_id != null && r.certificate_subject_id !== '' ? Number(r.certificate_subject_id) : '',
     grade: r.grade ?? '',
   }))
   institutionMeta.value = {
@@ -583,11 +590,20 @@ function stripHolderFields(data: Record<string, unknown>) {
                       Add subject
                     </button>
                   </div>
+                  <p
+                    v-if="certificateSubjects.length === 0"
+                    class="mt-3 rounded-lg border border-warning/30 bg-warning/10 px-3 py-2 text-xs text-text-primary"
+                  >
+                    No certificate subjects are configured yet. An administrator must add subjects under System settings → Certificate subjects before you can complete this section.
+                  </p>
                   <div class="mt-3 space-y-3">
                     <div v-for="(row, idx) in form.subject_results" :key="idx" class="grid grid-cols-1 gap-3 sm:grid-cols-7">
                       <div class="sm:col-span-4">
                         <label class="text-xs font-medium">Subject</label>
-                        <input v-model="row.subject_name" class="zaqa-input" :disabled="locked" />
+                        <select v-model="row.certificate_subject_id" class="zaqa-input" :disabled="locked || certificateSubjects.length === 0">
+                          <option value="">Select subject</option>
+                          <option v-for="s in certificateSubjects" :key="s.id" :value="s.id">{{ s.name }}</option>
+                        </select>
                       </div>
                       <div class="sm:col-span-2">
                         <label class="text-xs font-medium">Grade</label>

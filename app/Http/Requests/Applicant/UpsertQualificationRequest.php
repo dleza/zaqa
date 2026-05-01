@@ -3,6 +3,7 @@
 namespace App\Http\Requests\Applicant;
 
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Validation\Rule;
 use Illuminate\Validation\Validator;
 
 class UpsertQualificationRequest extends FormRequest
@@ -40,7 +41,11 @@ class UpsertQualificationRequest extends FormRequest
             'transcript_reason' => ['nullable', 'string', 'max:2000'],
             'notes' => ['nullable', 'string', 'max:5000'],
             'subject_results' => ['nullable', 'array'],
-            'subject_results.*.subject_name' => ['required_with:subject_results', 'string', 'max:255'],
+            'subject_results.*.certificate_subject_id' => [
+                'required_with:subject_results',
+                'integer',
+                Rule::exists('certificate_subjects', 'id')->where(fn ($q) => $q->where('is_active', true)),
+            ],
             'subject_results.*.grade' => ['required_with:subject_results', 'string', 'max:50'],
         ];
     }
@@ -107,6 +112,15 @@ class UpsertQualificationRequest extends FormRequest
             if ($requiresSubjects) {
                 if (! is_array($subjectResults) || count($subjectResults) < 1) {
                     $validator->errors()->add('subject_results', 'Subject results are required for school certificates.');
+                } elseif (is_array($subjectResults)) {
+                    $ids = collect($subjectResults)
+                        ->pluck('certificate_subject_id')
+                        ->filter(fn ($id) => (int) $id > 0)
+                        ->map(fn ($id) => (int) $id)
+                        ->all();
+                    if (count($ids) !== count(array_unique($ids))) {
+                        $validator->errors()->add('subject_results', 'Each subject may only be selected once.');
+                    }
                 }
             }
         });

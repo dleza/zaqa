@@ -9,6 +9,7 @@ class QualificationSubjectResult extends Model
 {
     protected $fillable = [
         'qualification_id',
+        'certificate_subject_id',
         'subject_name',
         'grade',
         'display_order',
@@ -21,6 +22,11 @@ class QualificationSubjectResult extends Model
     public function qualification(): BelongsTo
     {
         return $this->belongsTo(Qualification::class);
+    }
+
+    public function certificateSubject(): BelongsTo
+    {
+        return $this->belongsTo(CertificateSubject::class);
     }
 }
 
