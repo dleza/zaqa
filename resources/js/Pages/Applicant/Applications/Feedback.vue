@@ -55,50 +55,31 @@ function submit() {
     },
   })
 }
-
-function money(cents: number, currency: string) {
-  return new Intl.NumberFormat(undefined, { style: 'currency', currency: currency || 'ZMW' }).format((cents ?? 0) / 100)
-}
 </script>
 
 <template>
   <ApplicantLayout>
-    <div class="zaqa-wizard-shell">
-      <div class="rounded-2xl border border-success/20 bg-success/10 p-6">
-        <div class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-          <div class="flex items-start gap-3">
-            <div class="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-success/20 bg-surface">
-              <CheckCircle2 class="h-5 w-5 text-success" aria-hidden="true" />
-            </div>
-            <div>
-              <div class="text-base font-semibold text-text-primary">Application submitted</div>
-              <div class="mt-1 text-sm text-text-muted">
-                Reference: <span class="font-semibold text-text-primary">{{ application.application_number }}</span>
-              </div>
-              <div class="mt-1 text-xs text-text-muted">{{ application.status_label }}</div>
-            </div>
+    <div class="zaqa-wizard-shell mx-auto max-w-4xl px-4 pb-10 pt-2 sm:px-6">
+      <!-- Narrow context strip — feedback form below is the primary focus -->
+      <div class="mx-auto mb-8 max-w-sm">
+        <div class="flex items-center gap-3 rounded-xl border border-success/25 bg-success/[0.07] px-4 py-3">
+          <div class="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-success/20 bg-surface">
+            <CheckCircle2 class="h-4 w-4 text-success" aria-hidden="true" />
           </div>
-
-          <div class="rounded-xl border border-border bg-surface px-4 py-3 text-right">
-            <div class="text-[11px] font-semibold uppercase tracking-wider text-text-muted">Invoice</div>
-            <div class="mt-1 text-sm font-semibold text-text-primary">{{ application.invoice?.invoice_number ?? '—' }}</div>
-            <div class="mt-1 text-xs text-text-muted">
-              {{ money(application.invoice?.amount_cents ?? 0, application.invoice?.currency ?? 'ZMW') }}
-              <span class="ml-2 inline-flex rounded-full border border-border bg-surface-muted px-2 py-0.5 text-[11px] font-semibold text-text-muted">
-                {{ application.invoice?.status ?? '—' }}
-              </span>
-            </div>
+          <div class="min-w-0">
+            <div class="text-sm font-semibold text-text-primary">Application submitted</div>
+            <div class="truncate font-mono text-xs text-text-muted">{{ application.application_number }}</div>
           </div>
         </div>
       </div>
 
-      <div class="mt-6 overflow-hidden rounded-2xl border border-border bg-surface shadow-sm">
-        <div class="border-b border-border bg-surface-muted px-6 py-4">
-          <div class="text-sm font-semibold text-text-primary">How was your submission experience?</div>
-          <div class="mt-1 text-xs text-text-muted">Your feedback helps ZAQA improve the applicant portal.</div>
+      <div class="overflow-hidden rounded-2xl border border-border bg-surface shadow-sm ring-1 ring-black/[0.03]">
+        <div class="border-b border-border bg-surface-muted px-6 py-5 sm:px-8">
+          <div class="text-base font-semibold tracking-tight text-text-primary">How was your submission experience?</div>
+          <div class="mt-1 text-sm text-text-muted">Your feedback helps ZAQA improve the applicant portal.</div>
         </div>
 
-        <div class="px-6 py-5">
+        <div class="px-6 py-6 sm:px-8">
           <div v-if="existingFeedback" class="rounded-xl border border-success/20 bg-success/10 px-4 py-3 text-sm text-success">
             Feedback already submitted on {{ existingFeedback.submitted_at }}. Thank you.
           </div>
@@ -131,7 +112,7 @@ function money(cents: number, currency: string) {
           </div>
         </div>
 
-        <div class="border-t border-border bg-surface-muted px-6 py-4">
+        <div class="border-t border-border bg-surface-muted px-6 py-4 sm:px-8">
           <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             <button type="button" class="zaqa-btn zaqa-btn-secondary w-full sm:w-auto" @click="skip">Skip for now</button>
             <div class="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:justify-end">

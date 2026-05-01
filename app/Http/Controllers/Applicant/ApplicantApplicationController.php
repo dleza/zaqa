@@ -180,7 +180,22 @@ class ApplicantApplicationController extends Controller
     {
         $this->authorize('view', $application);
 
-        $application->load(['qualification.subjectResults', 'qualification.country', 'qualification.awardingInstitution', 'qualification.qualificationTypeMaster.billingCategory', 'documents', 'consentForm', 'statusHistories', 'invoice', 'payments.proofDocument']);
+        $application->load([
+            'qualifications.subjectResults',
+            'qualifications.country',
+            'qualifications.awardingInstitution.country',
+            'qualifications.qualificationTypeMaster.billingCategory',
+            'qualifications.consentForm',
+            'qualification.subjectResults',
+            'qualification.country',
+            'qualification.awardingInstitution',
+            'qualification.qualificationTypeMaster.billingCategory',
+            'documents',
+            'consentForm',
+            'statusHistories',
+            'invoice',
+            'payments.proofDocument',
+        ]);
         $request->user()?->loadMissing(['applicantProfile', 'institutionProfile']);
 
         return Inertia::render('Applicant/Applications/Show', [
