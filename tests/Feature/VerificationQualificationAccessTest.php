@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Domain\Applications\QualificationCaptureService;
 use App\Enums\ApplicationStatus;
 use App\Enums\DocumentType;
 use App\Enums\VerificationState;
@@ -426,5 +427,225 @@ class VerificationQualificationAccessTest extends TestCase
         $this->actingAs($officer)
             ->get(route('admin.verification.qualifications.edit', ['qualification' => $qualification->id]))
             ->assertForbidden();
+    }
+
+    public function test_level1_redirects_to_assigned_list_after_qualification_send_back(): void
+    {
+        $application = $this->makeSubmittedApplication();
+
+        $officer = User::factory()->activated()->create(['applicant_type' => null]);
+        $officer->givePermissionTo([
+            'verification.level1.process',
+            'verification.pool.view',
+            'verification.send_back',
+            'dashboard.view',
+        ]);
+
+        $qualification = Qualification::query()->create([
+            'application_id' => $application->id,
+            'awarding_institution_name' => 'Test Uni',
+            'qualification_holder_name' => 'Jane',
+            'country_name_other' => 'Zambia',
+            'nrc_passport_number' => '111111/11/1',
+            'title_of_qualification' => 'Diploma',
+            'award_date' => now()->subYear()->toDateString(),
+            'qualification_type' => 'L6',
+            'qualification_type_id' => null,
+            'is_foreign_qualification' => false,
+            'transcript_required' => false,
+            'assigned_verifier_id' => $officer->id,
+            'verification_state' => VerificationState::UnderLevel1Review,
+        ]);
+
+        $response = $this->actingAs($officer)
+            ->post(route('admin.verification.qualifications.send_back', ['qualification' => $qualification->id]), [
+                'comment' => 'Please upload a clearer certificate scan.',
+            ]);
+
+        $response->assertRedirect(route('admin.verification.assigned_to_me'));
+        $response->assertSessionHas('success');
+
+        $qualification->refresh();
+        $this->assertSame(VerificationState::ReturnedToApplicant, $qualification->verification_state);
+        $this->assertNull($qualification->assigned_verifier_id);
+    }
+
+    public function test_level2_redirects_to_pool_after_qualification_send_back(): void
+    {
+        $application = $this->makeSubmittedApplication();
+
+        $level2 = User::factory()->activated()->create(['applicant_type' => null]);
+        $level2->givePermissionTo([
+            'verification.level2.review',
+            'verification.send_back',
+            'verification.pool.view',
+            'dashboard.view',
+        ]);
+
+        $qualification = Qualification::query()->create([
+            'application_id' => $application->id,
+            'awarding_institution_name' => 'Test Uni',
+            'qualification_holder_name' => 'Jane',
+            'country_name_other' => 'Zambia',
+            'nrc_passport_number' => '222222/22/2',
+            'title_of_qualification' => 'Diploma',
+            'award_date' => now()->subYear()->toDateString(),
+            'qualification_type' => 'L6',
+            'qualification_type_id' => null,
+            'is_foreign_qualification' => false,
+            'transcript_required' => false,
+            'assigned_verifier_id' => null,
+            'verification_state' => VerificationState::UnderLevel2Review,
+        ]);
+
+        $response = $this->actingAs($level2)
+            ->post(route('admin.verification.qualifications.send_back', ['qualification' => $qualification->id]), [
+                'comment' => 'Applicant must correct institution details.',
+            ]);
+
+        $response->assertRedirect(route('admin.verification.pool.index'));
+        $response->assertSessionHas('success');
+
+        $qualification->refresh();
+        $this->assertSame(VerificationState::ReturnedToApplicant, $qualification->verification_state);
+    }
+
+    public function test_awaiting_applicant_resubmission_lists_only_send_back_officer_qualifications(): void
+    {
+        $application = $this->makeSubmittedApplication();
+
+        $officerA = User::factory()->activated()->create(['applicant_type' => null]);
+        $officerA->givePermissionTo([
+            'verification.pool.view',
+            'verification.send_back',
+            'dashboard.view',
+        ]);
+
+        $officerB = User::factory()->activated()->create(['applicant_type' => null]);
+        $officerB->givePermissionTo([
+            'verification.pool.view',
+            'verification.send_back',
+            'dashboard.view',
+        ]);
+
+        $qForA = Qualification::query()->create([
+            'application_id' => $application->id,
+            'awarding_institution_name' => 'Test',
+            'qualification_holder_name' => 'A',
+            'country_name_other' => 'Zambia',
+            'nrc_passport_number' => '111111/11/1',
+            'title_of_qualification' => 'Diploma A',
+            'award_date' => now()->subYear()->toDateString(),
+            'qualification_type' => 'L6',
+            'qualification_type_id' => null,
+            'is_foreign_qualification' => false,
+            'transcript_required' => false,
+            'verification_state' => VerificationState::ReturnedToApplicant,
+            'send_back_by_user_id' => $officerA->id,
+        ]);
+
+        Qualification::query()->create([
+            'application_id' => $application->id,
+            'awarding_institution_name' => 'Test',
+            'qualification_holder_name' => 'B',
+            'country_name_other' => 'Zambia',
+            'nrc_passport_number' => '222222/22/2',
+            'title_of_qualification' => 'Diploma B',
+            'award_date' => now()->subYear()->toDateString(),
+            'qualification_type' => 'L6',
+            'qualification_type_id' => null,
+            'is_foreign_qualification' => false,
+            'transcript_required' => false,
+            'verification_state' => VerificationState::ReturnedToApplicant,
+            'send_back_by_user_id' => $officerB->id,
+        ]);
+
+        $this->actingAs($officerA)
+            ->get(route('admin.verification.awaiting_applicant_resubmission'))
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page
+                ->has('qualifications.data', 1)
+                ->where('qualifications.data.0.id', $qForA->id));
+    }
+
+    public function test_level2_assigned_to_me_includes_qualifications_owned_under_level2_review(): void
+    {
+        $application = $this->makeSubmittedApplication();
+
+        $level2 = User::factory()->activated()->create(['applicant_type' => null]);
+        $level2->givePermissionTo([
+            'verification.level2.review',
+            'verification.pool.view',
+            'dashboard.view',
+        ]);
+
+        $qOwned = Qualification::query()->create([
+            'application_id' => $application->id,
+            'awarding_institution_name' => 'Test',
+            'qualification_holder_name' => 'Jane',
+            'country_name_other' => 'Zambia',
+            'nrc_passport_number' => '333333/33/3',
+            'title_of_qualification' => 'Diploma',
+            'award_date' => now()->subYear()->toDateString(),
+            'qualification_type' => 'L6',
+            'qualification_type_id' => null,
+            'is_foreign_qualification' => false,
+            'transcript_required' => false,
+            'assigned_verifier_id' => null,
+            'verification_state' => VerificationState::UnderLevel2Review,
+            'level2_review_owner_id' => $level2->id,
+        ]);
+
+        $this->actingAs($level2)
+            ->get(route('admin.verification.assigned_to_me'))
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page
+                ->has('qualifications.data', 1)
+                ->where('qualifications.data.0.id', $qOwned->id));
+    }
+
+    public function test_assigned_to_me_forbidden_without_level1_or_level2_process(): void
+    {
+        $viewer = User::factory()->activated()->create(['applicant_type' => null]);
+        $viewer->givePermissionTo(['verification.pool.view', 'dashboard.view']);
+
+        $this->actingAs($viewer)
+            ->get(route('admin.verification.assigned_to_me'))
+            ->assertForbidden();
+    }
+
+    public function test_reopen_after_applicant_amendment_restores_level2_review_owner(): void
+    {
+        $application = $this->makeSubmittedApplication();
+        $application->forceFill(['current_status' => ApplicationStatus::SentBack])->save();
+
+        $l2 = User::factory()->activated()->create(['applicant_type' => null]);
+        $l2->givePermissionTo(['verification.level2.review', 'verification.pool.view']);
+
+        $applicant = User::factory()->activated()->create(['applicant_type' => 'individual']);
+
+        $qualification = Qualification::query()->create([
+            'application_id' => $application->id,
+            'awarding_institution_name' => 'Test Uni',
+            'qualification_holder_name' => 'Jane',
+            'country_name_other' => 'Zambia',
+            'nrc_passport_number' => '444444/44/4',
+            'title_of_qualification' => 'Diploma',
+            'award_date' => now()->subYear()->toDateString(),
+            'qualification_type' => 'L6',
+            'qualification_type_id' => null,
+            'is_foreign_qualification' => false,
+            'transcript_required' => false,
+            'verification_state' => VerificationState::ReturnedToApplicant,
+            'send_back_by_user_id' => $l2->id,
+            'send_back_reopen_level' => 'level2',
+        ]);
+
+        app(QualificationCaptureService::class)->reopenQualificationAfterApplicantAmendment($qualification->fresh(), $applicant);
+
+        $qualification->refresh();
+        $this->assertSame(VerificationState::UnderLevel2Review, $qualification->verification_state);
+        $this->assertSame($l2->id, $qualification->level2_review_owner_id);
+        $this->assertNull($qualification->send_back_by_user_id);
     }
 }

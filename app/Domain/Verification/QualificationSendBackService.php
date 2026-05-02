@@ -59,11 +59,16 @@ class QualificationSendBackService
                 'returned_to_applicant_at' => optional($qualification->returned_to_applicant_at)?->toIso8601String(),
             ];
 
+            $reopenLevel = $actor->can('verification.level2.review') ? 'level2' : 'level1';
+
             $qualification->forceFill([
                 'assigned_verifier_id' => null,
                 'assigned_at' => null,
                 'verification_state' => VerificationState::ReturnedToApplicant,
                 'returned_to_applicant_at' => now(),
+                'send_back_by_user_id' => $actor->id,
+                'send_back_reopen_level' => $reopenLevel,
+                'level2_review_owner_id' => null,
             ])->save();
 
             $after = [

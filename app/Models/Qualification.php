@@ -36,6 +36,9 @@ class Qualification extends Model
         'assigned_at',
         'reviewed_at',
         'returned_to_applicant_at',
+        'send_back_by_user_id',
+        'send_back_reopen_level',
+        'level2_review_owner_id',
         'reviewer_notes',
         'fee_currency',
         'fee_amount_cents',
@@ -87,6 +90,16 @@ class Qualification extends Model
     public function assignedVerifier(): BelongsTo
     {
         return $this->belongsTo(User::class, 'assigned_verifier_id');
+    }
+
+    public function sendBackBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'send_back_by_user_id');
+    }
+
+    public function level2ReviewOwner(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'level2_review_owner_id');
     }
 
     public function consentForm(): HasOne

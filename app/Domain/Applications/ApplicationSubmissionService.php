@@ -30,6 +30,7 @@ class ApplicationSubmissionService
     public function __construct(
         private readonly AuditLogService $audit,
         private readonly ApplicationLifecycleService $lifecycle,
+        private readonly QualificationCaptureService $qualificationCapture,
     ) {}
 
     public function submit(Application $application, User $actor): Application
@@ -214,10 +215,14 @@ class ApplicationSubmissionService
             foreach ($application->qualifications as $qualification) {
                 /** @var Qualification $qualification */
                 if ($fromStatus === ApplicationStatus::SentBack) {
-                    $qualification->forceFill([
-                        'verification_state' => VerificationState::AwaitingAssignment,
-                        'returned_to_applicant_at' => null,
-                    ])->save();
+                    if ($qualification->verification_state === VerificationState::ReturnedToApplicant) {
+                        $this->qualificationCapture->reopenQualificationAfterApplicantAmendment($qualification, $actor);
+                    } else {
+                        $qualification->forceFill([
+                            'verification_state' => VerificationState::AwaitingAssignment,
+                            'returned_to_applicant_at' => null,
+                        ])->save();
+                    }
 
                     continue;
                 }

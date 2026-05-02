@@ -2,6 +2,7 @@
 
 namespace App\Domain\Verification;
 
+use App\Enums\VerificationState;
 use App\Models\Application;
 use App\Models\Qualification;
 use App\Models\User;
@@ -41,9 +42,17 @@ final class VerificationQualificationAccess
         if (! self::mustRestrictToAssignedQualifications($user)) {
             return;
         }
-        if ((int) $qualification->assigned_verifier_id !== (int) $user->id) {
-            abort(403);
+        if ((int) $qualification->assigned_verifier_id === (int) $user->id) {
+            return;
         }
+        // Officer may follow up on items they sent back while still awaiting applicant amendment.
+        $vs = $qualification->verification_state;
+        if ($vs === VerificationState::ReturnedToApplicant
+            && (int) ($qualification->send_back_by_user_id ?? 0) === (int) $user->id) {
+            return;
+        }
+
+        abort(403);
     }
 
     /**

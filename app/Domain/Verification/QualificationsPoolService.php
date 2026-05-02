@@ -31,6 +31,10 @@ class QualificationsPoolService
         /** @var User|null $viewer */
         $viewer = $request->user();
         $restrictLevel1 = VerificationQualificationAccess::mustRestrictToAssignedQualifications($viewer);
+        // Controllers may set flags via Request::merge(); query() alone would miss them.
+        $awaitingApplicantFromMe = ($request->query('awaiting_applicant_from_me')
+            ?? $request->input('awaiting_applicant_from_me')) === '1';
+        $mine = ($request->query('mine') ?? $request->input('mine')) === '1';
 
         $q = trim((string) $request->query('q', ''));
         $qualificationTypeId = $request->query('qualification_type_id');
@@ -125,7 +129,10 @@ class QualificationsPoolService
             $query->where('is_foreign_qualification', false);
         }
 
-        if ($restrictLevel1 && $viewer) {
+        if ($awaitingApplicantFromMe && $viewer) {
+            $query->where('qualifications.verification_state', VerificationState::ReturnedToApplicant->value)
+                ->where('qualifications.send_back_by_user_id', $viewer->id);
+        } elseif ($restrictLevel1 && $viewer) {
             $query->where('assigned_verifier_id', $viewer->id);
         } else {
             if ($assigned === '1') {
@@ -138,14 +145,20 @@ class QualificationsPoolService
                 $query->where('assigned_verifier_id', (int) $assignedVerifierId);
             }
 
-            if ($request->query('mine') === '1' && $currentUserId) {
-                $query->where('assigned_verifier_id', $currentUserId);
+            if ($mine && $currentUserId) {
+                $query->where(function ($w) use ($currentUserId) {
+                    $w->where('qualifications.assigned_verifier_id', $currentUserId)
+                        ->orWhere(function ($w2) use ($currentUserId) {
+                            $w2->where('qualifications.verification_state', VerificationState::UnderLevel2Review->value)
+                                ->where('qualifications.level2_review_owner_id', $currentUserId);
+                        });
+                });
             }
         }
 
         if ($verificationState !== '') {
             $query->where('verification_state', $verificationState);
-        } else {
+        } elseif (! $awaitingApplicantFromMe) {
             $query->where(function ($q) {
                 $q->whereNull('qualifications.verification_state')
                     ->orWhere('qualifications.verification_state', '!=', VerificationState::ReturnedToApplicant->value);

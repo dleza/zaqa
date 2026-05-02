@@ -253,7 +253,18 @@ class AdminVerificationQualificationController extends Controller
 
         $sendBack->sendBackToApplicant($qualification, $request->user(), (string) $request->validated('comment'));
 
-        return back()->with('success', 'Qualification sent back to applicant.');
+        // Send-back clears Level 1 assignment; restricted verifiers would get 403 on the same qualification URL.
+        $message = 'Qualification sent back to applicant.';
+        $user = $request->user();
+        if ($user && VerificationQualificationAccess::mustRestrictToAssignedQualifications($user)) {
+            return redirect()
+                ->route('admin.verification.assigned_to_me')
+                ->with('success', $message);
+        }
+
+        return redirect()
+            ->route('admin.verification.pool.index')
+            ->with('success', $message);
     }
 
     public function level1Complete(QualificationLevel1CompleteRequest $request, Qualification $qualification, QualificationLevel1ReviewService $reviews): RedirectResponse

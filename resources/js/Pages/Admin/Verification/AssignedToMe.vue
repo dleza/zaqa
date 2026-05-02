@@ -6,6 +6,7 @@ import { computed, ref, watch } from 'vue'
 
 const props = defineProps<{
   qualifications: any
+  pageVariant?: 'assigned' | 'awaiting_applicant'
   filters?: {
     q?: string
     overdue?: string | null
@@ -15,6 +16,26 @@ const props = defineProps<{
     qualification_q?: string | null
   }
 }>()
+
+const variant = computed(() => props.pageVariant ?? 'assigned')
+const listBasePath = computed(() =>
+  variant.value === 'awaiting_applicant'
+    ? '/admin/verification/awaiting-applicant-resubmission'
+    : '/admin/verification/assigned-to-me',
+)
+const pageTitle = computed(() =>
+  variant.value === 'awaiting_applicant' ? 'Awaiting applicant resubmission' : 'Assigned to me',
+)
+const pageDescription = computed(() =>
+  variant.value === 'awaiting_applicant'
+    ? 'Qualifications you sent back for corrections — the applicant has not yet resubmitted changes. Use this list to follow up or open the task for context.'
+    : 'Verification tasks tied to you: Level 1 assignments and Level 2 reviews you own after an applicant returns their corrections. Open a row to continue — actions apply to that qualification only.',
+)
+const emptyMessage = computed(() =>
+  variant.value === 'awaiting_applicant'
+    ? 'No qualifications are waiting on applicants from your send-backs.'
+    : 'No qualification tasks assigned to you.',
+)
 
 const q = ref((props.filters?.q ?? '').toString())
 const overdue = ref((props.filters?.overdue ?? '').toString())
@@ -53,9 +74,9 @@ const statusBadgeClass = computed(() => {
   }
 })
 
-watch([q, overdue, overdueDays, submittedFrom, submittedTo, qualificationQ], () => {
+watch([q, overdue, overdueDays, submittedFrom, submittedTo, qualificationQ, listBasePath], () => {
   router.get(
-    '/admin/verification/assigned-to-me',
+    listBasePath.value,
     {
       q: q.value || null,
       overdue: overdue.value || null,
@@ -77,11 +98,11 @@ watch([q, overdue, overdueDays, submittedFrom, submittedTo, qualificationQ], () 
           <UserCheck class="h-4 w-4" aria-hidden="true" />
           Verification
         </div>
-        <h1 class="mt-2 text-2xl font-semibold tracking-tight text-text-primary">Assigned to me</h1>
+        <h1 class="mt-2 text-2xl font-semibold tracking-tight text-text-primary">{{ pageTitle }}</h1>
         <p class="mt-1 text-sm text-text-muted">
-          Qualification verification tasks assigned to you for Level 1 review. Open a row to work that task — send-back and completion actions apply to that qualification only.
+          {{ pageDescription }}
         </p>
-        <p class="mt-2 text-xs text-text-muted">
+        <p v-if="variant === 'assigned'" class="mt-2 text-xs text-text-muted">
           Need the parent file? Use <span class="font-medium text-text-primary">Application</span> on a row to open the linked application (read-only context).
         </p>
       </div>
@@ -114,7 +135,7 @@ watch([q, overdue, overdueDays, submittedFrom, submittedTo, qualificationQ], () 
       </div>
 
       <div v-if="qualifications.data.length === 0" class="px-5 py-6 text-sm text-text-muted">
-        No qualification tasks assigned to you.
+        {{ emptyMessage }}
       </div>
 
       <div v-else class="overflow-x-auto">

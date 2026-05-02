@@ -9,21 +9,15 @@ use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
 
-class AdminVerificationAssignedToMeController extends Controller
+class AdminVerificationAwaitingApplicantResubmissionController extends Controller
 {
     public function index(Request $request, QualificationsPoolService $pool): Response
     {
-        $user = $request->user();
-        if (! $user?->can('verification.level1.process') && ! $user?->can('verification.level2.review')) {
-            abort(403);
-        }
-
-        $request->merge(['mine' => '1']);
+        $request->merge(['awaiting_applicant_from_me' => '1']);
 
         $rows = $pool->pool($request, $request->user()?->id);
 
         return Inertia::render('Admin/Verification/AssignedToMe', [
-            'pageVariant' => 'assigned',
             'qualifications' => $rows->through(fn (Qualification $q) => [
                 'id' => $q->id,
                 'verification_state' => $q->verification_state?->value ?? (string) $q->verification_state,
@@ -60,6 +54,7 @@ class AdminVerificationAssignedToMeController extends Controller
                 'submitted_to' => $request->query('submitted_to'),
                 'qualification_q' => $request->query('qualification_q'),
             ],
+            'pageVariant' => 'awaiting_applicant',
         ]);
     }
 }

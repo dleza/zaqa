@@ -131,26 +131,7 @@ class QualificationCaptureService
             }
 
             if ($wasReturnedToApplicant) {
-                $qualification->forceFill([
-                    'verification_state' => VerificationState::AwaitingAssignment,
-                    'returned_to_applicant_at' => null,
-                ])->save();
-
-                $this->lifecycle->event(
-                    application: $application,
-                    eventType: 'submission',
-                    eventCodeBase: 'submission.qualification_amended.q'.$qualification->id,
-                    stage: LifecycleStage::Review,
-                    title: 'Qualification amended',
-                    description: 'Applicant updated a qualification item after ZAQA feedback.',
-                    visibility: LifecycleVisibility::Both,
-                    actor: $actor,
-                    comment: null,
-                    metadata: [
-                        'qualification_id' => $qualification->id,
-                    ],
-                    occurredAt: now(),
-                );
+                $this->reopenQualificationAfterApplicantAmendment($qualification, $actor);
             }
 
             if (is_array($subjectResults)) {
@@ -212,6 +193,70 @@ class QualificationCaptureService
 
             return $qualification;
         });
+    }
+
+    /**
+     * When an applicant saves changes after a per-qualification send-back, route the task back to the
+     * officer who sent it (Level 1: reassignment; Level 2: under Level 2 review with owner tracking).
+     */
+    public function reopenQualificationAfterApplicantAmendment(Qualification $qualification, User $actor): void
+    {
+        $qualification->refresh();
+        if ($qualification->verification_state !== VerificationState::ReturnedToApplicant) {
+            return;
+        }
+
+        $qualification->loadMissing('application');
+        $application = $qualification->application;
+        if (! $application) {
+            return;
+        }
+
+        $sendBackBy = $qualification->send_back_by_user_id;
+        $reopenLevel = (string) ($qualification->send_back_reopen_level ?? 'level1');
+
+        if (! $sendBackBy) {
+            $qualification->forceFill([
+                'verification_state' => VerificationState::AwaitingAssignment,
+                'returned_to_applicant_at' => null,
+            ])->save();
+        } elseif ($reopenLevel === 'level2') {
+            $qualification->forceFill([
+                'verification_state' => VerificationState::UnderLevel2Review,
+                'assigned_verifier_id' => null,
+                'assigned_at' => null,
+                'returned_to_applicant_at' => null,
+                'send_back_by_user_id' => null,
+                'send_back_reopen_level' => null,
+                'level2_review_owner_id' => (int) $sendBackBy,
+            ])->save();
+        } else {
+            $qualification->forceFill([
+                'verification_state' => VerificationState::UnderLevel1Review,
+                'assigned_verifier_id' => (int) $sendBackBy,
+                'assigned_at' => now(),
+                'returned_to_applicant_at' => null,
+                'send_back_by_user_id' => null,
+                'send_back_reopen_level' => null,
+                'level2_review_owner_id' => null,
+            ])->save();
+        }
+
+        $this->lifecycle->event(
+            application: $application,
+            eventType: 'submission',
+            eventCodeBase: 'submission.qualification_amended.q'.$qualification->id,
+            stage: LifecycleStage::Review,
+            title: 'Qualification amended',
+            description: 'Applicant updated a qualification item after ZAQA feedback.',
+            visibility: LifecycleVisibility::Both,
+            actor: $actor,
+            comment: null,
+            metadata: [
+                'qualification_id' => $qualification->id,
+            ],
+            occurredAt: now(),
+        );
     }
 
     /**
@@ -436,6 +481,8 @@ class QualificationCaptureService
                 ->where('application_id', $application->id)
                 ->firstOrFail();
 
+            $wasReturnedToApplicant = $qualification->verification_state === VerificationState::ReturnedToApplicant;
+
             $beforeSubjects = $qualification->subjectResults
                 ->map(fn ($row) => ['subject_name' => $row->subject_name, 'grade' => $row->grade, 'display_order' => $row->display_order])
                 ->values()
@@ -484,6 +531,10 @@ class QualificationCaptureService
                 ],
                 occurredAt: now(),
             );
+
+            if ($wasReturnedToApplicant) {
+                $this->reopenQualificationAfterApplicantAmendment($qualification, $actor);
+            }
 
             return $qualification;
         });

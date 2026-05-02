@@ -20,6 +20,7 @@ use App\Http\Controllers\Admin\Settings\AdminFeesController;
 use App\Http\Controllers\Admin\Settings\AdminQualificationTypesController;
 use App\Http\Controllers\Admin\Verification\AdminVerificationApplicationController;
 use App\Http\Controllers\Admin\Verification\AdminVerificationAssignedToMeController;
+use App\Http\Controllers\Admin\Verification\AdminVerificationAwaitingApplicantResubmissionController;
 use App\Http\Controllers\Admin\Verification\AdminVerificationCategoryController;
 use App\Http\Controllers\Admin\Verification\AdminVerificationDocumentController;
 use App\Http\Controllers\Admin\Verification\AdminVerificationPoolController;
@@ -271,8 +272,11 @@ Route::middleware('auth')->group(function () {
                 ->middleware('can:verification.pool.view')
                 ->name('pool.awarding_institution');
             Route::get('/assigned-to-me', [AdminVerificationAssignedToMeController::class, 'index'])
-                ->middleware('can:verification.level1.process')
+                ->middleware('can:verification.pool.view')
                 ->name('assigned_to_me');
+            Route::get('/awaiting-applicant-resubmission', [AdminVerificationAwaitingApplicantResubmissionController::class, 'index'])
+                ->middleware(['can:verification.pool.view', 'can:verification.send_back'])
+                ->name('awaiting_applicant_resubmission');
 
             Route::get('/applications/{application}', [AdminVerificationApplicationController::class, 'show'])
                 ->middleware('can:verification.pool.view')
