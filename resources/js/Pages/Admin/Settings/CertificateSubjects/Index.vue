@@ -2,7 +2,7 @@
 import AdminLayout from '@/Layouts/AdminLayout.vue'
 import AdminViewModal from '@/Components/AdminViewModal.vue'
 import { Link, router } from '@inertiajs/vue3'
-import { ClipboardList, Plus, Search } from 'lucide-vue-next'
+import { BookOpen, Plus, Search } from 'lucide-vue-next'
 import { ref, watch } from 'vue'
 
 const props = defineProps<{
@@ -40,10 +40,10 @@ function openView(s: any) {
     <div class="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
       <div>
         <div class="inline-flex items-center gap-2 text-xs font-semibold text-text-muted">
-          <ClipboardList class="h-4 w-4" aria-hidden="true" />
-          System Settings
+          <BookOpen class="h-4 w-4" aria-hidden="true" />
+          Reference data · System settings
         </div>
-        <h1 class="mt-2 text-2xl font-semibold tracking-tight text-text-primary">Certificate subjects</h1>
+        <h1 class="mt-2 text-2xl font-semibold tracking-tight text-text-primary">Subjects</h1>
         <p class="mt-1 text-sm text-text-muted">
           Subjects applicants choose when entering school-certificate results (e.g. Grade 7 / 9 / 12).
         </p>

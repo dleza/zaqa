@@ -2,7 +2,7 @@
 import AdminLayout from '@/Layouts/AdminLayout.vue'
 import AdminCenteredFormPage from '@/Components/AdminCenteredFormPage.vue'
 import { Link, useForm } from '@inertiajs/vue3'
-import { ClipboardList } from 'lucide-vue-next'
+import { BookOpen } from 'lucide-vue-next'
 
 const props = defineProps<{
   subject: { id: number; name: string; is_active: boolean; sort_order: number }
@@ -26,10 +26,10 @@ function submit() {
         <div class="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
           <div>
             <div class="inline-flex items-center gap-2 text-xs font-semibold text-text-muted">
-              <ClipboardList class="h-4 w-4" aria-hidden="true" />
-              System Settings
+              <BookOpen class="h-4 w-4" aria-hidden="true" />
+              Reference data · System settings
             </div>
-            <h1 class="mt-2 text-2xl font-semibold tracking-tight text-text-primary">Edit certificate subject</h1>
+            <h1 class="mt-2 text-2xl font-semibold tracking-tight text-text-primary">Edit subject</h1>
             <p class="mt-1 text-sm text-text-muted">Update how this subject appears for applicants.</p>
           </div>
           <div class="flex items-center gap-2">
