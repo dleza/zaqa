@@ -180,9 +180,15 @@ class ApplicationsPoolService
     }
 
     /**
-     * Grouping counts by awarding institution (local) based on qualifications.awarding_institution_id.
+     * Grouping counts by awarding institution. Qualification locality is controlled by filters:
+     * - locality=all (default): all qualifications
+     * - locality=local: is_foreign_qualification = false
+     * - locality=foreign: is_foreign_qualification = true
      *
-     * @return array<int, array{awarding_institution_id:int|null, awarding_institution_name:string, count:int}>
+     * Uses qualification-level locality so mixed applications still contribute per-item counts.
+     *
+     * @param  array<string, mixed>  $filters  locality: all|local|foreign
+     * @return array<int, array{awarding_institution_id:int|null, awarding_institution_name:string, count:int, local_count:int, foreign_count:int}>
      */
     public function byAwardingInstitutionCounts(array $filters = []): array
     {
@@ -190,11 +196,14 @@ class ApplicationsPoolService
         $submittedTo = trim((string) ($filters['submitted_to'] ?? ''));
         $qualificationQ = trim((string) ($filters['qualification_q'] ?? ''));
         $overdueDays = (int) ($filters['overdue_days'] ?? 0);
+        $locality = trim((string) ($filters['locality'] ?? ''));
+        if (! in_array($locality, ['local', 'foreign'], true)) {
+            $locality = 'all';
+        }
 
         $rows = Application::query()
-            ->leftJoin('qualifications', 'qualifications.application_id', '=', 'applications.id')
+            ->join('qualifications', 'qualifications.application_id', '=', 'applications.id')
             ->leftJoin('awarding_institutions', 'awarding_institutions.id', '=', 'qualifications.awarding_institution_id')
-            ->where('applications.is_foreign', false)
             ->whereIn('applications.current_status', [
                 ApplicationStatus::Submitted->value,
                 ApplicationStatus::Resubmitted->value,
@@ -210,14 +219,31 @@ class ApplicationsPoolService
             ->get([
                 DB::raw('qualifications.awarding_institution_id as awarding_institution_id'),
                 DB::raw('coalesce(awarding_institutions.name, qualifications.awarding_institution_name_other, "Other") as awarding_institution_name'),
-                DB::raw('count(*) as cnt'),
+                DB::raw('sum(case when qualifications.is_foreign_qualification = 0 then 1 else 0 end) as local_cnt'),
+                DB::raw('sum(case when qualifications.is_foreign_qualification = 1 then 1 else 0 end) as foreign_cnt'),
             ]);
 
-        return $rows->map(fn ($r) => [
-            'awarding_institution_id' => $r->awarding_institution_id ? (int) $r->awarding_institution_id : null,
-            'awarding_institution_name' => (string) $r->awarding_institution_name,
-            'count' => (int) $r->cnt,
-        ])->all();
+        return $rows
+            ->map(function ($r) use ($locality) {
+                $localCount = (int) $r->local_cnt;
+                $foreignCount = (int) $r->foreign_cnt;
+                $displayCount = match ($locality) {
+                    'local' => $localCount,
+                    'foreign' => $foreignCount,
+                    default => $localCount + $foreignCount,
+                };
+
+                return [
+                    'awarding_institution_id' => $r->awarding_institution_id ? (int) $r->awarding_institution_id : null,
+                    'awarding_institution_name' => (string) $r->awarding_institution_name,
+                    'count' => $displayCount,
+                    'local_count' => $localCount,
+                    'foreign_count' => $foreignCount,
+                ];
+            })
+            ->filter(fn (array $g) => $g['count'] > 0)
+            ->sortByDesc('count')
+            ->values()
+            ->all();
     }
 }
-

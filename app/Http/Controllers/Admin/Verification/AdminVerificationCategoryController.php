@@ -41,6 +41,7 @@ class AdminVerificationCategoryController extends Controller
     public function byAwardingInstitution(Request $request, ApplicationsPoolService $pool): Response
     {
         $filters = [
+            'locality' => $request->query('locality'),
             'overdue_days' => $request->query('overdue_days'),
             'submitted_from' => $request->query('submitted_from'),
             'submitted_to' => $request->query('submitted_to'),
@@ -53,4 +54,3 @@ class AdminVerificationCategoryController extends Controller
         ]);
     }
 }
-
