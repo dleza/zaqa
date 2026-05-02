@@ -25,14 +25,17 @@ class InvoiceService
         private readonly AuditLogService $audit,
         private readonly QualificationFeeResolver $fees,
         private readonly ApplicationLifecycleService $lifecycle,
-    )
-    {
-    }
+        private readonly ApplicationPaymentSatisfaction $paymentSatisfaction,
+    ) {}
 
     public function ensureInvoice(Application $application, User $actor): Invoice
     {
         return DB::transaction(function () use ($application, $actor) {
-            $existing = Invoice::query()->where('application_id', $application->id)->lockForUpdate()->first();
+            $primary = Invoice::query()
+                ->where('application_id', $application->id)
+                ->whereNull('supplementary_of_invoice_id')
+                ->lockForUpdate()
+                ->first();
 
             $application->loadMissing('qualifications');
 
@@ -68,7 +71,6 @@ class InvoiceService
                 $feeCents = (int) $resolved['fee_cents'];
                 $totalCents += $feeCents;
 
-                // Snapshot fee on each qualification item (used for immutability + audit).
                 $q->forceFill([
                     'fee_currency' => $currency,
                     'fee_amount_cents' => $feeCents,
@@ -87,28 +89,33 @@ class InvoiceService
                 ];
             }
 
-            if ($existing) {
-                // Invoice immutability: do not mutate settled invoices. For unpaid/issued invoices (before payment),
-                // keep Step 2 + Payment consistent by updating the fee snapshot if fee-impacting fields changed.
-                if ($existing->status !== InvoiceStatus::Issued || $existing->paid_at) {
-                    return $existing;
+            if ($primary) {
+                if ($primary->status === InvoiceStatus::Paid || $primary->paid_at) {
+                    $this->syncSupplementaryForPaidPrimary($primary, $application, $actor, $totalCents, $currency, $breakdown);
+                    $application->refresh()->loadMissing('payments', 'qualifications');
+
+                    return $this->resolveInvoiceForPaymentFlow($application, $primary);
+                }
+
+                if ($primary->status !== InvoiceStatus::Issued) {
+                    return $this->resolveInvoiceForPaymentFlow($application, $primary);
                 }
 
                 $application->loadMissing('payments');
                 $hasConfirmedPayment = $application->payments->contains(fn ($p) => $p->status?->value === 'confirmed');
                 if ($hasConfirmedPayment) {
-                    return $existing;
+                    return $this->resolveInvoiceForPaymentFlow($application, $primary);
                 }
 
                 $needsUpdate =
-                    (int) $existing->amount_cents !== (int) $totalCents
-                    || (string) $existing->currency !== (string) $currency;
+                    (int) $primary->amount_cents !== (int) $totalCents
+                    || (string) $primary->currency !== (string) $currency;
 
                 if (! $needsUpdate) {
-                    return $existing;
+                    return $this->resolveInvoiceForPaymentFlow($application, $primary);
                 }
 
-                $before = $existing->only([
+                $before = $primary->only([
                     'billing_category_id',
                     'qualification_type_id',
                     'fee_structure_id',
@@ -119,8 +126,7 @@ class InvoiceService
                     'amount_cents',
                 ]);
 
-                $existing->forceFill([
-                    // Multi-qualification invoices store the detailed fee snapshot in metadata.breakdown.
+                $primary->forceFill([
                     'billing_category_id' => null,
                     'qualification_type_id' => null,
                     'fee_structure_id' => null,
@@ -129,21 +135,21 @@ class InvoiceService
                     'fee_label_snapshot' => 'Multiple qualifications',
                     'currency' => $currency,
                     'amount_cents' => $totalCents,
-                    'metadata' => array_merge((array) ($existing->metadata ?? []), [
+                    'metadata' => array_merge((array) ($primary->metadata ?? []), [
                         'breakdown' => $breakdown,
                         'recalculated_at' => now()->toIso8601String(),
                     ]),
                 ])->save();
 
                 Payment::query()
-                    ->where('invoice_id', $existing->id)
+                    ->where('invoice_id', $primary->id)
                     ->where('status', '!=', PaymentStatus::Confirmed)
                     ->update([
                         'amount_cents' => $totalCents,
                         'currency' => $currency,
                     ]);
 
-                $after = $existing->only([
+                $after = $primary->only([
                     'billing_category_id',
                     'qualification_type_id',
                     'fee_structure_id',
@@ -160,12 +166,12 @@ class InvoiceService
                     actionName: 'invoice_updated',
                     message: 'Invoice updated to reflect fee-impacting changes before payment.',
                     entityType: Invoice::class,
-                    entityId: $existing->id,
+                    entityId: $primary->id,
                     beforeState: $before,
                     afterState: $after,
                     metadata: [
                         'application_id' => $application->id,
-                        'invoice_number' => $existing->invoice_number,
+                        'invoice_number' => $primary->invoice_number,
                     ],
                     actor: $actor,
                 );
@@ -180,17 +186,18 @@ class InvoiceService
                     visibility: LifecycleVisibility::Internal,
                     actor: $actor,
                     metadata: [
-                        'invoice_id' => $existing->id,
-                        'invoice_number' => $existing->invoice_number,
+                        'invoice_id' => $primary->id,
+                        'invoice_number' => $primary->invoice_number,
                     ],
                     occurredAt: now(),
                 );
 
-                return $existing;
+                return $this->resolveInvoiceForPaymentFlow($application, $primary);
             }
 
             $invoice = Invoice::create([
                 'application_id' => $application->id,
+                'supplementary_of_invoice_id' => null,
                 'billing_category_id' => null,
                 'qualification_type_id' => null,
                 'fee_structure_id' => null,
@@ -206,6 +213,7 @@ class InvoiceService
                 'paid_at' => null,
                 'metadata' => [
                     'generated_by' => 'wizard_payment_step',
+                    'invoice_role' => 'primary',
                     'breakdown' => $breakdown,
                 ],
             ]);
@@ -249,13 +257,248 @@ class InvoiceService
                 occurredAt: now(),
             );
 
-            return $invoice;
+            return $this->resolveInvoiceForPaymentFlow($application, $invoice);
         });
+    }
+
+    /**
+     * Invoice used for initiating payment (open supplementary top-up if balance due; otherwise primary).
+     */
+    private function resolveInvoiceForPaymentFlow(Application $application, Invoice $primary): Invoice
+    {
+        $application->refresh()->loadMissing('payments', 'qualifications');
+
+        $outstanding = $this->paymentSatisfaction->outstandingCents($application);
+        if ($outstanding > 0) {
+            $supplementary = Invoice::query()
+                ->where('application_id', $application->id)
+                ->whereNotNull('supplementary_of_invoice_id')
+                ->where('status', InvoiceStatus::Issued)
+                ->whereNull('paid_at')
+                ->orderByDesc('id')
+                ->first();
+
+            if ($supplementary) {
+                return $supplementary;
+            }
+        }
+
+        return $primary;
+    }
+
+    /**
+     * Paid primary invoices are immutable. Additional fees are billed on a separate supplementary invoice.
+     */
+    private function syncSupplementaryForPaidPrimary(
+        Invoice $primary,
+        Application $application,
+        User $actor,
+        int $requiredTotalCents,
+        string $currency,
+        array $breakdown,
+    ): void {
+        $sumPaid = $this->sumConfirmedPaymentsCents($application);
+        $outstanding = max(0, $requiredTotalCents - $sumPaid);
+
+        $amendmentReason = $this->consumePendingAmendmentReason($application);
+
+        if ($outstanding === 0) {
+            $this->voidOpenSupplementaryInvoices($application, $primary, $actor);
+
+            if ($sumPaid > $requiredTotalCents) {
+                $this->setApplicationOverpaymentNotice($application);
+            } else {
+                $this->clearApplicationOverpaymentNotice($application);
+            }
+
+            return;
+        }
+
+        $this->clearApplicationOverpaymentNotice($application);
+
+        $existingOpen = Invoice::query()
+            ->where('application_id', $application->id)
+            ->where('supplementary_of_invoice_id', $primary->id)
+            ->where('status', InvoiceStatus::Issued)
+            ->whereNull('paid_at')
+            ->lockForUpdate()
+            ->first();
+
+        $metaBase = [
+            'invoice_role' => 'supplementary',
+            'invoice_display_label' => 'Supplementary invoice (top-up)',
+            'related_primary_invoice_id' => $primary->id,
+            'related_primary_invoice_number' => $primary->invoice_number,
+            'required_fee_total_cents_after_amendment' => $requiredTotalCents,
+            'credited_confirmed_payments_cents' => $sumPaid,
+            'balance_due_cents' => $outstanding,
+            'fee_breakdown_after_amendment' => $breakdown,
+            'amendment_reason' => $amendmentReason ?? 'Qualification amended; additional verification fee applies.',
+            'synced_at' => now()->toIso8601String(),
+        ];
+
+        if ($existingOpen) {
+            $before = $existingOpen->only(['amount_cents', 'currency', 'metadata']);
+
+            $existingOpen->forceFill([
+                'currency' => $currency,
+                'amount_cents' => $outstanding,
+                'fee_label_snapshot' => 'Supplementary invoice (top-up)',
+                'metadata' => array_merge((array) ($existingOpen->metadata ?? []), $metaBase),
+            ])->save();
+
+            $this->audit->record(
+                eventType: 'finance.supplementary_invoice_updated',
+                module: 'Finance',
+                actionName: 'supplementary_invoice_updated',
+                message: 'Supplementary top-up invoice updated for amended qualification fees.',
+                entityType: Invoice::class,
+                entityId: $existingOpen->id,
+                beforeState: $before,
+                afterState: $existingOpen->only(['amount_cents', 'currency', 'metadata']),
+                metadata: [
+                    'application_id' => $application->id,
+                    'primary_invoice_number' => $primary->invoice_number,
+                ],
+                actor: $actor,
+            );
+
+            return;
+        }
+
+        $supplementary = Invoice::create([
+            'application_id' => $application->id,
+            'supplementary_of_invoice_id' => $primary->id,
+            'billing_category_id' => null,
+            'qualification_type_id' => null,
+            'fee_structure_id' => null,
+            'is_foreign_snapshot' => (bool) $application->is_foreign,
+            'processing_days_snapshot' => null,
+            'fee_label_snapshot' => 'Supplementary invoice (top-up)',
+            'invoice_number' => $this->generateSupplementaryInvoiceNumber(),
+            'currency' => $currency,
+            'amount_cents' => $outstanding,
+            'status' => InvoiceStatus::Issued,
+            'issued_at' => now(),
+            'due_at' => null,
+            'paid_at' => null,
+            'metadata' => $metaBase,
+        ]);
+
+        $this->audit->record(
+            eventType: 'finance.supplementary_invoice_issued',
+            module: 'Finance',
+            actionName: 'supplementary_invoice_issued',
+            message: 'Supplementary top-up invoice issued for amended qualification fees.',
+            entityType: Invoice::class,
+            entityId: $supplementary->id,
+            metadata: [
+                'application_id' => $application->id,
+                'primary_invoice_id' => $primary->id,
+                'invoice_number' => $supplementary->invoice_number,
+                'amount_cents' => $outstanding,
+            ],
+            actor: $actor,
+        );
+
+        $this->lifecycle->event(
+            application: $application,
+            eventType: 'payment',
+            eventCodeBase: 'payment.supplementary_invoice_issued',
+            stage: LifecycleStage::Payment,
+            title: 'Supplementary invoice issued',
+            description: 'A separate top-up invoice was created for the additional fee; the original settled invoice was not changed.',
+            visibility: LifecycleVisibility::Both,
+            actor: $actor,
+            metadata: [
+                'invoice_id' => $supplementary->id,
+                'invoice_number' => $supplementary->invoice_number,
+                'amount_cents' => $outstanding,
+            ],
+            occurredAt: now(),
+        );
+    }
+
+    private function voidOpenSupplementaryInvoices(Application $application, Invoice $primary, User $actor): void
+    {
+        $open = Invoice::query()
+            ->where('application_id', $application->id)
+            ->where('supplementary_of_invoice_id', $primary->id)
+            ->where('status', InvoiceStatus::Issued)
+            ->whereNull('paid_at')
+            ->get();
+
+        foreach ($open as $invoice) {
+            $before = $invoice->only(['status', 'amount_cents']);
+            $invoice->forceFill([
+                'status' => InvoiceStatus::Void,
+                'metadata' => array_merge((array) ($invoice->metadata ?? []), [
+                    'voided_at' => now()->toIso8601String(),
+                    'void_reason' => 'Fee balance cleared; supplementary invoice no longer required.',
+                ]),
+            ])->save();
+
+            $this->audit->record(
+                eventType: 'finance.supplementary_invoice_voided',
+                module: 'Finance',
+                actionName: 'supplementary_invoice_voided',
+                message: 'Open supplementary invoice voided — outstanding balance is zero.',
+                entityType: Invoice::class,
+                entityId: $invoice->id,
+                beforeState: $before,
+                afterState: $invoice->only(['status']),
+                metadata: ['application_id' => $application->id],
+                actor: $actor,
+            );
+        }
+    }
+
+    private function sumConfirmedPaymentsCents(Application $application): int
+    {
+        return (int) Payment::query()
+            ->where('application_id', $application->id)
+            ->where('status', PaymentStatus::Confirmed)
+            ->sum('amount_cents');
+    }
+
+    private function consumePendingAmendmentReason(Application $application): ?string
+    {
+        $application->refresh();
+        $meta = (array) ($application->metadata ?? []);
+        $reason = $meta['pending_invoice_amendment_reason'] ?? null;
+        if (! is_string($reason) || trim($reason) === '') {
+            return null;
+        }
+
+        unset($meta['pending_invoice_amendment_reason']);
+        $application->forceFill(['metadata' => $meta])->save();
+
+        return trim($reason);
+    }
+
+    private function setApplicationOverpaymentNotice(Application $application): void
+    {
+        $application->refresh();
+        $meta = (array) ($application->metadata ?? []);
+        $meta['fee_amendment_overpayment_notice'] = 'This amendment may result in an overpayment. Please contact Finance.';
+        $application->forceFill(['metadata' => $meta])->save();
+    }
+
+    private function clearApplicationOverpaymentNotice(Application $application): void
+    {
+        $application->refresh();
+        $meta = (array) ($application->metadata ?? []);
+        unset($meta['fee_amendment_overpayment_notice']);
+        $application->forceFill(['metadata' => $meta])->save();
     }
 
     private function generateInvoiceNumber(Application $application): string
     {
         return 'INV-'.now()->format('Y').'-'.Str::upper(Str::random(10));
     }
-}
 
+    private function generateSupplementaryInvoiceNumber(): string
+    {
+        return 'SUP-'.now()->format('Y').'-'.Str::upper(Str::random(10));
+    }
+}

@@ -37,6 +37,8 @@ class QualificationCaptureService
             : null;
 
         return DB::transaction(function () use ($application, $data, $actor, $qualificationType, $qualificationTypeId, $subjectResults) {
+            $feeImpactingAmendmentNote = null;
+
             $qualificationId = (int) ($data['qualification_id'] ?? 0);
             $createNew = (bool) ($data['create_new'] ?? false);
             $qualification = $qualificationId > 0
@@ -121,17 +123,28 @@ class QualificationCaptureService
                 $payload['awarding_institution_name'] = $payload['awarding_institution_name'] ?: ($qualification?->awarding_institution_name ?? '');
             }
 
-            $wasReturnedToApplicant = $qualification
-                && ($qualification->verification_state === VerificationState::ReturnedToApplicant);
+            if ($qualification && ! $createNew) {
+                $oldTypeId = (int) ($qualification->qualification_type_id ?? 0);
+                $oldForeign = (bool) $qualification->is_foreign_qualification;
+                if ($oldTypeId !== $qualificationTypeId || $oldForeign !== $isForeignQualification) {
+                    $oldTypeName = $oldTypeId > 0
+                        ? (string) (QualificationType::query()->whereKey($oldTypeId)->value('name') ?? 'Previous type')
+                        : '—';
+                    $newTypeName = (string) $qualificationType->name;
+                    $parts = ["Qualification type: {$oldTypeName} → {$newTypeName}"];
+                    if ($oldForeign !== $isForeignQualification) {
+                        $parts[] = $isForeignQualification
+                            ? 'Award locality: Zambia → foreign'
+                            : 'Award locality: foreign → Zambia';
+                    }
+                    $feeImpactingAmendmentNote = implode('. ', $parts).'.';
+                }
+            }
 
             if ($qualification && ! $createNew) {
                 $qualification->forceFill($payload)->save();
             } else {
                 $qualification = Qualification::create(array_merge(['application_id' => $application->id], $payload));
-            }
-
-            if ($wasReturnedToApplicant) {
-                $this->reopenQualificationAfterApplicantAmendment($qualification, $actor);
             }
 
             if (is_array($subjectResults)) {
@@ -191,8 +204,21 @@ class QualificationCaptureService
                 'is_foreign' => (bool) $application->qualifications->contains(fn (Qualification $q) => (bool) $q->is_foreign_qualification),
             ])->save();
 
+            if ($feeImpactingAmendmentNote !== null) {
+                $this->mergeApplicationPendingInvoiceAmendmentReason($application, $feeImpactingAmendmentNote);
+            }
+
             return $qualification;
         });
+    }
+
+    private function mergeApplicationPendingInvoiceAmendmentReason(Application $application, string $line): void
+    {
+        $application->refresh();
+        $meta = (array) ($application->metadata ?? []);
+        $prev = isset($meta['pending_invoice_amendment_reason']) ? (string) $meta['pending_invoice_amendment_reason'] : '';
+        $meta['pending_invoice_amendment_reason'] = $prev !== '' ? $prev.' '.$line : $line;
+        $application->forceFill(['metadata' => $meta])->save();
     }
 
     /**
@@ -481,8 +507,6 @@ class QualificationCaptureService
                 ->where('application_id', $application->id)
                 ->firstOrFail();
 
-            $wasReturnedToApplicant = $qualification->verification_state === VerificationState::ReturnedToApplicant;
-
             $beforeSubjects = $qualification->subjectResults
                 ->map(fn ($row) => ['subject_name' => $row->subject_name, 'grade' => $row->grade, 'display_order' => $row->display_order])
                 ->values()
@@ -531,10 +555,6 @@ class QualificationCaptureService
                 ],
                 occurredAt: now(),
             );
-
-            if ($wasReturnedToApplicant) {
-                $this->reopenQualificationAfterApplicantAmendment($qualification, $actor);
-            }
 
             return $qualification;
         });

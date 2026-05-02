@@ -338,6 +338,9 @@ function saveApplicantDetails(nextStep?: StepKey) {
 
 const applicationLocked = computed(() => {
   if (props.amendmentQualificationId) return false
+  if (qualifications.value.some((q: any) => (q.verification_state ?? '') === 'returned_to_applicant')) {
+    return false
+  }
   return invoiceSettled.value || !!props.application?.paid_at
 })
 
@@ -416,7 +419,9 @@ const declarationAccepted = ref(false)
 
 const submissionBlockReasons = computed(() => {
   const reasons: string[] = []
-  if (!invoiceSettled.value) reasons.push('Payment must be confirmed before submission.')
+  if (!invoiceSettled.value) {
+    reasons.push('Your payments must cover the full fee for your qualifications (including any top-up after a type or locality change).')
+  }
   if (!declarationAccepted.value) reasons.push('Please accept the declaration to proceed.')
   return reasons
 })
@@ -452,7 +457,32 @@ async function submitApplication() {
 
 const payment = computed(() => props.application?.payment ?? null)
 const invoice = computed(() => props.application?.invoice ?? null)
-const invoiceSettled = computed(() => (invoice.value?.status ?? '') === 'paid' || (payment.value?.status ?? '') === 'confirmed')
+const invoiceSettled = computed(() => props.application?.payment_satisfied === true)
+
+const applicationPaymentSatisfied = computed(() => props.application?.payment_satisfied === true)
+const paymentOutstandingCents = computed(() => Number(props.application?.payment_outstanding_cents ?? 0))
+
+const qualificationsReturnedForAmendment = computed(() =>
+  qualifications.value.filter((q: any) => (q.verification_state ?? '') === 'returned_to_applicant'),
+)
+
+const finalizeAmendmentForm = useForm({})
+
+function formatMoneyCents(cents: number) {
+  const c = (invoice.value?.currency ?? 'ZMW').toString()
+  return new Intl.NumberFormat(undefined, { style: 'currency', currency: c }).format((cents || 0) / 100)
+}
+
+function submitCorrectionsToZaqa(qualificationId: number) {
+  finalizeAmendmentForm.post(`/applicant/applications/${props.application.id}/qualifications/${qualificationId}/finalize-amendment`, {
+    preserveScroll: true,
+    onSuccess: () => {
+      setSaved('Corrections sent to ZAQA.')
+      router.reload({ only: ['application'] })
+    },
+    onError: () => setError('Could not submit corrections. Fix any issue below and try again.'),
+  })
+}
 
 // Applicant wizard is now full-width on all steps (no right-side sidebar panels).
 const showSidebar = computed(() => false)
@@ -1107,6 +1137,52 @@ onBeforeUnmount(() => {
             </button>
           </div>
 
+          <div
+            v-if="qualificationsReturnedForAmendment.length > 0"
+            class="mt-6 rounded-2xl border border-brand/25 bg-brand/[0.06] px-5 py-4 sm:px-6"
+          >
+            <div class="text-sm font-semibold text-text-primary">Submit corrections back to ZAQA</div>
+            <p class="mt-1 text-sm leading-relaxed text-text-muted">
+              Updating details in the workspace only saves your draft. When you are satisfied with this qualification, submit it here so verification staff can continue your case.
+            </p>
+            <ul class="mt-4 space-y-3">
+              <li
+                v-for="q in qualificationsReturnedForAmendment"
+                :key="'ret-' + q.id"
+                class="flex flex-col gap-3 rounded-xl border border-border bg-surface px-4 py-3 sm:flex-row sm:items-center sm:justify-between"
+              >
+                <div class="min-w-0">
+                  <div class="font-medium text-text-primary">{{ q.title_of_qualification || 'Qualification' }}</div>
+                  <p v-if="q.amendment_comment" class="mt-1 whitespace-pre-wrap text-xs text-text-muted">{{ q.amendment_comment }}</p>
+                </div>
+                <button
+                  type="button"
+                  class="zaqa-btn zaqa-btn-primary shrink-0 px-5"
+                  :disabled="finalizeAmendmentForm.processing || !applicationPaymentSatisfied"
+                  @click="submitCorrectionsToZaqa(q.id)"
+                >
+                  Submit corrections to ZAQA
+                </button>
+              </li>
+            </ul>
+            <p v-if="!applicationPaymentSatisfied" class="mt-3 text-sm text-amber-900">
+              Pay any additional balance on the
+              <button type="button" class="font-semibold underline decoration-brand/40 underline-offset-2 hover:text-brand" @click="goToStep('payment')">
+                Payment
+              </button>
+              step before submitting corrections
+              <span v-if="paymentOutstandingCents > 0"> ({{ formatMoneyCents(paymentOutstandingCents) }} outstanding)</span>.
+            </p>
+            <p v-if="application?.fee_amendment_overpayment_notice" class="mt-2 text-xs leading-relaxed text-amber-900">
+              {{ application.fee_amendment_overpayment_notice }}
+            </p>
+            <p v-else class="mt-2 text-xs leading-relaxed text-text-muted">
+              If a qualification change lowered your fee and you overpaid, refunds are not issued automatically — contact finance by email.
+            </p>
+            <InputError :message="(finalizeAmendmentForm.errors as any).payment" class="mt-2" />
+            <InputError :message="(finalizeAmendmentForm.errors as any).qualification" class="mt-1" />
+          </div>
+
           <div v-if="applicationLocked" class="mt-6 rounded-xl border border-warning/25 bg-warning/10 px-4 py-3 text-sm text-warning">
             Payment is confirmed. This application is read-only.
           </div>
@@ -1321,9 +1397,23 @@ onBeforeUnmount(() => {
               </div>
             </div>
 
-            <div class="mt-3 rounded-lg border border-border bg-surface-muted px-3 py-2 text-xs text-text-muted">
-              You can add or edit qualifications and change types until payment is confirmed. If an invoice already exists, its amount is recalculated when you save
-              qualification changes.
+            <div
+              v-if="application?.supplementary_invoice"
+              class="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-950"
+            >
+              <div class="font-semibold text-text-primary">Supplementary invoice (top-up)</div>
+              <div class="mt-1 font-mono text-xs">{{ application.supplementary_invoice.invoice_number }}</div>
+              <div class="mt-1 text-sm">
+                Balance due:
+                <span class="font-semibold">{{ formatMoneyCents(Number(application.supplementary_invoice.amount_cents ?? 0)) }}</span>
+              </div>
+              <p v-if="application.supplementary_invoice.amendment_reason" class="mt-2 text-xs leading-relaxed opacity-90">
+                {{ application.supplementary_invoice.amendment_reason }}
+              </p>
+            </div>
+            <div v-else class="mt-3 rounded-lg border border-border bg-surface-muted px-3 py-2 text-xs text-text-muted">
+              You can add or edit qualifications until payment is confirmed. If you already paid and an amendment increases the fee, a separate supplementary invoice is
+              created for the difference — your original invoice is not changed.
             </div>
 
             <div v-if="!invoice && !applicationLocked" class="mt-4 flex flex-col gap-3 border-t border-border/60 pt-4 sm:flex-row sm:items-end sm:justify-between">

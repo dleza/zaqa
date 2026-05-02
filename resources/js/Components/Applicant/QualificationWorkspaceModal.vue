@@ -467,7 +467,7 @@ function stripHolderFields(data: Record<string, unknown>) {
                     {{ mode === 'add' ? 'Add qualification' : 'Edit qualification' }}
                   </h2>
                   <p class="mt-2 max-w-2xl text-sm leading-relaxed text-white/85">
-                    Enter qualification details, attach documents below, then save once at the bottom. Fields must match your certificate exactly.
+                    Enter qualification details and attach documents, then save your draft at the bottom. Sending your work back to ZAQA for review is a separate step on the qualification page after you close this window.
                   </p>
                 </div>
               </div>
@@ -631,7 +631,7 @@ function stripHolderFields(data: Record<string, unknown>) {
                   <h3 class="text-base font-semibold">Qualification documents</h3>
                 </div>
                 <p class="mt-1 text-sm text-text-muted">
-                  Choose files here first, then press <span class="font-semibold text-text-primary">Save qualification & documents</span> below—everything is submitted in one step.
+                  Choose files here first, then press <span class="font-semibold text-text-primary">Save changes</span> below to update your draft. Use “Submit corrections to ZAQA” on the qualification step when you are ready for staff to review.
                 </p>
                 <p v-if="modalQualId && hasExistingDoc('certificate_copy')" class="mt-2 text-xs text-success">
                   Certificate already on file — upload again only if you want to replace it.
@@ -719,7 +719,7 @@ function stripHolderFields(data: Record<string, unknown>) {
           <div class="shrink-0 border-t border-border bg-surface-muted/60 px-6 py-4 sm:px-8">
             <div class="flex flex-wrap items-center justify-between gap-3">
               <p class="max-w-xl text-xs text-text-muted">
-                Review details and files, then save once. You can reopen this workspace anytime from the list.
+                This saves your draft only. Submit back to ZAQA from the qualification step when you are finished.
               </p>
               <div class="flex flex-wrap gap-2">
                 <button type="button" class="zaqa-btn zaqa-btn-secondary" @click="close">Cancel</button>
@@ -730,7 +730,7 @@ function stripHolderFields(data: Record<string, unknown>) {
                   @click="submitQualificationAndDocuments"
                 >
                   {{
-                    savingAll ? 'Uploading…' : form.processing ? 'Saving…' : 'Save qualification & documents'
+                    savingAll ? 'Uploading…' : form.processing ? 'Saving…' : 'Save changes'
                   }}
                 </button>
               </div>

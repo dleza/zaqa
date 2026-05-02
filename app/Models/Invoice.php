@@ -11,6 +11,7 @@ class Invoice extends Model
 {
     protected $fillable = [
         'application_id',
+        'supplementary_of_invoice_id',
         'billing_category_id',
         'qualification_type_id',
         'fee_structure_id',
@@ -45,6 +46,16 @@ class Invoice extends Model
         return $this->belongsTo(Application::class);
     }
 
+    public function primaryInvoice(): BelongsTo
+    {
+        return $this->belongsTo(Invoice::class, 'supplementary_of_invoice_id');
+    }
+
+    public function supplementaryInvoices(): HasMany
+    {
+        return $this->hasMany(Invoice::class, 'supplementary_of_invoice_id');
+    }
+
     public function billingCategory(): BelongsTo
     {
         return $this->belongsTo(BillingCategory::class);
@@ -65,4 +76,3 @@ class Invoice extends Model
         return $this->hasMany(Payment::class);
     }
 }
-

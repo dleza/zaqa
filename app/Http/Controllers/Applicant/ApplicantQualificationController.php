@@ -3,9 +3,11 @@
 namespace App\Http\Controllers\Applicant;
 
 use App\Domain\Applications\QualificationCaptureService;
+use App\Domain\Payments\ApplicationPaymentSatisfaction;
 use App\Domain\Payments\InvoiceService;
 use App\Enums\InvoiceStatus;
 use App\Enums\PaymentStatus;
+use App\Enums\VerificationState;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Applicant\UpsertQualificationDetailsRequest;
 use App\Http\Requests\Applicant\UpsertQualificationRequest;
@@ -17,6 +19,7 @@ use App\Models\Qualification;
 use App\Models\User;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Validation\ValidationException;
 
 class ApplicantQualificationController extends Controller
 {
@@ -61,6 +64,37 @@ class ApplicantQualificationController extends Controller
         $this->syncInvoiceIfExists($application->fresh(), $request->user(), $invoices);
 
         return back()->with('success', 'Qualification details saved.');
+    }
+
+    public function finalizeAmendment(
+        Request $request,
+        Application $application,
+        Qualification $qualification,
+        QualificationCaptureService $capture,
+        ApplicationPaymentSatisfaction $paymentSatisfaction,
+    ): RedirectResponse {
+        $this->authorize('update', $application);
+
+        if ((int) $qualification->application_id !== (int) $application->id) {
+            abort(404);
+        }
+
+        if ($qualification->verification_state !== VerificationState::ReturnedToApplicant) {
+            throw ValidationException::withMessages([
+                'qualification' => 'This qualification is not waiting for you to submit corrections.',
+            ]);
+        }
+
+        $application->refresh()->loadMissing('qualifications', 'payments', 'invoice');
+        if (! $paymentSatisfaction->isSatisfied($application)) {
+            throw ValidationException::withMessages([
+                'payment' => 'Pay the outstanding balance for this application (Payment step) before you send your corrections back to ZAQA.',
+            ]);
+        }
+
+        $capture->reopenQualificationAfterApplicantAmendment($qualification->fresh(), $request->user());
+
+        return back()->with('success', 'Your corrections have been sent back to ZAQA for review.');
     }
 
     public function destroy(Request $request, Application $application, Qualification $qualification, InvoiceService $invoices): RedirectResponse

@@ -118,9 +118,17 @@ class Application extends Model
         );
     }
 
+    /**
+     * Primary invoice for the application (original fee — never repurposed as a supplementary row).
+     */
     public function invoice(): HasOne
     {
-        return $this->hasOne(Invoice::class);
+        return $this->hasOne(Invoice::class)->whereNull('supplementary_of_invoice_id');
+    }
+
+    public function invoices(): HasMany
+    {
+        return $this->hasMany(Invoice::class);
     }
 
     public function payments(): HasMany

@@ -15,6 +15,7 @@ use App\Models\User;
 use Database\Seeders\AwardingInstitutionsSeeder;
 use Database\Seeders\BillingCategoriesSeeder;
 use Database\Seeders\CountriesSeeder;
+use Database\Seeders\FeeStructuresSeeder;
 use Database\Seeders\QualificationTypesSeeder;
 use Database\Seeders\RolesAndPermissionsSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -647,5 +648,40 @@ class VerificationQualificationAccessTest extends TestCase
         $this->assertSame(VerificationState::UnderLevel2Review, $qualification->verification_state);
         $this->assertSame($l2->id, $qualification->level2_review_owner_id);
         $this->assertNull($qualification->send_back_by_user_id);
+    }
+
+    public function test_finalize_amendment_rejected_when_fee_not_fully_paid(): void
+    {
+        $this->seed(BillingCategoriesSeeder::class);
+        $this->seed(QualificationTypesSeeder::class);
+        $this->seed(FeeStructuresSeeder::class);
+
+        $application = $this->makeSubmittedApplication();
+        $applicant = User::query()->findOrFail($application->applicant_user_id);
+
+        $qualificationTypeId = (int) QualificationType::query()->value('id');
+        $this->assertGreaterThan(0, $qualificationTypeId);
+
+        $qualification = Qualification::query()->create([
+            'application_id' => $application->id,
+            'awarding_institution_name' => 'Test Uni',
+            'qualification_holder_name' => 'Jane',
+            'country_name_other' => 'Zambia',
+            'nrc_passport_number' => '555555/55/5',
+            'title_of_qualification' => 'Diploma',
+            'award_date' => now()->subYear()->toDateString(),
+            'qualification_type' => 'L6',
+            'qualification_type_id' => $qualificationTypeId,
+            'is_foreign_qualification' => false,
+            'transcript_required' => false,
+            'verification_state' => VerificationState::ReturnedToApplicant,
+        ]);
+
+        $this->actingAs($applicant)
+            ->post(route('applicant.applications.qualifications.finalize_amendment', [
+                'application' => $application->id,
+                'qualification' => $qualification->id,
+            ]))
+            ->assertSessionHasErrors('payment');
     }
 }

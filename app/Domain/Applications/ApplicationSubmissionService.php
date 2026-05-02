@@ -4,14 +4,13 @@ namespace App\Domain\Applications;
 
 use App\Domain\Applications\Events\ApplicationSubmitted;
 use App\Domain\Audit\AuditLogService;
+use App\Domain\Payments\ApplicationPaymentSatisfaction;
 use App\Domain\Tracking\ApplicationLifecycleService;
 use App\Enums\ApplicationStatus;
 use App\Enums\ConsentType;
 use App\Enums\DocumentType;
-use App\Enums\InvoiceStatus;
 use App\Enums\LifecycleStage;
 use App\Enums\LifecycleVisibility;
-use App\Enums\PaymentStatus;
 use App\Enums\VerificationState;
 use App\Models\Application;
 use App\Models\ApplicationStatusHistory;
@@ -31,6 +30,7 @@ class ApplicationSubmissionService
         private readonly AuditLogService $audit,
         private readonly ApplicationLifecycleService $lifecycle,
         private readonly QualificationCaptureService $qualificationCapture,
+        private readonly ApplicationPaymentSatisfaction $paymentSatisfaction,
     ) {}
 
     public function submit(Application $application, User $actor): Application
@@ -95,27 +95,26 @@ class ApplicationSubmissionService
 
             $this->assertWizardDeclarationsComplete($application);
 
-            $invoicePaid = $application->invoice && $application->invoice->status === InvoiceStatus::Paid;
-            $paymentConfirmed = $invoicePaid || $application->payments->contains(fn ($p) => $p->status === PaymentStatus::Confirmed);
-            if (! $paymentConfirmed) {
+            if (! $this->paymentSatisfaction->isSatisfied($application)) {
                 $latestPayment = $application->payments->sortByDesc('id')->first();
                 $this->audit->record(
                     eventType: 'applications.submission_blocked_due_to_payment',
                     module: 'Applications',
                     actionName: 'submission_blocked',
-                    message: 'Submission blocked: payment not confirmed.',
+                    message: 'Submission blocked: cumulative confirmed payments do not cover the current fee total.',
                     entityType: Application::class,
                     entityId: $application->id,
                     metadata: [
                         'invoice_status' => $application->invoice?->status?->value ?? null,
                         'payment_status' => $latestPayment?->status?->value ?? null,
                         'payment_method' => $latestPayment?->method?->value ?? null,
+                        'outstanding_cents' => $this->paymentSatisfaction->outstandingCents($application),
                     ],
                     actor: $actor,
                 );
 
                 throw ValidationException::withMessages([
-                    'payment' => 'Payment must be confirmed before submission.',
+                    'payment' => 'Payment must cover the full fee for your qualifications before submission. If you changed qualification type or locality, pay any additional balance shown on the Payment step.',
                 ]);
             }
 

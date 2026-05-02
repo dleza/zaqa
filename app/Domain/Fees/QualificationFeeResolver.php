@@ -2,6 +2,7 @@
 
 namespace App\Domain\Fees;
 
+use App\Models\Application;
 use App\Models\BillingCategory;
 use App\Models\FeeStructure;
 use App\Models\QualificationType;
@@ -13,7 +14,7 @@ class QualificationFeeResolver
     /**
      * @return array{
      *   qualification_type: QualificationType,
-     *   billing_category: \App\Models\BillingCategory,
+     *   billing_category: BillingCategory,
      *   fee_structure: FeeStructure,
      *   currency: string,
      *   fee_cents: int,
@@ -77,5 +78,25 @@ class QualificationFeeResolver
             'processing_days' => $processingDays !== null ? (int) $processingDays : null,
         ];
     }
-}
 
+    /**
+     * Total verification fee for all qualifications on the application (current ZQF + locality).
+     */
+    public function totalVerificationFeesCents(Application $application, ?Carbon $at = null): int
+    {
+        $at ??= now();
+        $application->loadMissing('qualifications');
+
+        $sum = 0;
+        foreach ($application->qualifications as $q) {
+            $typeId = (int) ($q->qualification_type_id ?? 0);
+            if ($typeId < 1) {
+                continue;
+            }
+            $resolved = $this->resolve($typeId, (bool) $q->is_foreign_qualification, $at);
+            $sum += (int) $resolved['fee_cents'];
+        }
+
+        return $sum;
+    }
+}

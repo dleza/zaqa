@@ -123,6 +123,8 @@ Route::middleware('auth')->group(function () {
         Route::put('/applications/{application}/qualification/details', [ApplicantQualificationController::class, 'upsertDetails'])->name('applications.qualification.details.upsert');
         Route::put('/applications/{application}/qualification/subject-results', [ApplicantQualificationController::class, 'upsertSubjectResults'])->name('applications.qualification.subject_results.upsert');
         Route::post('/applications/{application}/qualifications', [ApplicantQualificationController::class, 'store'])->name('applications.qualifications.store');
+        Route::post('/applications/{application}/qualifications/{qualification}/finalize-amendment', [ApplicantQualificationController::class, 'finalizeAmendment'])
+            ->name('applications.qualifications.finalize_amendment');
         Route::delete('/applications/{application}/qualifications/{qualification}', [ApplicantQualificationController::class, 'destroy'])->name('applications.qualifications.destroy');
 
         Route::post('/applications/{application}/documents', [ApplicantDocumentController::class, 'store'])->name('applications.documents.store');

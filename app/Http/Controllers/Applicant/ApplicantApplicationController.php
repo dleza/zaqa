@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Applicant;
 use App\Domain\Applications\ApplicationDraftService;
 use App\Domain\Applications\ApplicationSubmissionService;
 use App\Domain\Documents\ApplicantDocumentService;
+use App\Domain\Payments\ApplicationPaymentSatisfaction;
 use App\Enums\ApplicantType;
 use App\Enums\DocumentType;
 use App\Enums\InvoiceStatus;
@@ -22,6 +23,7 @@ use App\Models\BillingCategory;
 use App\Models\CertificateSubject;
 use App\Models\Country;
 use App\Models\FeeStructure;
+use App\Models\Invoice;
 use App\Models\Qualification;
 use App\Models\QualificationType;
 use App\Models\User;
@@ -320,9 +322,9 @@ class ApplicantApplicationController extends Controller
 
     private function wizardPaymentStepComplete(Application $application): bool
     {
-        $invoicePaid = $application->invoice && $application->invoice->status === InvoiceStatus::Paid;
+        $application->loadMissing('qualifications', 'payments', 'invoice');
 
-        return $invoicePaid || $application->payments->contains(fn ($p) => $p->status === PaymentStatus::Confirmed);
+        return app(ApplicationPaymentSatisfaction::class)->isSatisfied($application);
     }
 
     public function create(Request $request): Response
@@ -730,10 +732,26 @@ class ApplicantApplicationController extends Controller
             })
             ->all();
 
+        $application->loadMissing('qualifications', 'payments', 'invoice');
+        $paymentSatisfaction = app(ApplicationPaymentSatisfaction::class);
+
+        $openSupplementary = Invoice::query()
+            ->where('application_id', $application->id)
+            ->whereNotNull('supplementary_of_invoice_id')
+            ->where('status', InvoiceStatus::Issued)
+            ->whereNull('paid_at')
+            ->orderByDesc('id')
+            ->first();
+
+        $appMeta = (array) ($application->metadata ?? []);
+
         return [
             'id' => $application->id,
             'uuid' => $application->uuid,
             'application_number' => $application->application_number,
+            'payment_satisfied' => $paymentSatisfaction->isSatisfied($application),
+            'payment_outstanding_cents' => $paymentSatisfaction->outstandingCents($application),
+            'fee_amendment_overpayment_notice' => $appMeta['fee_amendment_overpayment_notice'] ?? null,
             'applicant_type' => $application->applicant_type?->value ?? (string) $application->applicant_type,
             'service_type' => $application->service_type?->value ?? (string) $application->service_type,
             'qualification_category' => $application->qualification_category,
@@ -752,6 +770,18 @@ class ApplicantApplicationController extends Controller
                     'status' => $application->invoice->status?->value ?? (string) $application->invoice->status,
                     'issued_at' => optional($application->invoice->issued_at)?->toIso8601String(),
                     'paid_at' => optional($application->invoice->paid_at)?->toIso8601String(),
+                ]
+                : null,
+            'supplementary_invoice' => $openSupplementary
+                ? [
+                    'id' => $openSupplementary->id,
+                    'invoice_number' => $openSupplementary->invoice_number,
+                    'currency' => $openSupplementary->currency,
+                    'amount_cents' => $openSupplementary->amount_cents,
+                    'status' => $openSupplementary->status?->value ?? (string) $openSupplementary->status,
+                    'fee_label_snapshot' => $openSupplementary->fee_label_snapshot,
+                    'issued_at' => optional($openSupplementary->issued_at)?->toIso8601String(),
+                    'amendment_reason' => is_array($openSupplementary->metadata) ? ($openSupplementary->metadata['amendment_reason'] ?? null) : null,
                 ]
                 : null,
             'payment' => $displayPayment
