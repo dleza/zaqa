@@ -2,6 +2,7 @@
 
 namespace App\Domain\AdminDashboard;
 
+use App\Domain\Verification\VerificationQualificationAccess;
 use App\Enums\ApplicationStatus;
 use App\Enums\DocumentType;
 use App\Enums\PaymentMethod;
@@ -12,6 +13,7 @@ use App\Models\ApplicationLifecycleEvent;
 use App\Models\AuditLog;
 use App\Models\Invoice;
 use App\Models\Payment;
+use App\Models\Qualification;
 use App\Models\QualificationDocument;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Builder;
@@ -115,7 +117,19 @@ class AdminDashboardService
         }
 
         if ($user->can('verification.pool.view')) {
-            $pendingVerification = $this->poolQuery()->count();
+            if (VerificationQualificationAccess::mustRestrictToAssignedQualifications($user)) {
+                $pendingVerification = Qualification::query()
+                    ->where('assigned_verifier_id', $user->id)
+                    ->whereHas('application', fn ($q) => $q->whereIn('current_status', $this->poolStatuses()))
+                    ->where(function ($q) {
+                        $q->whereNull('verification_state')
+                            ->orWhere('verification_state', '!=', VerificationState::ReturnedToApplicant->value);
+                    })
+                    ->count();
+            } else {
+                $pendingVerification = $this->poolQuery()->count();
+            }
+
             $kpis[] = [
                 'key' => 'pending_verification',
                 'label' => 'Pending verification',
@@ -125,10 +139,21 @@ class AdminDashboardService
                 'href' => '/admin/verification/pool',
             ];
 
-            $overduePool = $this->poolQuery()
-                ->whereNotNull('service_deadline_at')
-                ->where('service_deadline_at', '<', $now)
-                ->count();
+            if (VerificationQualificationAccess::mustRestrictToAssignedQualifications($user)) {
+                $overduePool = Qualification::query()
+                    ->where('assigned_verifier_id', $user->id)
+                    ->whereHas('application', function ($q) use ($now) {
+                        $q->whereIn('current_status', $this->poolStatuses())
+                            ->whereNotNull('service_deadline_at')
+                            ->where('service_deadline_at', '<', $now);
+                    })
+                    ->count();
+            } else {
+                $overduePool = $this->poolQuery()
+                    ->whereNotNull('service_deadline_at')
+                    ->where('service_deadline_at', '<', $now)
+                    ->count();
+            }
 
             $kpis[] = [
                 'key' => 'verification_overdue',
@@ -155,8 +180,12 @@ class AdminDashboardService
 
             $queues[] = [
                 'key' => 'recent_submissions',
-                'title' => 'Recent submissions',
-                'items' => $this->recentApplicationsQueue(8),
+                'title' => VerificationQualificationAccess::mustRestrictToAssignedQualifications($user)
+                    ? 'Applications with your assigned qualifications'
+                    : 'Recent submissions',
+                'items' => VerificationQualificationAccess::mustRestrictToAssignedQualifications($user)
+                    ? $this->recentAssignedQualificationApplicationsQueue($user, 8)
+                    : $this->recentApplicationsQueue(8),
             ];
         }
 
@@ -260,10 +289,17 @@ class AdminDashboardService
 
         // ——— Level 1 ———
         if ($user->can('verification.level1.process')) {
-            $mine = Application::query()
-                ->where('assigned_level1_user_id', $user->id)
-                ->whereIn('current_status', $this->poolStatuses())
-                ->count();
+            if (VerificationQualificationAccess::mustRestrictToAssignedQualifications($user)) {
+                $mine = Application::query()
+                    ->whereHas('qualifications', fn ($q) => $q->where('assigned_verifier_id', $user->id))
+                    ->whereIn('current_status', $this->poolStatuses())
+                    ->count();
+            } else {
+                $mine = Application::query()
+                    ->where('assigned_level1_user_id', $user->id)
+                    ->whereIn('current_status', $this->poolStatuses())
+                    ->count();
+            }
 
             $kpis[] = [
                 'key' => 'l1_assigned_to_me',
@@ -273,12 +309,21 @@ class AdminDashboardService
                 'href' => '/admin/verification/assigned-to-me',
             ];
 
-            $l1Overdue = Application::query()
-                ->where('assigned_level1_user_id', $user->id)
-                ->whereIn('current_status', $this->poolStatuses())
-                ->whereNotNull('service_deadline_at')
-                ->where('service_deadline_at', '<', $now)
-                ->count();
+            if (VerificationQualificationAccess::mustRestrictToAssignedQualifications($user)) {
+                $l1Overdue = Application::query()
+                    ->whereHas('qualifications', fn ($q) => $q->where('assigned_verifier_id', $user->id))
+                    ->whereIn('current_status', $this->poolStatuses())
+                    ->whereNotNull('service_deadline_at')
+                    ->where('service_deadline_at', '<', $now)
+                    ->count();
+            } else {
+                $l1Overdue = Application::query()
+                    ->where('assigned_level1_user_id', $user->id)
+                    ->whereIn('current_status', $this->poolStatuses())
+                    ->whereNotNull('service_deadline_at')
+                    ->where('service_deadline_at', '<', $now)
+                    ->count();
+            }
 
             $kpis[] = [
                 'key' => 'l1_my_overdue',
@@ -288,10 +333,17 @@ class AdminDashboardService
                 'href' => '/admin/verification/assigned-to-me',
             ];
 
-            $sentBackMine = Application::query()
-                ->where('assigned_level1_user_id', $user->id)
-                ->where('current_status', ApplicationStatus::SentBack)
-                ->count();
+            if (VerificationQualificationAccess::mustRestrictToAssignedQualifications($user)) {
+                $sentBackMine = Application::query()
+                    ->whereHas('qualifications', fn ($q) => $q->where('assigned_verifier_id', $user->id))
+                    ->where('current_status', ApplicationStatus::SentBack)
+                    ->count();
+            } else {
+                $sentBackMine = Application::query()
+                    ->where('assigned_level1_user_id', $user->id)
+                    ->where('current_status', ApplicationStatus::SentBack)
+                    ->count();
+            }
 
             $kpis[] = [
                 'key' => 'l1_sent_back_assigned',
@@ -316,7 +368,7 @@ class AdminDashboardService
             $queues[] = [
                 'key' => 'l1_recent_assigned',
                 'title' => 'Recently assigned to you',
-                'items' => $this->assignedToUserQueue($user->id, 6),
+                'items' => $this->assignedToUserQueue($user, 6),
             ];
         }
 
@@ -386,7 +438,6 @@ class AdminDashboardService
                 'value' => AuditLog::query()->whereDate('created_at', $today)->count(),
                 'icon' => 'scroll',
             ];
-
 
         }
 
@@ -483,11 +534,20 @@ class AdminDashboardService
         if ($user->can('verification.pool.view')) {
             $poolSeries = [];
             foreach ($w['dates'] as $date) {
-                $poolSeries[] = $this->poolQuery()->whereDate('submitted_at', $date)->count();
+                if (VerificationQualificationAccess::mustRestrictToAssignedQualifications($user)) {
+                    $poolSeries[] = Qualification::query()
+                        ->where('assigned_verifier_id', $user->id)
+                        ->whereHas('application', fn ($q) => $q->whereDate('submitted_at', $date)->whereIn('current_status', $this->poolStatuses()))
+                        ->count();
+                } else {
+                    $poolSeries[] = $this->poolQuery()->whereDate('submitted_at', $date)->count();
+                }
             }
             $charts[] = [
                 'key' => 'verification_pool_submissions_week',
-                'title' => 'Pool applications by submission day (week)',
+                'title' => VerificationQualificationAccess::mustRestrictToAssignedQualifications($user)
+                    ? 'Your pool qualifications by submission day (week)'
+                    : 'Pool applications by submission day (week)',
                 'type' => 'line',
                 'labels' => $w['labels'],
                 'values' => $poolSeries,
@@ -542,8 +602,6 @@ class AdminDashboardService
                 'values' => array_values($byModule),
             ];
         }
-
-
 
         // Receipt documents (generated receipt type) created today
         if ($user->can('admin.finance.view')) {
@@ -650,16 +708,48 @@ class AdminDashboardService
     }
 
     /**
+     * Recent applications where at least one qualification is assigned to this verifier (Level 1 scoped users).
+     *
      * @return list<array{title: string, subtitle: string, href: string|null}>
      */
-    private function assignedToUserQueue(int $userId, int $limit): array
+    private function recentAssignedQualificationApplicationsQueue(User $user, int $limit): array
     {
         $rows = Application::query()
-            ->where('assigned_level1_user_id', $userId)
+            ->whereHas('qualifications', fn ($q) => $q->where('assigned_verifier_id', $user->id))
+            ->whereNotNull('submitted_at')
+            ->orderByDesc('submitted_at')
+            ->limit($limit)
+            ->get(['id', 'application_number', 'current_status', 'submitted_at']);
+
+        $out = [];
+        foreach ($rows as $row) {
+            $out[] = [
+                'title' => $row->application_number,
+                'subtitle' => 'Submitted '.optional($row->submitted_at)->toDateTimeString(),
+                'href' => '/admin/verification/applications/'.$row->id,
+            ];
+        }
+
+        return $out;
+    }
+
+    /**
+     * @return list<array{title: string, subtitle: string, href: string|null}>
+     */
+    private function assignedToUserQueue(User $user, int $limit): array
+    {
+        $query = Application::query()
             ->whereIn('current_status', $this->poolStatuses())
             ->orderByDesc('updated_at')
-            ->limit($limit)
-            ->get(['id', 'application_number', 'current_status', 'updated_at']);
+            ->limit($limit);
+
+        if (VerificationQualificationAccess::mustRestrictToAssignedQualifications($user)) {
+            $query->whereHas('qualifications', fn ($q) => $q->where('assigned_verifier_id', $user->id));
+        } else {
+            $query->where('assigned_level1_user_id', $user->id);
+        }
+
+        $rows = $query->get(['id', 'application_number', 'current_status', 'updated_at']);
 
         $out = [];
         foreach ($rows as $row) {

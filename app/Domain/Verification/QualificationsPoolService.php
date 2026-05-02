@@ -5,6 +5,7 @@ namespace App\Domain\Verification;
 use App\Enums\ApplicationStatus;
 use App\Enums\VerificationState;
 use App\Models\Qualification;
+use App\Models\User;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Http\Request;
 
@@ -27,6 +28,10 @@ class QualificationsPoolService
      */
     public function pool(Request $request, ?int $currentUserId = null): LengthAwarePaginator
     {
+        /** @var User|null $viewer */
+        $viewer = $request->user();
+        $restrictLevel1 = VerificationQualificationAccess::mustRestrictToAssignedQualifications($viewer);
+
         $q = trim((string) $request->query('q', ''));
         $qualificationTypeId = $request->query('qualification_type_id');
         $awardingInstitutionId = $request->query('awarding_institution_id');
@@ -38,6 +43,9 @@ class QualificationsPoolService
         $paymentStatus = trim((string) $request->query('payment_status', ''));
         $submittedFrom = trim((string) $request->query('submitted_from', ''));
         $submittedTo = trim((string) $request->query('submitted_to', ''));
+        $qualificationQ = trim((string) $request->query('qualification_q', ''));
+        $overdue = $request->query('overdue');
+        $overdueDays = $request->query('overdue_days');
 
         $query = Qualification::query()
             ->with([
@@ -47,7 +55,7 @@ class QualificationsPoolService
                 'country',
                 'assignedVerifier',
             ])
-            ->whereHas('application', function ($aq) use ($submittedFrom, $submittedTo, $paymentStatus) {
+            ->whereHas('application', function ($aq) use ($submittedFrom, $submittedTo, $paymentStatus, $overdue, $overdueDays) {
                 $aq->whereIn('current_status', [
                     ApplicationStatus::Submitted,
                     ApplicationStatus::Resubmitted,
@@ -66,6 +74,17 @@ class QualificationsPoolService
                     $aq->whereNotNull('paid_at');
                 } elseif ($paymentStatus === 'unpaid') {
                     $aq->whereNull('paid_at');
+                }
+
+                if ($overdue === '1') {
+                    $aq->whereNotNull('service_deadline_at')->where('service_deadline_at', '<', now());
+                }
+
+                if (is_string($overdueDays) && $overdueDays !== '') {
+                    $days = (int) $overdueDays;
+                    if (in_array($days, [30, 60, 90], true)) {
+                        $aq->whereNotNull('service_deadline_at')->where('service_deadline_at', '<', now()->subDays($days));
+                    }
                 }
             });
 
@@ -86,6 +105,10 @@ class QualificationsPoolService
             });
         }
 
+        if ($qualificationQ !== '') {
+            $query->where('title_of_qualification', 'like', '%'.$qualificationQ.'%');
+        }
+
         if (is_string($qualificationTypeId) && $qualificationTypeId !== '') {
             $query->where('qualification_type_id', (int) $qualificationTypeId);
         }
@@ -102,18 +125,22 @@ class QualificationsPoolService
             $query->where('is_foreign_qualification', false);
         }
 
-        if ($assigned === '1') {
-            $query->whereNotNull('assigned_verifier_id');
-        } elseif ($assigned === '0') {
-            $query->whereNull('assigned_verifier_id');
-        }
+        if ($restrictLevel1 && $viewer) {
+            $query->where('assigned_verifier_id', $viewer->id);
+        } else {
+            if ($assigned === '1') {
+                $query->whereNotNull('assigned_verifier_id');
+            } elseif ($assigned === '0') {
+                $query->whereNull('assigned_verifier_id');
+            }
 
-        if (is_string($assignedVerifierId) && $assignedVerifierId !== '') {
-            $query->where('assigned_verifier_id', (int) $assignedVerifierId);
-        }
+            if (is_string($assignedVerifierId) && $assignedVerifierId !== '') {
+                $query->where('assigned_verifier_id', (int) $assignedVerifierId);
+            }
 
-        if ($request->query('mine') === '1' && $currentUserId) {
-            $query->where('assigned_verifier_id', $currentUserId);
+            if ($request->query('mine') === '1' && $currentUserId) {
+                $query->where('assigned_verifier_id', $currentUserId);
+            }
         }
 
         if ($verificationState !== '') {

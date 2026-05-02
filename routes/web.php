@@ -315,6 +315,9 @@ Route::middleware('auth')->group(function () {
             Route::post('/qualifications/{qualification}/assign', [AdminVerificationQualificationController::class, 'assign'])
                 ->middleware('can:verification.assign')
                 ->name('qualifications.assign');
+            Route::post('/qualifications/{qualification}/revoke-assignment', [AdminVerificationQualificationController::class, 'revokeAssignment'])
+                ->middleware('can:verification.assign')
+                ->name('qualifications.revoke_assignment');
             Route::post('/qualifications/{qualification}/send-back', [AdminVerificationQualificationController::class, 'sendBack'])
                 ->middleware('can:verification.send_back')
                 ->name('qualifications.send_back');

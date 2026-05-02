@@ -156,7 +156,6 @@ watch(
               <th class="px-5 py-3 text-left">Applicant</th>
               <th class="px-5 py-3 text-left">Qualification</th>
               <th class="px-5 py-3 text-left">Local/Foreign</th>
-              <th class="px-5 py-3 text-left">Assigned verifier</th>
               <th class="px-5 py-3 text-left">Qualification status</th>
               <th class="px-5 py-3 text-left">Payment</th>
               <th class="px-5 py-3 text-left">Submitted</th>
@@ -167,7 +166,11 @@ watch(
             <tr v-for="row in qualifications.data" :key="row.id" class="hover:bg-surface-muted/60">
               <td class="px-5 py-3">
                 <div class="font-semibold text-text-primary">{{ row.application?.application_number ?? '—' }}</div>
-                <div class="mt-0.5 text-xs text-text-muted">Task #{{ row.id }}</div>
+                <div class="mt-0.5 text-xs text-text-muted">Qualification task #{{ row.id }}</div>
+                <div class="mt-1.5 text-xs leading-snug">
+                  <span class="text-text-muted">Assigned to:</span>
+                  <span class="font-medium text-text-primary">{{ row.assigned_verifier ?? 'Unassigned' }}</span>
+                </div>
               </td>
               <td class="px-5 py-3 text-text-primary">{{ row.applicant_name ?? '—' }}</td>
               <td class="px-5 py-3">
@@ -177,7 +180,6 @@ watch(
                 </div>
               </td>
               <td class="px-5 py-3 text-text-primary">{{ row.is_foreign ? 'Foreign' : 'Local' }}</td>
-              <td class="px-5 py-3 text-text-primary">{{ row.assigned_verifier ?? '—' }}</td>
               <td class="px-5 py-3 text-text-primary">{{ row.verification_state ?? '—' }}</td>
               <td class="px-5 py-3 text-text-primary">{{ row.application?.payment_status ?? '—' }}</td>
               <td class="px-5 py-3 text-text-primary">

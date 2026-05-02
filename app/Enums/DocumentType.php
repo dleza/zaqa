@@ -14,5 +14,6 @@ enum DocumentType: string
     case GeneratedReceipt = 'generated_receipt';
     case GeneratedCertificate = 'generated_certificate';
     case OtherSupportingDocument = 'other_supporting_document';
+    /** Internal: Level 1 findings pack / attachment at completion (admin upload). */
+    case Level1ReviewAttachment = 'level1_review_attachment';
 }
-

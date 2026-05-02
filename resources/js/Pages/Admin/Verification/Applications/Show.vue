@@ -60,10 +60,24 @@ const canShowLevel1Complete = computed(() => {
   return ['assigned_to_level1', 'under_level1_review'].includes(state.value)
 })
 
+/** Same rule as backend qualification visibility: Level 1 officers without assign/L2 send back per qualification task only (not whole application). */
+const isQualificationScopedVerifier = computed(
+  () => props.can.level1_process && !props.can.assign && !props.can.level2_review,
+)
+
 const canShowSendBack = computed(() => {
+  if (isQualificationScopedVerifier.value) return false
   if (!props.can.send_back) return false
   return !['approved_for_certificate', 'rejected', 'certificate_issued', 'closed'].includes(state.value)
 })
+
+/** Per-item verification tasks on this application (filtered server-side for Level 1). */
+const qualificationsList = computed<any[]>(() => {
+  const list = props.application?.qualifications
+  return Array.isArray(list) ? list : []
+})
+
+const showQualificationsList = computed(() => qualificationsList.value.length > 1)
 
 const statusBadgeClass = computed(() => {
   return (value: string | null | undefined) => {
@@ -228,13 +242,41 @@ const slaProgressPct = computed(() => {
               <div class="mt-1 text-xs text-text-muted">{{ application.applicant?.phone ?? '—' }}</div>
               <div class="mt-1 text-xs text-text-muted">NRC/Passport: {{ application.applicant?.nrc_passport ?? '—' }}</div>
             </div>
-            <div>
-              <div class="text-xs font-semibold uppercase tracking-wider text-text-muted">Qualification</div>
-              <div class="mt-1 text-sm font-semibold text-text-primary">{{ application.qualification?.title ?? '—' }}</div>
-              <div class="mt-1 text-xs text-text-muted">
-                {{ application.qualification?.country ?? '—' }} • {{ application.qualification?.awarding_institution ?? '—' }}
+            <div class="sm:col-span-2">
+              <div class="text-xs font-semibold uppercase tracking-wider text-text-muted">Qualification(s)</div>
+              <div v-if="showQualificationsList" class="mt-3 space-y-3">
+                <div
+                  v-for="q in qualificationsList"
+                  :key="q.id"
+                  class="rounded-xl border border-border bg-surface-muted/50 px-4 py-3"
+                >
+                  <div class="flex flex-wrap items-start justify-between gap-2">
+                    <div class="min-w-0">
+                      <div class="text-sm font-semibold text-text-primary">{{ q.title ?? '—' }}</div>
+                      <div class="mt-1 text-xs text-text-muted">
+                        {{ q.country ?? '—' }} • {{ q.awarding_institution ?? '—' }}
+                      </div>
+                      <div class="mt-1 text-xs text-text-muted">Award date: {{ q.award_date ?? '—' }}</div>
+                      <div v-if="q.verification_state" class="mt-1 text-[11px] font-medium text-text-muted">
+                        Task: {{ String(q.verification_state).replace(/_/g, ' ') }}
+                      </div>
+                    </div>
+                    <Link
+                      :href="q.href"
+                      class="zaqa-btn zaqa-btn-secondary h-9 shrink-0 px-3 py-2 text-xs"
+                    >
+                      Open task
+                    </Link>
+                  </div>
+                </div>
               </div>
-              <div class="mt-1 text-xs text-text-muted">Award date: {{ application.qualification?.award_date ?? '—' }}</div>
+              <template v-else>
+                <div class="mt-1 text-sm font-semibold text-text-primary">{{ application.qualification?.title ?? '—' }}</div>
+                <div class="mt-1 text-xs text-text-muted">
+                  {{ application.qualification?.country ?? '—' }} • {{ application.qualification?.awarding_institution ?? '—' }}
+                </div>
+                <div class="mt-1 text-xs text-text-muted">Award date: {{ application.qualification?.award_date ?? '—' }}</div>
+              </template>
             </div>
           </div>
         </div>

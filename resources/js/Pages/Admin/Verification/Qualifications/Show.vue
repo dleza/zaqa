@@ -16,6 +16,7 @@ import {
   Link2,
   Shield,
   Timer,
+  UserMinus,
   UserRound,
   Users,
 } from 'lucide-vue-next'
@@ -28,14 +29,24 @@ const props = defineProps<{
 }>()
 
 const assignOpen = ref(false)
+const revokeOpen = ref(false)
 const sendBackOpen = ref(false)
 const level1CompleteOpen = ref(false)
 const copiedRef = ref(false)
 const copiedPageUrl = ref(false)
 
 const assignForm = useForm({ assigned_to_user_id: props.qualification.assigned_verifier_id ?? '', comment: '' })
+const revokeForm = useForm({ comment: '' })
 const sendBackForm = useForm({ comment: '' })
-const level1CompleteForm = useForm({ findings: '' })
+const level1CompleteForm = useForm<{ findings: string; attachment: File | null }>({ findings: '', attachment: null })
+const level1AttachmentInput = ref<HTMLInputElement | null>(null)
+
+function clearLevel1Attachment() {
+  level1CompleteForm.attachment = null
+  if (level1AttachmentInput.value) {
+    level1AttachmentInput.value.value = ''
+  }
+}
 
 const isForeign = computed(() => !!props.qualification.is_foreign)
 const appNum = computed(() => props.qualification.application?.application_number ?? '—')
@@ -81,6 +92,13 @@ const canShowSendBack = computed(() => {
 const canShowLevel1Complete = computed(() => {
   if (!props.can.level1_process) return false
   if (!isViewerAssignedLevel1.value) return false
+  return ['assigned_to_level1', 'under_level1_review'].includes(state.value)
+})
+
+/** Level 2 / Super Admin: remove Level 1 assignee and return task to the assignment pool. */
+const canShowRevokeAssignment = computed(() => {
+  if (!props.can.assign) return false
+  if (!props.qualification.assigned_verifier_id) return false
   return ['assigned_to_level1', 'under_level1_review'].includes(state.value)
 })
 
@@ -159,6 +177,13 @@ function formatDuration(ms: number | null): string {
   if (h > 0) return `${h}h ${m % 60}m`
   if (m > 0) return `${m}m`
   return `${s}s`
+}
+
+const documentTypeLabels: Record<string, string> = {
+  level1_review_attachment: 'Level 1 review attachment',
+}
+function documentTypeLabel(raw: string) {
+  return documentTypeLabels[raw] ?? raw.replace(/_/g, ' ')
 }
 
 const nowMs = ref<number>(Date.now())
@@ -324,6 +349,64 @@ const slaProgressPct = computed(() => {
         </div>
       </section>
 
+      <!-- Quick actions (workflow shortcuts — surfaced at top for fast access) -->
+      <section class="rounded-2xl border border-border bg-surface p-4 shadow-sm sm:p-5">
+        <div class="flex flex-col gap-4">
+          <div>
+            <h2 class="text-sm font-bold tracking-tight text-text-primary">Quick actions</h2>
+            <p class="mt-1 text-xs text-text-muted">Assign or revoke Level 1, return to applicant, or complete Level 1 review.</p>
+          </div>
+          <div
+            v-if="canShowAssign || canShowRevokeAssignment || canShowSendBack || canShowLevel1Complete"
+            class="grid grid-cols-1 gap-2.5 sm:grid-cols-2 lg:grid-cols-2 xl:grid-cols-4"
+          >
+            <button
+              v-if="canShowAssign"
+              type="button"
+              class="zaqa-btn zaqa-btn-secondary flex w-full items-center justify-center gap-2 border border-border bg-surface-muted py-2.5 font-semibold hover:bg-surface-muted/80"
+              @click="assignOpen = true"
+            >
+              <ArrowRight class="h-4 w-4" aria-hidden="true" />
+              {{ qualification.assigned_verifier_id ? 'Reassign Level 1' : 'Assign Level 1' }}
+            </button>
+
+            <button
+              v-if="canShowRevokeAssignment"
+              type="button"
+              class="zaqa-btn flex w-full items-center justify-center gap-2 border border-rose-300/50 bg-rose-500/10 py-2.5 font-semibold text-rose-950 hover:bg-rose-500/18"
+              @click="revokeOpen = true"
+            >
+              <UserMinus class="h-4 w-4" aria-hidden="true" />
+              Remove Level 1 assignment
+            </button>
+
+            <button
+              v-if="canShowSendBack"
+              type="button"
+              class="zaqa-btn flex w-full items-center justify-center gap-2 border border-amber-300/40 bg-amber-500/15 py-2.5 font-semibold text-amber-950 hover:bg-amber-500/25"
+              @click="sendBackOpen = true"
+            >
+              Send back to applicant
+            </button>
+
+            <button
+              v-if="canShowLevel1Complete"
+              type="button"
+              class="zaqa-btn flex w-full items-center justify-center gap-2 border border-sky-300/45 bg-sky-500/12 py-2.5 font-semibold text-sky-950 hover:bg-sky-500/20"
+              @click="level1CompleteOpen = true"
+            >
+              Mark Level 1 complete
+            </button>
+          </div>
+          <p
+            v-else
+            class="text-xs leading-relaxed text-text-muted"
+          >
+            No actions for your permissions or this task state. Open the parent application if you need application-level tools.
+          </p>
+        </div>
+      </section>
+
       <div class="grid gap-6 lg:grid-cols-12 lg:items-start">
         <!-- Main column -->
         <div class="space-y-6 lg:col-span-8">
@@ -427,7 +510,7 @@ const slaProgressPct = computed(() => {
                 </thead>
                 <tbody class="divide-y divide-border/60 bg-surface">
                   <tr v-for="d in qualification.documents" :key="d.id" class="transition hover:bg-surface-muted/40">
-                    <td class="px-4 py-3 font-medium text-text-primary">{{ d.document_type }}</td>
+                    <td class="px-4 py-3 font-medium text-text-primary">{{ documentTypeLabel(d.document_type) }}</td>
                     <td class="px-4 py-3 text-text-primary">{{ d.original_name }}</td>
                     <td class="px-4 py-3 tabular-nums text-text-muted">v{{ d.version_number }}</td>
                     <td class="px-4 py-3 text-right">
@@ -590,43 +673,6 @@ const slaProgressPct = computed(() => {
             </p>
           </section>
 
-          <!-- Actions -->
-          <section class="rounded-2xl border border-border bg-surface p-6 shadow-sm">
-            <h2 class="text-sm font-bold tracking-tight text-text-primary">Actions</h2>
-            <div class="mt-4 space-y-2.5">
-              <button
-                v-if="canShowAssign"
-                type="button"
-                class="zaqa-btn zaqa-btn-secondary flex w-full items-center justify-center gap-2 border border-border bg-surface-muted py-2.5 font-semibold hover:bg-surface-muted/80"
-                @click="assignOpen = true"
-              >
-                <ArrowRight class="h-4 w-4" aria-hidden="true" />
-                {{ qualification.assigned_verifier_id ? 'Reassign Level 1' : 'Assign Level 1' }}
-              </button>
-
-              <button
-                v-if="canShowSendBack"
-                type="button"
-                class="zaqa-btn flex w-full items-center justify-center gap-2 border border-amber-300/40 bg-amber-500/15 py-2.5 font-semibold text-amber-950 hover:bg-amber-500/25"
-                @click="sendBackOpen = true"
-              >
-                Send back to applicant
-              </button>
-
-              <button
-                v-if="canShowLevel1Complete"
-                type="button"
-                class="zaqa-btn flex w-full items-center justify-center gap-2 border border-sky-300/45 bg-sky-500/12 py-2.5 font-semibold text-sky-950 hover:bg-sky-500/20"
-                @click="level1CompleteOpen = true"
-              >
-                Mark Level 1 complete
-              </button>
-            </div>
-            <p v-if="!canShowAssign && !canShowSendBack && !canShowLevel1Complete" class="mt-4 text-xs leading-relaxed text-text-muted">
-              No actions for your permissions or this task state. Open the parent application if you need application-level tools.
-            </p>
-          </section>
-
           <!-- Assignment history -->
           <section v-if="qualification.assignments?.length" class="rounded-2xl border border-border bg-surface p-6 shadow-sm">
             <h2 class="text-sm font-bold tracking-tight text-text-primary">Assignment history</h2>
@@ -683,6 +729,42 @@ const slaProgressPct = computed(() => {
     </AdminActionModal>
 
     <AdminActionModal
+      v-model="revokeOpen"
+      title="Remove Level 1 assignment"
+      description="The task returns to the verification pool as awaiting assignment. The previous Level 1 officer will no longer see this qualification until someone is assigned again."
+    >
+      <div>
+        <label class="text-sm font-semibold text-text-primary">Internal note (optional)</label>
+        <textarea
+          v-model="revokeForm.comment"
+          class="zaqa-input mt-2 h-auto min-h-[6rem] py-3"
+          placeholder="Optional reason for auditors (shown on the application record)."
+        />
+        <div v-if="revokeForm.errors.comment" class="mt-1 text-xs text-danger">{{ revokeForm.errors.comment }}</div>
+        <div v-if="revokeForm.errors.qualification" class="mt-1 text-xs text-danger">{{ revokeForm.errors.qualification }}</div>
+      </div>
+      <template #footer>
+        <button type="button" class="zaqa-btn zaqa-btn-secondary px-4 py-2 text-sm" @click="revokeOpen = false">Cancel</button>
+        <button
+          type="button"
+          class="zaqa-btn border border-rose-400/40 bg-rose-600 px-4 py-2 text-sm font-semibold text-white hover:bg-rose-700"
+          :disabled="revokeForm.processing"
+          @click="
+            revokeForm.post(`/admin/verification/qualifications/${qualification.id}/revoke-assignment`, {
+              preserveScroll: true,
+              onSuccess: () => {
+                revokeOpen = false
+                revokeForm.reset()
+              },
+            })
+          "
+        >
+          Remove assignment
+        </button>
+      </template>
+    </AdminActionModal>
+
+    <AdminActionModal
       v-model="sendBackOpen"
       title="Send qualification back to applicant"
       description="Only this qualification is returned for amendment. The applicant will receive your comment and can update this item without reopening the whole application."
@@ -716,8 +798,38 @@ const slaProgressPct = computed(() => {
         <textarea v-model="level1CompleteForm.findings" class="zaqa-input mt-2 h-auto min-h-[10rem] py-3" placeholder="Summarize checks, issues, and recommendation." />
         <div v-if="level1CompleteForm.errors.findings" class="mt-1 text-xs text-danger">{{ level1CompleteForm.errors.findings }}</div>
       </div>
+      <div class="mt-4">
+        <label class="text-sm font-semibold text-text-primary">Attachment (optional)</label>
+        <p class="mt-1 text-xs text-text-secondary">Upload a supporting file (PDF, Word, or image) for Level 2 — max 10&nbsp;MB.</p>
+        <input
+          ref="level1AttachmentInput"
+          type="file"
+          class="zaqa-input mt-2"
+          accept=".pdf,.doc,.docx,image/jpeg,image/png,image/gif,image/webp"
+          @change="
+            (e) => {
+              const t = e.target as HTMLInputElement
+              level1CompleteForm.attachment = t.files?.[0] ?? null
+            }
+          "
+        />
+        <div v-if="level1CompleteForm.errors.attachment" class="mt-1 text-xs text-danger">{{ level1CompleteForm.errors.attachment }}</div>
+      </div>
       <template #footer>
-        <button type="button" class="zaqa-btn zaqa-btn-secondary px-4 py-2 text-sm" @click="level1CompleteOpen = false">Cancel</button>
+        <button
+          type="button"
+          class="zaqa-btn zaqa-btn-secondary px-4 py-2 text-sm"
+          @click="
+            () => {
+              level1CompleteOpen = false
+              level1CompleteForm.clearErrors()
+              level1CompleteForm.reset()
+              clearLevel1Attachment()
+            }
+          "
+        >
+          Cancel
+        </button>
         <button
           type="button"
           class="zaqa-btn zaqa-btn-primary px-4 py-2 text-sm"
@@ -725,7 +837,12 @@ const slaProgressPct = computed(() => {
           @click="
             level1CompleteForm.post(`/admin/verification/qualifications/${qualification.id}/level1-complete`, {
               preserveScroll: true,
-              onSuccess: () => (level1CompleteOpen = false),
+              forceFormData: true,
+              onSuccess: () => {
+                level1CompleteOpen = false
+                level1CompleteForm.reset()
+                clearLevel1Attachment()
+              },
             })
           "
         >

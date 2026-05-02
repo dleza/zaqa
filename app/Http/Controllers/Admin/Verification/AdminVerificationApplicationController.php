@@ -2,11 +2,12 @@
 
 namespace App\Http\Controllers\Admin\Verification;
 
+use App\Domain\Tracking\ApplicationLifecycleService;
 use App\Domain\Verification\AssignmentService;
 use App\Domain\Verification\DecisionService;
 use App\Domain\Verification\SendBackService;
+use App\Domain\Verification\VerificationQualificationAccess;
 use App\Domain\Verification\VerificationReviewService;
-use App\Domain\Tracking\ApplicationLifecycleService;
 use App\Enums\LifecycleStage;
 use App\Enums\LifecycleVisibility;
 use App\Enums\PaymentStatus;
@@ -32,14 +33,19 @@ class AdminVerificationApplicationController extends Controller
 {
     public function show(Request $request, Application $application): Response
     {
+        VerificationQualificationAccess::ensureApplicationHasAssignableQualification($request->user(), $application);
+
         $application->loadMissing([
             'applicant',
+            'qualifications.country',
+            'qualifications.awardingInstitution.country',
+            'qualifications.qualificationTypeMaster',
+            'qualifications.assignments.assignedBy',
+            'qualifications.assignments.assignedTo',
             'qualification.country',
             'qualification.awardingInstitution.country',
             'qualification.subjectResults',
             'documents.uploadedBy',
-            'assignments.assignedBy',
-            'assignments.assignedTo',
             'comments.author',
             'lifecycleEvents.actor',
             'statusHistories.changedBy',
@@ -59,6 +65,60 @@ class AdminVerificationApplicationController extends Controller
             ->map(fn (User $u) => ['id' => $u->id, 'name' => $u->name, 'email' => $u->email])
             ->values();
 
+        $viewer = $request->user();
+        $restricted = VerificationQualificationAccess::mustRestrictToAssignedQualifications($viewer);
+        $visibleQualifications = ($restricted && $viewer)
+            ? $application->qualifications->where('assigned_verifier_id', $viewer->id)->values()
+            : $application->qualifications;
+
+        $primaryQualification = $visibleQualifications->first() ?? $application->qualification;
+
+        $qualCountTotal = $application->qualifications->count();
+        $visibleQualificationIds = $visibleQualifications->pluck('id')->map(fn ($id) => (int) $id)->all();
+
+        $documentsForPayload = $application->documents;
+        if ($restricted && $viewer) {
+            $documentsForPayload = $documentsForPayload->filter(function ($d) use ($visibleQualificationIds, $qualCountTotal, $visibleQualifications, $application) {
+                if ($d->qualification_id !== null) {
+                    return in_array((int) $d->qualification_id, $visibleQualificationIds, true);
+                }
+                if ($qualCountTotal > 1) {
+                    return false;
+                }
+                if ($qualCountTotal === 1) {
+                    $only = $application->qualifications->first();
+                    if (! $only) {
+                        return false;
+                    }
+                    if ($visibleQualifications->count() !== 1) {
+                        return false;
+                    }
+
+                    return (int) $only->id === (int) $visibleQualifications->first()->id;
+                }
+
+                return false;
+            });
+        }
+
+        /** Level 1 assignment history lives on each qualification (`qualification_assignments`), not on the application row. */
+        $assignmentPayload = $visibleQualifications
+            ->flatMap(function ($q) {
+                return $q->assignments->map(fn ($a) => [
+                    'id' => $a->id,
+                    'qualification_id' => $q->id,
+                    'qualification_title' => $q->title_of_qualification,
+                    'assigned_by' => $a->assignedBy?->name,
+                    'assigned_to' => $a->assignedTo?->name,
+                    'comment' => $a->comment,
+                    'assigned_at' => optional($a->assigned_at)?->toIso8601String(),
+                    'unassigned_at' => optional($a->unassigned_at)?->toIso8601String(),
+                ]);
+            })
+            ->sortByDesc(fn (array $row) => $row['assigned_at'] ?? '')
+            ->values()
+            ->all();
+
         return Inertia::render('Admin/Verification/Applications/Show', [
             'application' => [
                 'id' => $application->id,
@@ -77,7 +137,7 @@ class AdminVerificationApplicationController extends Controller
                     'name' => $application->metadata['verification_subject']['full_name'] ?? $application->applicant?->name,
                     'email' => $application->applicant?->email,
                     'phone' => $application->applicant?->phone_primary,
-                    'nrc_passport' => $application->qualification?->nrc_passport_number
+                    'nrc_passport' => ($restricted ? $primaryQualification?->nrc_passport_number : $application->qualification?->nrc_passport_number)
                         ?: (function () use ($application) {
                             $subject = $application->metadata['verification_subject'] ?? null;
                             if (! is_array($subject)) {
@@ -87,17 +147,32 @@ class AdminVerificationApplicationController extends Controller
                             return ($subject['nrc_number'] ?? null) ?: ($subject['passport_number'] ?? null);
                         })(),
                 ],
-                'qualification' => $application->qualification
+                'qualification' => $primaryQualification
                     ? [
-                        'title' => $application->qualification->title_of_qualification,
-                        'holder_name' => $application->qualification->qualification_holder_name,
-                        'award_date' => $application->qualification->award_date,
-                        'country' => $application->qualification->country?->name ?? $application->qualification->country_name_other,
-                        'awarding_institution' => $application->qualification->awardingInstitution?->name ?? $application->qualification->awarding_institution_name_other,
-                        'qualification_type' => $application->qualification->qualificationTypeMaster?->name,
+                        'title' => $primaryQualification->title_of_qualification,
+                        'holder_name' => $primaryQualification->qualification_holder_name,
+                        'award_date' => $primaryQualification->award_date,
+                        'country' => $primaryQualification->country?->name ?? $primaryQualification->country_name_other,
+                        'awarding_institution' => $primaryQualification->awardingInstitution?->name ?? $primaryQualification->awarding_institution_name_other,
+                        'qualification_type' => $primaryQualification->qualificationTypeMaster?->name,
                     ]
                     : null,
-                'documents' => $application->documents
+                'qualifications' => $visibleQualifications
+                    ->map(fn ($q) => [
+                        'id' => $q->id,
+                        'title' => $q->title_of_qualification,
+                        'holder_name' => $q->qualification_holder_name,
+                        'award_date' => $q->award_date,
+                        'country' => $q->country?->name ?? $q->country_name_other,
+                        'awarding_institution' => $q->awardingInstitution?->name ?? $q->awarding_institution_name_other,
+                        'qualification_type' => $q->qualificationTypeMaster?->name,
+                        'verification_state' => $q->verification_state?->value ?? (string) $q->verification_state,
+                        'assigned_verifier_id' => $q->assigned_verifier_id,
+                        'href' => route('admin.verification.qualifications.show', ['qualification' => $q->id]),
+                    ])
+                    ->values()
+                    ->all(),
+                'documents' => $documentsForPayload
                     ->sortByDesc('id')
                     ->values()
                     ->map(fn ($d) => [
@@ -122,7 +197,7 @@ class AdminVerificationApplicationController extends Controller
                         'status' => $application->invoice->status?->value ?? (string) $application->invoice->status,
                         'issued_at' => optional($application->invoice->issued_at)?->toIso8601String(),
                         'paid_at' => optional($application->invoice->paid_at)?->toIso8601String(),
-                      ]
+                    ]
                     : null,
                 'latest_payment' => $displayPayment
                     ? (function ($p) {
@@ -142,22 +217,12 @@ class AdminVerificationApplicationController extends Controller
                                     'original_name' => $p->proofDocument->original_name,
                                     'preview_url' => route('admin.verification.documents.preview', ['document' => $p->proofDocument->id]),
                                     'download_url' => route('admin.verification.documents.download', ['document' => $p->proofDocument->id]),
-                                  ]
+                                ]
                                 : null,
                         ];
                     })($displayPayment)
                     : null,
-                'assignments' => $application->assignments
-                    ->sortByDesc('assigned_at')
-                    ->values()
-                    ->map(fn ($a) => [
-                        'id' => $a->id,
-                        'assigned_by' => $a->assignedBy?->name,
-                        'assigned_to' => $a->assignedTo?->name,
-                        'comment' => $a->comment,
-                        'assigned_at' => optional($a->assigned_at)?->toIso8601String(),
-                        'unassigned_at' => optional($a->unassigned_at)?->toIso8601String(),
-                    ]),
+                'assignments' => $assignmentPayload,
                 'comments' => $application->comments
                     ->sortByDesc('id')
                     ->values()

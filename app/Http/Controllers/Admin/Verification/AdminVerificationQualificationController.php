@@ -5,10 +5,12 @@ namespace App\Http\Controllers\Admin\Verification;
 use App\Domain\Verification\AssignmentService;
 use App\Domain\Verification\QualificationLevel1ReviewService;
 use App\Domain\Verification\QualificationSendBackService;
+use App\Domain\Verification\VerificationQualificationAccess;
 use App\Enums\VerificationState;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Admin\Verification\AssignApplicationRequest;
 use App\Http\Requests\Admin\Verification\QualificationLevel1CompleteRequest;
+use App\Http\Requests\Admin\Verification\RevokeQualificationAssignmentRequest;
 use App\Http\Requests\Admin\Verification\SendBackRequest;
 use App\Models\Qualification;
 use App\Models\User;
@@ -21,6 +23,8 @@ class AdminVerificationQualificationController extends Controller
 {
     public function show(Request $request, Qualification $qualification): Response
     {
+        VerificationQualificationAccess::ensureQualificationAccessible($request->user(), $qualification);
+
         $qualification->loadMissing([
             'application.applicant',
             'application.invoice',
@@ -132,8 +136,21 @@ class AdminVerificationQualificationController extends Controller
         return back()->with('success', 'Assigned to verifier.');
     }
 
+    public function revokeAssignment(RevokeQualificationAssignmentRequest $request, Qualification $qualification, AssignmentService $assignments): RedirectResponse
+    {
+        $assignments->revokeLevel1Assignment(
+            $qualification,
+            $request->user(),
+            $request->validated('comment'),
+        );
+
+        return back()->with('success', 'Level 1 assignment removed. This task is awaiting assignment again.');
+    }
+
     public function sendBack(SendBackRequest $request, Qualification $qualification, QualificationSendBackService $sendBack): RedirectResponse
     {
+        VerificationQualificationAccess::ensureQualificationAccessible($request->user(), $qualification);
+
         $sendBack->sendBackToApplicant($qualification, $request->user(), (string) $request->validated('comment'));
 
         return back()->with('success', 'Qualification sent back to applicant.');
@@ -141,7 +158,14 @@ class AdminVerificationQualificationController extends Controller
 
     public function level1Complete(QualificationLevel1CompleteRequest $request, Qualification $qualification, QualificationLevel1ReviewService $reviews): RedirectResponse
     {
-        $reviews->completeLevel1($qualification, $request->user(), (string) $request->validated('findings'));
+        VerificationQualificationAccess::ensureQualificationAccessible($request->user(), $qualification);
+
+        $reviews->completeLevel1(
+            $qualification,
+            $request->user(),
+            (string) $request->validated('findings'),
+            $request->file('attachment'),
+        );
 
         return back()->with('success', 'Level 1 review completed for this qualification.');
     }

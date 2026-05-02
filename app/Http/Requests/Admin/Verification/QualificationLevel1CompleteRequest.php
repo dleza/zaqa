@@ -15,6 +15,12 @@ class QualificationLevel1CompleteRequest extends FormRequest
     {
         return [
             'findings' => ['required', 'string', 'min:3', 'max:10000'],
+            'attachment' => [
+                'nullable',
+                'file',
+                'max:10240',
+                'mimes:pdf,doc,docx,jpg,jpeg,png,gif,webp',
+            ],
         ];
     }
 }

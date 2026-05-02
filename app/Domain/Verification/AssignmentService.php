@@ -131,4 +131,95 @@ class AssignmentService
             return $qualification;
         });
     }
+
+    /**
+     * Remove the Level 1 assignee and return the qualification to the assignment pool (awaiting Level 1).
+     * Only valid while the task is still with Level 1 (not yet with Level 2 for final review).
+     */
+    public function revokeLevel1Assignment(Qualification $qualification, User $level2Actor, ?string $comment = null): Qualification
+    {
+        $comment = $comment !== null ? trim($comment) : null;
+        if ($comment === '') {
+            $comment = null;
+        }
+
+        return DB::transaction(function () use ($qualification, $level2Actor, $comment) {
+            $qualification->refresh();
+            $qualification->loadMissing('application', 'assignedVerifier');
+            $application = $qualification->application;
+
+            if (! $qualification->assigned_verifier_id) {
+                throw ValidationException::withMessages([
+                    'qualification' => 'No Level 1 officer is assigned to this task.',
+                ]);
+            }
+
+            $vs = $qualification->verification_state;
+            if (! in_array($vs, [VerificationState::AssignedToLevel1, VerificationState::UnderLevel1Review], true)) {
+                throw ValidationException::withMessages([
+                    'qualification' => 'This task cannot be unassigned in its current state.',
+                ]);
+            }
+
+            $previousAssigneeId = (int) $qualification->assigned_verifier_id;
+
+            QualificationAssignment::query()
+                ->where('qualification_id', $qualification->id)
+                ->whereNull('unassigned_at')
+                ->lockForUpdate()
+                ->update(['unassigned_at' => now()]);
+
+            $assigneeLabel = $qualification->assignedVerifier?->name ?? 'Level 1 officer';
+            $noteBody = 'Level 1 assignment removed ('.$assigneeLabel.'). Task is awaiting assignment again.';
+            if ($comment) {
+                $noteBody .= ' '.$comment;
+            }
+            ApplicationComment::create([
+                'application_id' => $application->id,
+                'author_user_id' => $level2Actor->id,
+                'type' => 'assignment_note',
+                'visibility' => 'internal',
+                'body' => $noteBody,
+            ]);
+
+            $before = $qualification->only([
+                'assigned_verifier_id',
+                'assigned_at',
+                'verification_state',
+            ]);
+
+            $qualification->forceFill([
+                'assigned_verifier_id' => null,
+                'assigned_at' => null,
+                'verification_state' => VerificationState::AwaitingAssignment,
+            ])->save();
+
+            $after = $qualification->only([
+                'assigned_verifier_id',
+                'assigned_at',
+                'verification_state',
+            ]);
+
+            $this->audit->record(
+                eventType: 'verification.assignment_revoked',
+                module: 'Verification',
+                actionName: 'assignment_revoked',
+                message: 'Level 1 assignment removed; task returned to the assignment pool.',
+                entityType: Qualification::class,
+                entityId: $qualification->id,
+                beforeState: $before,
+                afterState: $after,
+                metadata: [
+                    'application_id' => $application->id,
+                    'qualification_id' => $qualification->id,
+                    'previous_assigned_to_user_id' => $previousAssigneeId,
+                    'revoked_by_user_id' => $level2Actor->id,
+                    'comment' => $comment,
+                ],
+                actor: $level2Actor,
+            );
+
+            return $qualification;
+        });
+    }
 }

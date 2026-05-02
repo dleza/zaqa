@@ -3,11 +3,14 @@
 namespace App\Domain\Verification;
 
 use App\Domain\Audit\AuditLogService;
+use App\Domain\Documents\ApplicantDocumentService;
 use App\Domain\Verification\Events\QualificationLevel1Completed;
+use App\Enums\DocumentType;
 use App\Enums\VerificationState;
 use App\Models\Qualification;
 use App\Models\QualificationAssignment;
 use App\Models\User;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
@@ -15,9 +18,10 @@ class QualificationLevel1ReviewService
 {
     public function __construct(
         private readonly AuditLogService $audit,
+        private readonly ApplicantDocumentService $documents,
     ) {}
 
-    public function completeLevel1(Qualification $qualification, User $actor, string $findings): Qualification
+    public function completeLevel1(Qualification $qualification, User $actor, string $findings, ?UploadedFile $attachment = null): Qualification
     {
         if ((int) $qualification->assigned_verifier_id !== (int) $actor->id) {
             throw ValidationException::withMessages([
@@ -32,7 +36,7 @@ class QualificationLevel1ReviewService
             ]);
         }
 
-        return DB::transaction(function () use ($qualification, $actor, $findings) {
+        return DB::transaction(function () use ($qualification, $actor, $findings, $attachment) {
             $qualification->refresh();
             $qualification->loadMissing('application');
 
@@ -56,6 +60,19 @@ class QualificationLevel1ReviewService
                 'reviewed_at' => now(),
             ])->save();
 
+            $attachmentDocumentId = null;
+            if ($attachment instanceof UploadedFile && $attachment->isValid()) {
+                $application = $qualification->application;
+                $document = $this->documents->upload(
+                    $application,
+                    DocumentType::Level1ReviewAttachment,
+                    $attachment,
+                    $actor,
+                    $qualification,
+                );
+                $attachmentDocumentId = $document->id;
+            }
+
             $after = [
                 'verification_state' => $qualification->verification_state?->value ?? null,
                 'reviewer_notes' => $qualification->reviewer_notes,
@@ -74,6 +91,7 @@ class QualificationLevel1ReviewService
                 metadata: [
                     'application_id' => $qualification->application_id,
                     'findings' => $findings,
+                    'level1_attachment_document_id' => $attachmentDocumentId,
                 ],
                 actor: $actor,
             );

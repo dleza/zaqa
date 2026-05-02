@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Admin\Verification;
 
 use App\Domain\Audit\AuditLogService;
 use App\Domain\Documents\ApplicantDocumentService;
+use App\Domain\Verification\VerificationQualificationAccess;
 use App\Http\Controllers\Controller;
 use App\Models\QualificationDocument;
 use Illuminate\Http\Request;
@@ -15,6 +16,8 @@ class AdminVerificationDocumentController extends Controller
         if (! $request->user() || ! $request->user()->can('verification.pool.view')) {
             abort(403);
         }
+
+        $this->assertVerificationDocumentAccessible($request, $document);
 
         $audit->record(
             eventType: 'documents.previewed',
@@ -41,6 +44,8 @@ class AdminVerificationDocumentController extends Controller
             abort(403);
         }
 
+        $this->assertVerificationDocumentAccessible($request, $document);
+
         $audit->record(
             eventType: 'documents.downloaded',
             module: 'Documents',
@@ -59,5 +64,40 @@ class AdminVerificationDocumentController extends Controller
 
         return $documents->downloadResponse($document);
     }
-}
 
+    private function assertVerificationDocumentAccessible(Request $request, QualificationDocument $document): void
+    {
+        $user = $request->user();
+        if (! $user || ! VerificationQualificationAccess::mustRestrictToAssignedQualifications($user)) {
+            return;
+        }
+
+        if ($document->qualification_id) {
+            $document->loadMissing('qualification');
+            if ($document->qualification) {
+                VerificationQualificationAccess::ensureQualificationAccessible($user, $document->qualification);
+            }
+
+            return;
+        }
+
+        $document->loadMissing('application.qualifications');
+        $application = $document->application;
+        if (! $application) {
+            abort(403);
+        }
+
+        VerificationQualificationAccess::ensureApplicationHasAssignableQualification($user, $application);
+
+        $qualCount = $application->qualifications->count();
+        if ($qualCount > 1) {
+            abort(403);
+        }
+        if ($qualCount === 1) {
+            $only = $application->qualifications->first();
+            if ($only) {
+                VerificationQualificationAccess::ensureQualificationAccessible($user, $only);
+            }
+        }
+    }
+}

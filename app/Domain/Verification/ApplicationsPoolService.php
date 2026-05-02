@@ -4,6 +4,7 @@ namespace App\Domain\Verification;
 
 use App\Enums\ApplicationStatus;
 use App\Models\Application;
+use App\Models\User;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -28,6 +29,10 @@ class ApplicationsPoolService
      */
     public function pool(Request $request, ?int $currentUserId = null): LengthAwarePaginator
     {
+        /** @var User|null $viewer */
+        $viewer = $request->user();
+        $restrictLevel1 = VerificationQualificationAccess::mustRestrictToAssignedQualifications($viewer);
+
         $q = trim((string) $request->query('q', ''));
         $assigned = $request->query('assigned');
         $mine = $request->query('mine');
@@ -58,6 +63,13 @@ class ApplicationsPoolService
                 ApplicationStatus::SentBack,
             ]);
 
+        if ($restrictLevel1 && $viewer) {
+            $query->whereHas(
+                'qualifications',
+                fn ($qq) => $qq->where('assigned_verifier_id', $viewer->id)
+            );
+        }
+
         if ($q !== '') {
             $query->where(function ($inner) use ($q) {
                 $inner->where('application_number', 'like', '%'.$q.'%')
@@ -82,7 +94,11 @@ class ApplicationsPoolService
         }
 
         if ($mine === '1' && $currentUserId) {
-            $query->where('assigned_level1_user_id', $currentUserId);
+            if ($restrictLevel1) {
+                // Already scoped to qualifications assigned to the viewer; no application-level filter needed.
+            } else {
+                $query->where('assigned_level1_user_id', $currentUserId);
+            }
         }
 
         if ($foreign === '1') {
@@ -143,7 +159,7 @@ class ApplicationsPoolService
      *
      * @return array<int, array{country_id:int|null, country_name:string, count:int}>
      */
-    public function byCountryCounts(bool $hideZambia = false, array $filters = []): array
+    public function byCountryCounts(bool $hideZambia = false, array $filters = [], ?int $restrictToVerifierId = null): array
     {
         $submittedFrom = trim((string) ($filters['submitted_from'] ?? ''));
         $submittedTo = trim((string) ($filters['submitted_to'] ?? ''));
@@ -153,6 +169,7 @@ class ApplicationsPoolService
         $rows = Application::query()
             ->leftJoin('qualifications', 'qualifications.application_id', '=', 'applications.id')
             ->leftJoin('countries', 'countries.id', '=', 'qualifications.country_id')
+            ->when($restrictToVerifierId !== null, fn ($q) => $q->where('qualifications.assigned_verifier_id', $restrictToVerifierId))
             ->whereIn('applications.current_status', [
                 ApplicationStatus::Submitted->value,
                 ApplicationStatus::Resubmitted->value,
@@ -190,7 +207,7 @@ class ApplicationsPoolService
      * @param  array<string, mixed>  $filters  locality: all|local|foreign
      * @return array<int, array{awarding_institution_id:int|null, awarding_institution_name:string, count:int, local_count:int, foreign_count:int}>
      */
-    public function byAwardingInstitutionCounts(array $filters = []): array
+    public function byAwardingInstitutionCounts(array $filters = [], ?int $restrictToVerifierId = null): array
     {
         $submittedFrom = trim((string) ($filters['submitted_from'] ?? ''));
         $submittedTo = trim((string) ($filters['submitted_to'] ?? ''));
@@ -204,6 +221,7 @@ class ApplicationsPoolService
         $rows = Application::query()
             ->join('qualifications', 'qualifications.application_id', '=', 'applications.id')
             ->leftJoin('awarding_institutions', 'awarding_institutions.id', '=', 'qualifications.awarding_institution_id')
+            ->when($restrictToVerifierId !== null, fn ($q) => $q->where('qualifications.assigned_verifier_id', $restrictToVerifierId))
             ->whereIn('applications.current_status', [
                 ApplicationStatus::Submitted->value,
                 ApplicationStatus::Resubmitted->value,

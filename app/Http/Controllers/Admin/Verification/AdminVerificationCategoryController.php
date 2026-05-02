@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Admin\Verification;
 
 use App\Domain\Verification\ApplicationsPoolService;
+use App\Domain\Verification\VerificationQualificationAccess;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -19,8 +20,10 @@ class AdminVerificationCategoryController extends Controller
             'qualification_q' => $request->query('qualification_q'),
         ];
 
+        $restrictVerifierId = VerificationQualificationAccess::restrictedVerifierIdForQueries($request->user());
+
         return Inertia::render('Admin/Verification/Pool/ByCountry', [
-            'groups' => $pool->byCountryCounts($request->query('hide_zambia') === '1', $filters),
+            'groups' => $pool->byCountryCounts($request->query('hide_zambia') === '1', $filters, $restrictVerifierId),
             'filters' => [
                 'hide_zambia' => $request->query('hide_zambia') === '1' ? '1' : null,
                 'overdue_days' => $request->query('overdue_days'),
@@ -33,8 +36,10 @@ class AdminVerificationCategoryController extends Controller
 
     public function byAwardingBody(Request $request, ApplicationsPoolService $pool): Response
     {
+        $restrictVerifierId = VerificationQualificationAccess::restrictedVerifierIdForQueries($request->user());
+
         return Inertia::render('Admin/Verification/Pool/ByAwardingBody', [
-            'groups' => $pool->byAwardingInstitutionCounts(),
+            'groups' => $pool->byAwardingInstitutionCounts([], $restrictVerifierId),
         ]);
     }
 
@@ -48,8 +53,10 @@ class AdminVerificationCategoryController extends Controller
             'qualification_q' => $request->query('qualification_q'),
         ];
 
+        $restrictVerifierId = VerificationQualificationAccess::restrictedVerifierIdForQueries($request->user());
+
         return Inertia::render('Admin/Verification/Pool/ByAwardingInstitution', [
-            'groups' => $pool->byAwardingInstitutionCounts($filters),
+            'groups' => $pool->byAwardingInstitutionCounts($filters, $restrictVerifierId),
             'filters' => $filters,
         ]);
     }
