@@ -6,10 +6,12 @@ use App\Domain\Audit\AuditLogService;
 use App\Domain\Tracking\ApplicationLifecycleService;
 use App\Enums\LifecycleStage;
 use App\Enums\LifecycleVisibility;
-use App\Models\Country;
+use App\Enums\VerificationState;
 use App\Models\Application;
-use App\Models\Qualification;
+use App\Models\AwardingInstitution;
 use App\Models\CertificateSubject;
+use App\Models\Country;
+use App\Models\Qualification;
 use App\Models\QualificationType;
 use App\Models\User;
 use App\Support\CountryIso;
@@ -21,12 +23,10 @@ class QualificationCaptureService
     public function __construct(
         private readonly AuditLogService $audit,
         private readonly ApplicationLifecycleService $lifecycle,
-    )
-    {
-    }
+    ) {}
 
     /**
-     * @param array<string, mixed> $data
+     * @param  array<string, mixed>  $data
      */
     public function upsertQualification(Application $application, array $data, User $actor): Qualification
     {
@@ -70,7 +70,7 @@ class QualificationCaptureService
             $isForeignQualification = (bool) ($qualification?->is_foreign_qualification ?? false);
             $awardingInstitutionId = $data['awarding_institution_id'] ?? ($data['awarding_body_id'] ?? null);
             if ($awardingInstitutionId) {
-                $inst = \App\Models\AwardingInstitution::query()->with('country')->find((int) $awardingInstitutionId);
+                $inst = AwardingInstitution::query()->with('country')->find((int) $awardingInstitutionId);
                 $iso = strtoupper((string) ($inst?->country?->iso_code ?? ''));
                 if ($iso !== '') {
                     $isForeignQualification = ! CountryIso::isZambia($iso);
@@ -121,10 +121,36 @@ class QualificationCaptureService
                 $payload['awarding_institution_name'] = $payload['awarding_institution_name'] ?: ($qualification?->awarding_institution_name ?? '');
             }
 
+            $wasReturnedToApplicant = $qualification
+                && ($qualification->verification_state === VerificationState::ReturnedToApplicant);
+
             if ($qualification && ! $createNew) {
                 $qualification->forceFill($payload)->save();
             } else {
                 $qualification = Qualification::create(array_merge(['application_id' => $application->id], $payload));
+            }
+
+            if ($wasReturnedToApplicant) {
+                $qualification->forceFill([
+                    'verification_state' => VerificationState::AwaitingAssignment,
+                    'returned_to_applicant_at' => null,
+                ])->save();
+
+                $this->lifecycle->event(
+                    application: $application,
+                    eventType: 'submission',
+                    eventCodeBase: 'submission.qualification_amended.q'.$qualification->id,
+                    stage: LifecycleStage::Review,
+                    title: 'Qualification amended',
+                    description: 'Applicant updated a qualification item after ZAQA feedback.',
+                    visibility: LifecycleVisibility::Both,
+                    actor: $actor,
+                    comment: null,
+                    metadata: [
+                        'qualification_id' => $qualification->id,
+                    ],
+                    occurredAt: now(),
+                );
             }
 
             if (is_array($subjectResults)) {
@@ -224,7 +250,7 @@ class QualificationCaptureService
     /**
      * Save only the qualification's non-subject fields (wizard step).
      *
-     * @param array<string, mixed> $data
+     * @param  array<string, mixed>  $data
      */
     public function upsertQualificationDetails(Application $application, array $data, User $actor): Qualification
     {
@@ -236,7 +262,7 @@ class QualificationCaptureService
     /**
      * Save only subject results (wizard step). Requires an existing Qualification row.
      *
-     * @param array<string, mixed> $subjectResults
+     * @param  array<string, mixed>  $subjectResults
      */
     public function upsertSubjectResults(Application $application, array $subjectResults, User $actor): Qualification
     {

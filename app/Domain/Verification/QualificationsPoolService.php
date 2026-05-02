@@ -3,6 +3,7 @@
 namespace App\Domain\Verification;
 
 use App\Enums\ApplicationStatus;
+use App\Enums\VerificationState;
 use App\Models\Qualification;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Http\Request;
@@ -117,6 +118,11 @@ class QualificationsPoolService
 
         if ($verificationState !== '') {
             $query->where('verification_state', $verificationState);
+        } else {
+            $query->where(function ($q) {
+                $q->whereNull('qualifications.verification_state')
+                    ->orWhere('qualifications.verification_state', '!=', VerificationState::ReturnedToApplicant->value);
+            });
         }
 
         return $query
@@ -125,4 +131,3 @@ class QualificationsPoolService
             ->withQueryString();
     }
 }
-

@@ -102,6 +102,7 @@ Route::middleware('auth')->group(function () {
         Route::get('/applications/{application}/track', [ApplicantApplicationTrackingController::class, 'show'])->name('applications.track');
         Route::get('/applications/{application}/track-summary', [ApplicantApplicationTrackingController::class, 'summary'])->name('applications.track.summary');
         Route::get('/applications/{application}/edit', [ApplicantApplicationController::class, 'edit'])->name('applications.edit');
+        Route::get('/applications/{application}/qualifications/{qualification}/amend', [ApplicantApplicationController::class, 'amendQualification'])->name('applications.qualifications.amend');
         Route::patch('/applications/{application}', [ApplicantApplicationController::class, 'update'])->name('applications.update');
         Route::patch('/applications/{application}/wizard-declarations', [ApplicantApplicationController::class, 'saveWizardDeclarations'])->name('applications.wizard_declarations.update');
         Route::delete('/applications/{application}', [ApplicantApplicationController::class, 'destroy'])->name('applications.destroy');
@@ -314,6 +315,12 @@ Route::middleware('auth')->group(function () {
             Route::post('/qualifications/{qualification}/assign', [AdminVerificationQualificationController::class, 'assign'])
                 ->middleware('can:verification.assign')
                 ->name('qualifications.assign');
+            Route::post('/qualifications/{qualification}/send-back', [AdminVerificationQualificationController::class, 'sendBack'])
+                ->middleware('can:verification.send_back')
+                ->name('qualifications.send_back');
+            Route::post('/qualifications/{qualification}/level1-complete', [AdminVerificationQualificationController::class, 'level1Complete'])
+                ->middleware('can:verification.level1.process')
+                ->name('qualifications.level1_complete');
         });
 
         Route::prefix('settings')->name('settings.')->group(function () {

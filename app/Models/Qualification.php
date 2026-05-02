@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Enums\VerificationState;
 use Illuminate\Database\Eloquent\Casts\AsArrayObject;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -34,6 +35,7 @@ class Qualification extends Model
         'assigned_verifier_id',
         'assigned_at',
         'reviewed_at',
+        'returned_to_applicant_at',
         'reviewer_notes',
         'fee_currency',
         'fee_amount_cents',
@@ -49,6 +51,8 @@ class Qualification extends Model
         'is_foreign_qualification' => 'bool',
         'assigned_at' => 'datetime',
         'reviewed_at' => 'datetime',
+        'returned_to_applicant_at' => 'datetime',
+        'verification_state' => VerificationState::class,
         'fee_amount_cents' => 'int',
         'raw_subject_results' => AsArrayObject::class,
         'created_at' => 'datetime',
@@ -105,4 +109,3 @@ class Qualification extends Model
         return $this->hasMany(QualificationDocument::class);
     }
 }
-

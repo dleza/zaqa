@@ -10,11 +10,13 @@ use App\Enums\DocumentType;
 use App\Enums\InvoiceStatus;
 use App\Enums\PaymentStatus;
 use App\Enums\ServiceType;
+use App\Enums\VerificationState;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Applicant\CreateApplicationDraftRequest;
 use App\Http\Requests\Applicant\SaveWizardDeclarationsRequest;
 use App\Http\Requests\Applicant\UpdateApplicationDraftRequest;
 use App\Models\Application;
+use App\Models\ApplicationComment;
 use App\Models\AwardingInstitution;
 use App\Models\BillingCategory;
 use App\Models\CertificateSubject;
@@ -26,6 +28,7 @@ use App\Models\User;
 use App\Support\CountryIso;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\URL;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -185,9 +188,9 @@ class ApplicantApplicationController extends Controller
     }
 
     /**
-     * @return \Illuminate\Support\Collection<int, Qualification>
+     * @return Collection<int, Qualification>
      */
-    private function wizardQualifications(Application $application): \Illuminate\Support\Collection
+    private function wizardQualifications(Application $application): Collection
     {
         $application->loadMissing([
             'qualifications.qualificationTypeMaster',
@@ -239,8 +242,8 @@ class ApplicantApplicationController extends Controller
         }
 
         $idNum = trim((string) ($q->certificate_number ?? ''))
-            . trim((string) ($q->student_number ?? ''))
-            . trim((string) ($q->examination_number ?? ''));
+            .trim((string) ($q->student_number ?? ''))
+            .trim((string) ($q->examination_number ?? ''));
         if ($idNum === '') {
             return false;
         }
@@ -403,6 +406,30 @@ class ApplicantApplicationController extends Controller
             return redirect()->route('applicant.applications.show', $application);
         }
 
+        return $this->buildEditInertiaResponse($request, $application, null);
+    }
+
+    public function amendQualification(Request $request, Application $application, Qualification $qualification): Response|RedirectResponse
+    {
+        $this->authorize('view', $application);
+
+        if ((int) $qualification->application_id !== (int) $application->id) {
+            abort(404);
+        }
+
+        if ($qualification->verification_state !== VerificationState::ReturnedToApplicant) {
+            return redirect()->route('applicant.applications.show', $application);
+        }
+
+        if (! $request->user()->can('update', $application)) {
+            return redirect()->route('applicant.applications.show', $application);
+        }
+
+        return $this->buildEditInertiaResponse($request, $application, $qualification->id);
+    }
+
+    private function buildEditInertiaResponse(Request $request, Application $application, ?int $amendmentQualificationId): Response
+    {
         $application->load([
             'qualifications.subjectResults',
             'qualifications.country',
@@ -498,6 +525,7 @@ class ApplicantApplicationController extends Controller
             'localConsent' => (array) config('consent.local'),
             'declarationsCopy' => (array) config('applicant_wizard.declarations'),
             'applicant' => $this->applicantPayload($request),
+            'amendmentQualificationId' => $amendmentQualificationId,
         ]);
     }
 
@@ -581,10 +609,19 @@ class ApplicantApplicationController extends Controller
         $currentDocs = $application->documents
             ->filter(fn ($d) => (bool) $d->is_current_version);
 
+        $sendBackLatest = ApplicationComment::query()
+            ->whereIn('qualification_id', $application->qualifications->pluck('id'))
+            ->where('type', 'send_back')
+            ->where('visibility', 'applicant_visible')
+            ->orderByDesc('id')
+            ->get()
+            ->unique('qualification_id')
+            ->keyBy('qualification_id');
+
         $qualifications = $application->qualifications
             ->sortBy('id')
             ->values()
-            ->map(function ($q) use ($currentDocs) {
+            ->map(function ($q) use ($currentDocs, $sendBackLatest) {
                 $qid = (int) $q->id;
                 $instIso = strtoupper((string) (($q->awardingInstitution?->country?->iso_code) ?: ($q->country?->iso_code) ?: ''));
                 $institutionIsForeign = $instIso !== '' && ! CountryIso::isZambia($instIso);
@@ -603,9 +640,15 @@ class ApplicantApplicationController extends Controller
                 $hasLocalConsent = ! $requiresForeignConsent;
 
                 $missing = [];
-                if (! $hasCert) $missing[] = 'certificate_copy';
-                if ((bool) ($q->transcript_required ?? false) && ! $hasTranscript) $missing[] = 'transcript';
-                if ($requiresForeignConsent && ! $hasForeignConsent) $missing[] = 'foreign_consent';
+                if (! $hasCert) {
+                    $missing[] = 'certificate_copy';
+                }
+                if ((bool) ($q->transcript_required ?? false) && ! $hasTranscript) {
+                    $missing[] = 'transcript';
+                }
+                if ($requiresForeignConsent && ! $hasForeignConsent) {
+                    $missing[] = 'foreign_consent';
+                }
 
                 return [
                     'id' => $q->id,
@@ -656,7 +699,7 @@ class ApplicantApplicationController extends Controller
                                     'foreign_processing_days' => $q->qualificationTypeMaster->billingCategory->foreign_processing_days,
                                 ]
                                 : null,
-                          ]
+                        ]
                         : null,
                     'transcript_required' => (bool) $q->transcript_required,
                     'transcript_reason' => $q->transcript_reason,
@@ -680,6 +723,9 @@ class ApplicantApplicationController extends Controller
                     'institution_consent_form_url' => $requiresForeignConsent ? $institutionConsentFormUrl : null,
                     'institution_has_consent_form' => $requiresForeignConsent ? $institutionHasConsentForm : null,
                     'missing_requirements' => $missing,
+                    'verification_state' => $q->verification_state?->value ?? (string) ($q->verification_state ?? ''),
+                    'returned_to_applicant_at' => optional($q->returned_to_applicant_at)?->toIso8601String(),
+                    'amendment_comment' => $sendBackLatest->get((int) $q->id)?->body,
                 ];
             })
             ->all();

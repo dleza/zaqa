@@ -44,6 +44,10 @@ const qualificationsList = computed<any[]>(() => {
   return single ? [single] : []
 })
 
+const qualificationsNeedingAmendment = computed(() =>
+  qualificationsList.value.filter((q: any) => (q.verification_state ?? '') === 'returned_to_applicant'),
+)
+
 const isDraftLike = computed(() => {
   const s = (props.application?.current_status ?? '').toString().toLowerCase()
   return s === 'draft'
@@ -283,6 +287,31 @@ function money(cents: number, currency: string) {
                   </dd>
                 </div>
               </dl>
+            </div>
+          </div>
+
+          <div
+            v-for="q in qualificationsNeedingAmendment"
+            :key="'amend-' + q.id"
+            class="border-b border-amber-300/40 bg-amber-50 px-5 py-4 sm:px-8"
+          >
+            <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+              <div class="min-w-0">
+                <div class="text-sm font-semibold text-amber-950">Qualification update required</div>
+                <div class="mt-0.5 text-sm font-medium text-text-primary">{{ q.title_of_qualification || 'Qualification' }}</div>
+                <p v-if="q.amendment_comment" class="mt-2 whitespace-pre-wrap text-sm leading-relaxed text-amber-950/90">
+                  {{ q.amendment_comment }}
+                </p>
+                <p v-else class="mt-2 text-sm text-amber-950/90">
+                  ZAQA has returned this item for amendment. Use the button to update only this qualification.
+                </p>
+              </div>
+              <Link
+                :href="`/applicant/applications/${application.id}/qualifications/${q.id}/amend`"
+                class="zaqa-btn zaqa-btn-primary h-10 shrink-0 px-4 py-2 text-sm"
+              >
+                Update qualification
+              </Link>
             </div>
           </div>
 

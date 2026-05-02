@@ -9,6 +9,7 @@ class ApplicationComment extends Model
 {
     protected $fillable = [
         'application_id',
+        'qualification_id',
         'author_user_id',
         'type',
         'visibility',
@@ -25,9 +26,13 @@ class ApplicationComment extends Model
         return $this->belongsTo(Application::class);
     }
 
+    public function qualification(): BelongsTo
+    {
+        return $this->belongsTo(Qualification::class);
+    }
+
     public function author(): BelongsTo
     {
         return $this->belongsTo(User::class, 'author_user_id');
     }
 }
-

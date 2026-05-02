@@ -2,8 +2,9 @@
 
 namespace App\Domain\Applications;
 
-use App\Domain\Audit\AuditLogService;
 use App\Domain\Applications\Events\ApplicationSubmitted;
+use App\Domain\Audit\AuditLogService;
+use App\Domain\Tracking\ApplicationLifecycleService;
 use App\Enums\ApplicationStatus;
 use App\Enums\ConsentType;
 use App\Enums\DocumentType;
@@ -12,7 +13,6 @@ use App\Enums\LifecycleStage;
 use App\Enums\LifecycleVisibility;
 use App\Enums\PaymentStatus;
 use App\Enums\VerificationState;
-use App\Domain\Tracking\ApplicationLifecycleService;
 use App\Models\Application;
 use App\Models\ApplicationStatusHistory;
 use App\Models\Qualification;
@@ -30,9 +30,7 @@ class ApplicationSubmissionService
     public function __construct(
         private readonly AuditLogService $audit,
         private readonly ApplicationLifecycleService $lifecycle,
-    )
-    {
-    }
+    ) {}
 
     public function submit(Application $application, User $actor): Application
     {
@@ -212,6 +210,24 @@ class ApplicationSubmissionService
 
             $this->assignVerificationReferenceNumbers($application);
 
+            $application->loadMissing('qualifications');
+            foreach ($application->qualifications as $qualification) {
+                /** @var Qualification $qualification */
+                if ($fromStatus === ApplicationStatus::SentBack) {
+                    $qualification->forceFill([
+                        'verification_state' => VerificationState::AwaitingAssignment,
+                        'returned_to_applicant_at' => null,
+                    ])->save();
+
+                    continue;
+                }
+
+                if ($fromStatus === ApplicationStatus::Draft && $qualification->verification_state === null) {
+                    $qualification->verification_state = VerificationState::AwaitingAssignment;
+                    $qualification->save();
+                }
+            }
+
             event(new ApplicationSubmitted($application, $actor, $toStatus === ApplicationStatus::Resubmitted));
 
             return $application;
@@ -229,7 +245,7 @@ class ApplicationSubmissionService
     }
 
     /**
-     * @param array<int, DocumentType> $requiredDocumentTypes
+     * @param  array<int, DocumentType>  $requiredDocumentTypes
      * @return array<int, string>
      */
     private function missingDocumentTypes(Application $application, array $requiredDocumentTypes): array

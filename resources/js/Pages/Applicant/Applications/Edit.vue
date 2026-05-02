@@ -33,10 +33,13 @@ const props = withDefaults(
     foreignFeePreview?: any | null
     /** Wizard step 3 — declarations copy (terms / accuracy); separate from qualification consent */
     declarationsCopy?: Record<string, string>
+    /** Open qualification amendment flow for one returned qualification */
+    amendmentQualificationId?: number | null
   }>(),
   {
     certificateSubjects: () => [],
     declarationsCopy: () => ({}),
+    amendmentQualificationId: null,
   },
 )
 
@@ -333,7 +336,10 @@ function saveApplicantDetails(nextStep?: StepKey) {
   })
 }
 
-const applicationLocked = computed(() => invoiceSettled.value || !!props.application?.paid_at)
+const applicationLocked = computed(() => {
+  if (props.amendmentQualificationId) return false
+  return invoiceSettled.value || !!props.application?.paid_at
+})
 
 const qualifications = computed<any[]>(() => {
   const list = (props.application as any)?.qualifications
@@ -773,6 +779,12 @@ function beforeUnload(e: BeforeUnloadEvent) {
 
 onMounted(() => {
   window.addEventListener('beforeunload', beforeUnload)
+
+  if (props.amendmentQualificationId) {
+    activeStep.value = 'qualification'
+    const q = qualifications.value.find((x: any) => Number(x.id) === Number(props.amendmentQualificationId))
+    if (q) openQualificationWorkspace('edit', q)
+  }
 })
 
 onBeforeUnmount(() => {

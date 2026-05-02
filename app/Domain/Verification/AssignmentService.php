@@ -21,8 +21,7 @@ class AssignmentService
     public function __construct(
         private readonly AuditLogService $audit,
         private readonly VerificationWorkflowService $workflow,
-    ) {
-    }
+    ) {}
 
     public function assign(Qualification $qualification, User $level2Actor, User $verifierAssignee, ?string $comment = null): Qualification
     {
@@ -77,6 +76,7 @@ class AssignmentService
             $qualification->forceFill([
                 'assigned_verifier_id' => $verifierAssignee->id,
                 'assigned_at' => now(),
+                'verification_state' => VerificationState::AssignedToLevel1,
             ])->save();
 
             // Keep application status progression simple: when any qualification is assigned,

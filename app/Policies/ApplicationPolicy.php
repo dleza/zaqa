@@ -3,6 +3,7 @@
 namespace App\Policies;
 
 use App\Enums\ApplicationStatus;
+use App\Enums\VerificationState;
 use App\Models\Application;
 use App\Models\User;
 
@@ -15,8 +16,17 @@ class ApplicationPolicy
 
     public function update(User $user, Application $application): bool
     {
-        return $this->view($user, $application)
-            && in_array($application->current_status, [ApplicationStatus::Draft, ApplicationStatus::SentBack], true);
+        if (! $this->view($user, $application)) {
+            return false;
+        }
+
+        if (in_array($application->current_status, [ApplicationStatus::Draft, ApplicationStatus::SentBack], true)) {
+            return true;
+        }
+
+        return $application->qualifications()
+            ->where('verification_state', VerificationState::ReturnedToApplicant->value)
+            ->exists();
     }
 
     public function submit(User $user, Application $application): bool
@@ -30,4 +40,3 @@ class ApplicationPolicy
             && $application->current_status === ApplicationStatus::Draft;
     }
 }
-

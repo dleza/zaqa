@@ -3,8 +3,13 @@
 namespace App\Http\Controllers\Admin\Verification;
 
 use App\Domain\Verification\AssignmentService;
+use App\Domain\Verification\QualificationLevel1ReviewService;
+use App\Domain\Verification\QualificationSendBackService;
+use App\Enums\VerificationState;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Admin\Verification\AssignApplicationRequest;
+use App\Http\Requests\Admin\Verification\QualificationLevel1CompleteRequest;
+use App\Http\Requests\Admin\Verification\SendBackRequest;
 use App\Models\Qualification;
 use App\Models\User;
 use Illuminate\Http\RedirectResponse;
@@ -43,10 +48,13 @@ class AdminVerificationQualificationController extends Controller
             'qualification' => [
                 'id' => $qualification->id,
                 'verification_reference_number' => $qualification->verification_reference_number,
-                'verification_state' => $qualification->verification_state,
+                'verification_state' => $qualification->verification_state?->value
+                    ?? VerificationState::AwaitingAssignment->value,
                 'is_foreign' => (bool) $qualification->is_foreign_qualification,
                 'assigned_verifier_id' => $qualification->assigned_verifier_id,
+                'assigned_verifier_name' => $qualification->assignedVerifier?->name,
                 'assigned_at' => optional($qualification->assigned_at)?->toIso8601String(),
+                'returned_to_applicant_at' => optional($qualification->returned_to_applicant_at)?->toIso8601String(),
                 'reviewed_at' => optional($qualification->reviewed_at)?->toIso8601String(),
                 'reviewer_notes' => $qualification->reviewer_notes,
                 'fee_currency' => $qualification->fee_currency,
@@ -55,8 +63,12 @@ class AdminVerificationQualificationController extends Controller
                     'id' => $qualification->application?->id,
                     'application_number' => $qualification->application?->application_number,
                     'current_status' => $qualification->application?->current_status?->value ?? (string) $qualification->application?->current_status,
+                    'verification_state' => $qualification->application?->verification_state?->value ?? (string) ($qualification->application?->verification_state ?? ''),
                     'payment_status' => $qualification->application?->paid_at ? 'paid' : 'unpaid',
                     'submitted_at' => optional($qualification->application?->submitted_at)?->toIso8601String(),
+                    'created_at' => optional($qualification->application?->created_at)?->toIso8601String(),
+                    'service_deadline_at' => optional($qualification->application?->service_deadline_at)?->toIso8601String(),
+                    'completed_at' => optional($qualification->application?->completed_at)?->toIso8601String(),
                     'applicant_name' => $qualification->application?->metadata['verification_subject']['full_name'] ?? $qualification->application?->applicant?->name,
                 ],
                 'qualification_type' => $qualification->qualificationTypeMaster?->name,
@@ -86,7 +98,7 @@ class AdminVerificationQualificationController extends Controller
                         'agreed_at' => optional($qualification->consentForm->agreed_at)?->toIso8601String(),
                         'uploaded_document_id' => $qualification->consentForm->uploaded_document_id,
                         'zaqa_uploaded_document_id' => $qualification->consentForm->zaqa_uploaded_document_id,
-                      ]
+                    ]
                     : null,
                 'assignments' => $qualification->assignments
                     ->sortByDesc('assigned_at')
@@ -104,6 +116,8 @@ class AdminVerificationQualificationController extends Controller
             'level1Users' => $level1Users,
             'can' => [
                 'assign' => (bool) $request->user()?->can('verification.assign'),
+                'send_back' => (bool) $request->user()?->can('verification.send_back'),
+                'level1_process' => (bool) $request->user()?->can('verification.level1.process'),
             ],
         ]);
     }
@@ -117,5 +131,18 @@ class AdminVerificationQualificationController extends Controller
 
         return back()->with('success', 'Assigned to verifier.');
     }
-}
 
+    public function sendBack(SendBackRequest $request, Qualification $qualification, QualificationSendBackService $sendBack): RedirectResponse
+    {
+        $sendBack->sendBackToApplicant($qualification, $request->user(), (string) $request->validated('comment'));
+
+        return back()->with('success', 'Qualification sent back to applicant.');
+    }
+
+    public function level1Complete(QualificationLevel1CompleteRequest $request, Qualification $qualification, QualificationLevel1ReviewService $reviews): RedirectResponse
+    {
+        $reviews->completeLevel1($qualification, $request->user(), (string) $request->validated('findings'));
+
+        return back()->with('success', 'Level 1 review completed for this qualification.');
+    }
+}
