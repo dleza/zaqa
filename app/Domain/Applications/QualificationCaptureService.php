@@ -260,6 +260,164 @@ class QualificationCaptureService
     }
 
     /**
+     * Admin verification UI: correct qualification data entered by the applicant. Does not change
+     * workflow state, assignments, fees, or verification reference numbers. Changes are audited.
+     *
+     * @param  array<string, mixed>  $data
+     */
+    public function adminVerificationCorrection(Qualification $qualification, array $data, User $actor): Qualification
+    {
+        return DB::transaction(function () use ($qualification, $data, $actor) {
+            $qualification->refresh();
+            $qualification->load(['application', 'subjectResults', 'awardingInstitution.country', 'country']);
+            $application = $qualification->application;
+            if (! $application) {
+                throw ValidationException::withMessages([
+                    'qualification' => 'Application is missing for this qualification.',
+                ]);
+            }
+
+            $beforeQualification = $qualification->toArray();
+            $beforeSubjects = $qualification->subjectResults
+                ->map(fn ($row) => ['subject_name' => $row->subject_name, 'grade' => $row->grade, 'display_order' => $row->display_order])
+                ->values()
+                ->all();
+
+            $qualificationTypeId = (int) $data['qualification_type_id'];
+            $qualificationType = QualificationType::query()->whereKey($qualificationTypeId)->firstOrFail();
+
+            $resolvedInstitutionId = $this->resolveNumericAwardingInstitutionId($data['awarding_institution_id'] ?? null);
+
+            $isForeignQualification = (bool) $qualification->is_foreign_qualification;
+            if ($resolvedInstitutionId) {
+                $inst = AwardingInstitution::query()->with('country')->find($resolvedInstitutionId);
+                $iso = strtoupper((string) ($inst?->country?->iso_code ?? ''));
+                if ($iso !== '') {
+                    $isForeignQualification = ! CountryIso::isZambia($iso);
+                }
+            } elseif (! empty($data['country_id'])) {
+                $country = Country::query()->find((int) $data['country_id']);
+                $iso = strtoupper((string) ($country?->iso_code ?? ''));
+                if ($iso !== '') {
+                    $isForeignQualification = ! CountryIso::isZambia($iso);
+                }
+            }
+
+            $transcriptRequired = (bool) $isForeignQualification || (bool) $qualificationType->requires_subject_results;
+
+            $holderName = trim((string) ($data['qualification_holder_name'] ?? ''));
+            if ($holderName === '') {
+                $holderName = (string) ($qualification->qualification_holder_name ?? '');
+            }
+            $nrc = trim((string) ($data['nrc_passport_number'] ?? ''));
+            if ($nrc === '') {
+                $nrc = (string) ($qualification->nrc_passport_number ?? '');
+            }
+
+            $awardingInstitutionNameOther = trim((string) ($data['awarding_institution_name_other'] ?? ''));
+            $awardingInstitutionNameInput = trim((string) ($data['awarding_institution_name'] ?? ''));
+
+            $awardingInstitutionName = $awardingInstitutionNameInput;
+            if ($awardingInstitutionName === '' && $awardingInstitutionNameOther !== '') {
+                $awardingInstitutionName = $awardingInstitutionNameOther;
+            }
+            if ($awardingInstitutionName === '' && $resolvedInstitutionId) {
+                $awardingInstitutionName = (string) (AwardingInstitution::query()->whereKey($resolvedInstitutionId)->value('name') ?? '');
+            }
+            if ($awardingInstitutionName === '') {
+                $awardingInstitutionName = (string) ($qualification->awarding_institution_name ?? '');
+            }
+
+            $notesVal = array_key_exists('notes', $data)
+                ? (($data['notes'] ?? '') !== '' ? (string) $data['notes'] : null)
+                : $qualification->notes;
+
+            $countryNameOther = trim((string) ($data['country_name_other'] ?? ''));
+            $payload = [
+                'awarding_institution_id' => $resolvedInstitutionId,
+                'awarding_institution_name_other' => $awardingInstitutionNameOther !== '' ? $awardingInstitutionNameOther : null,
+                'awarding_institution_name' => $awardingInstitutionName,
+                'qualification_holder_name' => $holderName,
+                'country_id' => (int) $data['country_id'],
+                'country_name_other' => $countryNameOther !== '' ? $countryNameOther : null,
+                'nrc_passport_number' => $nrc,
+                'certificate_number' => trim((string) ($data['certificate_number'] ?? '')) ?: null,
+                'student_number' => trim((string) ($data['student_number'] ?? '')) ?: null,
+                'examination_number' => trim((string) ($data['examination_number'] ?? '')) ?: null,
+                'title_of_qualification' => (string) $data['title_of_qualification'],
+                'award_date' => (string) $data['award_date'],
+                'qualification_type' => $qualificationType->zqf_level_code,
+                'qualification_type_id' => $qualificationTypeId,
+                'is_foreign_qualification' => $isForeignQualification,
+                'transcript_required' => $transcriptRequired,
+                'transcript_reason' => (($data['transcript_reason'] ?? '') !== '' ? (string) $data['transcript_reason'] : null),
+                'notes' => $notesVal,
+            ];
+
+            $qualification->forceFill($payload)->save();
+
+            $this->replaceQualificationSubjectResults($qualification, is_array($data['subject_results'] ?? null) ? $data['subject_results'] : []);
+
+            $qualification->load('subjectResults');
+
+            $afterQualification = $qualification->fresh()->toArray();
+            $afterSubjects = $qualification->subjectResults
+                ->map(fn ($row) => ['subject_name' => $row->subject_name, 'grade' => $row->grade, 'display_order' => $row->display_order])
+                ->values()
+                ->all();
+
+            $correctionNoteRaw = array_key_exists('correction_note', $data) ? trim((string) $data['correction_note']) : '';
+            $correctionNote = $correctionNoteRaw !== '' ? $correctionNoteRaw : null;
+
+            $this->audit->record(
+                eventType: 'verification.qualification_corrected',
+                module: 'Verification',
+                actionName: 'qualification_corrected',
+                message: 'Verifier corrected qualification data submitted for review.',
+                entityType: Qualification::class,
+                entityId: $qualification->id,
+                beforeState: [
+                    'qualification' => $beforeQualification,
+                    'subject_results' => $beforeSubjects,
+                ],
+                afterState: [
+                    'qualification' => $afterQualification,
+                    'subject_results' => $afterSubjects,
+                ],
+                metadata: [
+                    'application_id' => $application->id,
+                    'correction_note' => $correctionNote,
+                ],
+                actor: $actor,
+            );
+
+            $application->loadMissing('qualifications');
+            $application->forceFill([
+                'is_foreign' => (bool) $application->qualifications->contains(fn (Qualification $q) => (bool) $q->is_foreign_qualification),
+            ])->save();
+
+            return $qualification->fresh();
+        });
+    }
+
+    private function resolveNumericAwardingInstitutionId(mixed $raw): ?int
+    {
+        if ($raw === null || $raw === '') {
+            return null;
+        }
+        if (is_string($raw) && strtolower($raw) === 'other') {
+            return null;
+        }
+        if (! is_numeric($raw)) {
+            return null;
+        }
+
+        $id = (int) $raw;
+
+        return $id > 0 ? $id : null;
+    }
+
+    /**
      * Save only subject results (wizard step). Requires an existing Qualification row.
      *
      * @param  array<string, mixed>  $subjectResults

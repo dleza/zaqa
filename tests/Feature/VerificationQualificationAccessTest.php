@@ -6,8 +6,15 @@ use App\Enums\ApplicationStatus;
 use App\Enums\DocumentType;
 use App\Enums\VerificationState;
 use App\Models\Application;
+use App\Models\AwardingInstitution;
+use App\Models\Country;
 use App\Models\Qualification;
+use App\Models\QualificationType;
 use App\Models\User;
+use Database\Seeders\AwardingInstitutionsSeeder;
+use Database\Seeders\BillingCategoriesSeeder;
+use Database\Seeders\CountriesSeeder;
+use Database\Seeders\QualificationTypesSeeder;
 use Database\Seeders\RolesAndPermissionsSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
@@ -319,5 +326,105 @@ class VerificationQualificationAccessTest extends TestCase
             'qualification_id' => $qualification->id,
             'document_type' => DocumentType::Level1ReviewAttachment->value,
         ]);
+    }
+
+    public function test_level2_can_update_qualification_details_and_audit_logs(): void
+    {
+        $this->seed([
+            BillingCategoriesSeeder::class,
+            QualificationTypesSeeder::class,
+            CountriesSeeder::class,
+            AwardingInstitutionsSeeder::class,
+        ]);
+
+        $application = $this->makeSubmittedApplication();
+
+        $zambia = Country::query()->where('iso_code', 'ZMB')->firstOrFail();
+        $type = QualificationType::query()->where('zqf_level_code', 'L6')->firstOrFail();
+        $inst = AwardingInstitution::query()->where('country_id', $zambia->id)->firstOrFail();
+
+        $qualification = Qualification::query()->create([
+            'application_id' => $application->id,
+            'awarding_institution_id' => $inst->id,
+            'awarding_institution_name' => $inst->name,
+            'qualification_holder_name' => 'Jane Doe',
+            'country_id' => $zambia->id,
+            'country_name_other' => null,
+            'nrc_passport_number' => '111111/11/1',
+            'certificate_number' => 'CERT-ORIG',
+            'student_number' => null,
+            'examination_number' => null,
+            'title_of_qualification' => 'Diploma',
+            'award_date' => now()->subYear()->toDateString(),
+            'qualification_type' => $type->zqf_level_code,
+            'qualification_type_id' => $type->id,
+            'is_foreign_qualification' => false,
+            'transcript_required' => false,
+        ]);
+
+        $level2 = User::factory()->activated()->create(['applicant_type' => null]);
+        $level2->givePermissionTo(['verification.level2.review', 'verification.pool.view', 'dashboard.view']);
+
+        $payload = [
+            'qualification_holder_name' => 'Jane D. Corrected',
+            'nrc_passport_number' => '111111/11/1',
+            'country_id' => $zambia->id,
+            'country_name_other' => null,
+            'awarding_institution_id' => $inst->id,
+            'awarding_institution_name_other' => null,
+            'awarding_institution_name' => $inst->name,
+            'certificate_number' => 'CERT-UPD',
+            'student_number' => null,
+            'examination_number' => null,
+            'title_of_qualification' => 'Diploma',
+            'award_date' => now()->subYear()->format('Y-m-d'),
+            'qualification_type_id' => $type->id,
+            'transcript_reason' => null,
+            'notes' => null,
+            'correction_note' => 'Fixed certificate number.',
+            'subject_results' => [],
+        ];
+
+        $this->actingAs($level2)
+            ->put(route('admin.verification.qualifications.update', ['qualification' => $qualification->id]), $payload)
+            ->assertRedirect(route('admin.verification.qualifications.show', $qualification));
+
+        $qualification->refresh();
+        $this->assertSame('Jane D. Corrected', $qualification->qualification_holder_name);
+        $this->assertSame('CERT-UPD', $qualification->certificate_number);
+
+        $this->assertDatabaseHas('audit_logs', [
+            'event_type' => 'verification.qualification_corrected',
+            'entity_id' => $qualification->id,
+        ]);
+    }
+
+    public function test_level1_cannot_open_edit_when_qualification_not_assigned_to_them(): void
+    {
+        $application = $this->makeSubmittedApplication();
+
+        $officer = User::factory()->activated()->create(['applicant_type' => null]);
+        $officer->givePermissionTo(['verification.level1.process', 'verification.pool.view', 'dashboard.view']);
+
+        $other = User::factory()->activated()->create(['applicant_type' => null]);
+
+        $qualification = Qualification::query()->create([
+            'application_id' => $application->id,
+            'awarding_institution_name' => 'Test',
+            'qualification_holder_name' => 'Jane',
+            'country_name_other' => 'Zambia',
+            'nrc_passport_number' => '111111/11/1',
+            'title_of_qualification' => 'Diploma',
+            'award_date' => now()->subYear()->toDateString(),
+            'qualification_type' => 'L6',
+            'qualification_type_id' => null,
+            'is_foreign_qualification' => false,
+            'transcript_required' => false,
+            'assigned_verifier_id' => $other->id,
+        ]);
+
+        $this->actingAs($officer)
+            ->get(route('admin.verification.qualifications.edit', ['qualification' => $qualification->id]))
+            ->assertForbidden();
     }
 }

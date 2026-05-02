@@ -2,17 +2,22 @@
 
 namespace App\Http\Controllers\Admin\Verification;
 
+use App\Domain\Applications\QualificationCaptureService;
 use App\Domain\Verification\AssignmentService;
 use App\Domain\Verification\QualificationLevel1ReviewService;
 use App\Domain\Verification\QualificationSendBackService;
 use App\Domain\Verification\VerificationQualificationAccess;
 use App\Enums\VerificationState;
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Admin\Verification\AdminUpdateVerificationQualificationRequest;
 use App\Http\Requests\Admin\Verification\AssignApplicationRequest;
 use App\Http\Requests\Admin\Verification\QualificationLevel1CompleteRequest;
 use App\Http\Requests\Admin\Verification\RevokeQualificationAssignmentRequest;
 use App\Http\Requests\Admin\Verification\SendBackRequest;
+use App\Models\CertificateSubject;
+use App\Models\Country;
 use App\Models\Qualification;
+use App\Models\QualificationType;
 use App\Models\User;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -122,8 +127,103 @@ class AdminVerificationQualificationController extends Controller
                 'assign' => (bool) $request->user()?->can('verification.assign'),
                 'send_back' => (bool) $request->user()?->can('verification.send_back'),
                 'level1_process' => (bool) $request->user()?->can('verification.level1.process'),
+                'edit_qualification' => (bool) ($request->user()?->can('verification.level1.process') || $request->user()?->can('verification.level2.review')),
             ],
         ]);
+    }
+
+    public function edit(Request $request, Qualification $qualification): Response
+    {
+        VerificationQualificationAccess::ensureQualificationAccessible($request->user(), $qualification);
+        abort_unless(
+            $request->user()->can('verification.level1.process') || $request->user()->can('verification.level2.review'),
+            403
+        );
+
+        $qualification->load([
+            'subjectResults',
+            'country',
+            'awardingInstitution',
+            'qualificationTypeMaster',
+            'application',
+        ]);
+
+        $countries = Country::query()
+            ->where('is_active', true)
+            ->orderBy('sort_order')
+            ->orderBy('name')
+            ->get(['id', 'iso_code', 'name'])
+            ->map(fn (Country $c) => ['id' => $c->id, 'iso_code' => $c->iso_code, 'name' => $c->name])
+            ->all();
+
+        $qualificationTypes = QualificationType::query()
+            ->with('billingCategory')
+            ->where('is_active', true)
+            ->orderBy('sort_order')
+            ->get();
+
+        $certificateSubjects = CertificateSubject::query()
+            ->active()
+            ->orderBy('sort_order')
+            ->orderBy('name')
+            ->get(['id', 'name'])
+            ->map(fn (CertificateSubject $s) => ['id' => $s->id, 'name' => $s->name])
+            ->all();
+
+        $awardingInstitutionId = $qualification->awarding_institution_id;
+        $institutionField = $awardingInstitutionId
+            ? $awardingInstitutionId
+            : (trim((string) ($qualification->awarding_institution_name_other ?? '')) !== '' ? 'other' : '');
+
+        return Inertia::render('Admin/Verification/Qualifications/Edit', [
+            'qualification' => [
+                'id' => $qualification->id,
+                'qualification_holder_name' => $qualification->qualification_holder_name,
+                'nrc_passport_number' => $qualification->nrc_passport_number,
+                'country_id' => $qualification->country_id,
+                'country_name_other' => $qualification->country_name_other,
+                'awarding_institution_id' => $institutionField,
+                'awarding_institution_name_other' => $qualification->awarding_institution_name_other,
+                'awarding_institution_name' => $qualification->awarding_institution_name,
+                'certificate_number' => $qualification->certificate_number,
+                'student_number' => $qualification->student_number,
+                'examination_number' => $qualification->examination_number,
+                'title_of_qualification' => $qualification->title_of_qualification,
+                'award_date' => $qualification->award_date?->format('Y-m-d'),
+                'qualification_type_id' => $qualification->qualification_type_id,
+                'transcript_reason' => $qualification->transcript_reason,
+                'notes' => $qualification->notes,
+                'subject_results' => $qualification->subjectResults->map(fn ($r) => [
+                    'certificate_subject_id' => $r->certificate_subject_id,
+                    'grade' => $r->grade,
+                ])->values()->all(),
+            ],
+            'application' => [
+                'id' => $qualification->application_id,
+                'application_number' => $qualification->application?->application_number,
+            ],
+            'countries' => $countries,
+            'qualificationTypes' => $qualificationTypes->map(fn (QualificationType $t) => [
+                'id' => $t->id,
+                'zqf_level_code' => $t->zqf_level_code,
+                'level_label' => $t->level_label,
+                'name' => $t->name,
+                'requires_subject_results' => (bool) $t->requires_subject_results,
+            ])->values()->all(),
+            'certificateSubjects' => $certificateSubjects,
+        ]);
+    }
+
+    public function update(
+        AdminUpdateVerificationQualificationRequest $request,
+        Qualification $qualification,
+        QualificationCaptureService $capture,
+    ): RedirectResponse {
+        $capture->adminVerificationCorrection($qualification, $request->validated(), $request->user());
+
+        return redirect()
+            ->route('admin.verification.qualifications.show', $qualification)
+            ->with('success', 'Qualification details updated.');
     }
 
     public function assign(AssignApplicationRequest $request, Qualification $qualification, AssignmentService $assignments): RedirectResponse

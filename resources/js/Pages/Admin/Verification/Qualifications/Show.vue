@@ -14,6 +14,7 @@ import {
   Globe2,
   LayoutList,
   Link2,
+  Pencil,
   Shield,
   Timer,
   UserMinus,
@@ -25,7 +26,7 @@ const props = defineProps<{
   qualification: any
   viewerUserId: number | null
   level1Users: Array<{ id: number; name: string; email: string }>
-  can: { assign: boolean; send_back: boolean; level1_process: boolean }
+  can: { assign: boolean; send_back: boolean; level1_process: boolean; edit_qualification?: boolean }
 }>()
 
 const assignOpen = ref(false)
@@ -96,6 +97,8 @@ const canShowLevel1Complete = computed(() => {
 })
 
 /** Level 2 / Super Admin: remove Level 1 assignee and return task to the assignment pool. */
+const canEditQualificationDetails = computed(() => props.can.edit_qualification === true)
+
 const canShowRevokeAssignment = computed(() => {
   if (!props.can.assign) return false
   if (!props.qualification.assigned_verifier_id) return false
@@ -357,9 +360,17 @@ const slaProgressPct = computed(() => {
             <p class="mt-1 text-xs text-text-muted">Assign or revoke Level 1, return to applicant, or complete Level 1 review.</p>
           </div>
           <div
-            v-if="canShowAssign || canShowRevokeAssignment || canShowSendBack || canShowLevel1Complete"
+            v-if="canEditQualificationDetails || canShowAssign || canShowRevokeAssignment || canShowSendBack || canShowLevel1Complete"
             class="grid grid-cols-1 gap-2.5 sm:grid-cols-2 lg:grid-cols-2 xl:grid-cols-4"
           >
+            <Link
+              v-if="canEditQualificationDetails"
+              :href="`/admin/verification/qualifications/${qualification.id}/edit`"
+              class="zaqa-btn zaqa-btn-secondary flex w-full items-center justify-center gap-2 border border-border bg-surface-muted py-2.5 font-semibold hover:bg-surface-muted/80"
+            >
+              <Pencil class="h-4 w-4" aria-hidden="true" />
+              Edit qualification details
+            </Link>
             <button
               v-if="canShowAssign"
               type="button"

@@ -312,6 +312,12 @@ Route::middleware('auth')->group(function () {
             Route::get('/qualifications/{qualification}', [AdminVerificationQualificationController::class, 'show'])
                 ->middleware('can:verification.pool.view')
                 ->name('qualifications.show');
+            Route::get('/qualifications/{qualification}/edit', [AdminVerificationQualificationController::class, 'edit'])
+                ->middleware('can:verification.pool.view')
+                ->name('qualifications.edit');
+            Route::put('/qualifications/{qualification}', [AdminVerificationQualificationController::class, 'update'])
+                ->middleware('can:verification.pool.view')
+                ->name('qualifications.update');
             Route::post('/qualifications/{qualification}/assign', [AdminVerificationQualificationController::class, 'assign'])
                 ->middleware('can:verification.assign')
                 ->name('qualifications.assign');
