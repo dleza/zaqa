@@ -8,7 +8,7 @@ import { adminNavSections } from '@/Layouts/adminNav'
 import { Menu, X } from 'lucide-vue-next'
 
 const page = usePage()
-const zaqaLogoUrl = new URL('../../images/zaqa-logo-tranparent.png', import.meta.url).href
+import { zaqaLogoUrl } from '@/constants/zaqaLogo'
 const mobileSidebarOpen = ref(false)
 
 const user = computed(() => (page.props as any).auth?.user)

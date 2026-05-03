@@ -22,7 +22,7 @@ const props = withDefaults(
   },
 )
 
-const zaqaLogoUrl = new URL('../../images/zaqa-logo-tranparent.png', import.meta.url).href
+import { zaqaLogoUrl } from '@/constants/zaqaLogo'
 
 const page = usePage()
 const currentPath = computed(() => {

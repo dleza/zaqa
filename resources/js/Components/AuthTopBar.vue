@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { Link } from '@inertiajs/vue3'
+import { zaqaLogoUrl } from '@/constants/zaqaLogo'
 import { ArrowRight } from 'lucide-vue-next'
 
 withDefaults(
@@ -9,8 +10,6 @@ withDefaults(
   }>(),
   {},
 )
-
-const zaqaLogoUrl = new URL('../../images/zaqa-logo-tranparent.png', import.meta.url).href
 </script>
 
 <template>

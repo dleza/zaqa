@@ -2,6 +2,7 @@
 import { computed, onMounted, ref } from 'vue'
 import { Link, usePage } from '@inertiajs/vue3'
 import type { AdminNavSection } from '@/Layouts/adminNav'
+import { zaqaLogoUrl } from '@/constants/zaqaLogo'
 import { ChevronDown } from 'lucide-vue-next'
 
 const props = defineProps<{
@@ -9,8 +10,6 @@ const props = defineProps<{
   permissions: string[]
   isMobile?: boolean
 }>()
-
-const zaqaLogoUrl = new URL('../../images/zaqa-logo-tranparent.png', import.meta.url).href
 
 const page = usePage()
 const url = computed(() => (page.url ?? '').toString())

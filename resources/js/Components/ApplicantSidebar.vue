@@ -73,7 +73,7 @@ const applicantTypeLabel = computed(() => {
   return null
 })
 
-const zaqaLogoUrl = new URL('../../images/zaqa-logo-tranparent.png', import.meta.url).href
+import { zaqaLogoUrl } from '@/constants/zaqaLogo'
 
 const initials = computed(() => {
   const name = (user.value?.name ?? '').trim()
