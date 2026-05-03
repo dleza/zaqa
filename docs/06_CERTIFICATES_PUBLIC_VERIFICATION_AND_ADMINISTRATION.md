@@ -15,6 +15,15 @@ The system must:
 - allow Level 2 to change status of an issued certificate with comment
 - allow Systems Administrators to re-issue a certificate that failed to be issued on technical grounds
 
+## Qualification verification certificate (CVEQ)
+The **Certificate of Verification and Evaluation of Qualification (CVEQ)** is issued **per qualification** (a single application may list several qualifications; each can receive its own CVEQ once that line is approved and paid).
+
+- **Eligibility:** parent application `verification_state` is `approved_for_certificate`, cumulative **confirmed** payments cover the current fee total, and the qualification’s `verification_state` is `approved_for_certificate` (or, for **reissue** only, `certificate_issued` and the user is **Super Admin**).
+- **Admin action:** users with `verification.certificate.issue` use **Issue Certificate** on the qualification verification page. **Super Admin** may **Reissue**, which supersedes the prior active row (old row status `reissued`, new row `issued`).
+- **Output:** PDF generated via **DomPDF** from `resources/views/pdf/qualification-certificate.blade.php`, stored on the `local` disk at `qualification-certificates/{year}/{qualification_id}/{verification_token}.pdf`, with a `qualification_certificates` record and a **QR code** pointing at `config('certificates.verify_url_base')/{token}` (no PII in the QR payload).
+- **Applicant:** receives email `QualificationCertificateIssuedMail` with the PDF attached; can **download** only their own certificate from the application/qualification UI (authorization on the parent application).
+- **Admin registry:** Staff with `admin.certificates.view` can open **`/admin/certificates`** to search all CVEQ rows (issued / reissued / revoked), open the related verification task when they also have `verification.pool.view`, and **download PDF** via **`/admin/certificates/{id}/download`**.
+
 ## Certificate generation pipeline
 ### Trigger
 Certificate generation occurs only after:

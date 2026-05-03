@@ -600,7 +600,7 @@ function stripHolderFields(data: Record<string, unknown>) {
                     v-if="certificateSubjects.length === 0"
                     class="mt-3 rounded-lg border border-warning/30 bg-warning/10 px-3 py-2 text-xs text-text-primary"
                   >
-                    No subjects are configured yet. An administrator must add subjects under Admin → System settings → Reference data → Subjects before you can complete this section.
+                    No subjects are configured yet. An administrator must add subjects under Admin → System settings → Subjects before you can complete this section.
                   </p>
                   <div class="mt-3 space-y-3">
                     <div v-for="(row, idx) in form.subject_results" :key="idx" class="grid grid-cols-1 gap-3 sm:grid-cols-7">

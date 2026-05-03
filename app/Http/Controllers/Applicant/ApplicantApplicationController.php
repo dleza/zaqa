@@ -25,6 +25,7 @@ use App\Models\Country;
 use App\Models\FeeStructure;
 use App\Models\Invoice;
 use App\Models\Qualification;
+use App\Models\QualificationCertificate;
 use App\Models\QualificationType;
 use App\Models\User;
 use App\Support\CountryIso;
@@ -322,7 +323,7 @@ class ApplicantApplicationController extends Controller
 
     private function wizardPaymentStepComplete(Application $application): bool
     {
-        $application->loadMissing('qualifications', 'payments', 'invoice');
+        $application->loadMissing('qualifications.certificates', 'payments', 'invoice');
 
         return app(ApplicationPaymentSatisfaction::class)->isSatisfied($application);
     }
@@ -375,6 +376,7 @@ class ApplicantApplicationController extends Controller
 
         $application->load([
             'qualifications.subjectResults',
+            'qualifications.certificates',
             'qualifications.country',
             'qualifications.awardingInstitution.country',
             'qualifications.qualificationTypeMaster.billingCategory',
@@ -434,6 +436,7 @@ class ApplicantApplicationController extends Controller
     {
         $application->load([
             'qualifications.subjectResults',
+            'qualifications.certificates',
             'qualifications.country',
             'qualifications.awardingInstitution.country',
             'qualifications.qualificationTypeMaster.billingCategory',
@@ -572,6 +575,8 @@ class ApplicantApplicationController extends Controller
 
     private function applicationPayload(Request $request, Application $application): array
     {
+        $application->loadMissing('qualifications.certificates', 'payments', 'invoice');
+
         $signedExpiry = now()->addMinutes(15);
 
         $documents = $application->documents
@@ -623,7 +628,7 @@ class ApplicantApplicationController extends Controller
         $qualifications = $application->qualifications
             ->sortBy('id')
             ->values()
-            ->map(function ($q) use ($currentDocs, $sendBackLatest) {
+            ->map(function ($q) use ($application, $currentDocs, $sendBackLatest) {
                 $qid = (int) $q->id;
                 $instIso = strtoupper((string) (($q->awardingInstitution?->country?->iso_code) ?: ($q->country?->iso_code) ?: ''));
                 $institutionIsForeign = $instIso !== '' && ! CountryIso::isZambia($instIso);
@@ -650,6 +655,23 @@ class ApplicantApplicationController extends Controller
                 }
                 if ($requiresForeignConsent && ! $hasForeignConsent) {
                     $missing[] = 'foreign_consent';
+                }
+
+                $activeCveq = $q->certificates
+                    ->where('status', QualificationCertificate::STATUS_ISSUED)
+                    ->sortByDesc('id')
+                    ->first();
+
+                $cveqCertificate = null;
+                if ($activeCveq) {
+                    $cveqCertificate = [
+                        'certificate_number' => $activeCveq->certificate_number,
+                        'issued_at' => optional($activeCveq->issued_at)?->toIso8601String(),
+                        'download_url' => route('applicant.applications.qualifications.certificate.download', [
+                            'application' => $application,
+                            'qualification' => $q,
+                        ]),
+                    ];
                 }
 
                 return [
@@ -728,11 +750,11 @@ class ApplicantApplicationController extends Controller
                     'verification_state' => $q->verification_state?->value ?? (string) ($q->verification_state ?? ''),
                     'returned_to_applicant_at' => optional($q->returned_to_applicant_at)?->toIso8601String(),
                     'amendment_comment' => $sendBackLatest->get((int) $q->id)?->body,
+                    'cveq_certificate' => $cveqCertificate,
                 ];
             })
             ->all();
 
-        $application->loadMissing('qualifications', 'payments', 'invoice');
         $paymentSatisfaction = app(ApplicationPaymentSatisfaction::class);
 
         $openSupplementary = Invoice::query()

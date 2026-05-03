@@ -3,14 +3,18 @@
 namespace App\Http\Controllers\Admin\Settings;
 
 use App\Domain\Audit\AuditLogService;
+use App\Domain\Settings\CertificateSubjectExcelImportService;
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Admin\Settings\ImportCertificateSubjectsExcelRequest;
 use App\Http\Requests\Admin\Settings\StoreCertificateSubjectRequest;
 use App\Http\Requests\Admin\Settings\UpdateCertificateSubjectRequest;
 use App\Models\CertificateSubject;
+use App\Support\Imports\ExcelTemplateDownload;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class AdminCertificateSubjectsController extends Controller
 {
@@ -34,6 +38,8 @@ class AdminCertificateSubjectsController extends Controller
                 'sort_order' => (int) ($s->sort_order ?? 0),
             ]);
 
+        $user = $request->user();
+
         return Inertia::render('Admin/Settings/CertificateSubjects/Index', [
             'subjects' => $subjects,
             'filters' => [
@@ -41,11 +47,38 @@ class AdminCertificateSubjectsController extends Controller
                 'active' => is_string($active) ? $active : null,
             ],
             'can' => [
-                'create' => (bool) $request->user()?->can('settings.certificate_subjects.create'),
-                'edit' => (bool) $request->user()?->can('settings.certificate_subjects.edit'),
-                'delete' => (bool) $request->user()?->can('settings.certificate_subjects.delete'),
+                'create' => (bool) $user?->can('settings.certificate_subjects.create'),
+                'edit' => (bool) $user?->can('settings.certificate_subjects.edit'),
+                'delete' => (bool) $user?->can('settings.certificate_subjects.delete'),
+            ],
+            'excel_import' => [
+                'template_url' => route('admin.settings.certificate_subjects.import_template'),
+                'import_url' => route('admin.settings.certificate_subjects.import'),
+                'can_import' => (bool) ($user?->can('settings.certificate_subjects.create') || $user?->can('settings.certificate_subjects.edit')),
             ],
         ]);
+    }
+
+    public function importTemplate(Request $request): StreamedResponse
+    {
+        abort_unless($request->user()?->can('settings.certificate_subjects.view'), 403);
+
+        return ExcelTemplateDownload::stream(
+            'certificate-subject-import-template.xlsx',
+            ['name', 'is_active', 'sort_order'],
+            [['Example subject', 1, 0]],
+        );
+    }
+
+    public function import(
+        ImportCertificateSubjectsExcelRequest $request,
+        CertificateSubjectExcelImportService $import,
+    ): RedirectResponse {
+        $report = $import->import($request->file('file'), $request->user());
+
+        return back()
+            ->with('success', $report->summaryLine())
+            ->with('import_report', ['errors' => $report->errors]);
     }
 
     public function create(Request $request): Response
@@ -130,7 +163,7 @@ class AdminCertificateSubjectsController extends Controller
             entityType: CertificateSubject::class,
             entityId: $certificate_subject->id,
             beforeState: $before,
-            afterState: $certificateSubject->toArray(),
+            afterState: $certificate_subject->toArray(),
             actor: $request->user(),
         );
 

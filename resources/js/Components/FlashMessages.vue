@@ -7,6 +7,7 @@ const page = usePage()
 
 const success = computed(() => (page.props.flash as any)?.success)
 const error = computed(() => (page.props.flash as any)?.error)
+const importReport = computed(() => (page.props.flash as any)?.import_report as { errors?: string[] } | null | undefined)
 const generatedPassword = computed(() => (page.props.flash as any)?.generated_password)
 const generatedPasswordFor = computed(() => (page.props.flash as any)?.generated_password_for)
 </script>
@@ -21,6 +22,16 @@ const generatedPasswordFor = computed(() => (page.props.flash as any)?.generated
     >
       <CheckCircle2 class="mt-0.5 h-5 w-5 shrink-0" aria-hidden="true" />
       <span class="flex-1">{{ success }}</span>
+    </div>
+    <div
+      v-if="importReport?.errors && importReport.errors.length > 0"
+      class="rounded-xl border border-amber-400/40 bg-amber-50 px-5 py-4 text-sm text-amber-950"
+      role="status"
+    >
+      <div class="font-semibold text-amber-950">Import row messages</div>
+      <ul class="mt-2 list-disc space-y-1 pl-5 text-amber-950/95">
+        <li v-for="(line, idx) in importReport.errors" :key="idx">{{ line }}</li>
+      </ul>
     </div>
     <div
       v-if="generatedPassword"

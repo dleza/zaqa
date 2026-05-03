@@ -49,10 +49,12 @@ function hasAny(required?: string[]) {
 
 function itemIsActive(item: any) {
   const start = item.activeStartsWith ?? item.href
-  if (!start) return false
-  if (url.value.startsWith(start)) return true
+  if (start && url.value.startsWith(start)) return true
   const children = item.children ?? []
-  return children.some((c: any) => itemIsActive(c))
+  if ((children?.length ?? 0) > 0) {
+    return children.some((c: any) => itemIsActive(c))
+  }
+  return false
 }
 
 function sectionKey(section: AdminNavSection, index: number) {
@@ -87,9 +89,10 @@ function toggleSection(section: AdminNavSection, index: number) {
 }
 
 function groupIsOpen(item: any) {
+  if (itemIsActive(item)) return true
   const key = (item?.label ?? '').toString()
   const stored = openGroups.value[key]
-  return stored ?? itemIsActive(item)
+  return stored ?? false
 }
 
 function toggleGroup(item: any) {

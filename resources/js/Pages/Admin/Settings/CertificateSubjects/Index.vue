@@ -1,20 +1,23 @@
 <script setup lang="ts">
 import AdminLayout from '@/Layouts/AdminLayout.vue'
+import AdminExcelImportModal from '@/Components/AdminExcelImportModal.vue'
 import AdminViewModal from '@/Components/AdminViewModal.vue'
 import { Link, router } from '@inertiajs/vue3'
-import { BookOpen, Plus, Search } from 'lucide-vue-next'
+import { BookOpen, FileSpreadsheet, Plus, Search } from 'lucide-vue-next'
 import { ref, watch } from 'vue'
 
 const props = defineProps<{
   subjects: any
   filters: { q: string; active: string | null }
   can: { create: boolean; edit: boolean; delete: boolean }
+  excel_import: { template_url: string; import_url: string; can_import: boolean }
 }>()
 
 const q = ref(props.filters.q ?? '')
 const active = ref<string>(props.filters.active ?? '')
 const viewOpen = ref(false)
 const selected = ref<any | null>(null)
+const excelImportOpen = ref(false)
 
 watch([q, active], () => {
   router.get(
@@ -41,7 +44,7 @@ function openView(s: any) {
       <div>
         <div class="inline-flex items-center gap-2 text-xs font-semibold text-text-muted">
           <BookOpen class="h-4 w-4" aria-hidden="true" />
-          Reference data · System settings
+          System settings
         </div>
         <h1 class="mt-2 text-2xl font-semibold tracking-tight text-text-primary">Subjects</h1>
         <p class="mt-1 text-sm text-text-muted">
@@ -49,13 +52,30 @@ function openView(s: any) {
         </p>
       </div>
 
-      <div class="flex items-center gap-2">
+      <div class="flex flex-wrap items-center gap-2">
+        <button
+          type="button"
+          class="zaqa-btn zaqa-btn-secondary inline-flex items-center gap-2 px-4 py-2 text-sm"
+          @click="excelImportOpen = true"
+        >
+          <FileSpreadsheet class="h-4 w-4" aria-hidden="true" />
+          Excel import
+        </button>
         <Link v-if="can.create" href="/admin/settings/certificate-subjects/create" class="zaqa-btn zaqa-btn-primary px-4 py-2 text-sm">
           <Plus class="h-4 w-4" aria-hidden="true" />
           Add subject
         </Link>
       </div>
     </div>
+
+    <AdminExcelImportModal
+      v-model="excelImportOpen"
+      title="Import subjects from Excel"
+      description="Columns: name, is_active (1/0), sort_order. Existing rows match by exact name and are updated if you have edit permission."
+      :template-url="excel_import.template_url"
+      :import-url="excel_import.import_url"
+      :can-import="excel_import.can_import"
+    />
 
     <div class="mt-6 overflow-hidden rounded-2xl border border-border bg-surface shadow-sm">
       <div class="border-b border-border bg-surface-muted px-5 py-4">

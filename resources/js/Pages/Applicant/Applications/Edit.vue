@@ -9,7 +9,18 @@ import WizardFooterBar from '@/Components/WizardFooterBar.vue'
 import DocumentManager from '@/Components/DocumentManager.vue'
 import QualificationWorkspaceModal from '@/Components/Applicant/QualificationWorkspaceModal.vue'
 import Swal from 'sweetalert2'
-import { AlertCircle, CheckCircle2, CreditCard, GraduationCap, Landmark, PenLine, PlusCircle, Smartphone, Upload } from 'lucide-vue-next'
+import {
+  AlertCircle,
+  CheckCircle2,
+  CreditCard,
+  FileDown,
+  GraduationCap,
+  Landmark,
+  PenLine,
+  PlusCircle,
+  Smartphone,
+  Upload,
+} from 'lucide-vue-next'
 
 type ApplicantPayload = {
   applicant_type?: string
@@ -70,6 +81,15 @@ function setSaving(message = 'Saving…') {
 
 function setError(message = 'Could not save. Please retry.') {
   saveState.value = { state: 'error', message }
+}
+
+function formatCveqIssuedAt(iso: string | null | undefined): string {
+  if (!iso) return ''
+  try {
+    return new Date(iso).toLocaleString(undefined, { dateStyle: 'medium' })
+  } catch {
+    return iso
+  }
 }
 
 function goToStep(key: StepKey) {
@@ -1216,25 +1236,47 @@ onBeforeUnmount(() => {
                   :class="Number(selectedQualificationId) === Number(q.id) ? 'ring-2 ring-brand/20' : ''"
                 >
                   <div class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-                    <button type="button" class="min-w-0 text-left" @click="selectedQualificationId = q.id">
-                      <div class="flex flex-wrap items-center gap-2">
-                        <h3 class="text-lg font-semibold text-text-primary">{{ q.title_of_qualification || 'Untitled qualification' }}</h3>
-                        <span class="zaqa-badge text-xs" :class="q._isForeign ? 'zaqa-badge-warning' : 'zaqa-badge-success'">
-                          {{ q._isForeign ? 'Outside Zambia' : 'Zambia' }}
-                        </span>
+                    <div class="min-w-0 flex-1">
+                      <button type="button" class="w-full text-left" @click="selectedQualificationId = q.id">
+                        <div class="flex flex-wrap items-center gap-2">
+                          <h3 class="text-lg font-semibold text-text-primary">{{ q.title_of_qualification || 'Untitled qualification' }}</h3>
+                          <span class="zaqa-badge text-xs" :class="q._isForeign ? 'zaqa-badge-warning' : 'zaqa-badge-success'">
+                            {{ q._isForeign ? 'Outside Zambia' : 'Zambia' }}
+                          </span>
+                        </div>
+                        <p class="mt-1 text-sm text-text-muted">Award date {{ q.award_date || '—' }}</p>
+                        <div class="mt-3 flex flex-wrap gap-2 text-xs font-medium">
+                          <span class="inline-flex items-center gap-1.5 rounded-full border border-border bg-surface-muted px-2.5 py-1 text-text-primary">
+                            Documents
+                            <span :class="q._docsOk ? 'text-emerald-700' : 'text-warning'">{{ q._docsOk ? 'Ready' : 'Needed' }}</span>
+                          </span>
+                          <span class="inline-flex items-center gap-1.5 rounded-full border border-border bg-surface-muted px-2.5 py-1 text-text-primary">
+                            Consent
+                            <span :class="q._consentOk ? 'text-emerald-700' : 'text-warning'">{{ q._consentOk ? 'Ready' : 'Needed' }}</span>
+                          </span>
+                        </div>
+                      </button>
+                      <div
+                        v-if="q.cveq_certificate"
+                        class="mt-4 rounded-xl border border-emerald-300/50 bg-emerald-50/90 px-4 py-3 text-left"
+                      >
+                        <div class="text-xs font-bold uppercase tracking-wider text-emerald-900">ZAQA verification certificate</div>
+                        <p class="mt-1 text-sm text-emerald-950">
+                          <span class="font-mono font-semibold">{{ q.cveq_certificate.certificate_number }}</span>
+                          <span v-if="q.cveq_certificate.issued_at" class="text-xs text-emerald-800">
+                            · Issued {{ formatCveqIssuedAt(q.cveq_certificate.issued_at) }}
+                          </span>
+                        </p>
+                        <a
+                          v-if="q.cveq_certificate.download_url"
+                          :href="q.cveq_certificate.download_url"
+                          class="zaqa-btn zaqa-btn-secondary mt-3 inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold"
+                        >
+                          <FileDown class="h-4 w-4 shrink-0" aria-hidden="true" />
+                          Download PDF
+                        </a>
                       </div>
-                      <p class="mt-1 text-sm text-text-muted">Award date {{ q.award_date || '—' }}</p>
-                      <div class="mt-3 flex flex-wrap gap-2 text-xs font-medium">
-                        <span class="inline-flex items-center gap-1.5 rounded-full border border-border bg-surface-muted px-2.5 py-1 text-text-primary">
-                          Documents
-                          <span :class="q._docsOk ? 'text-emerald-700' : 'text-warning'">{{ q._docsOk ? 'Ready' : 'Needed' }}</span>
-                        </span>
-                        <span class="inline-flex items-center gap-1.5 rounded-full border border-border bg-surface-muted px-2.5 py-1 text-text-primary">
-                          Consent
-                          <span :class="q._consentOk ? 'text-emerald-700' : 'text-warning'">{{ q._consentOk ? 'Ready' : 'Needed' }}</span>
-                        </span>
-                      </div>
-                    </button>
+                    </div>
                     <div class="flex shrink-0 flex-wrap gap-2">
                       <button
                         type="button"

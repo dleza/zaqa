@@ -1,21 +1,24 @@
 <script setup lang="ts">
 import AdminLayout from '@/Layouts/AdminLayout.vue'
-import { Link, useForm } from '@inertiajs/vue3'
+import { Link, router, useForm } from '@inertiajs/vue3'
 import AdminActionModal from '@/Components/AdminActionModal.vue'
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import {
   ArrowRight,
   Building2,
   ClipboardCheck,
+  CornerDownLeft,
   Clock,
   Copy,
   ExternalLink,
+  FileDown,
   FileStack,
   Globe2,
   LayoutList,
   Link2,
   Pencil,
   Shield,
+  RotateCcw,
   Timer,
   UserMinus,
   UserRound,
@@ -26,7 +29,21 @@ const props = defineProps<{
   qualification: any
   viewerUserId: number | null
   level1Users: Array<{ id: number; name: string; email: string }>
-  can: { assign: boolean; send_back: boolean; level1_process: boolean; edit_qualification?: boolean }
+  send_back_timeline?: Array<{
+    kind: string
+    at: string | null
+    author_name?: string | null
+    body?: string | null
+    title?: string | null
+    description?: string | null
+  }>
+  can: {
+    assign: boolean
+    send_back: boolean
+    level1_process: boolean
+    edit_qualification?: boolean
+    issue_certificate?: boolean
+  }
 }>()
 
 const assignOpen = ref(false)
@@ -41,12 +58,33 @@ const revokeForm = useForm({ comment: '' })
 const sendBackForm = useForm({ comment: '' })
 const level1CompleteForm = useForm<{ findings: string; attachment: File | null }>({ findings: '', attachment: null })
 const level1AttachmentInput = ref<HTMLInputElement | null>(null)
+const issueCveqForm = useForm<{ reissue: boolean }>({ reissue: false })
 
 function clearLevel1Attachment() {
   level1CompleteForm.attachment = null
   if (level1AttachmentInput.value) {
     level1AttachmentInput.value.value = ''
   }
+}
+
+function submitIssueCveq() {
+  issueCveqForm.reissue = false
+  issueCveqForm.post(props.qualification.issue_certificate_url, { preserveScroll: true })
+}
+
+function submitReissueCveq() {
+  if (
+    !confirm(
+      'Reissue creates a new CVEQ PDF and marks the previous certificate as superseded. Continue?',
+    )
+  ) {
+    return
+  }
+  router.post(
+    props.qualification.issue_certificate_url,
+    { reissue: true },
+    { preserveScroll: true },
+  )
 }
 
 const isForeign = computed(() => !!props.qualification.is_foreign)
@@ -238,6 +276,17 @@ const slaProgressPct = computed(() => {
   const elapsed = nowMs.value - submittedAt.value.getTime()
   return Math.max(0, Math.min(100, Math.round((elapsed / total) * 100)))
 })
+
+const sendBackTimeline = computed(() => (Array.isArray(props.send_back_timeline) ? props.send_back_timeline : []).filter((r) => r.at))
+
+function formatTimelineAt(iso: string | null | undefined) {
+  if (!iso) return '—'
+  try {
+    return new Date(iso).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })
+  } catch {
+    return iso
+  }
+}
 </script>
 
 <template>
@@ -352,6 +401,77 @@ const slaProgressPct = computed(() => {
         </div>
       </section>
 
+      <!-- Send-back & applicant resubmission history (persists after workflow moves on) -->
+      <section
+        v-if="sendBackTimeline.length > 0"
+        class="overflow-hidden rounded-2xl border border-amber-400/35 bg-gradient-to-br from-amber-50/95 via-surface to-surface shadow-sm ring-1 ring-amber-500/10"
+      >
+        <div
+          class="flex flex-col gap-3 border-b border-amber-200/60 bg-amber-100/40 px-5 py-4 sm:flex-row sm:items-start sm:justify-between sm:px-6"
+        >
+          <div class="flex min-w-0 gap-3">
+            <div
+              class="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-amber-300/60 bg-surface text-amber-800 shadow-sm"
+            >
+              <RotateCcw class="h-5 w-5" aria-hidden="true" />
+            </div>
+            <div class="min-w-0">
+              <h2 class="text-sm font-bold tracking-tight text-text-primary">Return &amp; resubmission history</h2>
+              <p class="mt-1 max-w-prose text-xs leading-relaxed text-text-muted">
+                This qualification was returned to the applicant at least once. Officer feedback below is retained even after the applicant amends and resubmits.
+                Resubmission rows are recorded when the applicant saves changes after a send-back.
+              </p>
+            </div>
+          </div>
+        </div>
+        <ol class="divide-y divide-amber-200/50">
+          <li v-for="(row, idx) in sendBackTimeline" :key="`${row.kind}-${row.at}-${idx}`" class="px-5 py-4 sm:px-6">
+            <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:gap-4">
+              <div
+                class="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border text-xs font-bold"
+                :class="
+                  row.kind === 'send_back'
+                    ? 'border-amber-400/70 bg-amber-100 text-amber-950'
+                    : 'border-emerald-400/60 bg-emerald-50 text-emerald-950'
+                "
+              >
+                <span class="sr-only">{{ row.kind === 'send_back' ? 'Send-back' : 'Resubmission' }}</span>
+                <RotateCcw v-if="row.kind === 'send_back'" class="h-4 w-4" aria-hidden="true" />
+                <CornerDownLeft v-else class="h-4 w-4" aria-hidden="true" />
+              </div>
+              <div class="min-w-0 flex-1">
+                <div class="flex flex-wrap items-baseline gap-x-2 gap-y-1">
+                  <span class="text-sm font-semibold text-text-primary">
+                    {{ row.kind === 'send_back' ? 'Returned to applicant' : 'Applicant amended & resubmitted' }}
+                  </span>
+                  <span class="text-xs font-medium text-text-muted">{{ formatTimelineAt(row.at) }}</span>
+                </div>
+                <div v-if="row.kind === 'send_back'" class="mt-2 space-y-1">
+                  <div v-if="row.author_name" class="text-xs text-text-muted">
+                    By <span class="font-semibold text-text-primary">{{ row.author_name }}</span>
+                  </div>
+                  <div
+                    v-if="row.body && row.body.trim().length > 0"
+                    class="mt-2 rounded-xl border border-border bg-surface px-4 py-3 text-sm leading-relaxed text-text-primary"
+                  >
+                    {{ row.body }}
+                  </div>
+                </div>
+                <div v-else class="mt-2 space-y-1">
+                  <div v-if="row.author_name" class="text-xs text-text-muted">
+                    Applicant <span class="font-semibold text-text-primary">{{ row.author_name }}</span>
+                  </div>
+                  <div v-if="row.title || row.description" class="text-sm text-text-primary">
+                    <span v-if="row.title" class="font-medium">{{ row.title }}</span>
+                    <span v-if="row.description" class="mt-1 block text-text-muted">{{ row.description }}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </li>
+        </ol>
+      </section>
+
       <!-- Quick actions (workflow shortcuts — surfaced at top for fast access) -->
       <section class="rounded-2xl border border-border bg-surface p-4 shadow-sm sm:p-5">
         <div class="flex flex-col gap-4">
@@ -415,6 +535,64 @@ const slaProgressPct = computed(() => {
           >
             No actions for your permissions or this task state. Open the parent application if you need application-level tools.
           </p>
+        </div>
+      </section>
+
+      <section
+        v-if="
+          can.issue_certificate &&
+          (qualification.can_issue_cveq_certificate ||
+            qualification.cveq_certificate ||
+            qualification.can_reissue_cveq_certificate)
+        "
+        class="rounded-2xl border border-border bg-surface p-4 shadow-sm sm:p-5"
+      >
+        <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <h2 class="text-sm font-bold tracking-tight text-text-primary">CVEQ certificate</h2>
+            <p class="mt-1 text-xs text-text-muted">
+              Issue the Certificate of Verification and Evaluation of Qualification for this line item (payment must be satisfied and the qualification approved for certificate).
+            </p>
+            <p v-if="qualification.application?.payment_satisfied === false" class="mt-2 text-xs font-medium text-amber-900">
+              Payment is not satisfied — certificate issuance is blocked until fees are covered.
+            </p>
+          </div>
+          <div class="flex flex-wrap gap-2">
+            <button
+              v-if="qualification.can_issue_cveq_certificate && can.issue_certificate"
+              type="button"
+              class="zaqa-btn zaqa-btn-primary inline-flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-semibold"
+              :disabled="issueCveqForm.processing"
+              @click="submitIssueCveq"
+            >
+              Issue Certificate
+            </button>
+            <a
+              v-if="qualification.cveq_certificate?.admin_download_url"
+              :href="qualification.cveq_certificate.admin_download_url"
+              target="_blank"
+              rel="noopener"
+              class="zaqa-btn zaqa-btn-secondary inline-flex items-center justify-center gap-2 border border-border px-4 py-2.5 text-sm font-semibold"
+            >
+              <FileDown class="h-4 w-4 shrink-0" aria-hidden="true" />
+              Download Certificate
+            </a>
+            <button
+              v-if="qualification.can_reissue_cveq_certificate && can.issue_certificate"
+              type="button"
+              class="zaqa-btn inline-flex items-center justify-center gap-2 border border-amber-300/60 bg-amber-500/12 px-4 py-2.5 text-sm font-semibold text-amber-950 hover:bg-amber-500/20"
+              @click="submitReissueCveq"
+            >
+              Reissue (Super Admin)
+            </button>
+          </div>
+        </div>
+        <div v-if="qualification.cveq_certificate?.certificate_number" class="mt-4 rounded-xl border border-border/70 bg-surface-muted/40 px-4 py-3 text-xs text-text-muted">
+          <span class="font-semibold text-text-primary">Active certificate:</span>
+          {{ qualification.cveq_certificate.certificate_number }}
+          <span v-if="qualification.cveq_certificate.issued_at" class="ml-2">
+            · Issued {{ formatTimelineAt(qualification.cveq_certificate.issued_at) }}
+          </span>
         </div>
       </section>
 

@@ -3,14 +3,18 @@
 namespace App\Http\Controllers\Admin\Settings;
 
 use App\Domain\Audit\AuditLogService;
+use App\Domain\Settings\CountryExcelImportService;
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Admin\Settings\ImportCountriesExcelRequest;
 use App\Http\Requests\Admin\Settings\StoreCountryRequest;
 use App\Http\Requests\Admin\Settings\UpdateCountryRequest;
 use App\Models\Country;
+use App\Support\Imports\ExcelTemplateDownload;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class AdminCountriesController extends Controller
 {
@@ -38,6 +42,8 @@ class AdminCountriesController extends Controller
                 'sort_order' => (int) ($c->sort_order ?? 0),
             ]);
 
+        $user = $request->user();
+
         return Inertia::render('Admin/Settings/Countries/Index', [
             'countries' => $countries,
             'filters' => [
@@ -45,11 +51,38 @@ class AdminCountriesController extends Controller
                 'active' => is_string($active) ? $active : null,
             ],
             'can' => [
-                'create' => (bool) $request->user()?->can('settings.countries.create'),
-                'edit' => (bool) $request->user()?->can('settings.countries.edit'),
-                'delete' => (bool) $request->user()?->can('settings.countries.delete'),
+                'create' => (bool) $user?->can('settings.countries.create'),
+                'edit' => (bool) $user?->can('settings.countries.edit'),
+                'delete' => (bool) $user?->can('settings.countries.delete'),
+            ],
+            'excel_import' => [
+                'template_url' => route('admin.settings.countries.import_template'),
+                'import_url' => route('admin.settings.countries.import'),
+                'can_import' => (bool) ($user?->can('settings.countries.create') || $user?->can('settings.countries.edit')),
             ],
         ]);
+    }
+
+    public function importTemplate(Request $request): StreamedResponse
+    {
+        abort_unless($request->user()?->can('settings.countries.view'), 403);
+
+        return ExcelTemplateDownload::stream(
+            'country-import-template.xlsx',
+            ['name', 'iso_code', 'is_active', 'sort_order'],
+            [['Example Country', 'ZZZ', 1, 0]],
+        );
+    }
+
+    public function import(
+        ImportCountriesExcelRequest $request,
+        CountryExcelImportService $import,
+    ): RedirectResponse {
+        $report = $import->import($request->file('file'), $request->user());
+
+        return back()
+            ->with('success', $report->summaryLine())
+            ->with('import_report', ['errors' => $report->errors]);
     }
 
     public function create(Request $request): Response
@@ -144,4 +177,3 @@ class AdminCountriesController extends Controller
         return back()->with('success', 'Country deactivated.');
     }
 }
-

@@ -3,11 +3,14 @@
 namespace App\Http\Controllers\Admin\Settings;
 
 use App\Domain\Audit\AuditLogService;
+use App\Domain\Settings\AwardingInstitutionExcelImportService;
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Admin\Settings\ImportAwardingInstitutionsExcelRequest;
 use App\Http\Requests\Admin\Settings\StoreAwardingInstitutionRequest;
 use App\Http\Requests\Admin\Settings\UpdateAwardingInstitutionRequest;
 use App\Models\AwardingInstitution;
 use App\Models\Country;
+use App\Support\Imports\ExcelTemplateDownload;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -15,6 +18,7 @@ use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Inertia\Inertia;
 use Inertia\Response;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class AdminAwardingInstitutionsController extends Controller
 {
@@ -51,6 +55,8 @@ class AdminAwardingInstitutionsController extends Controller
             ->map(fn (Country $c) => ['id' => $c->id, 'name' => $c->name, 'iso_code' => $c->iso_code])
             ->values();
 
+        $user = $request->user();
+
         return Inertia::render('Admin/Settings/AwardingInstitutions/Index', [
             'institutions' => $institutions,
             'countries' => $countries,
@@ -60,11 +66,38 @@ class AdminAwardingInstitutionsController extends Controller
                 'active' => is_string($active) ? $active : null,
             ],
             'can' => [
-                'create' => (bool) $request->user()?->can('settings.awarding_institutions.create'),
-                'edit' => (bool) $request->user()?->can('settings.awarding_institutions.edit'),
-                'delete' => (bool) $request->user()?->can('settings.awarding_institutions.delete'),
+                'create' => (bool) $user?->can('settings.awarding_institutions.create'),
+                'edit' => (bool) $user?->can('settings.awarding_institutions.edit'),
+                'delete' => (bool) $user?->can('settings.awarding_institutions.delete'),
+            ],
+            'excel_import' => [
+                'template_url' => route('admin.settings.awarding_institutions.import_template'),
+                'import_url' => route('admin.settings.awarding_institutions.import'),
+                'can_import' => (bool) ($user?->can('settings.awarding_institutions.create') || $user?->can('settings.awarding_institutions.edit')),
             ],
         ]);
+    }
+
+    public function importTemplate(Request $request): StreamedResponse
+    {
+        abort_unless($request->user()?->can('settings.awarding_institutions.view'), 403);
+
+        return ExcelTemplateDownload::stream(
+            'awarding-institution-import-template.xlsx',
+            ['name', 'country_iso_code', 'is_active', 'sort_order'],
+            [['Example Institution', 'ZZZ', 1, 0]],
+        );
+    }
+
+    public function import(
+        ImportAwardingInstitutionsExcelRequest $request,
+        AwardingInstitutionExcelImportService $import,
+    ): RedirectResponse {
+        $report = $import->import($request->file('file'), $request->user());
+
+        return back()
+            ->with('success', $report->summaryLine())
+            ->with('import_report', ['errors' => $report->errors]);
     }
 
     public function create(Request $request): Response
@@ -218,4 +251,3 @@ class AdminAwardingInstitutionsController extends Controller
         return back()->with('success', 'Awarding institution deactivated.');
     }
 }
-

@@ -35,6 +35,7 @@ use App\Http\Controllers\Applicant\ApplicantPaymentController;
 use App\Http\Controllers\Applicant\ApplicantProfileController;
 use App\Http\Controllers\Applicant\ApplicantProfileEditController;
 use App\Http\Controllers\Applicant\ApplicantProfileIdentityDocumentController;
+use App\Http\Controllers\Applicant\ApplicantQualificationCertificateController;
 use App\Http\Controllers\Applicant\ApplicantQualificationController;
 use App\Http\Controllers\Applicant\ApplicantReferenceController;
 use App\Http\Controllers\Applicant\ApplicantServiceFeedbackController;
@@ -104,6 +105,8 @@ Route::middleware('auth')->group(function () {
         Route::get('/applications/{application}/track-summary', [ApplicantApplicationTrackingController::class, 'summary'])->name('applications.track.summary');
         Route::get('/applications/{application}/edit', [ApplicantApplicationController::class, 'edit'])->name('applications.edit');
         Route::get('/applications/{application}/qualifications/{qualification}/amend', [ApplicantApplicationController::class, 'amendQualification'])->name('applications.qualifications.amend');
+        Route::get('/applications/{application}/qualifications/{qualification}/certificate', [ApplicantQualificationCertificateController::class, 'download'])
+            ->name('applications.qualifications.certificate.download');
         Route::patch('/applications/{application}', [ApplicantApplicationController::class, 'update'])->name('applications.update');
         Route::patch('/applications/{application}/wizard-declarations', [ApplicantApplicationController::class, 'saveWizardDeclarations'])->name('applications.wizard_declarations.update');
         Route::delete('/applications/{application}', [ApplicantApplicationController::class, 'destroy'])->name('applications.destroy');
@@ -259,6 +262,15 @@ Route::middleware('auth')->group(function () {
         Route::get('/certificates', [AdminCertificatesController::class, 'index'])
             ->middleware('can:admin.certificates.view')
             ->name('certificates.index');
+        Route::get('/certificates/bulk-issue-template', [AdminCertificatesController::class, 'bulkIssueTemplate'])
+            ->middleware('can:admin.certificates.view')
+            ->name('certificates.bulk_issue_template');
+        Route::post('/certificates/bulk-issue-import', [AdminCertificatesController::class, 'bulkIssueImport'])
+            ->middleware('can:verification.certificate.issue')
+            ->name('certificates.bulk_issue_import');
+        Route::get('/certificates/{qualificationCertificate}/download', [AdminCertificatesController::class, 'download'])
+            ->middleware('can:admin.certificates.view')
+            ->name('certificates.download');
 
         Route::prefix('verification')->name('verification.')->group(function () {
             Route::get('/pool', [AdminVerificationPoolController::class, 'index'])
@@ -336,12 +348,23 @@ Route::middleware('auth')->group(function () {
             Route::post('/qualifications/{qualification}/level1-complete', [AdminVerificationQualificationController::class, 'level1Complete'])
                 ->middleware('can:verification.level1.process')
                 ->name('qualifications.level1_complete');
+            Route::post('/qualifications/{qualification}/issue-certificate', [AdminVerificationQualificationController::class, 'issueCertificate'])
+                ->middleware('can:verification.certificate.issue')
+                ->name('qualifications.issue_certificate');
+            Route::get('/qualifications/{qualification}/certificate.pdf', [AdminVerificationQualificationController::class, 'downloadCertificate'])
+                ->middleware('can:verification.pool.view')
+                ->name('qualifications.certificate.download');
         });
 
         Route::prefix('settings')->name('settings.')->group(function () {
             Route::get('/countries', [AdminCountriesController::class, 'index'])
                 ->middleware('can:settings.countries.view')
                 ->name('countries.index');
+            Route::get('/countries/import-template', [AdminCountriesController::class, 'importTemplate'])
+                ->middleware('can:settings.countries.view')
+                ->name('countries.import_template');
+            Route::post('/countries/import', [AdminCountriesController::class, 'import'])
+                ->name('countries.import');
             Route::get('/countries/create', [AdminCountriesController::class, 'create'])
                 ->middleware('can:settings.countries.create')
                 ->name('countries.create');
@@ -361,6 +384,11 @@ Route::middleware('auth')->group(function () {
             Route::get('/certificate-subjects', [AdminCertificateSubjectsController::class, 'index'])
                 ->middleware('can:settings.certificate_subjects.view')
                 ->name('certificate_subjects.index');
+            Route::get('/certificate-subjects/import-template', [AdminCertificateSubjectsController::class, 'importTemplate'])
+                ->middleware('can:settings.certificate_subjects.view')
+                ->name('certificate_subjects.import_template');
+            Route::post('/certificate-subjects/import', [AdminCertificateSubjectsController::class, 'import'])
+                ->name('certificate_subjects.import');
             Route::get('/certificate-subjects/create', [AdminCertificateSubjectsController::class, 'create'])
                 ->middleware('can:settings.certificate_subjects.create')
                 ->name('certificate_subjects.create');
@@ -380,6 +408,11 @@ Route::middleware('auth')->group(function () {
             Route::get('/awarding-institutions', [AdminAwardingInstitutionsController::class, 'index'])
                 ->middleware('can:settings.awarding_institutions.view')
                 ->name('awarding_institutions.index');
+            Route::get('/awarding-institutions/import-template', [AdminAwardingInstitutionsController::class, 'importTemplate'])
+                ->middleware('can:settings.awarding_institutions.view')
+                ->name('awarding_institutions.import_template');
+            Route::post('/awarding-institutions/import', [AdminAwardingInstitutionsController::class, 'import'])
+                ->name('awarding_institutions.import');
             Route::get('/awarding-institutions/create', [AdminAwardingInstitutionsController::class, 'create'])
                 ->middleware('can:settings.awarding_institutions.create')
                 ->name('awarding_institutions.create');

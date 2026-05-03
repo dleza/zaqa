@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import AdminLayout from '@/Layouts/AdminLayout.vue'
+import AdminExcelImportModal from '@/Components/AdminExcelImportModal.vue'
 import AdminViewModal from '@/Components/AdminViewModal.vue'
 import { Link, router } from '@inertiajs/vue3'
-import { Building2, Plus, Search } from 'lucide-vue-next'
+import { Building2, FileSpreadsheet, Plus, Search } from 'lucide-vue-next'
 import { ref, watch } from 'vue'
 
 const props = defineProps<{
@@ -10,6 +11,7 @@ const props = defineProps<{
   countries: Array<{ id: number; name: string; iso_code: string }>
   filters: { q: string; country_id: string | null; active: string | null }
   can: { create: boolean; edit: boolean; delete: boolean }
+  excel_import: { template_url: string; import_url: string; can_import: boolean }
 }>()
 
 const q = ref(props.filters.q ?? '')
@@ -17,6 +19,7 @@ const countryId = ref<string>(props.filters.country_id ?? '')
 const active = ref<string>(props.filters.active ?? '')
 const viewOpen = ref(false)
 const selected = ref<any | null>(null)
+const excelImportOpen = ref(false)
 
 watch([q, countryId, active], () => {
   router.get(
@@ -49,13 +52,30 @@ function openView(i: any) {
         <p class="mt-1 text-sm text-text-muted">Manage awarding institutions linked to countries.</p>
       </div>
 
-      <div class="flex items-center gap-2">
+      <div class="flex flex-wrap items-center gap-2">
+        <button
+          type="button"
+          class="zaqa-btn zaqa-btn-secondary inline-flex items-center gap-2 px-4 py-2 text-sm"
+          @click="excelImportOpen = true"
+        >
+          <FileSpreadsheet class="h-4 w-4" aria-hidden="true" />
+          Excel import
+        </button>
         <Link v-if="can.create" href="/admin/settings/awarding-institutions/create" class="zaqa-btn zaqa-btn-primary px-4 py-2 text-sm">
           <Plus class="h-4 w-4" aria-hidden="true" />
           Add institution
         </Link>
       </div>
     </div>
+
+    <AdminExcelImportModal
+      v-model="excelImportOpen"
+      title="Import awarding institutions from Excel"
+      description="Columns: name, country_iso_code (3-letter ISO matching Countries), is_active (1/0), sort_order. Existing rows match country + exact institution name."
+      :template-url="excel_import.template_url"
+      :import-url="excel_import.import_url"
+      :can-import="excel_import.can_import"
+    />
 
     <div class="mt-6 overflow-hidden rounded-2xl border border-border bg-surface shadow-sm">
       <div class="border-b border-border bg-surface-muted px-5 py-4">

@@ -121,4 +121,9 @@ class Qualification extends Model
     {
         return $this->hasMany(QualificationDocument::class);
     }
+
+    public function certificates(): HasMany
+    {
+        return $this->hasMany(QualificationCertificate::class);
+    }
 }

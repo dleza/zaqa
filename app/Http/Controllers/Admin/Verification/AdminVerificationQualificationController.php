@@ -3,6 +3,8 @@
 namespace App\Http\Controllers\Admin\Verification;
 
 use App\Domain\Applications\QualificationCaptureService;
+use App\Domain\Certificates\QualificationCertificateService;
+use App\Domain\Payments\ApplicationPaymentSatisfaction;
 use App\Domain\Verification\AssignmentService;
 use App\Domain\Verification\QualificationLevel1ReviewService;
 use App\Domain\Verification\QualificationSendBackService;
@@ -11,18 +13,23 @@ use App\Enums\VerificationState;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Admin\Verification\AdminUpdateVerificationQualificationRequest;
 use App\Http\Requests\Admin\Verification\AssignApplicationRequest;
+use App\Http\Requests\Admin\Verification\IssueQualificationCertificateRequest;
 use App\Http\Requests\Admin\Verification\QualificationLevel1CompleteRequest;
 use App\Http\Requests\Admin\Verification\RevokeQualificationAssignmentRequest;
 use App\Http\Requests\Admin\Verification\SendBackRequest;
+use App\Models\ApplicationComment;
+use App\Models\ApplicationLifecycleEvent;
 use App\Models\CertificateSubject;
 use App\Models\Country;
 use App\Models\Qualification;
+use App\Models\QualificationCertificate;
 use App\Models\QualificationType;
 use App\Models\User;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
+use Symfony\Component\HttpFoundation\Response as SymfonyResponse;
 
 class AdminVerificationQualificationController extends Controller
 {
@@ -43,7 +50,31 @@ class AdminVerificationQualificationController extends Controller
             'consentForm.zaqaUploadedDocument',
             'assignments.assignedBy',
             'assignments.assignedTo',
+            'certificates',
         ]);
+
+        $applicationModel = $qualification->application;
+        $paymentSatisfaction = app(ApplicationPaymentSatisfaction::class);
+        $paymentSatisfied = $applicationModel ? $paymentSatisfaction->isSatisfied($applicationModel) : false;
+
+        $activeCveq = QualificationCertificate::query()
+            ->where('qualification_id', $qualification->id)
+            ->where('status', QualificationCertificate::STATUS_ISSUED)
+            ->orderByDesc('id')
+            ->first();
+
+        $canIssueCveq = (bool) $request->user()?->can('verification.certificate.issue')
+            && $paymentSatisfied
+            && $applicationModel?->verification_state === VerificationState::ApprovedForCertificate
+            && $qualification->verification_state === VerificationState::ApprovedForCertificate
+            && ! $activeCveq;
+
+        $canReissueCveq = (bool) $request->user()?->hasRole('Super Admin')
+            && (bool) $request->user()?->can('verification.certificate.issue')
+            && $paymentSatisfied
+            && $applicationModel?->verification_state === VerificationState::ApprovedForCertificate
+            && $qualification->verification_state === VerificationState::CertificateIssued
+            && $activeCveq instanceof QualificationCertificate;
 
         $level1Users = User::query()
             ->whereNull('applicant_type', 'and', false)
@@ -52,6 +83,8 @@ class AdminVerificationQualificationController extends Controller
             ->get(['id', 'name', 'email'])
             ->map(fn (User $u) => ['id' => $u->id, 'name' => $u->name, 'email' => $u->email])
             ->values();
+
+        $sendBackTimeline = $this->buildSendBackResubmissionTimeline($qualification);
 
         return Inertia::render('Admin/Verification/Qualifications/Show', [
             'qualification' => [
@@ -74,12 +107,23 @@ class AdminVerificationQualificationController extends Controller
                     'current_status' => $qualification->application?->current_status?->value ?? (string) $qualification->application?->current_status,
                     'verification_state' => $qualification->application?->verification_state?->value ?? (string) ($qualification->application?->verification_state ?? ''),
                     'payment_status' => $qualification->application?->paid_at ? 'paid' : 'unpaid',
+                    'payment_satisfied' => $paymentSatisfied,
                     'submitted_at' => optional($qualification->application?->submitted_at)?->toIso8601String(),
                     'created_at' => optional($qualification->application?->created_at)?->toIso8601String(),
                     'service_deadline_at' => optional($qualification->application?->service_deadline_at)?->toIso8601String(),
                     'completed_at' => optional($qualification->application?->completed_at)?->toIso8601String(),
                     'applicant_name' => $qualification->application?->metadata['verification_subject']['full_name'] ?? $qualification->application?->applicant?->name,
                 ],
+                'cveq_certificate' => $activeCveq
+                    ? [
+                        'certificate_number' => $activeCveq->certificate_number,
+                        'issued_at' => optional($activeCveq->issued_at)?->toIso8601String(),
+                        'admin_download_url' => route('admin.verification.qualifications.certificate.download', ['qualification' => $qualification]),
+                    ]
+                    : null,
+                'issue_certificate_url' => route('admin.verification.qualifications.issue_certificate', ['qualification' => $qualification]),
+                'can_issue_cveq_certificate' => $canIssueCveq,
+                'can_reissue_cveq_certificate' => $canReissueCveq,
                 'qualification_type' => $qualification->qualificationTypeMaster?->name,
                 'title' => $qualification->title_of_qualification,
                 'awarding_institution' => $qualification->awardingInstitution?->name ?? $qualification->awarding_institution_name_other ?? $qualification->awarding_institution_name,
@@ -121,6 +165,7 @@ class AdminVerificationQualificationController extends Controller
                         'unassigned_at' => optional($a->unassigned_at)?->toIso8601String(),
                     ]),
             ],
+            'send_back_timeline' => $sendBackTimeline,
             'viewerUserId' => $request->user()?->id,
             'level1Users' => $level1Users,
             'can' => [
@@ -128,8 +173,45 @@ class AdminVerificationQualificationController extends Controller
                 'send_back' => (bool) $request->user()?->can('verification.send_back'),
                 'level1_process' => (bool) $request->user()?->can('verification.level1.process'),
                 'edit_qualification' => (bool) ($request->user()?->can('verification.level1.process') || $request->user()?->can('verification.level2.review')),
+                'issue_certificate' => (bool) $request->user()?->can('verification.certificate.issue'),
             ],
         ]);
+    }
+
+    public function issueCertificate(
+        IssueQualificationCertificateRequest $request,
+        Qualification $qualification,
+        QualificationCertificateService $certificates,
+    ): RedirectResponse {
+        VerificationQualificationAccess::ensureQualificationAccessible($request->user(), $qualification);
+
+        $certificates->issue(
+            $qualification,
+            $request->user(),
+            $request->boolean('reissue'),
+        );
+
+        return back()->with('success', 'Certificate issued successfully.');
+    }
+
+    public function downloadCertificate(
+        Request $request,
+        Qualification $qualification,
+        QualificationCertificateService $certificates,
+    ): SymfonyResponse {
+        VerificationQualificationAccess::ensureQualificationAccessible($request->user(), $qualification);
+
+        $record = QualificationCertificate::query()
+            ->where('qualification_id', $qualification->id)
+            ->where('status', QualificationCertificate::STATUS_ISSUED)
+            ->orderByDesc('id')
+            ->first();
+
+        abort_unless($record instanceof QualificationCertificate, 404);
+
+        return response($certificates->pdfContents($record))
+            ->header('Content-Type', 'application/pdf')
+            ->header('Content-Disposition', 'inline; filename="ZAQA-'.$record->certificate_number.'.pdf"');
     }
 
     public function edit(Request $request, Qualification $qualification): Response
@@ -279,5 +361,63 @@ class AdminVerificationQualificationController extends Controller
         );
 
         return back()->with('success', 'Level 1 review completed for this qualification.');
+    }
+
+    /**
+     * Officer send-back comments persist after the applicant resubmits (qualification row fields are cleared).
+     * Amendment submissions are recorded as lifecycle events.
+     *
+     * @return list<array{kind: string, at: string|null, author_name: string|null, body: string|null, title: string|null, description: string|null}>
+     */
+    private function buildSendBackResubmissionTimeline(Qualification $qualification): array
+    {
+        $qid = $qualification->id;
+        $appId = $qualification->application_id;
+        if (! $appId) {
+            return [];
+        }
+
+        $rows = collect();
+
+        $comments = ApplicationComment::query()
+            ->where('qualification_id', $qid)
+            ->where('type', 'send_back')
+            ->orderBy('created_at')
+            ->with('author')
+            ->get();
+
+        foreach ($comments as $c) {
+            $rows->push([
+                'kind' => 'send_back',
+                'at' => optional($c->created_at)?->toIso8601String(),
+                'author_name' => $c->author?->name,
+                'body' => $c->body,
+                'title' => null,
+                'description' => null,
+            ]);
+        }
+
+        $amendEvents = ApplicationLifecycleEvent::query()
+            ->where('application_id', $appId)
+            ->where('event_code', 'like', 'submission.qualification_amended.q'.$qid.'.%')
+            ->orderBy('occurred_at')
+            ->get();
+
+        foreach ($amendEvents as $e) {
+            $rows->push([
+                'kind' => 'resubmission',
+                'at' => optional($e->occurred_at)?->toIso8601String(),
+                'author_name' => $e->actor_name_snapshot,
+                'body' => null,
+                'title' => $e->title,
+                'description' => $e->description,
+            ]);
+        }
+
+        return $rows
+            ->filter(fn (array $r) => is_string($r['at']) && $r['at'] !== '')
+            ->sortBy('at')
+            ->values()
+            ->all();
     }
 }

@@ -20,6 +20,7 @@ import {
   UserRound,
   ScrollText,
   Shield,
+  FileDown,
 } from 'lucide-vue-next'
 
 const props = defineProps<{
@@ -34,6 +35,15 @@ const copiedQualId = ref<number | null>(null)
 let copyTimer: ReturnType<typeof setTimeout> | null = null
 
 const countryNameById = computed(() => new Map(props.countries.map((c) => [c.id, c.name])))
+
+function formatCveqIssuedAt(iso: string | null | undefined): string {
+  if (!iso) return ''
+  try {
+    return new Date(iso).toLocaleString(undefined, { dateStyle: 'medium' })
+  } catch {
+    return iso
+  }
+}
 
 const qualificationsList = computed<any[]>(() => {
   const multi = props.application?.qualifications
@@ -486,6 +496,32 @@ function money(cents: number, currency: string) {
 
                   <div class="grid grid-cols-1 gap-6 px-5 py-6 pl-6 sm:px-8 lg:grid-cols-2 lg:items-start">
                     <div class="space-y-4">
+                      <div
+                        v-if="q.cveq_certificate"
+                        class="rounded-2xl border border-emerald-300/60 bg-emerald-50/95 p-4 sm:p-5"
+                      >
+                        <div class="flex flex-wrap items-start justify-between gap-3">
+                          <div>
+                            <div class="text-[10px] font-bold uppercase tracking-wider text-emerald-900">
+                              ZAQA verification certificate
+                            </div>
+                            <p class="mt-1 font-mono text-sm font-semibold text-emerald-950">
+                              {{ q.cveq_certificate.certificate_number }}
+                            </p>
+                            <p v-if="q.cveq_certificate.issued_at" class="mt-1 text-xs text-emerald-800">
+                              Issued {{ formatCveqIssuedAt(q.cveq_certificate.issued_at) }}
+                            </p>
+                          </div>
+                          <a
+                            v-if="q.cveq_certificate.download_url"
+                            :href="q.cveq_certificate.download_url"
+                            class="zaqa-btn zaqa-btn-secondary inline-flex shrink-0 items-center gap-2 px-4 py-2 text-sm font-semibold"
+                          >
+                            <FileDown class="h-4 w-4" aria-hidden="true" />
+                            Download PDF
+                          </a>
+                        </div>
+                      </div>
                       <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
                         <div class="rounded-2xl border border-border/80 bg-surface-muted/40 p-4">
                           <div class="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-text-muted">

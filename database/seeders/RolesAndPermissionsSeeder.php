@@ -138,6 +138,7 @@ class RolesAndPermissionsSeeder extends Seeder
             'dashboard.view',
             'admin.applications.view',
             'admin.verification.view',
+            'admin.certificates.view',
             'reports.sla.view',
             'verification.pool.view',
             'verification.assign',

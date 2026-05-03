@@ -9,6 +9,7 @@ use App\Enums\LifecycleVisibility;
 use App\Enums\VerificationState;
 use App\Models\Application;
 use App\Models\ApplicationComment;
+use App\Models\Qualification;
 use App\Models\User;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
@@ -18,8 +19,7 @@ class DecisionService
     public function __construct(
         private readonly AuditLogService $audit,
         private readonly VerificationWorkflowService $workflow,
-    ) {
-    }
+    ) {}
 
     public function approve(Application $application, User $actor, ?string $comment = null): Application
     {
@@ -64,6 +64,22 @@ class DecisionService
                     'approved_by_user_id' => $actor->id,
                 ],
             );
+
+            $application->loadMissing('qualifications');
+            foreach ($application->qualifications as $qualification) {
+                if (! $qualification instanceof Qualification) {
+                    continue;
+                }
+                $vs = $qualification->verification_state;
+                if ($vs === VerificationState::Rejected
+                    || $vs === VerificationState::Closed
+                    || $vs === VerificationState::CertificateIssued) {
+                    continue;
+                }
+                $qualification->forceFill([
+                    'verification_state' => VerificationState::ApprovedForCertificate,
+                ])->save();
+            }
 
             $after = [
                 'current_status' => $application->current_status?->value ?? null,
