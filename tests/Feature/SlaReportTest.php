@@ -34,8 +34,7 @@ class SlaReportTest extends TestCase
     public function test_sla_report_aggregates_on_time_vs_late_and_groups_by_level2_actor(): void
     {
         $viewer = User::factory()->activated()->create(['applicant_type' => null]);
-        $viewer->givePermissionTo('dashboard.view');
-        $viewer->givePermissionTo('reports.sla.view');
+        $viewer->assignRole('Verification Officer Level 2');
         $this->actingAs($viewer);
 
         $level2 = User::factory()->activated()->create(['applicant_type' => null]);

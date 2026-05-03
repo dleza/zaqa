@@ -44,6 +44,7 @@ class RolesAndPermissionsSeeder extends Seeder
 
         // Reports
         'reports.sla.view',
+        'reports.view',
 
         // Verification module (granular)
         'verification.pool.view',
@@ -139,7 +140,7 @@ class RolesAndPermissionsSeeder extends Seeder
             'admin.applications.view',
             'admin.verification.view',
             'admin.certificates.view',
-            'reports.sla.view',
+            'reports.view',
             'verification.pool.view',
             'verification.assign',
             'verification.send_back',

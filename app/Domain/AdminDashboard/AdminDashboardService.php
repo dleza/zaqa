@@ -674,7 +674,7 @@ class AdminDashboardService
         $push('Manage users', '/admin/users', 'users', 'admin.users.view');
         $push('Applicants', '/admin/applicants', 'user', 'admin.applicants.view');
         $push('Roles & permissions', '/admin/roles', 'shield', 'admin.roles.view');
-        $push('SLA performance', '/admin/reports/sla', 'activity', 'reports.sla.view');
+        $push('SLA performance', '/admin/reports/sla', 'activity', 'reports.view');
         $push('Certificates', '/admin/certificates', 'award', 'admin.certificates.view');
         $push('Countries', '/admin/settings/countries', 'globe', 'settings.countries.view');
         $push('Subjects', '/admin/settings/certificate-subjects', 'list', 'settings.certificate_subjects.view');

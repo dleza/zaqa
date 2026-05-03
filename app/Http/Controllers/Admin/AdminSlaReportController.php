@@ -2,32 +2,33 @@
 
 namespace App\Http\Controllers\Admin;
 
+use App\Domain\Reports\SlaTurnaroundReportService;
 use App\Enums\ApplicationStatus;
+use App\Http\Controllers\Admin\Reports\HandlesReportExport;
 use App\Http\Controllers\Controller;
 use App\Models\Application;
 use App\Models\ApplicationLifecycleEvent;
 use App\Models\ApplicationStatusHistory;
 use App\Models\QualificationAssignment;
 use App\Models\User;
+use App\Support\Reports\ReportDateRange;
 use Illuminate\Http\Request;
-use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Inertia\Inertia;
 use Inertia\Response;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class AdminSlaReportController extends Controller
 {
+    use HandlesReportExport;
+
     public function index(Request $request): Response
     {
-        $range = (string) $request->query('range', 'last30');
-
-        $to = $request->query('to') ? Carbon::parse((string) $request->query('to'))->endOfDay() : now()->endOfDay();
-        $from = match ($range) {
-            'last7' => $to->copy()->subDays(7)->startOfDay(),
-            'last90' => $to->copy()->subDays(90)->startOfDay(),
-            'custom' => ($request->query('from') ? Carbon::parse((string) $request->query('from'))->startOfDay() : $to->copy()->subDays(30)->startOfDay()),
-            default => $to->copy()->subDays(30)->startOfDay(),
-        };
+        $slaMetrics = app(SlaTurnaroundReportService::class);
+        $dr = ReportDateRange::fromRequest($request);
+        $from = $dr['from'];
+        $to = $dr['to'];
+        $range = $dr['range'];
 
         // Decided applications within window (decision time).
         $decided = Application::query()
@@ -139,6 +140,7 @@ class AdminSlaReportController extends Controller
                 $row['on_time_pct'] = $row['decisions_total'] > 0 ? round(($row['on_time'] / $row['decisions_total']) * 100, 1) : 0;
                 $row['turnaround_avg_sec'] = $this->avg($turn);
                 $row['turnaround_median_sec'] = $this->median($turn);
+
                 return $row;
             })
             ->sortByDesc('decisions_total')
@@ -164,7 +166,9 @@ class AdminSlaReportController extends Controller
 
         foreach ($assignments as $a) {
             $uid = (int) $a->assigned_to_user_id;
-            if ($uid <= 0) continue;
+            if ($uid <= 0) {
+                continue;
+            }
             $bucket = $level1Agg[$uid] ?? ['reviewer_user_id' => $uid, 'assignments_received' => 0, 'completed_handoffs' => 0, 'durations' => []];
             $bucket['assignments_received']++;
             $level1Agg[$uid] = $bucket;
@@ -177,7 +181,9 @@ class AdminSlaReportController extends Controller
 
         foreach ($level1Completions as $c) {
             $uid = (int) $c->actor_user_id;
-            if ($uid <= 0) continue;
+            if ($uid <= 0) {
+                continue;
+            }
             $bucket = $level1Agg[$uid] ?? ['reviewer_user_id' => $uid, 'assignments_received' => 0, 'completed_handoffs' => 0, 'durations' => []];
             $bucket['completed_handoffs']++;
 
@@ -206,6 +212,7 @@ class AdminSlaReportController extends Controller
                 $row['reviewer_name'] = $level1Users->get($row['reviewer_user_id'])?->name;
                 $row['assignment_to_complete_avg_sec'] = $this->avg($dur);
                 $row['assignment_to_complete_median_sec'] = $this->median($dur);
+
                 return $row;
             })
             ->sortByDesc('completed_handoffs')
@@ -221,30 +228,130 @@ class AdminSlaReportController extends Controller
             'overall' => $overall,
             'level2' => $level2,
             'level1' => $level1,
+            'qualification_metrics' => $slaMetrics->metrics($from, $to),
         ]);
     }
 
     /**
-     * @param array<int,int|float> $values
+     * Export aggregated reviewer / SLA metrics (not unpaginated raw tables).
+     */
+    public function export(Request $request): StreamedResponse|\Illuminate\Http\Response
+    {
+        $slaMetrics = app(SlaTurnaroundReportService::class);
+        $format = strtolower((string) $request->query('format', 'csv'));
+        $dr = ReportDateRange::fromRequest($request);
+
+        if ($format === 'pdf') {
+            $qm = $slaMetrics->metrics($dr['from'], $dr['to']);
+
+            return $this->exportPdf('reports.pdf.applications-summary', [
+                'title' => 'SLA & turnaround',
+                'period_from' => $dr['from']->toDateString(),
+                'period_to' => $dr['to']->toDateString(),
+                'generated_at' => now()->toDateTimeString(),
+                'rows' => [
+                    ['label' => 'Overdue qualifications', 'value' => $qm['overdue_qualifications']],
+                    ['label' => 'Avg submit → assign (sec)', 'value' => $qm['avg_submission_to_assignment_sec'] ?? '—'],
+                    ['label' => 'Avg assign → review (sec)', 'value' => $qm['avg_assignment_to_review_sec'] ?? '—'],
+                    ['label' => 'Avg review → certificate (sec)', 'value' => $qm['avg_review_to_certificate_sec'] ?? '—'],
+                    ['label' => 'Applications within SLA', 'value' => $qm['compliance']['within_sla']],
+                    ['label' => 'Applications late vs deadline', 'value' => $qm['compliance']['overdue']],
+                ],
+            ], 'sla-report-'.now()->format('Y-m-d').'.pdf');
+        }
+
+        if ($format === 'xlsx') {
+            return $this->exportXlsx($this->buildExportRows($request, $slaMetrics), 'sla-report-'.now()->format('Y-m-d').'.xlsx');
+        }
+
+        return response()->streamDownload(function () use ($request, $slaMetrics) {
+            $out = fopen('php://output', 'w');
+            foreach ($this->buildExportRows($request, $slaMetrics) as $row) {
+                fputcsv($out, $row);
+            }
+            fclose($out);
+        }, 'sla-report-'.now()->format('Y-m-d').'.csv', ['Content-Type' => 'text/csv; charset=UTF-8']);
+    }
+
+    /**
+     * @return \Generator<int, array<int, string|float|int|null>>
+     */
+    private function buildExportRows(Request $request, SlaTurnaroundReportService $slaMetrics): \Generator
+    {
+        $dr = ReportDateRange::fromRequest($request);
+        $from = $dr['from'];
+        $to = $dr['to'];
+
+        yield ['section', 'reviewer_user_id', 'reviewer_name', 'metric', 'value'];
+
+        $qm = $slaMetrics->metrics($from, $to);
+        yield ['qualification_metrics', '', '', 'overdue_qualifications', $qm['overdue_qualifications']];
+        yield ['qualification_metrics', '', '', 'avg_submission_to_assignment_sec', $qm['avg_submission_to_assignment_sec'] ?? ''];
+        yield ['qualification_metrics', '', '', 'avg_assignment_to_review_sec', $qm['avg_assignment_to_review_sec'] ?? ''];
+
+        $decided = Application::query()
+            ->where(function ($q) use ($from, $to) {
+                $q->whereBetween('approved_at', [$from, $to])->orWhereBetween('rejected_at', [$from, $to]);
+            })
+            ->whereIn('current_status', [ApplicationStatus::Approved, ApplicationStatus::Rejected])
+            ->count();
+        yield ['application_decisions_window', '', '', 'count', $decided];
+
+        $level2Rows = ApplicationStatusHistory::query()
+            ->whereIn('to_status', [ApplicationStatus::Approved->value, ApplicationStatus::Rejected->value], 'and', false)
+            ->whereBetween('changed_at', [$from, $to])
+            ->selectRaw('changed_by_user_id, count(*) as c')
+            ->groupBy('changed_by_user_id')
+            ->get();
+
+        foreach ($level2Rows as $r) {
+            $uid = (int) $r->changed_by_user_id;
+            $name = $uid > 0 ? User::query()->whereKey($uid)->value('name') : '';
+            yield ['level2_decisions', (string) $uid, (string) $name, 'count', (int) $r->c];
+        }
+
+        $l1 = QualificationAssignment::query()
+            ->whereBetween('assigned_at', [$from, $to])
+            ->selectRaw('assigned_to_user_id, count(*) as c')
+            ->whereNotNull('assigned_to_user_id')
+            ->groupBy('assigned_to_user_id')
+            ->get();
+
+        foreach ($l1 as $r) {
+            $uid = (int) $r->assigned_to_user_id;
+            $name = $uid > 0 ? User::query()->whereKey($uid)->value('name') : '';
+            yield ['level1_assignments', (string) $uid, (string) $name, 'count', (int) $r->c];
+        }
+    }
+
+    /**
+     * @param  array<int,int|float>  $values
      */
     private function avg(array $values): ?int
     {
         $n = count($values);
-        if ($n === 0) return null;
+        if ($n === 0) {
+            return null;
+        }
+
         return (int) round(array_sum($values) / $n);
     }
 
     /**
-     * @param array<int,int|float> $values
+     * @param  array<int,int|float>  $values
      */
     private function median(array $values): ?int
     {
         $n = count($values);
-        if ($n === 0) return null;
+        if ($n === 0) {
+            return null;
+        }
         sort($values);
         $mid = intdiv($n, 2);
-        if ($n % 2 === 1) return (int) round($values[$mid]);
+        if ($n % 2 === 1) {
+            return (int) round($values[$mid]);
+        }
+
         return (int) round(($values[$mid - 1] + $values[$mid]) / 2);
     }
 }
-
