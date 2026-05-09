@@ -6,6 +6,7 @@ use App\Domain\Applications\QualificationCaptureService;
 use App\Domain\Certificates\QualificationCertificateService;
 use App\Domain\Payments\ApplicationPaymentSatisfaction;
 use App\Domain\Verification\AssignmentService;
+use App\Domain\Verification\QualificationDecisionService;
 use App\Domain\Verification\QualificationLevel1ReviewService;
 use App\Domain\Verification\QualificationSendBackService;
 use App\Domain\Verification\VerificationQualificationAccess;
@@ -14,6 +15,8 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\Admin\Verification\AdminUpdateVerificationQualificationRequest;
 use App\Http\Requests\Admin\Verification\AssignApplicationRequest;
 use App\Http\Requests\Admin\Verification\IssueQualificationCertificateRequest;
+use App\Http\Requests\Admin\Verification\QualificationDecisionApproveRequest;
+use App\Http\Requests\Admin\Verification\QualificationDecisionRejectRequest;
 use App\Http\Requests\Admin\Verification\QualificationLevel1CompleteRequest;
 use App\Http\Requests\Admin\Verification\RevokeQualificationAssignmentRequest;
 use App\Http\Requests\Admin\Verification\SendBackRequest;
@@ -57,6 +60,10 @@ class AdminVerificationQualificationController extends Controller
         $paymentSatisfaction = app(ApplicationPaymentSatisfaction::class);
         $paymentSatisfied = $applicationModel ? $paymentSatisfaction->isSatisfied($applicationModel) : false;
 
+        $applicationVerificationState = $applicationModel?->verification_state;
+        $applicationBlockedForCertificateIssue = $applicationVerificationState === VerificationState::Rejected
+            || $applicationVerificationState === VerificationState::Closed;
+
         $activeCveq = QualificationCertificate::query()
             ->where('qualification_id', $qualification->id)
             ->where('status', QualificationCertificate::STATUS_ISSUED)
@@ -65,15 +72,15 @@ class AdminVerificationQualificationController extends Controller
 
         $canIssueCveq = (bool) $request->user()?->can('verification.certificate.issue')
             && $paymentSatisfied
-            && $applicationModel?->verification_state === VerificationState::ApprovedForCertificate
             && $qualification->verification_state === VerificationState::ApprovedForCertificate
+            && ! $applicationBlockedForCertificateIssue
             && ! $activeCveq;
 
         $canReissueCveq = (bool) $request->user()?->hasRole('Super Admin')
             && (bool) $request->user()?->can('verification.certificate.issue')
             && $paymentSatisfied
-            && $applicationModel?->verification_state === VerificationState::ApprovedForCertificate
             && $qualification->verification_state === VerificationState::CertificateIssued
+            && ! $applicationBlockedForCertificateIssue
             && $activeCveq instanceof QualificationCertificate;
 
         $level1Users = User::query()
@@ -172,6 +179,8 @@ class AdminVerificationQualificationController extends Controller
                 'assign' => (bool) $request->user()?->can('verification.assign'),
                 'send_back' => (bool) $request->user()?->can('verification.send_back'),
                 'level1_process' => (bool) $request->user()?->can('verification.level1.process'),
+                'approve' => (bool) $request->user()?->can('verification.decide.approve'),
+                'reject' => (bool) $request->user()?->can('verification.decide.reject'),
                 'edit_qualification' => (bool) ($request->user()?->can('verification.level1.process') || $request->user()?->can('verification.level2.review')),
                 'issue_certificate' => (bool) $request->user()?->can('verification.certificate.issue'),
             ],
@@ -361,6 +370,43 @@ class AdminVerificationQualificationController extends Controller
         );
 
         return back()->with('success', 'Level 1 review completed for this qualification.');
+    }
+
+    public function approve(
+        QualificationDecisionApproveRequest $request,
+        Qualification $qualification,
+        QualificationDecisionService $decisions,
+    ): RedirectResponse {
+        VerificationQualificationAccess::ensureQualificationAccessible($request->user(), $qualification);
+
+        $issueCertificate = $request->boolean('issue_certificate');
+        $decisions->approve(
+            $qualification,
+            $request->user(),
+            $request->validated('comment'),
+            $issueCertificate,
+        );
+
+        return back()->with(
+            'success',
+            $issueCertificate ? 'Qualification approved and certificate issued.' : 'Qualification approved.',
+        );
+    }
+
+    public function reject(
+        QualificationDecisionRejectRequest $request,
+        Qualification $qualification,
+        QualificationDecisionService $decisions,
+    ): RedirectResponse {
+        VerificationQualificationAccess::ensureQualificationAccessible($request->user(), $qualification);
+
+        $decisions->reject(
+            $qualification,
+            $request->user(),
+            (string) $request->validated('reason'),
+        );
+
+        return back()->with('success', 'Qualification rejected.');
     }
 
     /**

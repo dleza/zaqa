@@ -365,6 +365,12 @@ Route::middleware('auth')->group(function () {
             Route::post('/qualifications/{qualification}/level1-complete', [AdminVerificationQualificationController::class, 'level1Complete'])
                 ->middleware('can:verification.level1.process')
                 ->name('qualifications.level1_complete');
+            Route::post('/qualifications/{qualification}/approve', [AdminVerificationQualificationController::class, 'approve'])
+                ->middleware('can:verification.decide.approve')
+                ->name('qualifications.approve');
+            Route::post('/qualifications/{qualification}/reject', [AdminVerificationQualificationController::class, 'reject'])
+                ->middleware('can:verification.decide.reject')
+                ->name('qualifications.reject');
             Route::post('/qualifications/{qualification}/issue-certificate', [AdminVerificationQualificationController::class, 'issueCertificate'])
                 ->middleware('can:verification.certificate.issue')
                 ->name('qualifications.issue_certificate');

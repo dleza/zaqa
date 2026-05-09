@@ -41,6 +41,8 @@ const props = defineProps<{
     assign: boolean
     send_back: boolean
     level1_process: boolean
+    approve?: boolean
+    reject?: boolean
     edit_qualification?: boolean
     issue_certificate?: boolean
   }
@@ -50,6 +52,8 @@ const assignOpen = ref(false)
 const revokeOpen = ref(false)
 const sendBackOpen = ref(false)
 const level1CompleteOpen = ref(false)
+const approveOpen = ref(false)
+const rejectOpen = ref(false)
 const copiedRef = ref(false)
 const copiedPageUrl = ref(false)
 
@@ -59,6 +63,8 @@ const sendBackForm = useForm({ comment: '' })
 const level1CompleteForm = useForm<{ findings: string; attachment: File | null }>({ findings: '', attachment: null })
 const level1AttachmentInput = ref<HTMLInputElement | null>(null)
 const issueCveqForm = useForm<{ reissue: boolean }>({ reissue: false })
+const approveForm = useForm<{ comment: string; issue_certificate: boolean }>({ comment: '', issue_certificate: false })
+const rejectForm = useForm<{ reason: string }>({ reason: '' })
 
 function clearLevel1Attachment() {
   level1CompleteForm.attachment = null
@@ -136,6 +142,9 @@ const canShowLevel1Complete = computed(() => {
 
 /** Level 2 / Super Admin: remove Level 1 assignee and return task to the assignment pool. */
 const canEditQualificationDetails = computed(() => props.can.edit_qualification === true)
+
+const canShowApprove = computed(() => props.can.approve === true && state.value === 'under_level2_review')
+const canShowReject = computed(() => props.can.reject === true && state.value === 'under_level2_review')
 
 const canShowRevokeAssignment = computed(() => {
   if (!props.can.assign) return false
@@ -480,7 +489,15 @@ function formatTimelineAt(iso: string | null | undefined) {
             <p class="mt-1 text-xs text-text-muted">Assign or revoke Level 1, return to applicant, or complete Level 1 review.</p>
           </div>
           <div
-            v-if="canEditQualificationDetails || canShowAssign || canShowRevokeAssignment || canShowSendBack || canShowLevel1Complete"
+            v-if="
+              canEditQualificationDetails ||
+              canShowAssign ||
+              canShowRevokeAssignment ||
+              canShowSendBack ||
+              canShowLevel1Complete ||
+              canShowApprove ||
+              canShowReject
+            "
             class="grid grid-cols-1 gap-2.5 sm:grid-cols-2 lg:grid-cols-2 xl:grid-cols-4"
           >
             <Link
@@ -527,6 +544,24 @@ function formatTimelineAt(iso: string | null | undefined) {
               @click="level1CompleteOpen = true"
             >
               Mark Level 1 complete
+            </button>
+
+            <button
+              v-if="canShowApprove"
+              type="button"
+              class="zaqa-btn flex w-full items-center justify-center gap-2 border border-emerald-300/50 bg-emerald-500/12 py-2.5 font-semibold text-emerald-950 hover:bg-emerald-500/20"
+              @click="approveOpen = true"
+            >
+              Approve
+            </button>
+
+            <button
+              v-if="canShowReject"
+              type="button"
+              class="zaqa-btn flex w-full items-center justify-center gap-2 border border-rose-300/50 bg-rose-500/10 py-2.5 font-semibold text-rose-950 hover:bg-rose-500/18"
+              @click="rejectOpen = true"
+            >
+              Reject
             </button>
           </div>
           <p
@@ -1036,6 +1071,113 @@ function formatTimelineAt(iso: string | null | undefined) {
           "
         >
           Submit
+        </button>
+      </template>
+    </AdminActionModal>
+
+    <AdminActionModal
+      v-model="approveOpen"
+      title="Approve qualification"
+      description="Optional internal comment. Qualification will be marked approved for certificate."
+    >
+      <div class="space-y-4">
+        <div>
+          <label class="text-sm font-semibold text-text-primary">Comment (optional)</label>
+          <textarea v-model="approveForm.comment" class="zaqa-input mt-2 h-auto min-h-[6rem] py-3" placeholder="Optional internal note." />
+          <div v-if="approveForm.errors.comment" class="mt-1 text-xs text-danger">{{ approveForm.errors.comment }}</div>
+        </div>
+
+        <div v-if="can.issue_certificate" class="rounded-xl border border-border/70 bg-surface-muted/40 px-4 py-3">
+          <label class="flex items-start gap-2 text-sm font-semibold text-text-primary">
+            <input
+              v-model="approveForm.issue_certificate"
+              type="checkbox"
+              class="mt-0.5"
+              :disabled="qualification.application?.payment_satisfied === false"
+            />
+            Generate CVEQ certificate now
+          </label>
+          <p class="mt-1 text-xs text-text-muted">
+            Payment must be satisfied. This will email the applicant and mark the qualification as certificate issued.
+          </p>
+          <p v-if="qualification.application?.payment_satisfied === false" class="mt-2 text-xs font-medium text-amber-900">
+            Payment is not satisfied — certificate issuance is blocked until fees are covered.
+          </p>
+          <div v-if="approveForm.errors.issue_certificate" class="mt-1 text-xs text-danger">{{ approveForm.errors.issue_certificate }}</div>
+          <div v-if="(approveForm.errors as any).payment" class="mt-1 text-xs text-danger">{{ (approveForm.errors as any).payment }}</div>
+          <div v-if="(approveForm.errors as any).application" class="mt-1 text-xs text-danger">{{ (approveForm.errors as any).application }}</div>
+          <div v-if="(approveForm.errors as any).qualification" class="mt-1 text-xs text-danger">{{ (approveForm.errors as any).qualification }}</div>
+        </div>
+      </div>
+      <template #footer>
+        <button
+          type="button"
+          class="zaqa-btn zaqa-btn-secondary px-4 py-2 text-sm"
+          @click="
+            () => {
+              approveOpen = false
+              approveForm.clearErrors()
+              approveForm.reset()
+            }
+          "
+        >
+          Cancel
+        </button>
+        <button
+          type="button"
+          class="zaqa-btn zaqa-btn-primary px-4 py-2 text-sm"
+          :disabled="approveForm.processing"
+          @click="
+            approveForm.post(`/admin/verification/qualifications/${qualification.id}/approve`, {
+              preserveScroll: true,
+              onSuccess: () => {
+                approveOpen = false
+                approveForm.reset()
+              },
+            })
+          "
+        >
+          Approve
+        </button>
+      </template>
+    </AdminActionModal>
+
+    <AdminActionModal v-model="rejectOpen" title="Reject qualification" description="Reason is required and will be visible to the applicant.">
+      <div>
+        <label class="text-sm font-semibold text-text-primary">Reason</label>
+        <textarea v-model="rejectForm.reason" class="zaqa-input mt-2 h-auto min-h-[10rem] py-3" placeholder="Provide a clear rejection reason." />
+        <div v-if="rejectForm.errors.reason" class="mt-1 text-xs text-danger">{{ rejectForm.errors.reason }}</div>
+        <div v-if="(rejectForm.errors as any).qualification" class="mt-1 text-xs text-danger">{{ (rejectForm.errors as any).qualification }}</div>
+      </div>
+      <template #footer>
+        <button
+          type="button"
+          class="zaqa-btn zaqa-btn-secondary px-4 py-2 text-sm"
+          @click="
+            () => {
+              rejectOpen = false
+              rejectForm.clearErrors()
+              rejectForm.reset()
+            }
+          "
+        >
+          Cancel
+        </button>
+        <button
+          type="button"
+          class="zaqa-btn zaqa-btn-primary px-4 py-2 text-sm"
+          :disabled="rejectForm.processing"
+          @click="
+            rejectForm.post(`/admin/verification/qualifications/${qualification.id}/reject`, {
+              preserveScroll: true,
+              onSuccess: () => {
+                rejectOpen = false
+                rejectForm.reset()
+              },
+            })
+          "
+        >
+          Reject
         </button>
       </template>
     </AdminActionModal>

@@ -157,9 +157,9 @@ class QualificationCertificateService
             ]);
         }
 
-        if ($application->verification_state !== VerificationState::ApprovedForCertificate) {
+        if ($application->verification_state === VerificationState::Rejected || $application->verification_state === VerificationState::Closed) {
             throw ValidationException::withMessages([
-                'application' => 'The application must be approved for certificate before issuing.',
+                'application' => 'Certificates cannot be issued for rejected or closed applications.',
             ]);
         }
 
