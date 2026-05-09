@@ -5,6 +5,7 @@ import FlashMessages from '@/Components/FlashMessages.vue'
 import ApplicantSidebar from '@/Components/ApplicantSidebar.vue'
 import { applicantNavSections } from '@/Layouts/applicantNav'
 import { Menu, X } from 'lucide-vue-next'
+import { zaqaLogoUrl } from '@/constants/zaqaLogo'
 
 const props = withDefaults(
   defineProps<{
@@ -16,8 +17,6 @@ const props = withDefaults(
 )
 
 const page = usePage()
-
-import { zaqaLogoUrl } from '@/constants/zaqaLogo'
 
 const mobileSidebarOpen = ref(false)
 const user = computed(() => (page.props as any).auth?.user)

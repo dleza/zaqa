@@ -245,7 +245,7 @@ class QualificationCertificateService
 
         $recognisedName = $type?->name ?? (string) ($qualification->title_of_qualification ?? '');
 
-        $logoPath = resource_path('images/zaqa-logo-tranparent.png');
+        $logoPath = resource_path('images/zaqa_logo_clean.png');
         $logoDataUri = null;
         if (is_file($logoPath)) {
             $logoDataUri = 'data:image/png;base64,'.base64_encode((string) file_get_contents($logoPath));

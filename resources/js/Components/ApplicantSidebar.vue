@@ -2,6 +2,7 @@
 import { computed, onMounted, ref, watch } from 'vue'
 import { Link, usePage } from '@inertiajs/vue3'
 import type { ApplicantNavSection } from '@/Layouts/applicantNav'
+import { zaqaLogoUrl } from '@/constants/zaqaLogo'
 import { ChevronDown } from 'lucide-vue-next'
 
 const props = defineProps<{
@@ -72,8 +73,6 @@ const applicantTypeLabel = computed(() => {
   if (t === 'institution') return 'Institution'
   return null
 })
-
-import { zaqaLogoUrl } from '@/constants/zaqaLogo'
 
 const initials = computed(() => {
   const name = (user.value?.name ?? '').trim()

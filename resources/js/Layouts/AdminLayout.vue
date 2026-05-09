@@ -6,9 +6,9 @@ import AdminSidebar from '@/Components/AdminSidebar.vue'
 import TopbarUserMenu from '@/Components/TopbarUserMenu.vue'
 import { adminNavSections } from '@/Layouts/adminNav'
 import { Menu, X } from 'lucide-vue-next'
+import { zaqaLogoUrl } from '@/constants/zaqaLogo'
 
 const page = usePage()
-import { zaqaLogoUrl } from '@/constants/zaqaLogo'
 const mobileSidebarOpen = ref(false)
 
 const user = computed(() => (page.props as any).auth?.user)

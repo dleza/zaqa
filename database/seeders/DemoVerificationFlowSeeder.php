@@ -18,7 +18,7 @@ class DemoVerificationFlowSeeder extends Seeder
         app(PermissionRegistrar::class)->forgetCachedPermissions();
 
         // Demo password for all seeded staff accounts (change anytime).
-        $password = 'Password@2026';
+        $password = 'ChangeMe@2026';
 
         $users = [
             [

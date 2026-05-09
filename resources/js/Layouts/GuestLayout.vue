@@ -2,6 +2,7 @@
 import { computed } from 'vue'
 import { usePage } from '@inertiajs/vue3'
 import FlashMessages from '@/Components/FlashMessages.vue'
+import { zaqaLogoUrl } from '@/constants/zaqaLogo'
 
 const props = withDefaults(
   defineProps<{
@@ -21,8 +22,6 @@ const props = withDefaults(
     centerContent: true,
   },
 )
-
-import { zaqaLogoUrl } from '@/constants/zaqaLogo'
 
 const page = usePage()
 const currentPath = computed(() => {
