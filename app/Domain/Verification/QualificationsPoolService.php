@@ -159,9 +159,17 @@ class QualificationsPoolService
         if ($verificationState !== '') {
             $query->where('verification_state', $verificationState);
         } elseif (! $awaitingApplicantFromMe) {
+            // Verification pool only shows actionable tasks by default.
+            // Terminal outcomes (approved/rejected/issued/closed) should not remain in the pool even if the
+            // parent application still has other pending qualification items.
             $query->where(function ($q) {
                 $q->whereNull('qualifications.verification_state')
-                    ->orWhere('qualifications.verification_state', '!=', VerificationState::ReturnedToApplicant->value);
+                    ->orWhereIn('qualifications.verification_state', [
+                        VerificationState::AwaitingAssignment->value,
+                        VerificationState::AssignedToLevel1->value,
+                        VerificationState::UnderLevel1Review->value,
+                        VerificationState::UnderLevel2Review->value,
+                    ]);
             });
         }
 

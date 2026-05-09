@@ -54,6 +54,7 @@ const sendBackOpen = ref(false)
 const level1CompleteOpen = ref(false)
 const approveOpen = ref(false)
 const rejectOpen = ref(false)
+const sendBackHistoryOpen = ref(false)
 const copiedRef = ref(false)
 const copiedPageUrl = ref(false)
 
@@ -382,207 +383,150 @@ function formatTimelineAt(iso: string | null | undefined) {
             {{ viewerHint }}
           </p>
 
-          <!-- Quick links -->
-          <div class="mt-6 flex flex-wrap gap-2 border-t border-white/15 pt-5">
-            <Link
-              :href="`/admin/verification/applications/${qualification.application?.id}`"
-              class="inline-flex items-center gap-2 rounded-xl border border-white/25 bg-white/10 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-white/20"
-            >
-              <ExternalLink class="h-4 w-4 shrink-0 opacity-90" aria-hidden="true" />
-              Parent application
-            </Link>
-            <Link
-              href="/admin/verification/pool"
-              class="inline-flex items-center gap-2 rounded-xl border border-white/25 bg-white/10 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-white/20"
-            >
-              <LayoutList class="h-4 w-4 shrink-0 opacity-90" aria-hidden="true" />
-              Verification pool
-            </Link>
-            <button
-              type="button"
-              class="inline-flex items-center gap-2 rounded-xl border border-white/20 bg-black/25 px-4 py-2.5 text-sm font-medium text-white/95 transition hover:bg-black/35"
-              @click="copyPageUrl"
-            >
-              <Link2 class="h-4 w-4 shrink-0 opacity-90" aria-hidden="true" />
-              {{ copiedPageUrl ? 'Link copied' : 'Copy page link' }}
-            </button>
-          </div>
-        </div>
-      </section>
+	          <!-- Links + actions -->
+	          <div class="mt-6 border-t border-white/15 pt-5">
+	            <div class="flex items-center gap-2 overflow-x-auto pb-1">
+	              <Link
+	                :href="`/admin/verification/applications/${qualification.application?.id}`"
+	                class="inline-flex shrink-0 items-center gap-2 rounded-xl border border-white/25 bg-white/10 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-white/20"
+	              >
+	                <ExternalLink class="h-4 w-4 shrink-0 opacity-90" aria-hidden="true" />
+	                Parent application
+	              </Link>
+	              <Link
+	                href="/admin/verification/pool"
+	                class="inline-flex shrink-0 items-center gap-2 rounded-xl border border-white/25 bg-white/10 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-white/20"
+	              >
+	                <LayoutList class="h-4 w-4 shrink-0 opacity-90" aria-hidden="true" />
+	                Verification pool
+	              </Link>
+	              <button
+	                type="button"
+	                class="inline-flex shrink-0 items-center gap-2 rounded-xl border border-white/20 bg-black/25 px-4 py-2.5 text-sm font-medium text-white/95 transition hover:bg-black/35"
+	                @click="copyPageUrl"
+	              >
+	                <Link2 class="h-4 w-4 shrink-0 opacity-90" aria-hidden="true" />
+	                {{ copiedPageUrl ? 'Link copied' : 'Copy page link' }}
+	              </button>
 
-      <!-- Send-back & applicant resubmission history (persists after workflow moves on) -->
-      <section
-        v-if="sendBackTimeline.length > 0"
-        class="overflow-hidden rounded-2xl border border-amber-400/35 bg-gradient-to-br from-amber-50/95 via-surface to-surface shadow-sm ring-1 ring-amber-500/10"
-      >
-        <div
-          class="flex flex-col gap-3 border-b border-amber-200/60 bg-amber-100/40 px-5 py-4 sm:flex-row sm:items-start sm:justify-between sm:px-6"
-        >
-          <div class="flex min-w-0 gap-3">
-            <div
-              class="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-amber-300/60 bg-surface text-amber-800 shadow-sm"
-            >
-              <RotateCcw class="h-5 w-5" aria-hidden="true" />
-            </div>
-            <div class="min-w-0">
-              <h2 class="text-sm font-bold tracking-tight text-text-primary">Return &amp; resubmission history</h2>
-              <p class="mt-1 max-w-prose text-xs leading-relaxed text-text-muted">
-                This qualification was returned to the applicant at least once. Officer feedback below is retained even after the applicant amends and resubmits.
-                Resubmission rows are recorded when the applicant saves changes after a send-back.
-              </p>
-            </div>
-          </div>
-        </div>
-        <ol class="divide-y divide-amber-200/50">
-          <li v-for="(row, idx) in sendBackTimeline" :key="`${row.kind}-${row.at}-${idx}`" class="px-5 py-4 sm:px-6">
-            <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:gap-4">
-              <div
-                class="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border text-xs font-bold"
-                :class="
-                  row.kind === 'send_back'
-                    ? 'border-amber-400/70 bg-amber-100 text-amber-950'
-                    : 'border-emerald-400/60 bg-emerald-50 text-emerald-950'
-                "
-              >
-                <span class="sr-only">{{ row.kind === 'send_back' ? 'Send-back' : 'Resubmission' }}</span>
-                <RotateCcw v-if="row.kind === 'send_back'" class="h-4 w-4" aria-hidden="true" />
-                <CornerDownLeft v-else class="h-4 w-4" aria-hidden="true" />
-              </div>
-              <div class="min-w-0 flex-1">
-                <div class="flex flex-wrap items-baseline gap-x-2 gap-y-1">
-                  <span class="text-sm font-semibold text-text-primary">
-                    {{ row.kind === 'send_back' ? 'Returned to applicant' : 'Applicant amended & resubmitted' }}
-                  </span>
-                  <span class="text-xs font-medium text-text-muted">{{ formatTimelineAt(row.at) }}</span>
-                </div>
-                <div v-if="row.kind === 'send_back'" class="mt-2 space-y-1">
-                  <div v-if="row.author_name" class="text-xs text-text-muted">
-                    By <span class="font-semibold text-text-primary">{{ row.author_name }}</span>
-                  </div>
-                  <div
-                    v-if="row.body && row.body.trim().length > 0"
-                    class="mt-2 rounded-xl border border-border bg-surface px-4 py-3 text-sm leading-relaxed text-text-primary"
-                  >
-                    {{ row.body }}
-                  </div>
-                </div>
-                <div v-else class="mt-2 space-y-1">
-                  <div v-if="row.author_name" class="text-xs text-text-muted">
-                    Applicant <span class="font-semibold text-text-primary">{{ row.author_name }}</span>
-                  </div>
-                  <div v-if="row.title || row.description" class="text-sm text-text-primary">
-                    <span v-if="row.title" class="font-medium">{{ row.title }}</span>
-                    <span v-if="row.description" class="mt-1 block text-text-muted">{{ row.description }}</span>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </li>
-        </ol>
-      </section>
+	              <button
+	                v-if="sendBackTimeline.length > 0"
+	                type="button"
+	                class="inline-flex shrink-0 items-center gap-2 rounded-xl border border-amber-300/40 bg-amber-500/15 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-amber-500/25"
+	                @click="sendBackHistoryOpen = true"
+	              >
+	                Returned to applicant ({{ sendBackTimeline.length }})
+	              </button>
 
-      <!-- Quick actions (workflow shortcuts — surfaced at top for fast access) -->
-      <section class="rounded-2xl border border-border bg-surface p-4 shadow-sm sm:p-5">
-        <div class="flex flex-col gap-4">
-          <div>
-            <h2 class="text-sm font-bold tracking-tight text-text-primary">Quick actions</h2>
-            <p class="mt-1 text-xs text-text-muted">Assign or revoke Level 1, return to applicant, or complete Level 1 review.</p>
-          </div>
-          <div
-            v-if="
-              canEditQualificationDetails ||
-              canShowAssign ||
-              canShowRevokeAssignment ||
-              canShowSendBack ||
-              canShowLevel1Complete ||
-              canShowApprove ||
-              canShowReject
-            "
-            class="grid grid-cols-1 gap-2.5 sm:grid-cols-2 lg:grid-cols-2 xl:grid-cols-4"
-          >
-            <Link
-              v-if="canEditQualificationDetails"
-              :href="`/admin/verification/qualifications/${qualification.id}/edit`"
-              class="zaqa-btn zaqa-btn-secondary flex w-full items-center justify-center gap-2 border border-border bg-surface-muted py-2.5 font-semibold hover:bg-surface-muted/80"
-            >
-              <Pencil class="h-4 w-4" aria-hidden="true" />
-              Edit qualification details
-            </Link>
-            <button
-              v-if="canShowAssign"
-              type="button"
-              class="zaqa-btn zaqa-btn-secondary flex w-full items-center justify-center gap-2 border border-border bg-surface-muted py-2.5 font-semibold hover:bg-surface-muted/80"
-              @click="assignOpen = true"
-            >
-              <ArrowRight class="h-4 w-4" aria-hidden="true" />
-              {{ qualification.assigned_verifier_id ? 'Reassign Level 1' : 'Assign Level 1' }}
-            </button>
+	              <Link
+	                v-if="canEditQualificationDetails"
+	                :href="`/admin/verification/qualifications/${qualification.id}/edit`"
+	                class="inline-flex shrink-0 items-center gap-2 rounded-xl border border-white/25 bg-white/10 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-white/20"
+	              >
+	                <Pencil class="h-4 w-4 shrink-0 opacity-90" aria-hidden="true" />
+	                Edit details
+	              </Link>
 
-            <button
-              v-if="canShowRevokeAssignment"
-              type="button"
-              class="zaqa-btn flex w-full items-center justify-center gap-2 border border-rose-300/50 bg-rose-500/10 py-2.5 font-semibold text-rose-950 hover:bg-rose-500/18"
-              @click="revokeOpen = true"
-            >
-              <UserMinus class="h-4 w-4" aria-hidden="true" />
-              Remove Level 1 assignment
-            </button>
+	              <button
+	                v-if="canShowAssign"
+	                type="button"
+	                class="inline-flex shrink-0 items-center gap-2 rounded-xl border border-white/25 bg-white/10 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-white/20"
+	                @click="assignOpen = true"
+	              >
+	                <ArrowRight class="h-4 w-4 shrink-0 opacity-90" aria-hidden="true" />
+	                {{ qualification.assigned_verifier_id ? 'Reassign Level 1' : 'Assign Level 1' }}
+	              </button>
 
-            <button
-              v-if="canShowSendBack"
-              type="button"
-              class="zaqa-btn flex w-full items-center justify-center gap-2 border border-amber-300/40 bg-amber-500/15 py-2.5 font-semibold text-amber-950 hover:bg-amber-500/25"
-              @click="sendBackOpen = true"
-            >
-              Send back to applicant
-            </button>
+	              <button
+	                v-if="canShowRevokeAssignment"
+	                type="button"
+	                class="inline-flex shrink-0 items-center gap-2 rounded-xl border border-rose-300/40 bg-rose-600/20 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-rose-600/30"
+	                @click="revokeOpen = true"
+	              >
+	                <UserMinus class="h-4 w-4 shrink-0 opacity-90" aria-hidden="true" />
+	                Remove assignment
+	              </button>
 
-            <button
-              v-if="canShowLevel1Complete"
-              type="button"
-              class="zaqa-btn flex w-full items-center justify-center gap-2 border border-sky-300/45 bg-sky-500/12 py-2.5 font-semibold text-sky-950 hover:bg-sky-500/20"
-              @click="level1CompleteOpen = true"
-            >
-              Mark Level 1 complete
-            </button>
+	              <button
+	                v-if="canShowSendBack"
+	                type="button"
+	                class="inline-flex shrink-0 items-center gap-2 rounded-xl border border-amber-300/40 bg-amber-500/15 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-amber-500/25"
+	                @click="sendBackOpen = true"
+	              >
+	                Send back
+	              </button>
 
-            <button
-              v-if="canShowApprove"
-              type="button"
-              class="zaqa-btn flex w-full items-center justify-center gap-2 border border-emerald-300/50 bg-emerald-500/12 py-2.5 font-semibold text-emerald-950 hover:bg-emerald-500/20"
-              @click="approveOpen = true"
-            >
-              Approve
-            </button>
+	              <button
+	                v-if="canShowLevel1Complete"
+	                type="button"
+	                class="inline-flex shrink-0 items-center gap-2 rounded-xl border border-sky-300/40 bg-sky-500/15 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-sky-500/25"
+	                @click="level1CompleteOpen = true"
+	              >
+	                Mark Level 1 complete
+	              </button>
 
-            <button
-              v-if="canShowReject"
-              type="button"
-              class="zaqa-btn flex w-full items-center justify-center gap-2 border border-rose-300/50 bg-rose-500/10 py-2.5 font-semibold text-rose-950 hover:bg-rose-500/18"
-              @click="rejectOpen = true"
-            >
-              Reject
-            </button>
-          </div>
-          <p
-            v-else
-            class="text-xs leading-relaxed text-text-muted"
-          >
-            No actions for your permissions or this task state. Open the parent application if you need application-level tools.
-          </p>
-        </div>
-      </section>
+	              <button
+	                v-if="canShowApprove"
+	                type="button"
+	                class="inline-flex shrink-0 items-center gap-2 rounded-xl border border-emerald-300/40 bg-emerald-500/15 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-emerald-500/25"
+	                @click="approveOpen = true"
+	              >
+	                Approve
+	              </button>
 
-      <section
-        v-if="
-          can.issue_certificate &&
+	              <button
+	                v-if="canShowReject"
+	                type="button"
+	                class="inline-flex shrink-0 items-center gap-2 rounded-xl border border-rose-300/40 bg-rose-600/20 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-rose-600/30"
+	                @click="rejectOpen = true"
+	              >
+	                Reject
+	              </button>
+
+	              <button
+	                v-if="qualification.can_issue_cveq_certificate && can.issue_certificate"
+	                type="button"
+	                class="inline-flex shrink-0 items-center gap-2 rounded-xl border border-emerald-300/40 bg-emerald-500/15 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-emerald-500/25"
+	                :disabled="issueCveqForm.processing"
+	                @click="submitIssueCveq"
+	              >
+	                Issue certificate
+	              </button>
+
+	              <a
+	                v-if="qualification.cveq_certificate?.admin_download_url && can.issue_certificate"
+	                :href="qualification.cveq_certificate.admin_download_url"
+	                target="_blank"
+	                rel="noopener"
+	                class="inline-flex shrink-0 items-center gap-2 rounded-xl border border-white/25 bg-white/10 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-white/20"
+	              >
+	                <FileDown class="h-4 w-4 shrink-0 opacity-90" aria-hidden="true" />
+	                Download certificate
+	              </a>
+
+	              <button
+	                v-if="qualification.can_reissue_cveq_certificate && can.issue_certificate"
+	                type="button"
+	                class="inline-flex shrink-0 items-center gap-2 rounded-xl border border-amber-300/40 bg-amber-500/15 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-amber-500/25"
+	                @click="submitReissueCveq"
+	              >
+	                Reissue certificate
+	              </button>
+	            </div>
+	          </div>
+	        </div>
+	      </section>
+
+	      <section
+	        v-if="
+	          can.issue_certificate &&
           (qualification.can_issue_cveq_certificate ||
             qualification.cveq_certificate ||
             qualification.can_reissue_cveq_certificate)
         "
         class="rounded-2xl border border-border bg-surface p-4 shadow-sm sm:p-5"
       >
-        <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div class="flex flex-col gap-3">
           <div>
             <h2 class="text-sm font-bold tracking-tight text-text-primary">CVEQ certificate</h2>
             <p class="mt-1 text-xs text-text-muted">
@@ -591,35 +535,6 @@ function formatTimelineAt(iso: string | null | undefined) {
             <p v-if="qualification.application?.payment_satisfied === false" class="mt-2 text-xs font-medium text-amber-900">
               Payment is not satisfied — certificate issuance is blocked until fees are covered.
             </p>
-          </div>
-          <div class="flex flex-wrap gap-2">
-            <button
-              v-if="qualification.can_issue_cveq_certificate && can.issue_certificate"
-              type="button"
-              class="zaqa-btn zaqa-btn-primary inline-flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-semibold"
-              :disabled="issueCveqForm.processing"
-              @click="submitIssueCveq"
-            >
-              Issue Certificate
-            </button>
-            <a
-              v-if="qualification.cveq_certificate?.admin_download_url"
-              :href="qualification.cveq_certificate.admin_download_url"
-              target="_blank"
-              rel="noopener"
-              class="zaqa-btn zaqa-btn-secondary inline-flex items-center justify-center gap-2 border border-border px-4 py-2.5 text-sm font-semibold"
-            >
-              <FileDown class="h-4 w-4 shrink-0" aria-hidden="true" />
-              Download Certificate
-            </a>
-            <button
-              v-if="qualification.can_reissue_cveq_certificate && can.issue_certificate"
-              type="button"
-              class="zaqa-btn inline-flex items-center justify-center gap-2 border border-amber-300/60 bg-amber-500/12 px-4 py-2.5 text-sm font-semibold text-amber-950 hover:bg-amber-500/20"
-              @click="submitReissueCveq"
-            >
-              Reissue (Super Admin)
-            </button>
           </div>
         </div>
         <div v-if="qualification.cveq_certificate?.certificate_number" class="mt-4 rounded-xl border border-border/70 bg-surface-muted/40 px-4 py-3 text-xs text-text-muted">
@@ -1012,6 +927,58 @@ function formatTimelineAt(iso: string | null | undefined) {
           "
         >
           Send back
+        </button>
+      </template>
+    </AdminActionModal>
+
+    <AdminActionModal
+      v-model="sendBackHistoryOpen"
+      title="Return & resubmission history"
+      description="This qualification was returned to the applicant at least once. Officer feedback is retained even after resubmission."
+    >
+      <div v-if="sendBackTimeline.length === 0" class="text-sm text-text-muted">
+        No history recorded for this qualification.
+      </div>
+      <div v-else class="max-h-[60vh] overflow-auto pr-1">
+        <ol class="space-y-3">
+          <li v-for="(row, idx) in sendBackTimeline" :key="`${row.kind}-${row.at}-${idx}`">
+            <div class="rounded-xl border border-border bg-surface-muted/30 px-4 py-3">
+              <div class="flex flex-wrap items-center justify-between gap-2">
+                <div class="flex items-center gap-2">
+                  <span
+                    class="inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-bold"
+                    :class="
+                      row.kind === 'send_back'
+                        ? 'border-amber-400/60 bg-amber-50 text-amber-950'
+                        : 'border-emerald-400/60 bg-emerald-50 text-emerald-950'
+                    "
+                  >
+                    <RotateCcw v-if="row.kind === 'send_back'" class="mr-1 h-3.5 w-3.5" aria-hidden="true" />
+                    <CornerDownLeft v-else class="mr-1 h-3.5 w-3.5" aria-hidden="true" />
+                    {{ row.kind === 'send_back' ? 'Returned to applicant' : 'Resubmitted' }}
+                  </span>
+                  <span v-if="row.author_name" class="text-xs text-text-muted">
+                    <span class="font-semibold text-text-primary">{{ row.author_name }}</span>
+                  </span>
+                </div>
+                <div class="text-xs font-medium text-text-muted">{{ formatTimelineAt(row.at) }}</div>
+              </div>
+
+              <div v-if="row.kind === 'send_back' && row.body && row.body.trim().length > 0" class="mt-3 whitespace-pre-wrap text-sm text-text-primary">
+                {{ row.body }}
+              </div>
+
+              <div v-if="row.kind !== 'send_back' && (row.title || row.description)" class="mt-3 text-sm text-text-primary">
+                <div v-if="row.title" class="font-semibold">{{ row.title }}</div>
+                <div v-if="row.description" class="mt-1 text-text-muted">{{ row.description }}</div>
+              </div>
+            </div>
+          </li>
+        </ol>
+      </div>
+      <template #footer>
+        <button type="button" class="zaqa-btn zaqa-btn-secondary px-4 py-2 text-sm" @click="sendBackHistoryOpen = false">
+          Close
         </button>
       </template>
     </AdminActionModal>
