@@ -21,19 +21,20 @@ class SendAssignmentNotification implements ShouldQueue
         $qualification = $event->qualification->loadMissing('application', 'country', 'awardingInstitution');
         $application = $qualification->application;
 
-        $emailLog = EmailLog::create([
-            'user_id' => $assignee->id,
-            'application_id' => $application->id,
-            'email' => $assignee->email,
-            'subject' => 'ZAQA: Qualification task assigned for review',
-            'template_key' => 'verification_assigned',
-            'status' => 'queued',
-            'sent_at' => null,
-        ]);
+        $email = trim((string) ($assignee->email ?? ''));
+        if ($email !== '') {
+            $emailLog = EmailLog::create([
+                'user_id' => $assignee->id,
+                'application_id' => $application->id,
+                'email' => $email,
+                'subject' => 'ZAQA: Qualification task assigned for review',
+                'template_key' => 'verification_assigned',
+                'status' => 'queued',
+                'sent_at' => null,
+            ]);
 
-        if ($assignee->email) {
             try {
-                Mail::to($assignee->email)->queue(new QualificationAssignedToVerifierMail(
+                Mail::to($email)->queue(new QualificationAssignedToVerifierMail(
                     qualification: $qualification,
                     assignedBy: $event->assignedBy,
                     assignedTo: $assignee,
@@ -48,8 +49,6 @@ class SendAssignmentNotification implements ShouldQueue
                 $emailLog->forceFill(['status' => 'failed'])->save();
                 throw $e;
             }
-        } else {
-            $emailLog->forceFill(['status' => 'skipped'])->save();
         }
 
         $message = sprintf(
@@ -58,31 +57,33 @@ class SendAssignmentNotification implements ShouldQueue
         );
 
         $provider = (string) config('services.sms.provider', 'log');
-        $smsLog = SmsLog::create([
-            'user_id' => $assignee->id,
-            'application_id' => $application->id,
-            'phone_number' => $assignee->phone_primary,
-            'message_type' => 'verification_assigned',
-            'message_body' => $message,
-            'provider' => $provider,
-            'status' => 'queued',
-            'provider_reference' => null,
-            'sent_at' => null,
-        ]);
+        $phone = trim((string) ($assignee->phone_primary ?? ''));
+        if ($phone !== '') {
+            $smsLog = SmsLog::create([
+                'user_id' => $assignee->id,
+                'application_id' => $application->id,
+                'phone_number' => $phone,
+                'message_type' => 'verification_assigned',
+                'message_body' => $message,
+                'provider' => $provider,
+                'status' => 'queued',
+                'provider_reference' => null,
+                'sent_at' => null,
+            ]);
 
-        try {
-            if ($provider === 'log') {
-                Log::info('SMS', ['to' => $assignee->phone_primary, 'message' => $message]);
+            try {
+                if ($provider === 'log') {
+                    Log::info('SMS', ['to' => $phone, 'message' => $message]);
+                }
+
+                $smsLog->forceFill([
+                    'status' => 'sent',
+                    'sent_at' => now(),
+                ])->save();
+            } catch (\Throwable $e) {
+                $smsLog->forceFill(['status' => 'failed'])->save();
+                throw $e;
             }
-
-            $smsLog->forceFill([
-                'status' => 'sent',
-                'sent_at' => now(),
-            ])->save();
-        } catch (\Throwable $e) {
-            $smsLog->forceFill(['status' => 'failed'])->save();
-            throw $e;
         }
     }
 }
-

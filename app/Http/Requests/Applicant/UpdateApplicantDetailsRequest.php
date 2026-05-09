@@ -26,12 +26,19 @@ class UpdateApplicantDetailsRequest extends FormRequest
 
         $base = [
             'email' => [
-                'required',
+                'nullable',
+                'required_without:phone_primary',
                 'email:rfc,dns',
                 'max:255',
                 Rule::unique('users', 'email')->ignore($user?->id),
             ],
-            'phone_primary' => ['required', 'string', 'max:30'],
+            'phone_primary' => [
+                'nullable',
+                'required_without:email',
+                'string',
+                'max:30',
+                Rule::unique('users', 'phone_primary')->ignore($user?->id),
+            ],
             'phone_secondary' => ['nullable', 'string', 'max:30'],
         ];
 
@@ -70,4 +77,3 @@ class UpdateApplicantDetailsRequest extends FormRequest
         });
     }
 }
-

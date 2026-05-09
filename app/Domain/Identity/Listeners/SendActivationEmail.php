@@ -17,6 +17,11 @@ class SendActivationEmail implements ShouldQueue
     {
         $user = $event->user;
 
+        $email = trim((string) ($user->email ?? ''));
+        if ($email === '') {
+            return;
+        }
+
         $activationUrl = route('activation.email.verify', [
             'token' => $event->token,
         ]);
@@ -26,7 +31,7 @@ class SendActivationEmail implements ShouldQueue
         $log = EmailLog::create([
             'user_id' => $user->id,
             'application_id' => null,
-            'email' => $user->email,
+            'email' => $email,
             'subject' => $subject,
             'template_key' => 'activation_email',
             'status' => 'queued',
@@ -34,7 +39,7 @@ class SendActivationEmail implements ShouldQueue
         ]);
 
         try {
-            Mail::to($user->email)->send(new ActivationEmailMail(
+            Mail::to($email)->send(new ActivationEmailMail(
                 recipientName: $user->name,
                 activationUrl: $activationUrl,
                 expiresAt: $event->expiresAt,
@@ -53,4 +58,3 @@ class SendActivationEmail implements ShouldQueue
         }
     }
 }
-

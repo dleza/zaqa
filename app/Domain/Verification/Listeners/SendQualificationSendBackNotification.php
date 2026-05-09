@@ -21,24 +21,23 @@ class SendQualificationSendBackNotification implements ShouldQueue
             return;
         }
 
+        $email = trim((string) ($user->email ?? ''));
+        if ($email === '') {
+            return;
+        }
+
         $emailLog = EmailLog::create([
             'user_id' => $user->id,
             'application_id' => $application->id,
-            'email' => $user->email,
+            'email' => $email,
             'subject' => 'ZAQA: Qualification amendment required',
             'template_key' => 'verification_qualification_sent_back',
             'status' => 'queued',
             'sent_at' => null,
         ]);
 
-        if (! $user->email) {
-            $emailLog->forceFill(['status' => 'skipped'])->save();
-
-            return;
-        }
-
         try {
-            Mail::to($user->email)->queue(new QualificationSentBackToApplicantMail(
+            Mail::to($email)->queue(new QualificationSentBackToApplicantMail(
                 qualification: $event->qualification,
                 application: $application,
                 applicant: $user,

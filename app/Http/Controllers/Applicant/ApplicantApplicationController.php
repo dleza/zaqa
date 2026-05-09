@@ -144,7 +144,11 @@ class ApplicantApplicationController extends Controller
 
     private function wizardApplicantStepComplete(Application $application, User $user): bool
     {
-        if (trim((string) ($user->email ?? '')) === '' || trim((string) ($user->phone_primary ?? '')) === '') {
+        $email = trim((string) ($user->email ?? ''));
+        $phone = trim((string) ($user->phone_primary ?? ''));
+
+        // Applicants may register with a single primary contact method (email OR phone).
+        if ($email === '' && $phone === '') {
             return false;
         }
 

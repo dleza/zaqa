@@ -17,24 +17,23 @@ class SendQualificationLevel1CompletedNotification implements ShouldQueue
     {
         $recipient = $event->assignedBy;
 
+        $email = trim((string) ($recipient->email ?? ''));
+        if ($email === '') {
+            return;
+        }
+
         $emailLog = EmailLog::create([
             'user_id' => $recipient->id,
             'application_id' => $event->qualification->application_id,
-            'email' => $recipient->email,
+            'email' => $email,
             'subject' => 'ZAQA: Level 1 completed qualification task',
             'template_key' => 'verification_qualification_level1_completed',
             'status' => 'queued',
             'sent_at' => null,
         ]);
 
-        if (! $recipient->email) {
-            $emailLog->forceFill(['status' => 'skipped'])->save();
-
-            return;
-        }
-
         try {
-            Mail::to($recipient->email)->queue(new QualificationLevel1CompletedMail(
+            Mail::to($email)->queue(new QualificationLevel1CompletedMail(
                 qualification: $event->qualification->fresh(['application']),
                 level1Actor: $event->level1Actor,
                 assignedBy: $recipient,

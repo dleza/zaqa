@@ -44,9 +44,13 @@ class ApplicantProfileEditController extends Controller
         $validated = $request->validated();
 
         DB::transaction(function () use ($user, $validated) {
-            $user->email = (string) $validated['email'];
-            $user->phone_primary = (string) $validated['phone_primary'];
-            $user->phone_secondary = $validated['phone_secondary'] ?? null;
+            $email = $this->nullIfBlank($validated['email'] ?? null);
+            $phonePrimary = $this->nullIfBlank($validated['phone_primary'] ?? null);
+            $phoneSecondary = $this->nullIfBlank($validated['phone_secondary'] ?? null);
+
+            $user->email = $email;
+            $user->phone_primary = $phonePrimary;
+            $user->phone_secondary = $phoneSecondary;
 
             if ($user->applicant_type === ApplicantType::Institution) {
                 $profile = $user->institutionProfile ?: new InstitutionProfile(['user_id' => $user->id]);
@@ -54,9 +58,9 @@ class ApplicantProfileEditController extends Controller
                 $profile->institution_name = (string) $validated['institution_name'];
                 $profile->tpin = $validated['tpin'] ?? null;
                 $profile->contact_person_name = (string) $validated['contact_person_name'];
-                $profile->email = (string) $validated['email'];
-                $profile->phone_primary = (string) $validated['phone_primary'];
-                $profile->phone_secondary = $validated['phone_secondary'] ?? null;
+                $profile->email = $email;
+                $profile->phone_primary = $phonePrimary;
+                $profile->phone_secondary = $phoneSecondary;
                 $profile->address_line_1 = $validated['address_line_1'] ?? null;
                 $profile->address_line_2 = $validated['address_line_2'] ?? null;
                 $profile->city = $validated['city'] ?? null;
@@ -74,9 +78,9 @@ class ApplicantProfileEditController extends Controller
                 $profile->surname = (string) $validated['surname'];
                 $profile->nrc_number = $validated['nrc_number'] ?? null;
                 $profile->passport_number = $validated['passport_number'] ?? null;
-                $profile->email = (string) $validated['email'];
-                $profile->phone_primary = (string) $validated['phone_primary'];
-                $profile->phone_secondary = $validated['phone_secondary'] ?? null;
+                $profile->email = $email;
+                $profile->phone_primary = $phonePrimary;
+                $profile->phone_secondary = $phoneSecondary;
                 $profile->address_line_1 = $validated['address_line_1'] ?? null;
                 $profile->address_line_2 = $validated['address_line_2'] ?? null;
                 $profile->city = $validated['city'] ?? null;
@@ -158,5 +162,11 @@ class ApplicantProfileEditController extends Controller
             ]),
         ];
     }
-}
 
+    private function nullIfBlank(mixed $value): ?string
+    {
+        $str = trim((string) ($value ?? ''));
+
+        return $str === '' ? null : $str;
+    }
+}

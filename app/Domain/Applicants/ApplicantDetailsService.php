@@ -29,17 +29,21 @@ class ApplicantDetailsService
                 'institution_profile' => $user->institutionProfile?->toArray(),
             ];
 
-            $user->email = (string) $data['email'];
-            $user->phone_primary = (string) $data['phone_primary'];
-            $user->phone_secondary = $data['phone_secondary'] ?? null;
+            $email = $this->nullIfBlank($data['email'] ?? null);
+            $phonePrimary = $this->nullIfBlank($data['phone_primary'] ?? null);
+            $phoneSecondary = $this->nullIfBlank($data['phone_secondary'] ?? null);
+
+            $user->email = $email;
+            $user->phone_primary = $phonePrimary;
+            $user->phone_secondary = $phoneSecondary;
 
             if ($user->applicant_type === ApplicantType::Institution) {
                 $profile = $user->institutionProfile ?: new InstitutionProfile(['user_id' => $user->id]);
 
                 $profile->institution_name = (string) $data['institution_name'];
-                $profile->email = (string) $data['email'];
-                $profile->phone_primary = (string) $data['phone_primary'];
-                $profile->phone_secondary = $data['phone_secondary'] ?? null;
+                $profile->email = $email;
+                $profile->phone_primary = $phonePrimary;
+                $profile->phone_secondary = $phoneSecondary;
                 $profile->tpin = $data['tpin'] ?? null;
                 $profile->contact_person_name = (string) $data['contact_person_name'];
 
@@ -54,9 +58,9 @@ class ApplicantDetailsService
                 $profile->surname = (string) $data['surname'];
                 $profile->nrc_number = $data['nrc_number'] ?? null;
                 $profile->passport_number = $data['passport_number'] ?? null;
-                $profile->email = (string) $data['email'];
-                $profile->phone_primary = (string) $data['phone_primary'];
-                $profile->phone_secondary = $data['phone_secondary'] ?? null;
+                $profile->email = $email;
+                $profile->phone_primary = $phonePrimary;
+                $profile->phone_secondary = $phoneSecondary;
 
                 $profile->save();
 
@@ -87,5 +91,11 @@ class ApplicantDetailsService
             );
         });
     }
-}
 
+    private function nullIfBlank(mixed $value): ?string
+    {
+        $str = trim((string) ($value ?? ''));
+
+        return $str === '' ? null : $str;
+    }
+}

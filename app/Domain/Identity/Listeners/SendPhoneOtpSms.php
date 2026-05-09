@@ -16,6 +16,11 @@ class SendPhoneOtpSms implements ShouldQueue
     {
         $user = $event->user;
 
+        $phone = trim((string) ($user->phone_primary ?? ''));
+        if ($phone === '') {
+            return;
+        }
+
         $message = sprintf(
             'Your ZAQA OTP code is %s. It expires at %s.',
             $event->code,
@@ -27,7 +32,7 @@ class SendPhoneOtpSms implements ShouldQueue
         $log = SmsLog::create([
             'user_id' => $user->id,
             'application_id' => null,
-            'phone_number' => $user->phone_primary,
+            'phone_number' => $phone,
             'message_type' => 'activation_otp',
             'message_body' => $message,
             'provider' => $provider,
@@ -39,7 +44,7 @@ class SendPhoneOtpSms implements ShouldQueue
         try {
             if ($provider === 'log') {
                 Log::info('SMS OTP', [
-                    'to' => $user->phone_primary,
+                    'to' => $phone,
                     'message' => $message,
                 ]);
             }
@@ -57,4 +62,3 @@ class SendPhoneOtpSms implements ShouldQueue
         }
     }
 }
-

@@ -86,13 +86,13 @@ function removeIdentityDocument() {
 
         <div class="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div class="sm:col-span-2">
-            <label class="text-sm font-medium">Email</label>
+            <label class="text-sm font-medium">Email (optional)</label>
             <input v-model="form.email" type="email" class="zaqa-input" />
             <InputError :message="form.errors.email" />
           </div>
 
           <div>
-            <label class="text-sm font-medium">Primary phone</label>
+            <label class="text-sm font-medium">Primary phone (optional)</label>
             <input v-model="form.phone_primary" class="zaqa-input" />
             <InputError :message="form.errors.phone_primary" />
           </div>
@@ -100,6 +100,10 @@ function removeIdentityDocument() {
             <label class="text-sm font-medium">Secondary phone (optional)</label>
             <input v-model="form.phone_secondary" class="zaqa-input" />
             <InputError :message="form.errors.phone_secondary" />
+          </div>
+
+          <div class="sm:col-span-2 text-xs text-text-muted">
+            Provide at least one contact method: <span class="font-semibold text-text-primary">email</span> or <span class="font-semibold text-text-primary">primary phone</span>.
           </div>
         </div>
 
@@ -243,4 +247,3 @@ function removeIdentityDocument() {
     </div>
   </ApplicantLayout>
 </template>
-

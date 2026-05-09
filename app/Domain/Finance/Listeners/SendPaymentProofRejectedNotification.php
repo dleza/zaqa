@@ -24,19 +24,20 @@ class SendPaymentProofRejectedNotification implements ShouldQueue
             return;
         }
 
-        $emailLog = EmailLog::create([
-            'user_id' => $user->id,
-            'application_id' => $application->id,
-            'email' => $user->email,
-            'subject' => 'ZAQA: Payment proof rejected',
-            'template_key' => 'finance_payment_rejected',
-            'status' => 'queued',
-            'sent_at' => null,
-        ]);
+        $email = trim((string) ($user->email ?? ''));
+        if ($email !== '') {
+            $emailLog = EmailLog::create([
+                'user_id' => $user->id,
+                'application_id' => $application->id,
+                'email' => $email,
+                'subject' => 'ZAQA: Payment proof rejected',
+                'template_key' => 'finance_payment_rejected',
+                'status' => 'queued',
+                'sent_at' => null,
+            ]);
 
-        if ($user->email) {
             try {
-                Mail::to($user->email)->queue(new PaymentProofRejectedMail(
+                Mail::to($email)->queue(new PaymentProofRejectedMail(
                     payment: $payment,
                     application: $application,
                     applicant: $user,
@@ -52,8 +53,6 @@ class SendPaymentProofRejectedNotification implements ShouldQueue
                 $emailLog->forceFill(['status' => 'failed'])->save();
                 throw $e;
             }
-        } else {
-            $emailLog->forceFill(['status' => 'skipped'])->save();
         }
 
         $message = sprintf(
@@ -63,30 +62,33 @@ class SendPaymentProofRejectedNotification implements ShouldQueue
         );
         $provider = (string) config('services.sms.provider', 'log');
 
-        $smsLog = SmsLog::create([
-            'user_id' => $user->id,
-            'application_id' => $application->id,
-            'phone_number' => $user->phone_primary,
-            'message_type' => 'finance_payment_rejected',
-            'message_body' => $message,
-            'provider' => $provider,
-            'status' => 'queued',
-            'provider_reference' => null,
-            'sent_at' => null,
-        ]);
+        $phone = trim((string) ($user->phone_primary ?? ''));
+        if ($phone !== '') {
+            $smsLog = SmsLog::create([
+                'user_id' => $user->id,
+                'application_id' => $application->id,
+                'phone_number' => $phone,
+                'message_type' => 'finance_payment_rejected',
+                'message_body' => $message,
+                'provider' => $provider,
+                'status' => 'queued',
+                'provider_reference' => null,
+                'sent_at' => null,
+            ]);
 
-        try {
-            if ($provider === 'log') {
-                Log::info('SMS', ['to' => $user->phone_primary, 'message' => $message]);
+            try {
+                if ($provider === 'log') {
+                    Log::info('SMS', ['to' => $phone, 'message' => $message]);
+                }
+
+                $smsLog->forceFill([
+                    'status' => 'sent',
+                    'sent_at' => now(),
+                ])->save();
+            } catch (\Throwable $e) {
+                $smsLog->forceFill(['status' => 'failed'])->save();
+                throw $e;
             }
-
-            $smsLog->forceFill([
-                'status' => 'sent',
-                'sent_at' => now(),
-            ])->save();
-        } catch (\Throwable $e) {
-            $smsLog->forceFill(['status' => 'failed'])->save();
-            throw $e;
         }
     }
 }

@@ -171,8 +171,9 @@ function evaluateApplicantStep(): { ok: boolean; missing: string[] } {
 
   const emailEff = trimStr(applicantForm.email) || trimStr(props.applicant?.email)
   const phoneEff = trimStr(applicantForm.phone_primary) || trimStr(props.applicant?.phone_primary)
-  if (!emailEff) missing.push('Enter your email address in the Communication section.')
-  if (!phoneEff) missing.push('Enter your primary phone number.')
+  if (!emailEff && !phoneEff) {
+    missing.push('Provide at least one contact method (email or primary phone).')
+  }
 
   const applicantTypeStr = trimStr(props.applicant?.applicant_type ?? props.application?.applicant_type)
 
@@ -1047,13 +1048,13 @@ onBeforeUnmount(() => {
 
           <form class="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2" @submit.prevent="saveApplicantDetails">
             <div class="sm:col-span-2">
-              <label class="text-sm font-medium">Email</label>
+              <label class="text-sm font-medium">Email (optional)</label>
               <input v-model="applicantForm.email" type="email" class="zaqa-input" />
               <InputError :message="applicantForm.errors.email" />
             </div>
 
             <div>
-              <label class="text-sm font-medium">Primary phone</label>
+              <label class="text-sm font-medium">Primary phone (optional)</label>
               <input v-model="applicantForm.phone_primary" class="zaqa-input" />
               <InputError :message="applicantForm.errors.phone_primary" />
             </div>
@@ -1061,6 +1062,10 @@ onBeforeUnmount(() => {
               <label class="text-sm font-medium">Secondary phone (optional)</label>
               <input v-model="applicantForm.phone_secondary" class="zaqa-input" />
               <InputError :message="applicantForm.errors.phone_secondary" />
+            </div>
+
+            <div class="sm:col-span-2 text-xs text-text-muted">
+              Provide at least one contact method: <span class="font-semibold text-text-primary">email</span> or <span class="font-semibold text-text-primary">primary phone</span>.
             </div>
 
             <template v-if="applicantType === 'institution'">
