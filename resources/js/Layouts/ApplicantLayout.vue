@@ -3,6 +3,7 @@ import { computed, ref } from 'vue'
 import { Link, usePage } from '@inertiajs/vue3'
 import FlashMessages from '@/Components/FlashMessages.vue'
 import ApplicantSidebar from '@/Components/ApplicantSidebar.vue'
+import TopbarNotificationsMenu from '@/Components/TopbarNotificationsMenu.vue'
 import { applicantNavSections } from '@/Layouts/applicantNav'
 import { Menu, X } from 'lucide-vue-next'
 import { zaqaLogoUrl } from '@/constants/zaqaLogo'
@@ -51,6 +52,7 @@ const applicantTypeLabel = computed(() => {
         </Link>
 
         <div class="flex items-center gap-2">
+          <TopbarNotificationsMenu v-if="user" variant="brand" basePath="/applicant/notifications" />
           <Link href="/logout" method="post" as="button" class="zaqa-btn zaqa-btn-ghost-on-brand px-3 py-2 text-sm">
             Log out
           </Link>
@@ -126,6 +128,7 @@ const applicantTypeLabel = computed(() => {
             </div>
 
             <div class="flex items-center gap-3">
+              <TopbarNotificationsMenu v-if="user" basePath="/applicant/notifications" />
               <div class="text-right">
                 <div class="text-sm font-semibold text-text-primary">{{ user?.name }}</div>
                 <div class="text-xs text-text-muted">

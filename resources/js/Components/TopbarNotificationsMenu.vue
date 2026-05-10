@@ -6,9 +6,11 @@ import { Bell, Check, ListChecks } from 'lucide-vue-next'
 const props = withDefaults(
   defineProps<{
     variant?: 'surface' | 'brand'
+    basePath?: string
   }>(),
   {
     variant: 'surface',
+    basePath: '/admin/notifications',
   },
 )
 
@@ -84,7 +86,7 @@ function timeAgo(iso: string | null | undefined): string {
 
 function markAllRead() {
   router.post(
-    '/admin/notifications/read-all',
+    `${props.basePath}/read-all`,
     {},
     {
       preserveScroll: true,
@@ -97,7 +99,7 @@ function markAllRead() {
 
 function markRead(id: string) {
   router.post(
-    `/admin/notifications/${id}/read`,
+    `${props.basePath}/${id}/read`,
     {},
     {
       preserveScroll: true,
@@ -148,7 +150,7 @@ function markRead(id: string) {
             <ListChecks class="h-4 w-4" aria-hidden="true" />
             Mark all read
           </button>
-          <Link href="/admin/notifications" class="zaqa-btn zaqa-btn-secondary h-9 px-3 py-2 text-xs" @click="closeMenu">
+          <Link :href="props.basePath" class="zaqa-btn zaqa-btn-secondary h-9 px-3 py-2 text-xs" @click="closeMenu">
             View all
           </Link>
         </div>
@@ -164,7 +166,7 @@ function markRead(id: string) {
             <div class="flex items-start justify-between gap-3">
               <Link
                 class="min-w-0 text-left"
-                :href="`/admin/notifications/${n.id}/open`"
+                :href="`${props.basePath}/${n.id}/open`"
                 method="post"
                 as="button"
               >
@@ -192,4 +194,3 @@ function markRead(id: string) {
     </div>
   </div>
 </template>
-

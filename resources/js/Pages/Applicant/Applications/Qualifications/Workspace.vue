@@ -65,28 +65,42 @@ type IdentifierType = 'certificate_number' | 'student_number' | 'examination_num
 const identifierType = ref<IdentifierType>('certificate_number')
 const identifierValue = ref('')
 
-const form = useForm({
-  qualification_id: null as number | null,
-  country_id: '' as number | string | '',
-  country_name_other: '',
-  awarding_institution_id: '' as number | string | 'other' | '',
-  awarding_institution_name_other: '',
-  awarding_institution_name: '' as string,
-  certificate_number: '',
-  student_number: '',
-  examination_number: '',
-  title_of_qualification: '',
-  award_date: '',
-  qualification_type_id: '' as number | string | '',
-  transcript_reason: '',
-  subject_results: [] as Array<{ certificate_subject_id: number | ''; grade: string }>,
-})
+function blankQualificationForm() {
+  return {
+    qualification_id: null as number | null,
+    country_id: '' as number | string | '',
+    country_name_other: '',
+    awarding_institution_id: '' as number | string | 'other' | '',
+    awarding_institution_name_other: '',
+    awarding_institution_name: '' as string,
+    certificate_number: '',
+    student_number: '',
+    examination_number: '',
+    title_of_qualification: '',
+    award_date: '',
+    qualification_type_id: '' as number | string | '',
+    transcript_reason: '',
+    subject_results: [] as Array<{ certificate_subject_id: number | ''; grade: string }>,
+  }
+}
+
+const form = useForm(blankQualificationForm())
 
 /** Staged files uploaded in the same action as qualification save */
 const pendingCertificateFile = ref<File | null>(null)
 const pendingTranscriptFile = ref<File | null>(null)
 const pendingConsentFile = ref<File | null>(null)
 const savingAll = ref(false)
+
+const certificateFileInputEl = ref<HTMLInputElement | null>(null)
+const transcriptFileInputEl = ref<HTMLInputElement | null>(null)
+const consentFileInputEl = ref<HTMLInputElement | null>(null)
+
+function clearFileInputs() {
+  if (certificateFileInputEl.value) certificateFileInputEl.value.value = ''
+  if (transcriptFileInputEl.value) transcriptFileInputEl.value.value = ''
+  if (consentFileInputEl.value) consentFileInputEl.value.value = ''
+}
 
 function syncIdentifierFromForm() {
   const cert = (form.certificate_number ?? '').toString().trim()
@@ -180,10 +194,6 @@ const institutionConsentUrl = computed(() => {
   return institutionMeta.value?.consent_form_url ?? null
 })
 
-function resetSubjectRows() {
-  form.subject_results = []
-}
-
 function addSubjectRow() {
   form.subject_results.push({ certificate_subject_id: '', grade: '' })
 }
@@ -234,6 +244,7 @@ async function initForm() {
   pendingCertificateFile.value = null
   pendingTranscriptFile.value = null
   pendingConsentFile.value = null
+  clearFileInputs()
   savingAll.value = false
   institutionMeta.value = null
 
@@ -254,10 +265,10 @@ async function initForm() {
   }
 
   modalQualId.value = null
+  const defaults = blankQualificationForm()
+  if (zambiaCountryId.value) defaults.country_id = zambiaCountryId.value
+  form.defaults(defaults)
   form.reset()
-  form.qualification_id = null
-  if (zambiaCountryId.value) form.country_id = zambiaCountryId.value
-  resetSubjectRows()
   syncIdentifierFromForm()
 }
 
@@ -709,6 +720,7 @@ const holderSummaryId = computed(() => {
                 <div class="sm:col-span-2">
                   <label class="text-sm font-medium">Certificate or qualification document</label>
                   <input
+                    ref="certificateFileInputEl"
                     type="file"
                     class="zaqa-input"
                     accept=".pdf,.jpg,.jpeg,.png,.webp,application/pdf,image/jpeg,image/png,image/webp"
@@ -722,6 +734,7 @@ const holderSummaryId = computed(() => {
                     <span v-if="!isForeignAwarding" class="font-normal text-text-muted">(if applicable)</span>
                   </label>
                   <input
+                    ref="transcriptFileInputEl"
                     type="file"
                     class="zaqa-input"
                     accept=".pdf,.jpg,.jpeg,.png,.webp,application/pdf,image/jpeg,image/png,image/webp"
@@ -766,6 +779,7 @@ const holderSummaryId = computed(() => {
                 <div>
                   <label class="text-sm font-medium">Signed consent file</label>
                   <input
+                    ref="consentFileInputEl"
                     type="file"
                     accept=".pdf,.doc,.docx,.jpg,.jpeg,.png,.webp,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,image/jpeg,image/png,image/webp"
                     class="zaqa-input"

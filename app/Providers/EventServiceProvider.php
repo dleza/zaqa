@@ -26,6 +26,7 @@ use App\Domain\Verification\Events\QualificationLevel1Completed;
 use App\Domain\Verification\Events\QualificationSentBackToApplicant;
 use App\Domain\Verification\Listeners\CreateQualificationAssignmentPortalNotification;
 use App\Domain\Verification\Listeners\CreateQualificationLevel1CompletedPortalNotification;
+use App\Domain\Verification\Listeners\CreateQualificationSendBackApplicantPortalNotification;
 use App\Domain\Verification\Listeners\SendAssignmentNotification;
 use App\Domain\Verification\Listeners\SendLevel1CompletedNotification;
 use App\Domain\Verification\Listeners\SendQualificationLevel1CompletedNotification;
@@ -71,6 +72,7 @@ class EventServiceProvider extends ServiceProvider
         ],
         QualificationSentBackToApplicant::class => [
             SendQualificationSendBackNotification::class,
+            CreateQualificationSendBackApplicantPortalNotification::class,
         ],
         QualificationLevel1Completed::class => [
             SendQualificationLevel1CompletedNotification::class,

@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Domain\Verification\AssignmentService;
 use App\Domain\Verification\QualificationLevel1ReviewService;
+use App\Domain\Verification\QualificationSendBackService;
 use App\Enums\ApplicationStatus;
 use App\Enums\VerificationState;
 use App\Models\Application;
@@ -154,6 +155,28 @@ class VerificationQualificationNotificationsTest extends TestCase
             'notifiable_type' => User::class,
             'notifiable_id' => $level1a->id,
             'type' => 'verification.qualification_reassigned',
+        ]);
+    }
+
+    public function test_applicant_receives_portal_notification_when_qualification_sent_back(): void
+    {
+        $application = $this->makeSubmittedApplication();
+        $qualification = $this->makeQualification($application);
+
+        $actor = User::factory()->activated()->create(['applicant_type' => null]);
+        $actor->givePermissionTo('verification.level2.review');
+
+        /** @var QualificationSendBackService $sendBack */
+        $sendBack = $this->app->make(QualificationSendBackService::class);
+        $sendBack->sendBackToApplicant($qualification, $actor, 'Please attach a clearer certificate scan.');
+
+        $applicant = $application->applicant()->firstOrFail();
+
+        $this->assertDatabaseHas('notifications', [
+            'notifiable_type' => User::class,
+            'notifiable_id' => $applicant->id,
+            'type' => 'verification.qualification_sent_back_to_applicant',
+            'read_at' => null,
         ]);
     }
 

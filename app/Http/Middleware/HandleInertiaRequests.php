@@ -38,10 +38,10 @@ class HandleInertiaRequests extends Middleware
                 'permissions' => $request->user()
                     ? $request->user()->getAllPermissions()->pluck('name')->values()->all()
                     : [],
-                'notifications_unread_count' => fn () => $request->user() && $request->user()->applicant_type === null
+                'notifications_unread_count' => fn () => $request->user()
                     ? $request->user()->unreadNotifications()->count()
                     : 0,
-                'notifications' => fn () => $request->user() && $request->user()->applicant_type === null
+                'notifications' => fn () => $request->user()
                     ? $request->user()
                         ->notifications()
                         ->orderByDesc('created_at')

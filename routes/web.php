@@ -38,6 +38,7 @@ use App\Http\Controllers\Applicant\ApplicantBillingController;
 use App\Http\Controllers\Applicant\ApplicantConsentController;
 use App\Http\Controllers\Applicant\ApplicantDetailsController;
 use App\Http\Controllers\Applicant\ApplicantDocumentController;
+use App\Http\Controllers\Applicant\ApplicantNotificationsController;
 use App\Http\Controllers\Applicant\ApplicantPaymentController;
 use App\Http\Controllers\Applicant\ApplicantProfileController;
 use App\Http\Controllers\Applicant\ApplicantProfileEditController;
@@ -103,6 +104,11 @@ Route::middleware('auth')->group(function () {
 
     Route::middleware(EnsureAccountIsActive::class)->prefix('applicant')->name('applicant.')->group(function () {
         Route::get('/dashboard', [DashboardController::class, 'index'])->name('dashboard');
+
+        Route::get('/notifications', [ApplicantNotificationsController::class, 'index'])->name('notifications.index');
+        Route::post('/notifications/read-all', [ApplicantNotificationsController::class, 'markAllRead'])->name('notifications.read_all');
+        Route::post('/notifications/{notification}/read', [ApplicantNotificationsController::class, 'markRead'])->name('notifications.read');
+        Route::post('/notifications/{notification}/open', [ApplicantNotificationsController::class, 'open'])->name('notifications.open');
 
         Route::get('/applications', [ApplicantApplicationController::class, 'index'])->name('applications.index');
         Route::get('/applications/new', [ApplicantApplicationController::class, 'create'])->name('applications.create');
