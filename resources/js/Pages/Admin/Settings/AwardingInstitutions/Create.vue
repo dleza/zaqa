@@ -79,7 +79,7 @@ function submit() {
             <input
               type="file"
               class="mt-2 block w-full text-sm text-text-primary file:mr-4 file:rounded-lg file:border-0 file:bg-surface-muted file:px-4 file:py-2 file:text-sm file:font-semibold file:text-text-primary hover:file:bg-surface-muted/70"
-              accept=".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+              accept=".pdf,.doc,.docx,.png,.jpg,.jpeg,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,image/png,image/jpeg"
               @change="(e) => (form.consent_form = (e.target as HTMLInputElement).files?.[0] ?? null)"
             />
             <div v-if="form.errors.consent_form" class="mt-1 text-xs text-danger">{{ form.errors.consent_form }}</div>

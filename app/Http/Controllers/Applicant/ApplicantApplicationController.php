@@ -436,6 +436,32 @@ class ApplicantApplicationController extends Controller
         return $this->buildEditInertiaResponse($request, $application, $qualification->id);
     }
 
+    public function createQualificationWorkspace(Request $request, Application $application): Response|RedirectResponse
+    {
+        $this->authorize('view', $application);
+
+        if (! $request->user()->can('update', $application)) {
+            return redirect()->route('applicant.applications.show', $application);
+        }
+
+        return $this->buildQualificationWorkspaceInertiaResponse($request, $application, null);
+    }
+
+    public function editQualificationWorkspace(Request $request, Application $application, Qualification $qualification): Response|RedirectResponse
+    {
+        $this->authorize('view', $application);
+
+        if ((int) $qualification->application_id !== (int) $application->id) {
+            abort(404);
+        }
+
+        if (! $request->user()->can('update', $application)) {
+            return redirect()->route('applicant.applications.show', $application);
+        }
+
+        return $this->buildQualificationWorkspaceInertiaResponse($request, $application, (int) $qualification->id);
+    }
+
     private function buildEditInertiaResponse(Request $request, Application $application, ?int $amendmentQualificationId): Response
     {
         $application->load([
@@ -535,6 +561,52 @@ class ApplicantApplicationController extends Controller
             'declarationsCopy' => (array) config('applicant_wizard.declarations'),
             'applicant' => $this->applicantPayload($request),
             'amendmentQualificationId' => $amendmentQualificationId,
+        ]);
+    }
+
+    private function buildQualificationWorkspaceInertiaResponse(Request $request, Application $application, ?int $qualificationId): Response
+    {
+        $application->load([
+            'qualifications.subjectResults',
+            'qualifications.certificates',
+            'qualifications.country',
+            'qualifications.awardingInstitution.country',
+            'qualifications.qualificationTypeMaster.billingCategory',
+            'qualifications.consentForm',
+            'documents',
+            'statusHistories',
+            'invoice',
+            'payments.proofDocument',
+        ]);
+        $request->user()?->loadMissing(['applicantProfile', 'institutionProfile']);
+
+        $certificateSubjects = CertificateSubject::query()
+            ->active()
+            ->orderBy('sort_order')
+            ->orderBy('name')
+            ->get(['id', 'name'])
+            ->map(fn (CertificateSubject $s) => ['id' => $s->id, 'name' => $s->name])
+            ->all();
+
+        $qualificationTypes = QualificationType::query()
+            ->where('is_active', true)
+            ->orderBy('sort_order')
+            ->get()
+            ->map(fn (QualificationType $t) => [
+                'id' => $t->id,
+                'zqf_level_code' => $t->zqf_level_code,
+                'level_label' => $t->level_label,
+                'name' => $t->name,
+                'requires_subject_results' => (bool) $t->requires_subject_results,
+            ])
+            ->all();
+
+        return Inertia::render('Applicant/Applications/Qualifications/Workspace', [
+            'application' => $this->applicationPayload($request, $application),
+            'qualificationId' => $qualificationId,
+            'countries' => $this->countryOptions(),
+            'qualificationTypes' => $qualificationTypes,
+            'certificateSubjects' => $certificateSubjects,
         ]);
     }
 

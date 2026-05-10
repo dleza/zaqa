@@ -36,7 +36,6 @@ class AwardingInstitution extends Model
             return null;
         }
 
-        return URL::signedRoute('reference.awarding_institutions.consent_form', ['awardingInstitution' => $this->id]);
+        return URL::signedRoute('applicant.reference.awarding_institutions.consent_form', ['awardingInstitution' => $this->id]);
     }
 }
-

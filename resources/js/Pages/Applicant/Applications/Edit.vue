@@ -7,7 +7,6 @@ import WizardStepper from '@/Components/WizardStepper.vue'
 import WizardShell from '@/Components/WizardShell.vue'
 import WizardFooterBar from '@/Components/WizardFooterBar.vue'
 import DocumentManager from '@/Components/DocumentManager.vue'
-import QualificationWorkspaceModal from '@/Components/Applicant/QualificationWorkspaceModal.vue'
 import Swal from 'sweetalert2'
 import {
   AlertCircle,
@@ -378,27 +377,23 @@ const selectedQualification = computed<any | null>(() => {
   return qualifications.value.find((q) => Number(q.id) === Number(selectedQualificationId.value)) ?? null
 })
 
-const zambiaCountryId = computed(() => {
-  const byIso = props.countries?.find((c: any) => (c.iso_code ?? '').toString().toUpperCase() === 'ZMB')
-  if (byIso?.id) return byIso.id
-  const byName = props.countries?.find((c: any) => (c.name ?? '').toString().toLowerCase() === 'zambia')
-  return byName?.id ?? null
-})
-
-const qualificationWorkspaceOpen = ref(false)
-const qualificationWorkspaceMode = ref<'add' | 'edit'>('add')
-const qualificationWorkspaceQual = ref<any | null>(null)
-
 function openQualificationWorkspace(mode: 'add' | 'edit', qual?: any) {
   if (applicationLocked.value && mode === 'add') return
-  qualificationWorkspaceMode.value = mode
-  qualificationWorkspaceQual.value = qual ?? null
   if (qual?.id) selectedQualificationId.value = qual.id
-  qualificationWorkspaceOpen.value = true
-}
-
-function onQualificationWorkspaceSaved(payload: { qualificationId: number | null }) {
-  if (payload.qualificationId) selectedQualificationId.value = payload.qualificationId
+  const base = `/applicant/applications/${props.application.id}`
+  if (mode === 'add') {
+    router.visit(`${base}/qualifications/create`, {
+      data: { return: `${base}/edit?step=qualification` },
+      preserveScroll: true,
+    })
+    return
+  }
+  if (qual?.id) {
+    router.visit(`${base}/qualifications/${qual.id}/edit`, {
+      data: { return: `${base}/edit?step=qualification` },
+      preserveScroll: true,
+    })
+  }
 }
 
 function removeQualification(id: number) {
@@ -1962,19 +1957,6 @@ onBeforeUnmount(() => {
       <!-- Sidebar intentionally removed from applicant wizard -->
     </WizardShell>
 
-    <QualificationWorkspaceModal
-      v-model="qualificationWorkspaceOpen"
-      :mode="qualificationWorkspaceMode"
-      :application-id="application.id"
-      :application="application"
-      :countries="countries"
-      :qualification-types="qualificationTypes"
-      :certificate-subjects="certificateSubjects"
-      :editing-qualification="qualificationWorkspaceMode === 'edit' ? qualificationWorkspaceQual : null"
-      :locked="applicationLocked"
-      :zambia-country-id="zambiaCountryId"
-      @saved="onQualificationWorkspaceSaved"
-    />
     </div>
   </ApplicantLayout>
 </template>

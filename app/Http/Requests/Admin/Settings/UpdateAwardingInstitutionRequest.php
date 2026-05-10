@@ -25,7 +25,7 @@ class UpdateAwardingInstitutionRequest extends FormRequest
             'name' => ['required', 'string', 'max:255'],
             'is_active' => ['required', 'boolean'],
             'sort_order' => ['nullable', 'integer', 'min:0', 'max:1000000'],
-            'consent_form' => ['nullable', 'file', 'max:'.$maxKb, 'mimes:pdf,doc,docx'],
+            'consent_form' => ['nullable', 'file', 'max:'.$maxKb, 'mimes:pdf,doc,docx,png,jpg,jpeg'],
             'remove_consent_form' => ['nullable', 'boolean'],
             'unique_scope' => [
                 function () use ($inst) {
@@ -35,4 +35,3 @@ class UpdateAwardingInstitutionRequest extends FormRequest
         ];
     }
 }
-
