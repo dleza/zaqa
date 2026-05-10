@@ -11,11 +11,10 @@ const props = defineProps<{
 }>()
 
 const labels = [
-  { value: 1, label: 'Very poor' },
-  { value: 2, label: 'Poor' },
-  { value: 3, label: 'Fair' },
-  { value: 4, label: 'Good' },
-  { value: 5, label: 'Excellent' },
+  { value: 1, label: 'Poor', range: 'Below 50%' },
+  { value: 2, label: 'Average', range: '51–64%' },
+  { value: 3, label: 'Commendable', range: '65–84%' },
+  { value: 4, label: 'Exceptional', range: 'Above 85%' },
 ]
 
 const selected = ref<number>(props.existingFeedback?.rating_value ?? 0)
@@ -92,12 +91,20 @@ function submit() {
                   v-for="l in labels"
                   :key="l.value"
                   type="button"
-                  class="inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-sm font-semibold transition"
+                  class="inline-flex items-start gap-2 rounded-xl border px-3 py-2 text-left text-sm font-semibold transition"
                   :class="selected === l.value ? 'border-brand/30 bg-brand/10 text-brand' : 'border-border bg-surface text-text-muted hover:bg-surface-muted'"
                   @click="setRating(l.value)"
                 >
-                  <Star class="h-4 w-4" :class="selected >= l.value ? 'text-accent' : 'text-text-muted'" aria-hidden="true" />
-                  <span>{{ l.label }}</span>
+                  <Star class="mt-0.5 h-4 w-4" :class="selected >= l.value ? 'text-accent' : 'text-text-muted'" aria-hidden="true" />
+                  <span class="flex flex-col leading-tight">
+                    <span>{{ l.label }}</span>
+                    <span
+                      class="text-[11px] font-medium"
+                      :class="selected === l.value ? 'text-brand/80' : 'text-text-muted'"
+                    >
+                      {{ l.range }}
+                    </span>
+                  </span>
                 </button>
               </div>
               <div v-if="form.errors.rating_value" class="mt-2 text-sm text-danger">{{ form.errors.rating_value }}</div>
@@ -133,4 +140,3 @@ function submit() {
     </div>
   </ApplicantLayout>
 </template>
-

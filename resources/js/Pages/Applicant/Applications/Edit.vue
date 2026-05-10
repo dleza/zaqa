@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, watch, withDefaults } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch, withDefaults } from 'vue'
 import { Link, router, useForm, usePage } from '@inertiajs/vue3'
 import ApplicantLayout from '@/Layouts/ApplicantLayout.vue'
 import InputError from '@/Components/InputError.vue'
@@ -416,6 +416,7 @@ function saveDeclarations() {
           const next = stepNav.value.next
           if (next) {
             goToStep(next)
+            void nextTick().then(() => window.scrollTo({ top: 0, behavior: 'smooth' }))
           }
         },
         onFinish: () => {
@@ -449,10 +450,9 @@ async function submitApplication() {
 
   const result = await Swal.fire({
     icon: 'warning',
-    title: 'Submit and lock application?',
+    title: 'Submit application?',
     html: `<div style="text-align:left">
-      <div><strong>Once you submit, you will not be able to change this application</strong> unless ZAQA reopens or returns it for amendment.</div>
-      <div style="margin-top:8px; font-size:13px; opacity:.9">Please confirm you are ready to submit for processing.</div>
+      <div><strong>Once you submit, you will not be able to change this application</strong>.</div>
     </div>`,
     showCancelButton: true,
     confirmButtonText: 'Submit application',
@@ -757,7 +757,7 @@ function stepIncompleteHtml(step: StepKey): string | null {
     if (!declarationsForm.accept_terms || !declarationsForm.confirm_information_correct) {
       return '<p class="text-sm text-left">Tick both declaration checkboxes to continue.</p>'
     }
-    return '<p class="text-sm text-left">Click <strong>Save declarations</strong> to record your confirmation before continuing.</p>'
+    return '<p class="text-sm text-left">Click <strong>Save &amp; continue</strong> to record your confirmation and proceed to the next step.</p>'
   }
   if (step === 'payment') {
     return '<p class="text-sm text-left">Confirm payment for this application before continuing.</p>'
@@ -1378,7 +1378,7 @@ onBeforeUnmount(() => {
                 "
                 @click="saveDeclarations"
               >
-                Save declarations
+                Save &amp; continue
               </button>
               <span
                 v-if="application?.wizard_declarations?.terms_accepted_at && application?.wizard_declarations?.information_confirmed_at"
@@ -1697,38 +1697,38 @@ onBeforeUnmount(() => {
                   <div class="text-[11px] font-semibold uppercase tracking-wider text-text-muted">Applicant type</div>
                   <div class="mt-1 text-sm font-semibold text-text-primary">{{ applicantType }}</div>
                 </div>
-                <div class="rounded-xl border border-border bg-surface-muted px-4 py-3">
+                <div v-if="trimStr(applicant.email)" class="rounded-xl border border-border bg-surface-muted px-4 py-3">
                   <div class="text-[11px] font-semibold uppercase tracking-wider text-text-muted">Email</div>
-                  <div class="mt-1 text-sm font-semibold text-text-primary">{{ applicant.email ?? '—' }}</div>
+                  <div class="mt-1 text-sm font-semibold text-text-primary">{{ applicant.email }}</div>
                 </div>
-                <div class="rounded-xl border border-border bg-surface-muted px-4 py-3">
+                <div v-if="trimStr(applicant.phone_primary)" class="rounded-xl border border-border bg-surface-muted px-4 py-3">
                   <div class="text-[11px] font-semibold uppercase tracking-wider text-text-muted">Primary phone</div>
-                  <div class="mt-1 text-sm font-semibold text-text-primary">{{ applicant.phone_primary ?? '—' }}</div>
+                  <div class="mt-1 text-sm font-semibold text-text-primary">{{ applicant.phone_primary }}</div>
                 </div>
-                <div class="rounded-xl border border-border bg-surface-muted px-4 py-3">
+                <div v-if="trimStr(applicant.phone_secondary)" class="rounded-xl border border-border bg-surface-muted px-4 py-3">
                   <div class="text-[11px] font-semibold uppercase tracking-wider text-text-muted">Secondary phone</div>
-                  <div class="mt-1 text-sm font-semibold text-text-primary">{{ applicant.phone_secondary ?? '—' }}</div>
+                  <div class="mt-1 text-sm font-semibold text-text-primary">{{ applicant.phone_secondary }}</div>
                 </div>
                 <template v-if="applicantType !== 'institution'">
                   <div class="rounded-xl border border-border bg-surface-muted px-4 py-3">
                     <div class="text-[11px] font-semibold uppercase tracking-wider text-text-muted">First name</div>
                     <div class="mt-1 text-sm font-semibold text-text-primary">{{ applicantForm.first_name || '—' }}</div>
                   </div>
-                  <div class="rounded-xl border border-border bg-surface-muted px-4 py-3">
+                  <div v-if="trimStr(applicantForm.middle_name)" class="rounded-xl border border-border bg-surface-muted px-4 py-3">
                     <div class="text-[11px] font-semibold uppercase tracking-wider text-text-muted">Middle name</div>
-                    <div class="mt-1 text-sm font-semibold text-text-primary">{{ applicantForm.middle_name || '—' }}</div>
+                    <div class="mt-1 text-sm font-semibold text-text-primary">{{ applicantForm.middle_name }}</div>
                   </div>
                   <div class="rounded-xl border border-border bg-surface-muted px-4 py-3">
                     <div class="text-[11px] font-semibold uppercase tracking-wider text-text-muted">Surname</div>
                     <div class="mt-1 text-sm font-semibold text-text-primary">{{ applicantForm.surname || '—' }}</div>
                   </div>
-                  <div class="rounded-xl border border-border bg-surface-muted px-4 py-3">
+                  <div v-if="trimStr(applicantForm.nrc_number)" class="rounded-xl border border-border bg-surface-muted px-4 py-3">
                     <div class="text-[11px] font-semibold uppercase tracking-wider text-text-muted">NRC number</div>
-                    <div class="mt-1 text-sm font-semibold text-text-primary">{{ applicantForm.nrc_number || '—' }}</div>
+                    <div class="mt-1 text-sm font-semibold text-text-primary">{{ applicantForm.nrc_number }}</div>
                   </div>
-                  <div class="rounded-xl border border-border bg-surface-muted px-4 py-3 sm:col-span-2">
+                  <div v-if="trimStr(applicantForm.passport_number)" class="rounded-xl border border-border bg-surface-muted px-4 py-3 sm:col-span-2">
                     <div class="text-[11px] font-semibold uppercase tracking-wider text-text-muted">Passport number</div>
-                    <div class="mt-1 text-sm font-semibold text-text-primary">{{ applicantForm.passport_number || '—' }}</div>
+                    <div class="mt-1 text-sm font-semibold text-text-primary">{{ applicantForm.passport_number }}</div>
                   </div>
                 </template>
               </div>
@@ -1788,10 +1788,6 @@ onBeforeUnmount(() => {
                       <div class="mt-1 text-sm font-semibold text-text-primary">
                         {{ q.certificate_number || q.student_number || q.examination_number || '—' }}
                       </div>
-                    </div>
-                    <div class="rounded-xl border border-border bg-surface-muted px-4 py-3 sm:col-span-2">
-                      <div class="text-[11px] font-semibold uppercase tracking-wider text-text-muted">Notes</div>
-                      <div class="mt-1 whitespace-pre-wrap text-sm font-semibold text-text-primary">{{ q.notes || '—' }}</div>
                     </div>
                   </div>
                 </div>
@@ -1912,26 +1908,12 @@ onBeforeUnmount(() => {
                   Please confirm before submitting.
                 </div>
 
-                <div class="mt-3 rounded-xl border border-warning/20 bg-warning/10 px-4 py-3 text-sm text-warning">
-                  <div class="font-semibold">Submission locks your application</div>
-                  <div class="mt-1 text-xs">
-                    Once you submit this application, you will not be able to change it unless it is reopened or returned for amendment by ZAQA.
-                  </div>
-                </div>
-
                 <label class="mt-4 flex cursor-pointer items-start gap-3 rounded-xl border border-border bg-surface-muted px-4 py-3">
                   <input v-model="declarationAccepted" type="checkbox" class="mt-1 h-4 w-4 rounded border-border text-brand focus:ring-brand/30" />
                   <span class="text-sm text-text-primary">
                     I confirm that the information provided is accurate, and I understand that final submission locks this application unless ZAQA reopens it.
                   </span>
                 </label>
-
-                <div v-if="submissionBlockReasons.length > 0" class="mt-4 rounded-xl border border-danger/20 bg-danger/10 px-4 py-3 text-sm text-danger">
-                  <div class="font-semibold">Submission is currently blocked</div>
-                  <ul class="mt-2 list-disc space-y-1 pl-5 text-xs">
-                    <li v-for="(r, idx) in submissionBlockReasons" :key="idx">{{ r }}</li>
-                  </ul>
-                </div>
               </div>
             </div>
           </div>
