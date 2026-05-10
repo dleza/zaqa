@@ -193,6 +193,11 @@
         --zaqa-btn-shadow: color-mix(in oklab, var(--zaqa-brand) 35%, transparent);
     }
 
+    .zaqa-btn-warning {
+        @apply bg-warning text-text-on-dark hover:bg-warning/90;
+        --zaqa-btn-shadow: color-mix(in oklab, var(--zaqa-warning) 35%, transparent);
+    }
+
     .zaqa-btn-secondary {
         @apply border border-border bg-surface text-text-primary hover:bg-surface-muted;
         --zaqa-btn-shadow: color-mix(in oklab, var(--zaqa-text-muted) 18%, transparent);

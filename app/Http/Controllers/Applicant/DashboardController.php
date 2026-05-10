@@ -21,7 +21,8 @@ class DashboardController extends Controller
             'applications' => $payload['applications'],
             'activity' => $payload['activity'],
             'alerts' => $payload['alerts'],
+            'returnedQualifications' => $payload['returned_qualifications'],
+            'returnedQualificationsCount' => $payload['returned_qualifications_count'],
         ]);
     }
 }
-

@@ -5,6 +5,7 @@ namespace App\Domain\Applicant;
 use App\Enums\ApplicationStatus;
 use App\Enums\InvoiceStatus;
 use App\Enums\PaymentStatus;
+use App\Enums\VerificationState;
 use App\Models\Application;
 use App\Models\ApplicationStatusHistory;
 use App\Models\User;
@@ -18,7 +19,9 @@ class ApplicantDashboardService
      *   continue_draft: array<string,mixed>|null,
      *   applications: array<int,array<string,mixed>>,
      *   activity: array<int,array<string,mixed>>,
-     *   alerts: array<int,array{type:string,title:string,message:string,application_id?:int|null,application_number?:string|null,href?:string|null}>
+     *   alerts: array<int,array{type:string,title:string,message:string,application_id?:int|null,application_number?:string|null,href?:string|null}>,
+     *   returned_qualifications: array<int,array{qualification_id:int,application_id:int,application_number:string|null,title_of_qualification:string|null,returned_to_applicant_at:string|null,href:string}>,
+     *   returned_qualifications_count: int
      * }
      */
     public function build(User $user): array
@@ -64,6 +67,13 @@ class ApplicantDashboardService
                 ])
                 ->all();
 
+            $returned = $a->qualifications
+                ->filter(fn ($q) => ($q->verification_state?->value ?? (string) $q->verification_state) === VerificationState::ReturnedToApplicant->value)
+                ->sortByDesc(fn ($q) => optional($q->returned_to_applicant_at)?->getTimestamp() ?? 0)
+                ->values();
+            $returnedCount = $returned->count();
+            $firstReturned = $returned->first();
+
             $firstQualificationType = $a->qualifications->first()?->qualificationTypeMaster;
 
             return [
@@ -96,6 +106,14 @@ class ApplicantDashboardService
                       ]
                     : null,
                 'primary_action' => $this->primaryActionFor($a),
+                'amend_action' => $firstReturned
+                    ? [
+                        'label' => $returnedCount === 1 ? 'Update qualification' : "Update {$returnedCount} qualifications",
+                        'href' => route('applicant.applications.qualifications.amend', ['application' => $a->id, 'qualification' => $firstReturned->id]),
+                        'kind' => 'amend',
+                      ]
+                    : null,
+                'returned_qualifications_count' => $returnedCount,
             ];
         })->values()->all();
 
@@ -106,12 +124,30 @@ class ApplicantDashboardService
 
         $activity = $this->activityFor($user, $apps);
 
+        $returnedModels = $apps
+            ->flatMap(fn (Application $a) => $a->qualifications
+                ->filter(fn ($q) => ($q->verification_state?->value ?? (string) $q->verification_state) === VerificationState::ReturnedToApplicant->value)
+                ->map(fn ($q) => [
+                    'qualification_id' => (int) $q->id,
+                    'application_id' => (int) $a->id,
+                    'application_number' => $a->application_number,
+                    'title_of_qualification' => $q->title_of_qualification,
+                    'returned_to_applicant_at' => optional($q->returned_to_applicant_at)?->toIso8601String(),
+                    'href' => route('applicant.applications.qualifications.amend', ['application' => $a->id, 'qualification' => $q->id]),
+                ]))
+            ->sortByDesc('returned_to_applicant_at')
+            ->values();
+        $returnedQualificationsCount = $returnedModels->count();
+        $returnedQualifications = $returnedModels->take(10)->values()->all();
+
         return [
             'counts' => $counts,
             'continue_draft' => $continueDraft ? $this->primaryActionFor($continueDraft) : null,
             'applications' => $applications,
             'activity' => $activity,
             'alerts' => $alerts,
+            'returned_qualifications' => $returnedQualifications,
+            'returned_qualifications_count' => $returnedQualificationsCount,
         ];
     }
 
@@ -148,6 +184,30 @@ class ApplicantDashboardService
         /** @var Application $app */
         foreach ($apps->take(12) as $app) {
             $status = $app->current_status?->value ?? (string) $app->current_status;
+
+            $returned = $app->qualifications
+                ->filter(fn ($q) => ($q->verification_state?->value ?? (string) $q->verification_state) === VerificationState::ReturnedToApplicant->value)
+                ->sortByDesc(fn ($q) => optional($q->returned_to_applicant_at)?->getTimestamp() ?? 0)
+                ->values();
+            $returnedCount = $returned->count();
+
+            if ($returnedCount > 0) {
+                $firstReturned = $returned->first();
+
+                $alerts[] = [
+                    'type' => 'warning',
+                    'title' => 'Qualification update required',
+                    'message' => $returnedCount === 1
+                        ? "A qualification in application {$app->application_number} was returned for amendment."
+                        : "{$returnedCount} qualifications in application {$app->application_number} were returned for amendment.",
+                    'application_id' => $app->id,
+                    'application_number' => $app->application_number,
+                    'href' => $firstReturned
+                        ? route('applicant.applications.qualifications.amend', ['application' => $app->id, 'qualification' => $firstReturned->id])
+                        : route('applicant.applications.show', $app),
+                ];
+                continue;
+            }
 
             if ($status === ApplicationStatus::SentBack->value) {
                 $alerts[] = [

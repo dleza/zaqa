@@ -31,6 +31,8 @@ const props = defineProps<{
   applications: Array<any>
   activity: Array<any>
   alerts: Array<any>
+  returnedQualifications: Array<any>
+  returnedQualificationsCount: number
 }>()
 
 function money(cents: number, currency: string) {
@@ -38,6 +40,12 @@ function money(cents: number, currency: string) {
 }
 
 const hasApplications = computed(() => (props.applications?.length ?? 0) > 0)
+const firstReturnedQualification = computed(() => (props.returnedQualifications?.length ?? 0) > 0 ? props.returnedQualifications[0] : null)
+const returnedQualificationsLabel = computed(() => {
+  const c = Number(props.returnedQualificationsCount ?? 0)
+  if (c <= 0) return ''
+  return c === 1 ? 'Update returned qualification' : `Update returned qualifications (${c})`
+})
 
 const activityRows = computed(() => {
   const byId = Object.fromEntries((props.applications ?? []).map((a: any) => [a.id, a]))
@@ -252,6 +260,14 @@ function qualBadgeClass(state: string) {
                       <Eye class="mr-2 h-4 w-4" aria-hidden="true" />
                       Track
                     </button>
+                    <Link
+                      v-if="app.amend_action"
+                      :href="app.amend_action.href"
+                      class="zaqa-btn zaqa-btn-warning h-10 px-4 text-sm"
+                    >
+                      <CircleAlert class="h-4 w-4" aria-hidden="true" />
+                      {{ app.amend_action.label }}
+                    </Link>
                     <Link :href="app.primary_action.href" class="zaqa-btn zaqa-btn-secondary h-10 px-4 text-sm">
                       {{ app.primary_action.label }}
                     </Link>
@@ -286,6 +302,15 @@ function qualBadgeClass(state: string) {
               <Link href="/applicant/applications/new" class="zaqa-btn zaqa-btn-primary h-11 w-full justify-center">
                 <ClipboardList class="mr-2 h-4 w-4" aria-hidden="true" />
                 New application
+              </Link>
+
+              <Link
+                v-if="firstReturnedQualification"
+                :href="firstReturnedQualification.href"
+                class="zaqa-btn zaqa-btn-warning h-11 w-full justify-center"
+              >
+                <CircleAlert class="mr-2 h-4 w-4" aria-hidden="true" />
+                {{ returnedQualificationsLabel }}
               </Link>
 
               <button
@@ -449,4 +474,3 @@ function qualBadgeClass(state: string) {
     </div>
   </ApplicantLayout>
 </template>
-

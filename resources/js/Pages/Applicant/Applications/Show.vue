@@ -63,6 +63,12 @@ const isDraftLike = computed(() => {
   return s === 'draft'
 })
 
+const canContinueEditing = computed(() => {
+  if (!props.application?.can_edit) return false
+  const s = (props.application?.current_status ?? '').toString().toLowerCase()
+  return s === 'draft' || s === 'sent_back'
+})
+
 function formatDisplayDate(iso: string | null | undefined): string {
   if (!iso) return '—'
   try {
@@ -242,7 +248,7 @@ function money(cents: number, currency: string) {
               Track progress
             </Link>
             <Link
-              v-if="application.can_edit"
+              v-if="canContinueEditing"
               :href="`/applicant/applications/${application.id}/edit`"
               class="zaqa-btn zaqa-btn-primary inline-flex items-center gap-2 px-4 py-2.5 text-sm font-semibold shadow-md shadow-brand/20"
             >
@@ -318,7 +324,7 @@ function money(cents: number, currency: string) {
               </div>
               <Link
                 :href="`/applicant/applications/${application.id}/qualifications/${q.id}/amend`"
-                class="zaqa-btn zaqa-btn-primary h-10 shrink-0 px-4 py-2 text-sm"
+                class="zaqa-btn zaqa-btn-warning h-10 shrink-0 px-4 py-2 text-sm"
               >
                 Update qualification
               </Link>
