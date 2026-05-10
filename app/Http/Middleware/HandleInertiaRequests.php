@@ -3,6 +3,7 @@
 namespace App\Http\Middleware;
 
 use Illuminate\Http\Request;
+use Illuminate\Notifications\DatabaseNotification;
 use Inertia\Middleware;
 use Spatie\Permission\PermissionRegistrar;
 
@@ -36,6 +37,28 @@ class HandleInertiaRequests extends Middleware
                     : null,
                 'permissions' => $request->user()
                     ? $request->user()->getAllPermissions()->pluck('name')->values()->all()
+                    : [],
+                'notifications_unread_count' => fn () => $request->user() && $request->user()->applicant_type === null
+                    ? $request->user()->unreadNotifications()->count()
+                    : 0,
+                'notifications' => fn () => $request->user() && $request->user()->applicant_type === null
+                    ? $request->user()
+                        ->notifications()
+                        ->orderByDesc('created_at')
+                        ->limit(8)
+                        ->get()
+                        ->map(fn (DatabaseNotification $n) => [
+                            'id' => (string) $n->id,
+                            'type' => (string) $n->type,
+                            'title' => (string) ($n->data['title'] ?? ''),
+                            'message' => (string) ($n->data['message'] ?? ''),
+                            'link_url' => (string) ($n->data['link_url'] ?? ''),
+                            'data' => $n->data,
+                            'read_at' => optional($n->read_at)?->toIso8601String(),
+                            'created_at' => optional($n->created_at)?->toIso8601String(),
+                        ])
+                        ->values()
+                        ->all()
                     : [],
             ],
             'flash' => [

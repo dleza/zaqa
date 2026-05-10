@@ -24,10 +24,8 @@ class QualificationLevel1CompletedMail extends Mailable implements ShouldQueue
 
     public function envelope(): Envelope
     {
-        $num = $this->qualification->application?->application_number ?? 'verification';
-
         return new Envelope(
-            subject: "ZAQA: Level 1 completed qualification task ({$num})",
+            subject: 'Qualification Review Submitted for Further Action',
         );
     }
 

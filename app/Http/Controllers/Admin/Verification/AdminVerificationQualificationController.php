@@ -231,6 +231,13 @@ class AdminVerificationQualificationController extends Controller
             403
         );
 
+        $user = $request->user();
+        if ($user && VerificationQualificationAccess::mustRestrictToAssignedQualifications($user)) {
+            $vs = $qualification->verification_state;
+            $allowed = [VerificationState::AssignedToLevel1, VerificationState::UnderLevel1Review];
+            abort_unless($vs instanceof VerificationState && in_array($vs, $allowed, true), 403);
+        }
+
         $qualification->load([
             'subjectResults',
             'country',
@@ -310,6 +317,13 @@ class AdminVerificationQualificationController extends Controller
         Qualification $qualification,
         QualificationCaptureService $capture,
     ): RedirectResponse {
+        $user = $request->user();
+        if ($user && VerificationQualificationAccess::mustRestrictToAssignedQualifications($user)) {
+            $vs = $qualification->verification_state;
+            $allowed = [VerificationState::AssignedToLevel1, VerificationState::UnderLevel1Review];
+            abort_unless($vs instanceof VerificationState && in_array($vs, $allowed, true), 403);
+        }
+
         $capture->adminVerificationCorrection($qualification, $request->validated(), $request->user());
 
         return redirect()

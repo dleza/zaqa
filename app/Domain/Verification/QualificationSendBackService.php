@@ -36,7 +36,7 @@ class QualificationSendBackService
             $qualification->loadMissing('application');
             $application = $qualification->application;
 
-            $this->assertCanSendBack($qualification);
+            $this->assertCanSendBack($qualification, $actor);
 
             QualificationAssignment::query()
                 ->where('qualification_id', $qualification->id)
@@ -116,13 +116,19 @@ class QualificationSendBackService
         });
     }
 
-    private function assertCanSendBack(Qualification $qualification): void
+    private function assertCanSendBack(Qualification $qualification, User $actor): void
     {
         $vs = $qualification->verification_state;
 
         if ($vs === VerificationState::ReturnedToApplicant) {
             throw ValidationException::withMessages([
                 'qualification' => 'This qualification is already with the applicant for amendment.',
+            ]);
+        }
+
+        if ($vs === VerificationState::UnderLevel2Review && ! $actor->can('verification.level2.review')) {
+            throw ValidationException::withMessages([
+                'qualification' => 'This task is already with Level 2 for final review.',
             ]);
         }
 

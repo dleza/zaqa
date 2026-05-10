@@ -18,7 +18,7 @@ class SendAssignmentNotification implements ShouldQueue
     public function handle(QualificationAssignedToVerifier $event): void
     {
         $assignee = $event->assignedTo;
-        $qualification = $event->qualification->loadMissing('application', 'country', 'awardingInstitution');
+        $qualification = $event->qualification->loadMissing('application', 'country', 'awardingInstitution', 'qualificationTypeMaster');
         $application = $qualification->application;
 
         $email = trim((string) ($assignee->email ?? ''));
@@ -27,7 +27,7 @@ class SendAssignmentNotification implements ShouldQueue
                 'user_id' => $assignee->id,
                 'application_id' => $application->id,
                 'email' => $email,
-                'subject' => 'ZAQA: Qualification task assigned for review',
+                'subject' => 'New Qualification Verification Task Assigned',
                 'template_key' => 'verification_assigned',
                 'status' => 'queued',
                 'sent_at' => null,

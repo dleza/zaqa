@@ -12,7 +12,7 @@ class QualificationAssignedToVerifier
         public readonly User $assignedBy,
         public readonly User $assignedTo,
         public readonly ?string $comment = null,
+        public readonly ?User $previousAssignee = null,
     ) {
     }
 }
-

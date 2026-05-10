@@ -123,6 +123,21 @@ const isViewerAssignedLevel1 = computed(() => {
   return (props.qualification.assigned_verifier_id ?? null) === props.viewerUserId
 })
 
+const isRestrictedLevel1 = computed(() => {
+  return (
+    props.can.level1_process === true &&
+    props.can.assign !== true &&
+    props.can.approve !== true &&
+    props.can.reject !== true &&
+    props.can.issue_certificate !== true
+  )
+})
+
+const restrictedLevel1CanAct = computed(() => {
+  if (!isRestrictedLevel1.value) return true
+  return ['assigned_to_level1', 'under_level1_review'].includes(state.value)
+})
+
 const canShowAssign = computed(() => {
   if (!props.can.assign) return false
   return ['awaiting_assignment', 'assigned_to_level1', 'under_level1_review'].includes(state.value)
@@ -130,6 +145,9 @@ const canShowAssign = computed(() => {
 
 const canShowSendBack = computed(() => {
   if (!props.can.send_back) return false
+  if (isRestrictedLevel1.value) {
+    return ['assigned_to_level1', 'under_level1_review'].includes(state.value)
+  }
   return !['approved_for_certificate', 'rejected', 'certificate_issued', 'closed', 'returned_to_applicant'].includes(
     state.value,
   )
@@ -142,7 +160,7 @@ const canShowLevel1Complete = computed(() => {
 })
 
 /** Level 2 / Super Admin: remove Level 1 assignee and return task to the assignment pool. */
-const canEditQualificationDetails = computed(() => props.can.edit_qualification === true)
+const canEditQualificationDetails = computed(() => props.can.edit_qualification === true && restrictedLevel1CanAct.value)
 
 const canShowApprove = computed(() => props.can.approve === true && state.value === 'under_level2_review')
 const canShowReject = computed(() => props.can.reject === true && state.value === 'under_level2_review')
@@ -236,6 +254,14 @@ const documentTypeLabels: Record<string, string> = {
 function documentTypeLabel(raw: string) {
   return documentTypeLabels[raw] ?? raw.replace(/_/g, ' ')
 }
+
+const level1Findings = computed(() => (props.qualification?.reviewer_notes ?? '').toString().trim())
+const level1ReviewedAt = computed(() => parseIso(props.qualification?.reviewed_at))
+const hasLevel1Findings = computed(() => level1Findings.value.length > 0)
+const level1Attachment = computed(() => {
+  const docs = (props.qualification?.documents ?? []) as any[]
+  return docs.find((d) => d.document_type === 'level1_review_attachment' && d.is_current_version) ?? null
+})
 
 const nowMs = ref<number>(Date.now())
 let slaTick: number | null = null
@@ -664,6 +690,60 @@ function formatTimelineAt(iso: string | null | undefined) {
               No documents uploaded for this qualification item yet.
             </div>
           </section>
+
+          <!-- Level 1 recommendation -->
+          <section class="rounded-2xl border border-border bg-surface p-6 shadow-sm sm:p-7">
+            <div class="flex items-start gap-3 border-b border-border/80 pb-4">
+              <span class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-sky-500/15 text-sky-700">
+                <CornerDownLeft class="h-5 w-5" aria-hidden="true" />
+              </span>
+              <div class="min-w-0">
+                <h2 class="text-base font-bold tracking-tight text-text-primary">Level 1 recommendation</h2>
+                <p class="mt-1 text-sm text-text-muted">
+                  Findings submitted by Level 1. Level 2 should use these notes to decide the final outcome.
+                </p>
+              </div>
+            </div>
+
+            <div v-if="hasLevel1Findings" class="mt-5 space-y-4">
+              <div class="flex flex-wrap items-center gap-2">
+                <span
+                  class="inline-flex items-center rounded-full border px-3 py-1 text-xs font-semibold"
+                  :class="
+                    state === 'under_level2_review' || workflowActiveStep >= 2
+                      ? 'border-emerald-300/40 bg-emerald-500/15 text-emerald-900'
+                      : 'border-border bg-surface-muted text-text-muted'
+                  "
+                >
+                  {{ state === 'under_level2_review' || workflowActiveStep >= 2 ? 'Submitted to Level 2 for further action' : 'Recorded' }}
+                </span>
+                <span v-if="level1ReviewedAt" class="text-xs text-text-muted">Submitted {{ level1ReviewedAt.toLocaleString() }}</span>
+                <span v-if="qualification.assigned_verifier_name" class="text-xs text-text-muted">· Verifier: <span class="font-semibold text-text-primary">{{ qualification.assigned_verifier_name }}</span></span>
+              </div>
+
+              <div class="rounded-xl border border-border/70 bg-surface-muted/40 px-4 py-3">
+                <div class="text-[11px] font-bold uppercase tracking-wider text-text-muted">Recommendation / findings</div>
+                <div class="mt-2 whitespace-pre-wrap text-sm leading-relaxed text-text-primary">{{ qualification.reviewer_notes }}</div>
+              </div>
+
+              <div v-if="level1Attachment" class="rounded-xl border border-border/70 bg-surface-muted/40 px-4 py-3">
+                <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                  <div class="min-w-0">
+                    <div class="text-[11px] font-bold uppercase tracking-wider text-text-muted">Attachment</div>
+                    <div class="mt-1 truncate text-sm font-semibold text-text-primary">{{ level1Attachment.original_name }}</div>
+                  </div>
+                  <div class="flex flex-wrap gap-2">
+                    <a :href="level1Attachment.preview_url" class="zaqa-btn zaqa-btn-secondary h-9 px-3 py-2 text-xs">Preview</a>
+                    <a :href="level1Attachment.download_url" class="zaqa-btn zaqa-btn-secondary h-9 px-3 py-2 text-xs">Download</a>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div v-else class="mt-5 rounded-xl border border-dashed border-border bg-surface-muted/40 px-4 py-8 text-center text-sm text-text-muted">
+              No Level 1 recommendation submitted yet. Once Level 1 completes review, their notes will appear here.
+            </div>
+          </section>
         </div>
 
         <!-- Sidebar: workflow + assignment + actions -->
@@ -1062,7 +1142,7 @@ function formatTimelineAt(iso: string | null | undefined) {
               class="mt-0.5"
               :disabled="qualification.application?.payment_satisfied === false"
             />
-            Generate CVEQ certificate now
+            Generate certificate of Recognition
           </label>
           <p class="mt-1 text-xs text-text-muted">
             Payment must be satisfied. This will email the applicant and mark the qualification as certificate issued.

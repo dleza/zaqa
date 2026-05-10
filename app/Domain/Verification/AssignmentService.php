@@ -40,6 +40,10 @@ class AssignmentService
             $qualification->refresh();
             $qualification->loadMissing('application');
             $application = $qualification->application;
+            $previousAssigneeId = (int) ($qualification->assigned_verifier_id ?? 0);
+            $previousAssignee = $previousAssigneeId > 0 && $previousAssigneeId !== (int) $verifierAssignee->id
+                ? User::query()->whereKey($previousAssigneeId)->first()
+                : null;
 
             // Close any active assignment history row.
             QualificationAssignment::query()
@@ -126,7 +130,7 @@ class AssignmentService
                 actor: $level2Actor,
             );
 
-            event(new QualificationAssignedToVerifier($qualification, $level2Actor, $verifierAssignee, $comment));
+            event(new QualificationAssignedToVerifier($qualification, $level2Actor, $verifierAssignee, $comment, $previousAssignee));
 
             return $qualification;
         });

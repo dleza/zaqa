@@ -21,8 +21,11 @@ use App\Domain\Identity\Listeners\SendPhoneOtpSms;
 use App\Domain\Verification\Events\ApplicationAssignedToLevel1;
 use App\Domain\Verification\Events\ApplicationLevel1Completed;
 use App\Domain\Verification\Events\ApplicationSentBackToApplicant;
+use App\Domain\Verification\Events\QualificationAssignedToVerifier;
 use App\Domain\Verification\Events\QualificationLevel1Completed;
 use App\Domain\Verification\Events\QualificationSentBackToApplicant;
+use App\Domain\Verification\Listeners\CreateQualificationAssignmentPortalNotification;
+use App\Domain\Verification\Listeners\CreateQualificationLevel1CompletedPortalNotification;
 use App\Domain\Verification\Listeners\SendAssignmentNotification;
 use App\Domain\Verification\Listeners\SendLevel1CompletedNotification;
 use App\Domain\Verification\Listeners\SendQualificationLevel1CompletedNotification;
@@ -62,11 +65,16 @@ class EventServiceProvider extends ServiceProvider
         ApplicationSentBackToApplicant::class => [
             SendSendBackNotification::class,
         ],
+        QualificationAssignedToVerifier::class => [
+            SendAssignmentNotification::class,
+            CreateQualificationAssignmentPortalNotification::class,
+        ],
         QualificationSentBackToApplicant::class => [
             SendQualificationSendBackNotification::class,
         ],
         QualificationLevel1Completed::class => [
             SendQualificationLevel1CompletedNotification::class,
+            CreateQualificationLevel1CompletedPortalNotification::class,
         ],
         PaymentProofApproved::class => [
             SendPaymentProofApprovedNotification::class,

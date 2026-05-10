@@ -5,6 +5,7 @@ use App\Http\Controllers\Admin\AdminApplicationsController;
 use App\Http\Controllers\Admin\AdminApplicationsTrackController;
 use App\Http\Controllers\Admin\AdminCertificatesController;
 use App\Http\Controllers\Admin\AdminDashboardController;
+use App\Http\Controllers\Admin\AdminNotificationsController;
 use App\Http\Controllers\Admin\AdminProfileController;
 use App\Http\Controllers\Admin\AdminRolesController;
 use App\Http\Controllers\Admin\AdminSlaReportController;
@@ -184,6 +185,10 @@ Route::middleware('auth')->group(function () {
         Route::get('/profile', [AdminProfileController::class, 'show'])->name('profile.show');
         Route::get('/change-password', [AdminProfileController::class, 'editPassword'])->name('profile.password.edit');
         Route::post('/change-password', [AdminProfileController::class, 'updatePassword'])->name('profile.password.update');
+        Route::get('/notifications', [AdminNotificationsController::class, 'index'])->name('notifications.index');
+        Route::post('/notifications/read-all', [AdminNotificationsController::class, 'markAllRead'])->name('notifications.read_all');
+        Route::post('/notifications/{notification}/read', [AdminNotificationsController::class, 'markRead'])->name('notifications.read');
+        Route::post('/notifications/{notification}/open', [AdminNotificationsController::class, 'open'])->name('notifications.open');
 
         Route::prefix('finance')->name('finance.')->group(function () {
             Route::get('/', [AdminFinanceDashboardController::class, 'index'])

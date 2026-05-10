@@ -4,6 +4,7 @@ import { Link, usePage } from '@inertiajs/vue3'
 import FlashMessages from '@/Components/FlashMessages.vue'
 import AdminSidebar from '@/Components/AdminSidebar.vue'
 import TopbarUserMenu from '@/Components/TopbarUserMenu.vue'
+import TopbarNotificationsMenu from '@/Components/TopbarNotificationsMenu.vue'
 import { adminNavSections } from '@/Layouts/adminNav'
 import { Menu, X } from 'lucide-vue-next'
 import { zaqaLogoUrl } from '@/constants/zaqaLogo'
@@ -32,7 +33,10 @@ const permissions = computed<string[]>(() => ((page.props as any).auth?.permissi
           </div>
         </Link>
 
-        <TopbarUserMenu :user="user" variant="brand" />
+        <div class="flex items-center gap-2">
+          <TopbarNotificationsMenu v-if="user" variant="brand" />
+          <TopbarUserMenu :user="user" variant="brand" />
+        </div>
       </div>
     </header>
 
@@ -69,7 +73,10 @@ const permissions = computed<string[]>(() => ((page.props as any).auth?.permissi
               <div class="text-sm font-semibold text-text-primary">Admin Portal</div>
               <div class="mt-0.5 text-xs text-text-muted">ZAQA back-office operations</div>
             </div>
-            <TopbarUserMenu :user="user" />
+            <div class="flex items-center gap-2">
+              <TopbarNotificationsMenu v-if="user" />
+              <TopbarUserMenu :user="user" />
+            </div>
           </div>
         </header>
 

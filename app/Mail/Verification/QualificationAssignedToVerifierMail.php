@@ -25,10 +25,8 @@ class QualificationAssignedToVerifierMail extends Mailable implements ShouldQueu
 
     public function envelope(): Envelope
     {
-        $appNum = $this->qualification->application?->application_number ?? '—';
-
         return new Envelope(
-            subject: "ZAQA: Qualification task for {$appNum} assigned for review",
+            subject: 'New Qualification Verification Task Assigned',
         );
     }
 
@@ -49,4 +47,3 @@ class QualificationAssignedToVerifierMail extends Mailable implements ShouldQueu
         );
     }
 }
-

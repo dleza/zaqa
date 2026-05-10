@@ -26,7 +26,7 @@ class SendQualificationLevel1CompletedNotification implements ShouldQueue
             'user_id' => $recipient->id,
             'application_id' => $event->qualification->application_id,
             'email' => $email,
-            'subject' => 'ZAQA: Level 1 completed qualification task',
+            'subject' => 'Qualification Review Submitted for Further Action',
             'template_key' => 'verification_qualification_level1_completed',
             'status' => 'queued',
             'sent_at' => null,
@@ -34,7 +34,7 @@ class SendQualificationLevel1CompletedNotification implements ShouldQueue
 
         try {
             Mail::to($email)->queue(new QualificationLevel1CompletedMail(
-                qualification: $event->qualification->fresh(['application']),
+                qualification: $event->qualification->fresh(['application', 'country', 'awardingInstitution', 'qualificationTypeMaster']),
                 level1Actor: $event->level1Actor,
                 assignedBy: $recipient,
                 findings: $event->findings,
