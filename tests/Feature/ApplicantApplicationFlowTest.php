@@ -310,7 +310,7 @@ class ApplicantApplicationFlowTest extends TestCase
 
         $this->post("/applicant/applications/{$application->id}/consent/foreign-upload", [
             'qualification_id' => $qualification->id,
-            'file' => UploadedFile::fake()->create('consent.pdf', 80, 'application/pdf'),
+            'file' => UploadedFile::fake()->image('consent.jpg')->size(200),
             'source_awarding_institution_name' => 'Foreign University',
         ])->assertRedirect();
 

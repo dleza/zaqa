@@ -364,6 +364,7 @@ async function promptAfterQualificationAdded(): Promise<'add_another' | 'back_to
     showDenyButton: true,
     confirmButtonText: 'Back to Step 2 (Qualifications)',
     denyButtonText: 'Add another qualification',
+    denyButtonColor: '#16a34a',
     reverseButtons: true,
     allowOutsideClick: false,
     allowEscapeKey: false,
@@ -766,7 +767,7 @@ const holderSummaryId = computed(() => {
                   <label class="text-sm font-medium">Signed consent file</label>
                   <input
                     type="file"
-                    accept=".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                    accept=".pdf,.doc,.docx,.jpg,.jpeg,.png,.webp,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,image/jpeg,image/png,image/webp"
                     class="zaqa-input"
                     :disabled="locked"
                     @change="onPendingConsentChange"
