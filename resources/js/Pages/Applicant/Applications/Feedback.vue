@@ -86,12 +86,12 @@ function submit() {
           <div v-else class="space-y-5">
             <div>
               <div class="text-sm font-semibold text-text-primary">Rating</div>
-              <div class="mt-2 flex flex-wrap items-center gap-2">
+              <div class="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4">
                 <button
                   v-for="l in labels"
                   :key="l.value"
                   type="button"
-                  class="inline-flex items-start gap-2 rounded-xl border px-3 py-2 text-left text-sm font-semibold transition"
+                  class="inline-flex w-full items-start justify-start gap-2 rounded-xl border px-3 py-2 text-left text-sm font-semibold transition"
                   :class="selected === l.value ? 'border-brand/30 bg-brand/10 text-brand' : 'border-border bg-surface text-text-muted hover:bg-surface-muted'"
                   @click="setRating(l.value)"
                 >
