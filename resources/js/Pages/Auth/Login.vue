@@ -44,7 +44,7 @@ function submit() {
                 <h1 class="mt-3 text-5xl font-semibold tracking-tight">Verification Portal</h1>
                 <div class="mt-4 h-0.5 w-10 rounded-full bg-amber-300/80" />
                 <p class="mt-6 max-w-md text-sm leading-relaxed text-white/75">
-                  The official platform for secure qualification and certificate verification.
+                  The official platform for secure qualification verification.
                 </p>
               </div>
 
@@ -86,10 +86,7 @@ function submit() {
                 </div>
               </div>
 
-              <div class="mt-10 flex items-start gap-3 rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-xs text-white/75 backdrop-blur-sm">
-                <ShieldCheck class="mt-0.5 h-4 w-4 text-white/80" aria-hidden="true" />
-                <span>Secure qualification verification and certificate validation you can trust.</span>
-              </div>
+  
             </div>
           </aside>
 
