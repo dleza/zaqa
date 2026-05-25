@@ -2,10 +2,13 @@
 
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Support\Facades\Artisan;
+use Illuminate\Support\Str;
+use App\Domain\Payments\Gateways\CGrate\CGrateClient;
 use App\Enums\VerificationState;
 use App\Models\ApplicationComment;
 use App\Models\Qualification;
 use App\Notifications\Verification\QualificationSentBackToApplicantPortalNotification;
+use App\Support\Phone\ZambiaMsisdnNormalizer;
 
 Artisan::command('inspire', function () {
     $this->comment(Inspiring::quote());
@@ -95,3 +98,58 @@ Artisan::command('notifications:backfill-qualification-sendbacks {email?}', func
 
     $this->info("Backfill completed: created={$created}, skipped={$skipped}.");
 })->purpose('Backfill applicant portal notifications for returned qualifications.');
+
+Artisan::command('cgrate:test-payment {mobile} {amount} {--query : Query status after initiation} {--wait=10 : Seconds to wait before querying}', function (CGrateClient $client, string $mobile, string $amount) {
+    if (app()->environment('production') && ! (bool) config('cgrate.allow_test_command_in_production')) {
+        $this->error('Refusing to run cGrate test payment in production.');
+        $this->error('Set CGRATE_ALLOW_TEST_COMMAND_IN_PRODUCTION=true to override.');
+
+        return 1;
+    }
+
+    if (! (bool) config('cgrate.enabled')) {
+        $this->error('cGrate is disabled (CGRATE_ENABLED=false).');
+        return 1;
+    }
+
+    $format = (string) config('cgrate.msisdn_format', 'local');
+    try {
+        $msisdn = ZambiaMsisdnNormalizer::normalizeForCGrate($mobile, $format);
+    } catch (\InvalidArgumentException $e) {
+        $this->error('Invalid mobile number: '.$e->getMessage());
+        return 1;
+    }
+
+    $paymentReference = 'ZAQA-TEST-'.Str::upper(Str::random(12));
+
+    $this->info('Initiating...');
+    $resp = $client->processCustomerPayment(transactionAmount: (string) $amount, customerMobile: $msisdn, paymentReference: $paymentReference);
+
+    $this->line('paymentReference: '.$paymentReference);
+    $this->line('responseCode: '.($resp->responseCode ?? 'null'));
+    $this->line('responseMessage: '.$resp->responseMessage);
+    if ($resp->paymentId) {
+        $this->line('paymentID: '.$resp->paymentId);
+    }
+
+    if (! (bool) $this->option('query')) {
+        return 0;
+    }
+
+    $wait = (int) $this->option('wait');
+    $wait = max(0, $wait);
+    if ($wait > 0) {
+        $this->info("Waiting {$wait}s before query...");
+        sleep($wait);
+    }
+
+    $this->info('Querying...');
+    $q = $client->queryCustomerPayment(paymentReference: $paymentReference);
+    $this->line('query.responseCode: '.($q->responseCode ?? 'null'));
+    $this->line('query.responseMessage: '.$q->responseMessage);
+    if ($q->paymentId) {
+        $this->line('query.paymentID: '.$q->paymentId);
+    }
+
+    return 0;
+})->purpose('Initiate a cGrate test Customer Payment (UAT tooling).');

@@ -6,6 +6,8 @@ use App\Enums\PaymentMethod;
 use App\Enums\PaymentStatus;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 
 class Payment extends Model
 {
@@ -69,5 +71,15 @@ class Payment extends Model
     public function reviewedBy(): BelongsTo
     {
         return $this->belongsTo(User::class, 'reviewed_by_user_id');
+    }
+
+    public function attempts(): HasMany
+    {
+        return $this->hasMany(PaymentAttempt::class);
+    }
+
+    public function latestAttempt(): HasOne
+    {
+        return $this->hasOne(PaymentAttempt::class)->latestOfMany();
     }
 }

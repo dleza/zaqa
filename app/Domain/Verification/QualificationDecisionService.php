@@ -21,6 +21,7 @@ class QualificationDecisionService
         private readonly AuditLogService $audit,
         private readonly ApplicationLifecycleService $lifecycle,
         private readonly QualificationCertificateService $certificates,
+        private readonly QualificationLevel2ReviewLockService $locks,
     ) {}
 
     public function approve(Qualification $qualification, User $actor, ?string $comment = null, bool $issueCertificate = false): Qualification
@@ -41,21 +42,32 @@ class QualificationDecisionService
                 ]);
             }
 
-            if ($qualification->verification_state !== VerificationState::UnderLevel2Review) {
+            $vs = $qualification->verification_state;
+            if (! in_array($vs, [VerificationState::UnderLevel2Review, VerificationState::AutoVerifiedPendingLevel2], true)) {
                 throw ValidationException::withMessages([
                     'qualification' => 'This qualification is not awaiting a Level 2 decision.',
                 ]);
             }
 
+            if ($vs === VerificationState::AutoVerifiedPendingLevel2) {
+                $this->locks->assertActorHoldsLockOrIsSuperAdmin($qualification, $actor);
+            }
+
             $before = $qualification->only([
                 'verification_state',
                 'level2_review_owner_id',
+                'level2_review_locked_by',
+                'level2_review_locked_at',
             ]);
 
             $qualification->forceFill([
                 'verification_state' => VerificationState::ApprovedForCertificate,
                 'level2_review_owner_id' => null,
             ])->save();
+
+            if ($vs === VerificationState::AutoVerifiedPendingLevel2) {
+                $this->locks->clearLock($qualification);
+            }
 
             if ($comment) {
                 ApplicationComment::create([
@@ -87,6 +99,8 @@ class QualificationDecisionService
             $after = $qualification->only([
                 'verification_state',
                 'level2_review_owner_id',
+                'level2_review_locked_by',
+                'level2_review_locked_at',
             ]);
 
             $this->audit->record(
@@ -141,21 +155,32 @@ class QualificationDecisionService
                 ]);
             }
 
-            if ($qualification->verification_state !== VerificationState::UnderLevel2Review) {
+            $vs = $qualification->verification_state;
+            if (! in_array($vs, [VerificationState::UnderLevel2Review, VerificationState::AutoVerifiedPendingLevel2], true)) {
                 throw ValidationException::withMessages([
                     'qualification' => 'This qualification is not awaiting a Level 2 decision.',
                 ]);
             }
 
+            if ($vs === VerificationState::AutoVerifiedPendingLevel2) {
+                $this->locks->assertActorHoldsLockOrIsSuperAdmin($qualification, $actor);
+            }
+
             $before = $qualification->only([
                 'verification_state',
                 'level2_review_owner_id',
+                'level2_review_locked_by',
+                'level2_review_locked_at',
             ]);
 
             $qualification->forceFill([
                 'verification_state' => VerificationState::Rejected,
                 'level2_review_owner_id' => null,
             ])->save();
+
+            if ($vs === VerificationState::AutoVerifiedPendingLevel2) {
+                $this->locks->clearLock($qualification);
+            }
 
             ApplicationComment::create([
                 'application_id' => $application->id,
@@ -185,6 +210,8 @@ class QualificationDecisionService
             $after = $qualification->only([
                 'verification_state',
                 'level2_review_owner_id',
+                'level2_review_locked_by',
+                'level2_review_locked_at',
             ]);
 
             $this->audit->record(
@@ -207,4 +234,3 @@ class QualificationDecisionService
         });
     }
 }
-

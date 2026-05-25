@@ -143,6 +143,7 @@ Each application should have one primary qualification record, but the model mus
 Fields:
 - id
 - application_id
+- learner_record_id nullable (FK → learner_records)
 - awarding_institution_name
 - qualification_holder_name
 - country_id nullable
@@ -154,6 +155,9 @@ Fields:
 - student_number nullable
 - examination_number nullable
 - title_of_qualification
+- applicant_entered_qualification_title nullable
+- verified_qualification_title nullable
+- qualification_title_source nullable (catalog|other|auto_verified_internal|institution_api|manual_override)
 - award_date
 - qualification_type_id (FK → qualification_types)
 - qualification_type legacy string (for backward compatibility / human label only)
@@ -161,6 +165,14 @@ Fields:
 - transcript_reason nullable
 - notes nullable
 - raw_subject_results JSON nullable
+- verification_state nullable
+- auto_verification_attempted_at nullable
+- auto_verification_status nullable
+- auto_verified_at nullable
+- auto_verification_confidence nullable
+- auto_verification_failure_reason nullable
+- auto_verification_match_summary JSON nullable
+- verification_source nullable
 - created_at
 - updated_at
 
@@ -172,6 +184,70 @@ Fields:
 - subject_name
 - grade
 - display_order
+- created_at
+- updated_at
+
+## Learner Achievement Records
+### learner_record_imports
+Tracks asynchronous spreadsheet imports.
+Fields:
+- id
+- uploaded_by_user_id nullable (FK → users)
+- awarding_institution_id nullable (FK → awarding_institutions)
+- file_path
+- original_filename
+- status: pending|processing|completed|completed_with_errors|failed
+- total_rows nullable
+- processed_rows
+- inserted_rows
+- updated_rows
+- failed_rows
+- errors JSON nullable
+- started_at nullable
+- completed_at nullable
+- created_at
+- updated_at
+
+### learner_records
+Internal catalog used for qualification title selection and auto-verification matching.
+Fields:
+- id
+- awarding_institution_id nullable (FK → awarding_institutions)
+- import_id nullable (FK → learner_record_imports)
+- institution_name_raw nullable
+- student_id nullable
+- certificate_no nullable
+- nrc_number nullable
+- passport_no nullable
+- first_name nullable
+- last_name nullable
+- other_names nullable
+- gender nullable
+- program_of_study nullable
+- year_awarded nullable
+- award_date nullable
+- source_type: import|institution_api|manual
+- source_reference nullable
+- raw_payload JSON nullable
+- normalized fields: nrc_normalized, passport_normalized, name_normalized, student_id_normalized, certificate_no_normalized, qualification_title_normalized
+- dedupe_hash nullable
+- is_active boolean
+- verified_at nullable
+- created_at
+- updated_at
+
+### learner_record_match_attempts
+Audit log of each auto-verification matching attempt.
+Fields:
+- id
+- qualification_id (FK → qualifications)
+- learner_record_id nullable (FK → learner_records)
+- status: matched|possible_match|ambiguous|not_found|error
+- confidence nullable integer
+- source: internal|institution_api
+- matched_fields JSON nullable
+- candidate_record_ids JSON nullable
+- failure_reason nullable
 - created_at
 - updated_at
 

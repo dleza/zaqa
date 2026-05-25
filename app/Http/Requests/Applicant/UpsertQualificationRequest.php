@@ -36,6 +36,8 @@ class UpsertQualificationRequest extends FormRequest
             'student_number' => ['nullable', 'string', 'max:100'],
             'examination_number' => ['nullable', 'string', 'max:100'],
             'title_of_qualification' => ['required', 'string', 'max:255'],
+            'qualification_title_source' => ['nullable', 'string', Rule::in(['catalog', 'other'])],
+            'applicant_entered_qualification_title' => ['nullable', 'string', 'max:255'],
             'award_date' => ['required', 'date', 'before_or_equal:today'],
             'qualification_type_id' => ['required', 'integer', 'exists:qualification_types,id'],
             'transcript_reason' => ['nullable', 'string', 'max:2000'],
@@ -122,6 +124,15 @@ class UpsertQualificationRequest extends FormRequest
                         $validator->errors()->add('subject_results', 'Each subject may only be selected once.');
                     }
                 }
+            }
+
+            $source = trim((string) $this->input('qualification_title_source', ''));
+            $manualTitle = trim((string) $this->input('applicant_entered_qualification_title', ''));
+            if ($source === 'other' && $manualTitle === '') {
+                $validator->errors()->add('applicant_entered_qualification_title', 'Please type the qualification title.');
+            }
+            if ($manualTitle !== '' && $source !== '' && $source !== 'other') {
+                $validator->errors()->add('applicant_entered_qualification_title', 'Remove the typed title when selecting from the list.');
             }
         });
     }

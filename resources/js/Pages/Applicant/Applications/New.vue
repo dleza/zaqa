@@ -49,14 +49,13 @@ const selfMissingIdEffective = computed(
   () => effectiveSelfNrc.value.length === 0 && effectiveSelfPassport.value.length === 0,
 )
 
-type StepKey = 'applicant' | 'qualification' | 'consent' | 'payment' | 'review'
+type StepKey = 'applicant' | 'qualification' | 'consent' | 'payment'
 const activeStep = ref<StepKey>('applicant')
 const steps = computed(() => [
   { key: 'applicant' as const, label: 'Applicant' },
   { key: 'qualification' as const, label: 'Qualification' },
-  { key: 'consent' as const, label: 'Consent' },
+  { key: 'consent' as const, label: 'Declarations' },
   { key: 'payment' as const, label: 'Payment' },
-  { key: 'review' as const, label: 'Review & submit' },
 ])
 
 function submit() {
@@ -344,7 +343,7 @@ watch(
             <li class="flex gap-3">
               <CheckCircle2 class="mt-0.5 h-5 w-5 shrink-0 text-text-muted" aria-hidden="true" />
               <div>
-                <div class="text-sm font-semibold text-text-primary">Consent</div>
+                <div class="text-sm font-semibold text-text-primary">Declarations</div>
                 <p class="mt-1 text-sm leading-relaxed text-text-muted">Declarations and any required consent uploads.</p>
               </div>
             </li>
@@ -353,15 +352,8 @@ watch(
               <div>
                 <div class="text-sm font-semibold text-text-primary">Payment</div>
                 <p class="mt-1 text-sm leading-relaxed text-text-muted">
-                  Invoice and fee payment before your application can be submitted for processing.
+                  Invoice and fee payment before your application is automatically submitted for processing.
                 </p>
-              </div>
-            </li>
-            <li class="flex gap-3">
-              <CheckCircle2 class="mt-0.5 h-5 w-5 shrink-0 text-text-muted" aria-hidden="true" />
-              <div>
-                <div class="text-sm font-semibold text-text-primary">Review & submit</div>
-                <p class="mt-1 text-sm leading-relaxed text-text-muted">Final check and submit to ZAQA.</p>
               </div>
             </li>
           </ul>
@@ -382,4 +374,3 @@ watch(
     </div>
   </ApplicantLayout>
 </template>
-

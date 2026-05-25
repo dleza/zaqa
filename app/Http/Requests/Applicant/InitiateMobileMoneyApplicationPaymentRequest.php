@@ -10,7 +10,7 @@ class InitiateMobileMoneyApplicationPaymentRequest extends FormRequest
     {
         $application = $this->route('application');
 
-        return $this->user() && $application && $this->user()->can('update', $application);
+        return $this->user() && $application && $this->user()->can('view', $application);
     }
 
     /**
@@ -23,4 +23,3 @@ class InitiateMobileMoneyApplicationPaymentRequest extends FormRequest
         ];
     }
 }
-

@@ -88,6 +88,13 @@ class QualificationCaptureService
 
             $holderIdentity = $this->holderIdentityFromApplication($application, $actor);
 
+            $titleSourceRaw = array_key_exists('qualification_title_source', $data)
+                ? trim((string) ($data['qualification_title_source'] ?? ''))
+                : '';
+            $manualTitleRaw = array_key_exists('applicant_entered_qualification_title', $data)
+                ? trim((string) ($data['applicant_entered_qualification_title'] ?? ''))
+                : '';
+
             $payload = [
                 'awarding_institution_id' => $data['awarding_institution_id'] ?? ($data['awarding_body_id'] ?? null),
                 'awarding_institution_name_other' => $data['awarding_institution_name_other'] ?? ($data['awarding_body_name_other'] ?? null),
@@ -112,6 +119,17 @@ class QualificationCaptureService
                     : ($qualification?->notes),
                 'raw_subject_results' => $subjectResults,
             ];
+
+            if ($titleSourceRaw !== '' || $manualTitleRaw !== '') {
+                $source = $titleSourceRaw !== '' ? $titleSourceRaw : ($manualTitleRaw !== '' ? 'other' : 'catalog');
+                if ($source === 'other') {
+                    $payload['qualification_title_source'] = 'other';
+                    $payload['applicant_entered_qualification_title'] = $manualTitleRaw !== '' ? $manualTitleRaw : null;
+                } else {
+                    $payload['qualification_title_source'] = 'catalog';
+                    $payload['applicant_entered_qualification_title'] = null;
+                }
+            }
 
             // Backward compatibility: if the awarding institution isn't posted as an id/other,
             // accept the legacy awarding_institution_name input.
@@ -404,6 +422,14 @@ class QualificationCaptureService
                 : $qualification->notes;
 
             $countryNameOther = trim((string) ($data['country_name_other'] ?? ''));
+
+            $titleSourceRaw = array_key_exists('qualification_title_source', $data)
+                ? trim((string) ($data['qualification_title_source'] ?? ''))
+                : '';
+            $manualTitleRaw = array_key_exists('applicant_entered_qualification_title', $data)
+                ? trim((string) ($data['applicant_entered_qualification_title'] ?? ''))
+                : '';
+
             $payload = [
                 'awarding_institution_id' => $resolvedInstitutionId,
                 'awarding_institution_name_other' => $awardingInstitutionNameOther !== '' ? $awardingInstitutionNameOther : null,
@@ -424,6 +450,17 @@ class QualificationCaptureService
                 'transcript_reason' => (($data['transcript_reason'] ?? '') !== '' ? (string) $data['transcript_reason'] : null),
                 'notes' => $notesVal,
             ];
+
+            if ($titleSourceRaw !== '' || $manualTitleRaw !== '') {
+                $source = $titleSourceRaw !== '' ? $titleSourceRaw : ($manualTitleRaw !== '' ? 'other' : 'catalog');
+                if ($source === 'other') {
+                    $payload['qualification_title_source'] = 'other';
+                    $payload['applicant_entered_qualification_title'] = $manualTitleRaw !== '' ? $manualTitleRaw : null;
+                } else {
+                    $payload['qualification_title_source'] = 'catalog';
+                    $payload['applicant_entered_qualification_title'] = null;
+                }
+            }
 
             $qualification->forceFill($payload)->save();
 

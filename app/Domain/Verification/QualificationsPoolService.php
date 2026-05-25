@@ -169,6 +169,7 @@ class QualificationsPoolService
                         VerificationState::AssignedToLevel1->value,
                         VerificationState::UnderLevel1Review->value,
                         VerificationState::UnderLevel2Review->value,
+                        VerificationState::AutoVerifiedPendingLevel2->value,
                     ]);
             });
         }

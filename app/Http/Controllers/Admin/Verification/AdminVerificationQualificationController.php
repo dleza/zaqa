@@ -6,8 +6,10 @@ use App\Domain\Applications\QualificationCaptureService;
 use App\Domain\Certificates\QualificationCertificateService;
 use App\Domain\Payments\ApplicationPaymentSatisfaction;
 use App\Domain\Verification\AssignmentService;
+use App\Domain\Verification\AutoVerifiedQualificationReviewService;
 use App\Domain\Verification\QualificationDecisionService;
 use App\Domain\Verification\QualificationLevel1ReviewService;
+use App\Domain\Verification\QualificationLevel2ReviewLockService;
 use App\Domain\Verification\QualificationSendBackService;
 use App\Domain\Verification\VerificationQualificationAccess;
 use App\Enums\VerificationState;
@@ -54,6 +56,9 @@ class AdminVerificationQualificationController extends Controller
             'assignments.assignedBy',
             'assignments.assignedTo',
             'certificates',
+            'learnerRecord.awardingInstitution',
+            'learnerRecordMatchAttempts.learnerRecord',
+            'level2ReviewLockedBy',
         ]);
 
         $applicationModel = $qualification->application;
@@ -92,6 +97,13 @@ class AdminVerificationQualificationController extends Controller
             ->values();
 
         $sendBackTimeline = $this->buildSendBackResubmissionTimeline($qualification);
+
+        $locks = app(QualificationLevel2ReviewLockService::class);
+        $lockExpired = $locks->isExpired($qualification->level2_review_locked_at);
+        $isLocked = (bool) $qualification->level2_review_locked_by && ! $lockExpired;
+        $lockExpiresAt = $qualification->level2_review_locked_at
+            ? $qualification->level2_review_locked_at->copy()->addMinutes($locks->ttlMinutes())
+            : null;
 
         return Inertia::render('Admin/Verification/Qualifications/Show', [
             'qualification' => [
@@ -133,10 +145,70 @@ class AdminVerificationQualificationController extends Controller
                 'can_reissue_cveq_certificate' => $canReissueCveq,
                 'qualification_type' => $qualification->qualificationTypeMaster?->name,
                 'title' => $qualification->title_of_qualification,
+                'applicant_entered_qualification_title' => $qualification->applicant_entered_qualification_title,
+                'verified_qualification_title' => $qualification->verified_qualification_title,
+                'qualification_title_source' => $qualification->qualification_title_source?->value ?? (string) ($qualification->qualification_title_source ?? ''),
                 'awarding_institution' => $qualification->awardingInstitution?->name ?? $qualification->awarding_institution_name_other ?? $qualification->awarding_institution_name,
                 'country' => $qualification->country?->name ?? $qualification->country_name_other,
                 'holder_name' => $qualification->qualification_holder_name,
                 'holder_nrc_passport' => $qualification->nrc_passport_number,
+                'student_number' => $qualification->student_number,
+                'certificate_number' => $qualification->certificate_number,
+                'award_date' => optional($qualification->award_date)?->format('Y-m-d'),
+                'auto_verification' => [
+                    'attempted_at' => optional($qualification->auto_verification_attempted_at)?->toIso8601String(),
+                    'status' => $qualification->auto_verification_status?->value ?? (string) ($qualification->auto_verification_status ?? ''),
+                    'confidence' => $qualification->auto_verification_confidence !== null ? min(100, (int) $qualification->auto_verification_confidence) : null,
+                    'failure_reason' => $qualification->auto_verification_failure_reason,
+                    'match_summary' => $qualification->auto_verification_match_summary,
+                    'source' => $qualification->verification_source,
+                    'auto_verified_at' => optional($qualification->auto_verified_at)?->toIso8601String(),
+                ],
+                'level2_review_lock' => [
+                    'is_locked' => $isLocked,
+                    'locked_by_user_id' => $isLocked ? (int) $qualification->level2_review_locked_by : null,
+                    'locked_by_name' => $isLocked ? ($qualification->level2ReviewLockedBy?->name ?? null) : null,
+                    'locked_at' => $isLocked ? optional($qualification->level2_review_locked_at)?->toIso8601String() : null,
+                    'expires_at' => $isLocked ? optional($lockExpiresAt)?->toIso8601String() : null,
+                ],
+                'level2_lock_url' => route('admin.verification.qualifications.level2_lock', ['qualification' => $qualification]),
+                'level2_unlock_url' => route('admin.verification.qualifications.level2_unlock', ['qualification' => $qualification]),
+                'send_to_manual_review_url' => route('admin.verification.qualifications.send_to_manual_review', ['qualification' => $qualification]),
+                'learner_record' => $qualification->learnerRecord
+                    ? [
+                        'id' => $qualification->learnerRecord->id,
+                        'awarding_institution' => $qualification->learnerRecord->awardingInstitution
+                            ? [
+                                'id' => $qualification->learnerRecord->awardingInstitution->id,
+                                'name' => $qualification->learnerRecord->awardingInstitution->name,
+                            ]
+                            : null,
+                        'institution_name_raw' => $qualification->learnerRecord->institution_name_raw,
+                        'student_id' => $qualification->learnerRecord->student_id,
+                        'certificate_no' => $qualification->learnerRecord->certificate_no,
+                        'nrc_number' => $qualification->learnerRecord->nrc_number,
+                        'passport_no' => $qualification->learnerRecord->passport_no,
+                        'program_of_study' => $qualification->learnerRecord->program_of_study,
+                        'year_awarded' => $qualification->learnerRecord->year_awarded,
+                        'award_date' => optional($qualification->learnerRecord->award_date)?->format('Y-m-d'),
+                        'source_type' => $qualification->learnerRecord->source_type?->value,
+                    ]
+                    : null,
+                'match_attempts' => $qualification->learnerRecordMatchAttempts
+                    ->sortByDesc('id')
+                    ->take(20)
+                    ->values()
+                    ->map(fn ($a) => [
+                        'id' => $a->id,
+                        'status' => $a->status?->value ?? (string) ($a->status ?? ''),
+                        'confidence' => $a->confidence !== null ? min(100, (int) $a->confidence) : null,
+                        'source' => $a->source,
+                        'matched_fields' => $a->matched_fields,
+                        'candidate_record_ids' => $a->candidate_record_ids,
+                        'failure_reason' => $a->failure_reason,
+                        'learner_record_id' => $a->learner_record_id,
+                        'created_at' => optional($a->created_at)?->toIso8601String(),
+                    ]),
                 'documents' => $qualification->documents
                     ->sortByDesc('id')
                     ->values()
@@ -179,10 +251,12 @@ class AdminVerificationQualificationController extends Controller
                 'assign' => (bool) $request->user()?->can('verification.assign'),
                 'send_back' => (bool) $request->user()?->can('verification.send_back'),
                 'level1_process' => (bool) $request->user()?->can('verification.level1.process'),
+                'level2_review' => (bool) $request->user()?->can('verification.level2.review'),
                 'approve' => (bool) $request->user()?->can('verification.decide.approve'),
                 'reject' => (bool) $request->user()?->can('verification.decide.reject'),
                 'edit_qualification' => (bool) ($request->user()?->can('verification.level1.process') || $request->user()?->can('verification.level2.review')),
                 'issue_certificate' => (bool) $request->user()?->can('verification.certificate.issue'),
+                'is_super_admin' => (bool) $request->user()?->hasRole('Super Admin'),
             ],
         ]);
     }
@@ -356,6 +430,10 @@ class AdminVerificationQualificationController extends Controller
     {
         VerificationQualificationAccess::ensureQualificationAccessible($request->user(), $qualification);
 
+        if ($qualification->verification_state === VerificationState::AutoVerifiedPendingLevel2) {
+            app(QualificationLevel2ReviewLockService::class)->assertActorHoldsLockOrIsSuperAdmin($qualification, $request->user());
+        }
+
         $sendBack->sendBackToApplicant($qualification, $request->user(), (string) $request->validated('comment'));
 
         // Send-back clears Level 1 assignment; restricted verifiers would get 403 on the same qualification URL.
@@ -421,6 +499,63 @@ class AdminVerificationQualificationController extends Controller
         );
 
         return back()->with('success', 'Qualification rejected.');
+    }
+
+    public function lockForLevel2Review(
+        Request $request,
+        Qualification $qualification,
+        QualificationLevel2ReviewLockService $locks,
+    ): RedirectResponse {
+        VerificationQualificationAccess::ensureQualificationAccessible($request->user(), $qualification);
+
+        abort_unless((bool) $request->user()?->can('verification.level2.review'), 403);
+
+        if ($qualification->verification_state !== VerificationState::AutoVerifiedPendingLevel2) {
+            return back()->withErrors([
+                'lock' => 'This qualification is not in the auto-verified Level 2 review queue.',
+            ]);
+        }
+
+        try {
+            $locks->lock($qualification, $request->user());
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return back()->withErrors($e->errors());
+        }
+
+        return back()->with('success', 'Locked for Level 2 review.');
+    }
+
+    public function unlockLevel2Review(
+        Request $request,
+        Qualification $qualification,
+        QualificationLevel2ReviewLockService $locks,
+    ): RedirectResponse {
+        VerificationQualificationAccess::ensureQualificationAccessible($request->user(), $qualification);
+
+        abort_unless((bool) $request->user()?->can('verification.level2.review'), 403);
+
+        try {
+            $locks->unlock($qualification, $request->user());
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return back()->withErrors($e->errors());
+        }
+
+        return back()->with('success', 'Review lock released.');
+    }
+
+    public function sendToManualReview(
+        Request $request,
+        Qualification $qualification,
+        AutoVerifiedQualificationReviewService $autoVerified,
+    ): RedirectResponse {
+        VerificationQualificationAccess::ensureQualificationAccessible($request->user(), $qualification);
+        abort_unless((bool) $request->user()?->can('verification.level2.review'), 403);
+
+        $autoVerified->sendToManualReview($qualification, $request->user());
+
+        return redirect()
+            ->route('admin.verification.auto_verified.index')
+            ->with('success', 'Qualification sent to manual review queue.');
     }
 
     /**

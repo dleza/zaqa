@@ -256,11 +256,13 @@ class AdminApplicationsTrackController extends Controller
         }
 
         return match ($state) {
+            VerificationState::AwaitingAutoVerification => 'Awaiting auto-verification',
             VerificationState::AwaitingAssignment => 'Awaiting assignment',
             VerificationState::AssignedToLevel1 => 'Assigned to Level 1',
             VerificationState::UnderLevel1Review => 'Under Level 1 review',
             VerificationState::UnderLevel2Review => 'Under Level 2 review',
             VerificationState::ReturnedToApplicant => 'Returned to applicant',
+            VerificationState::AutoVerifiedPendingLevel2 => 'Auto-verified (Level 2 review)',
             VerificationState::ApprovedForCertificate => 'Approved for certificate',
             VerificationState::Rejected => 'Rejected',
             VerificationState::CertificateIssued => 'Certificate issued',

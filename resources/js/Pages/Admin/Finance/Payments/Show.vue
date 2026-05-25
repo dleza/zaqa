@@ -11,8 +11,8 @@ const props = defineProps<{
 
 function badgeClass(s: string) {
   if (s === 'confirmed') return 'zaqa-badge-success'
-  if (s === 'rejected' || s === 'failed' || s === 'expired') return 'zaqa-badge-danger'
-  if (s === 'awaiting_finance_review' || s === 'pending_confirmation' || s === 'initiated') return 'zaqa-badge-warning'
+  if (s === 'rejected' || s === 'failed' || s === 'expired' || s === 'unknown') return 'zaqa-badge-danger'
+  if (s === 'awaiting_finance_review' || s === 'pending_confirmation' || s === 'initiated' || s === 'pending') return 'zaqa-badge-warning'
   return 'zaqa-badge-secondary'
 }
 </script>
@@ -102,6 +102,45 @@ function badgeClass(s: string) {
           </div>
         </div>
 
+        <div v-if="(payment.attempts ?? []).length > 0" class="rounded-2xl border border-border bg-surface p-6 shadow-sm">
+          <div class="text-sm font-semibold text-text-primary">Gateway attempts</div>
+          <div class="mt-3 overflow-x-auto">
+            <table class="min-w-full text-sm">
+              <thead class="bg-surface-muted text-xs font-semibold text-text-muted">
+                <tr>
+                  <th class="px-4 py-3 text-left">ID</th>
+                  <th class="px-4 py-3 text-left">Gateway</th>
+                  <th class="px-4 py-3 text-left">Reference</th>
+                  <th class="px-4 py-3 text-left">Mobile</th>
+                  <th class="px-4 py-3 text-left">Status</th>
+                  <th class="px-4 py-3 text-left">Code</th>
+                  <th class="px-4 py-3 text-left">Message</th>
+                  <th class="px-4 py-3 text-left">Queried</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-border/60">
+                <tr v-for="a in payment.attempts" :key="a.id">
+                  <td class="px-4 py-3 font-semibold text-text-primary">#{{ a.id }}</td>
+                  <td class="px-4 py-3 text-text-primary">{{ a.gateway }}</td>
+                  <td class="px-4 py-3 text-xs text-text-muted">{{ a.payment_reference ?? '—' }}</td>
+                  <td class="px-4 py-3 text-xs text-text-muted">{{ a.mobile_number ?? '—' }}</td>
+                  <td class="px-4 py-3">
+                    <span class="zaqa-badge" :class="badgeClass(a.status)">{{ a.status }}</span>
+                  </td>
+                  <td class="px-4 py-3 text-xs text-text-muted">{{ a.response_code ?? '—' }}</td>
+                  <td class="px-4 py-3 text-xs text-text-muted">
+                    <span v-if="a.response_message">{{ a.response_message }}</span>
+                    <span v-else>—</span>
+                  </td>
+                  <td class="px-4 py-3 text-xs text-text-muted">
+                    {{ a.last_queried_at ? new Date(a.last_queried_at).toLocaleString() : '—' }}
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
         <div class="rounded-2xl border border-border bg-surface p-6 shadow-sm">
           <div class="text-sm font-semibold text-text-primary">Webhook / return events</div>
           <div v-if="webhooks.length === 0" class="mt-3 text-sm text-text-muted">No webhook/return logs recorded for this payment.</div>
@@ -159,4 +198,3 @@ function badgeClass(s: string) {
     </div>
   </AdminLayout>
 </template>
-

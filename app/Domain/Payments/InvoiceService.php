@@ -5,6 +5,7 @@ namespace App\Domain\Payments;
 use App\Domain\Audit\AuditLogService;
 use App\Domain\Fees\QualificationFeeResolver;
 use App\Domain\Tracking\ApplicationLifecycleService;
+use App\Enums\ApplicationStatus;
 use App\Enums\InvoiceStatus;
 use App\Enums\LifecycleStage;
 use App\Enums\LifecycleVisibility;
@@ -38,6 +39,16 @@ class InvoiceService
                 ->first();
 
             $application->loadMissing('qualifications');
+
+            // When an invoice exists for a draft application, the applicant has entered the payment journey.
+            // Keep it editable until payment satisfaction triggers automatic submission.
+            if (
+                $application->current_status === ApplicationStatus::Draft
+                && $primary
+                && $primary->status === InvoiceStatus::Issued
+            ) {
+                $application->forceFill(['current_status' => ApplicationStatus::PendingPayment])->save();
+            }
 
             if ($application->qualifications->count() < 1) {
                 throw ValidationException::withMessages([
@@ -217,6 +228,10 @@ class InvoiceService
                     'breakdown' => $breakdown,
                 ],
             ]);
+
+            if ($application->current_status === ApplicationStatus::Draft) {
+                $application->forceFill(['current_status' => ApplicationStatus::PendingPayment])->save();
+            }
 
             $this->audit->record(
                 eventType: 'finance.invoice_issued',

@@ -100,7 +100,7 @@ Capture:
 - awarding institution (searchable list; supports **Other** with manual entry)
 - country of award
 - certificate number or student number or examination number
-- title of qualification
+- title of qualification (searchable dropdown from Learner Records; supports **Other** with manual entry)
 - date of award as on certificate
 - qualification type (**ZQF level**, loaded from master data)
 
@@ -142,13 +142,13 @@ Implementation:
 - version the consent upload if resubmitted
 
 ### Step 7 — Payment (required before final submission)
-Applicants must complete payment before they can submit the application for processing.
+Applicants must complete payment before the system submits the application for processing.
 
 Payment rules:
 - payment is a first-class wizard step after Consent
 - supported methods: **Card (VISA)**, **Mobile Money**, **Bank deposit**, **Bank transfer**
 - applicant may initiate payment and return later
-- **final submission must remain blocked until payment is confirmed**
+- the application remains editable until payment is confirmed
 - an invoice is generated as the immutable billing record; changing payment method does not change the invoice
 - after payment is confirmed, payment method options are hidden and the payment step becomes read-only
 
@@ -157,25 +157,27 @@ Confirmed means:
 - mobile money callback/status update marks payment successful
 - bank deposit/transfer proof is manually approved by finance
 
-### Step 8 — Review & submit
-Applicants can review the full application and submit only when:
-- all required steps are complete, and
-- **payment status is confirmed**
+### Automatic submission trigger (no manual “Submit Application”)
+There is no separate applicant “Submit Application” action.
+
+Once payment is confirmed and payment satisfaction is met:
+- the application is locked from applicant editing
+- the application is automatically marked as submitted (`submitted_at` set)
+- qualifications enter the auto-verification pipeline asynchronously
 
 ## Post-submission service feedback (required)
-Immediately after a successful final submission, the applicant is shown a premium service feedback experience:
+Immediately after payment confirmation and automatic submission, the applicant is shown a premium service feedback experience:
 - rating (required when submitting feedback)
 - optional written comments
 - feedback is linked to the submitted application and applicant user
 - feedback can be skipped
 - only one feedback submission per application is allowed by default
 
-### Step 9 — Save draft
+### Save draft
 Users must be able to:
 - save draft
 - return later
-- edit draft before submission
-- submit only when validations pass
+- edit draft before payment confirmation locks the application
 
 UI notes:
 - step navigation is gated; users can only continue once a step is completed and saved

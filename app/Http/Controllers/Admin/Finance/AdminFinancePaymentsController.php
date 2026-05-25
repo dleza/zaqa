@@ -39,7 +39,7 @@ class AdminFinancePaymentsController extends Controller
 
     public function show(Request $request, Payment $payment, AuditLogService $audit): Response
     {
-        $payment->loadMissing(['application.applicant', 'invoice', 'proofDocument', 'reviewedBy']);
+        $payment->loadMissing(['application.applicant', 'invoice', 'proofDocument', 'reviewedBy', 'attempts']);
 
         $audit->record(
             eventType: 'finance.payment_viewed',
@@ -80,6 +80,32 @@ class AdminFinancePaymentsController extends Controller
                 'provider_reference' => $payment->provider_reference,
                 'provider_transaction_id' => $payment->provider_transaction_id,
                 'mobile_number' => $payment->mobile_number,
+                'attempts' => $payment->attempts
+                    ->sortByDesc('id')
+                    ->values()
+                    ->map(fn ($a) => [
+                        'id' => $a->id,
+                        'gateway' => $a->gateway,
+                        'method' => $a->method,
+                        'status' => $a->status?->value ?? (string) $a->status,
+                        'payment_reference' => $a->payment_reference,
+                        'provider_transaction_id' => $a->provider_transaction_id,
+                        'mobile_number' => $a->mobile_number,
+                        'currency' => $a->currency,
+                        'amount_cents' => (int) $a->amount_cents,
+                        'response_code' => $a->response_code,
+                        'response_message' => $a->response_message,
+                        'query_attempts' => (int) $a->query_attempts,
+                        'initiated_at' => optional($a->initiated_at)?->toIso8601String(),
+                        'confirmed_at' => optional($a->confirmed_at)?->toIso8601String(),
+                        'failed_at' => optional($a->failed_at)?->toIso8601String(),
+                        'rejected_at' => optional($a->rejected_at)?->toIso8601String(),
+                        'expired_at' => optional($a->expired_at)?->toIso8601String(),
+                        'last_queried_at' => optional($a->last_queried_at)?->toIso8601String(),
+                        'next_query_at' => optional($a->next_query_at)?->toIso8601String(),
+                        'created_at' => optional($a->created_at)?->toIso8601String(),
+                    ])
+                    ->all(),
                 'review_comment' => $payment->review_comment,
                 'rejection_reason' => $payment->rejection_reason,
                 'initiated_at' => optional($payment->initiated_at)?->toIso8601String(),

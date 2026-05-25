@@ -3,6 +3,8 @@
 namespace App\Models;
 
 use App\Enums\VerificationState;
+use App\Enums\LearnerRecordMatchStatus;
+use App\Enums\QualificationTitleSource;
 use Illuminate\Database\Eloquent\Casts\AsArrayObject;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -13,6 +15,7 @@ class Qualification extends Model
 {
     protected $fillable = [
         'application_id',
+        'learner_record_id',
         'verification_reference_number',
         'awarding_institution_id',
         'awarding_institution_name',
@@ -27,6 +30,9 @@ class Qualification extends Model
         'student_number',
         'examination_number',
         'title_of_qualification',
+        'applicant_entered_qualification_title',
+        'verified_qualification_title',
+        'qualification_title_source',
         'award_date',
         'qualification_type',
         'qualification_type_id',
@@ -36,9 +42,18 @@ class Qualification extends Model
         'assigned_at',
         'reviewed_at',
         'returned_to_applicant_at',
+        'auto_verification_attempted_at',
+        'auto_verification_status',
+        'auto_verified_at',
+        'auto_verification_confidence',
+        'auto_verification_failure_reason',
+        'auto_verification_match_summary',
+        'verification_source',
         'send_back_by_user_id',
         'send_back_reopen_level',
         'level2_review_owner_id',
+        'level2_review_locked_by',
+        'level2_review_locked_at',
         'reviewer_notes',
         'fee_currency',
         'fee_amount_cents',
@@ -55,7 +70,14 @@ class Qualification extends Model
         'assigned_at' => 'datetime',
         'reviewed_at' => 'datetime',
         'returned_to_applicant_at' => 'datetime',
+        'auto_verification_attempted_at' => 'datetime',
+        'auto_verification_status' => LearnerRecordMatchStatus::class,
+        'auto_verified_at' => 'datetime',
+        'auto_verification_confidence' => 'int',
+        'auto_verification_match_summary' => AsArrayObject::class,
+        'qualification_title_source' => QualificationTitleSource::class,
         'verification_state' => VerificationState::class,
+        'level2_review_locked_at' => 'datetime',
         'fee_amount_cents' => 'int',
         'raw_subject_results' => AsArrayObject::class,
         'created_at' => 'datetime',
@@ -87,6 +109,16 @@ class Qualification extends Model
         return $this->belongsTo(QualificationType::class, 'qualification_type_id');
     }
 
+    public function learnerRecord(): BelongsTo
+    {
+        return $this->belongsTo(LearnerRecord::class);
+    }
+
+    public function learnerRecordMatchAttempts(): HasMany
+    {
+        return $this->hasMany(LearnerRecordMatchAttempt::class);
+    }
+
     public function assignedVerifier(): BelongsTo
     {
         return $this->belongsTo(User::class, 'assigned_verifier_id');
@@ -100,6 +132,11 @@ class Qualification extends Model
     public function level2ReviewOwner(): BelongsTo
     {
         return $this->belongsTo(User::class, 'level2_review_owner_id');
+    }
+
+    public function level2ReviewLockedBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'level2_review_locked_by');
     }
 
     public function consentForm(): HasOne

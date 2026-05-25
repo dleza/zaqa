@@ -7,14 +7,18 @@ use App\Domain\Finance\Events\PaymentProofRejected;
 use App\Domain\Finance\Listeners\SendPaymentProofApprovedNotification;
 use App\Domain\Finance\Listeners\SendPaymentProofRejectedNotification;
 use App\Domain\Finance\PaymentProofReviewService;
+use App\Enums\DocumentType;
 use App\Enums\InvoiceStatus;
 use App\Enums\PaymentMethod;
 use App\Enums\PaymentStatus;
 use App\Mail\Finance\PaymentProofApprovedMail;
 use App\Mail\Finance\PaymentProofRejectedMail;
+use App\Models\ApplicantProfile;
 use App\Models\Application;
 use App\Models\Invoice;
 use App\Models\Payment;
+use App\Models\Qualification;
+use App\Models\QualificationDocument;
 use App\Models\User;
 use Database\Seeders\RolesAndPermissionsSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -36,6 +40,21 @@ class FinancePaymentOperationsTest extends TestCase
     private function makeManualProofPayment(): array
     {
         $applicant = User::factory()->activated()->create(['applicant_type' => 'individual', 'email' => 'applicant@example.test']);
+
+        ApplicantProfile::create([
+            'user_id' => $applicant->id,
+            'first_name' => 'Applicant',
+            'surname' => 'Test',
+            'nrc_number' => '111111/11/1',
+            'email' => $applicant->email,
+            'phone_primary' => $applicant->phone_primary,
+            'identity_document_disk' => 'local',
+            'identity_document_path' => 'profiles/'.$applicant->id.'/identity.pdf',
+            'identity_document_original_name' => 'identity.pdf',
+            'identity_document_size_bytes' => 1,
+            'identity_document_uploaded_at' => now(),
+        ]);
+
         $application = Application::query()->create([
             'uuid' => (string) Str::uuid(),
             'application_number' => 'ZAQA-FIN-'.rand(1000, 9999),
@@ -45,7 +64,44 @@ class FinancePaymentOperationsTest extends TestCase
             'qualification_category' => 'diploma',
             'current_status' => 'draft',
             'is_foreign' => false,
-            'metadata' => [],
+            'metadata' => [
+                'submitting_for' => 'self',
+                'wizard_declarations' => [
+                    'terms_accepted_at' => now()->toIso8601String(),
+                    'information_confirmed_at' => now()->toIso8601String(),
+                ],
+            ],
+        ]);
+
+        $qualification = Qualification::query()->create([
+            'application_id' => $application->id,
+            'awarding_institution_name' => 'Test Institute',
+            'qualification_holder_name' => 'Applicant Test',
+            'nrc_passport_number' => '111111/11/1',
+            'certificate_number' => 'CERT-FIN-001',
+            'title_of_qualification' => 'Diploma in Finance Testing',
+            'award_date' => now()->subYear()->toDateString(),
+            'qualification_type' => 'diploma',
+            'is_foreign_qualification' => false,
+            'verification_state' => null,
+        ]);
+
+        QualificationDocument::query()->create([
+            'application_id' => $application->id,
+            'qualification_id' => $qualification->id,
+            'document_type' => DocumentType::CertificateCopy->value,
+            'original_name' => 'certificate.pdf',
+            'stored_name' => 'certificate.pdf',
+            'disk' => 'local',
+            'path' => 'applications/'.$application->id.'/certificate.pdf',
+            'mime_type' => 'application/pdf',
+            'extension' => 'pdf',
+            'size_bytes' => 1,
+            'sha256_hash' => hash('sha256', 'certificate'),
+            'visibility' => 'private',
+            'uploaded_by_user_id' => $applicant->id,
+            'version_number' => 1,
+            'is_current_version' => true,
         ]);
 
         $invoice = Invoice::query()->create([

@@ -116,6 +116,63 @@ Confirmation rules:
 - Mobile Money: provider callback/status update marks payment successful
 - Bank deposit/transfer: finance manual approval confirms payment (rejection requires a reason)
 
+## Mobile Money gateway: cGrate (Konik) (implemented)
+The applicant Mobile Money flow is implemented using cGrate’s Konik SOAP webservice (push + poll):
+
+1. Initiate payment (`processCustomerPayment`) which triggers a USSD/STK prompt on the customer phone.
+2. Store a local `payment_attempts` row (gateway = `cgrate`) and set `payments.status = pending_confirmation`.
+3. Poll cGrate (`queryCustomerPayment`) using the server-generated `payment_reference` until a terminal status is reached.
+4. Only mark the invoice/application paid after the query confirms approval.
+
+### Key files
+- `config/cgrate.php` — gateway configuration (env-driven)
+- `app/Domain/Payments/Gateways/CGrate/CGrateClient.php` — SOAP over HTTP client (manual XML; no PHP SOAP extension)
+- `app/Domain/Payments/Gateways/CGrate/CGratePaymentGateway.php` — `PaymentGateway` adapter for Mobile Money
+- `app/Jobs/Payments/QueryCGratePaymentAttemptJob.php` — polling job (query + status update)
+- `app/Domain/Payments/CGratePollingService.php` + `bootstrap/app.php` — scheduled sweep for due attempts (every minute)
+
+### Environment variables
+Required:
+- `CGRATE_ENABLED` (`true|false`)
+- `CGRATE_BASE_URL` (e.g. `https://test.543.cgrate.co.zm`)
+- `CGRATE_USERNAME`
+- `CGRATE_PASSWORD`
+
+Operational:
+- `CGRATE_TIMEOUT`, `CGRATE_CONNECT_TIMEOUT`
+- `CGRATE_VERIFY_SSL` (default `true`; set `false` only for staging environments with invalid TLS)
+- `CGRATE_POLL_INTERVAL_SECONDS`, `CGRATE_MAX_QUERY_ATTEMPTS`, `CGRATE_PAYMENT_EXPIRY_MINUTES`
+- `CGRATE_DEFAULT_CURRENCY` (default `ZMW`)
+
+Formatting/safety:
+- `CGRATE_AMOUNT_MODE` (`kwacha_decimal` or `minor_units`)
+- `CGRATE_MSISDN_FORMAT` (`local` or `international_without_plus`)
+- `CGRATE_UNKNOWN_FAIL_AFTER_ATTEMPTS` (how long to tolerate transient “unknown/no transaction”)
+
+### SOAP endpoint + auth
+- Endpoint: `${CGRATE_BASE_URL}/Konik/KonikWs`
+- Namespace: `http://konik.cgrate.com`
+- Auth: WS-Security `UsernameToken` with `PasswordText` in SOAP header.
+
+### Status / response code handling
+Important response codes (simplified mapping):
+- Pending (keep polling): `206` (PENDING_APPROVAL), `8` (PROCESSING_DELAY), `17` (TIMEOUT)
+- Confirmed (settle invoice/application): `207` (APPROVED), `226` (PAYMENT_PROCESSED)
+- Rejected: `208` (REJECTED)
+- Failed: `7` (INVALID_MSISDN), `210` (PAYMENT_FAILED), `214` (TRANSACTION_REVERSED)
+- Unknown/no transaction: `12` (UNKNOWN_TRANSACTION), `213` (NO_TRANSACTIONS_FOUND) → treated as pending for the first `CGRATE_UNKNOWN_FAIL_AFTER_ATTEMPTS` polls
+
+Notes:
+- `responseCode = 0` indicates a successful SOAP request, but is not treated as a final “paid” state on queries by default (environment-dependent).
+
+### Audit / logging
+- Gateway events are recorded via the existing `payment_webhook_logs` table using event types such as `cgrate.query` / `cgrate.expired`.
+- Payloads are sanitized (no credentials / WSSE headers are stored).
+
+### UAT tooling
+Command (non-production by default):
+- `php artisan cgrate:test-payment {mobile} {amount} --query --wait=10`
+
 ## Receipt requirements
 The system must generate a receipt after successful payment. A copy of the receipt must be stored on the applicant portal.
 

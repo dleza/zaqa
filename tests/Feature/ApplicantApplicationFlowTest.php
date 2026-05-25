@@ -139,6 +139,11 @@ class ApplicantApplicationFlowTest extends TestCase
             'consent_type' => 'local_embedded',
         ]);
 
+        $this->patch("/applicant/applications/{$application->id}/wizard-declarations", [
+            'accept_terms' => true,
+            'confirm_information_correct' => true,
+        ])->assertRedirect();
+
         // Selecting a method should not create a payment attempt/record.
         $this->post("/applicant/applications/{$application->id}/payment/select", [
             'method' => 'card',
@@ -163,14 +168,6 @@ class ApplicantApplicationFlowTest extends TestCase
         ]);
         $blocked->assertSessionHasErrors(['payment']);
 
-        $this->patch("/applicant/applications/{$application->id}/wizard-declarations", [
-            'accept_terms' => true,
-            'confirm_information_correct' => true,
-        ])->assertRedirect();
-
-        $submitResponse = $this->post("/applicant/applications/{$application->id}/submit");
-        $submitResponse->assertRedirect(route('applicant.applications.feedback.show', $application));
-
         $application->refresh();
         $this->assertSame(ApplicationStatus::Submitted, $application->current_status);
         $this->assertSame('awaiting_assignment', $application->verification_state?->value);
@@ -180,9 +177,11 @@ class ApplicantApplicationFlowTest extends TestCase
         $qualification->refresh();
         $this->assertNotNull($qualification->verification_reference_number);
         $this->assertStringStartsWith('ZAQA-Q-', $qualification->verification_reference_number);
+        $this->assertNotNull($qualification->auto_verification_attempted_at);
+        $this->assertSame('awaiting_assignment', $qualification->verification_state?->value);
 
         $this->assertDatabaseHas('audit_logs', [
-            'event_type' => 'applications.submitted',
+            'event_type' => 'applications.auto_submitted',
             'module' => 'Applications',
             'entity_type' => Application::class,
             'entity_id' => $application->id,
@@ -220,8 +219,14 @@ class ApplicantApplicationFlowTest extends TestCase
 
         $this->assertDatabaseHas('application_lifecycle_events', [
             'application_id' => $application->id,
-            'event_code' => 'submission.submitted',
+            'event_code' => 'submission.auto_submitted',
         ]);
+
+        $this->post("/applicant/applications/{$application->id}/documents", [
+            'document_type' => 'certificate_copy',
+            'qualification_id' => $qualification->id,
+            'file' => UploadedFile::fake()->create('extra.pdf', 1, 'application/pdf'),
+        ])->assertForbidden();
     }
 
     public function test_foreign_application_requires_signed_consent_upload_before_submission(): void
@@ -305,8 +310,17 @@ class ApplicantApplicationFlowTest extends TestCase
             'file' => UploadedFile::fake()->create('transcript.pdf', 120, 'application/pdf'),
         ])->assertRedirect();
 
-        $failedSubmit = $this->post("/applicant/applications/{$application->id}/submit");
-        $failedSubmit->assertSessionHasErrors(['consent']);
+        $this->patch("/applicant/applications/{$application->id}/wizard-declarations", [
+            'accept_terms' => true,
+            'confirm_information_correct' => true,
+        ])->assertRedirect();
+
+        $this->post("/applicant/applications/{$application->id}/payment/select", [
+            'method' => 'card',
+        ])->assertRedirect();
+
+        $blockedInitiate = $this->post("/applicant/applications/{$application->id}/payment/initiate-card");
+        $blockedInitiate->assertSessionHasErrors(['consent']);
 
         $this->post("/applicant/applications/{$application->id}/consent/foreign-upload", [
             'qualification_id' => $qualification->id,
@@ -323,27 +337,12 @@ class ApplicantApplicationFlowTest extends TestCase
         $this->assertNotNull($consent->uploaded_document_id);
         $this->assertNull($consent->zaqa_uploaded_document_id);
 
-        $this->patch("/applicant/applications/{$application->id}/wizard-declarations", [
-            'accept_terms' => true,
-            'confirm_information_correct' => true,
-        ])->assertRedirect();
-
-        $failedPaymentSubmit = $this->post("/applicant/applications/{$application->id}/submit");
-        $failedPaymentSubmit->assertSessionHasErrors(['payment']);
-
-        $this->post("/applicant/applications/{$application->id}/payment/select", [
-            'method' => 'card',
-        ])->assertRedirect();
-        $this->assertDatabaseMissing('payments', [
-            'application_id' => $application->id,
-        ]);
-
         $initiate = $this->post("/applicant/applications/{$application->id}/payment/initiate-card");
         $initiate->assertRedirect();
         $this->get($initiate->headers->get('Location'))->assertRedirect();
 
-        $submit = $this->post("/applicant/applications/{$application->id}/submit");
-        $submit->assertRedirect(route('applicant.applications.feedback.show', $application));
+        $application->refresh();
+        $this->assertSame(ApplicationStatus::Submitted, $application->current_status);
     }
 
     public function test_zambia_country_iso_alpha3_zmb_is_classified_as_local_not_foreign(): void
@@ -480,6 +479,11 @@ class ApplicantApplicationFlowTest extends TestCase
             'agreed_by_name' => $user->name,
         ])->assertRedirect();
 
+        $this->patch("/applicant/applications/{$application->id}/wizard-declarations", [
+            'accept_terms' => true,
+            'confirm_information_correct' => true,
+        ])->assertRedirect();
+
         $this->post("/applicant/applications/{$application->id}/payment/select", [
             'method' => 'bank_transfer',
         ])->assertRedirect();
@@ -492,22 +496,17 @@ class ApplicantApplicationFlowTest extends TestCase
         ])->assertRedirect();
 
         $payment = Payment::query()->where('application_id', $application->id)->latest('id')->firstOrFail();
-
-        $this->patch("/applicant/applications/{$application->id}/wizard-declarations", [
-            'accept_terms' => true,
-            'confirm_information_correct' => true,
-        ])->assertRedirect();
-
-        $failedSubmit = $this->post("/applicant/applications/{$application->id}/submit");
-        $failedSubmit->assertSessionHasErrors(['payment']);
+        $application->refresh();
+        $this->assertNull($application->submitted_at);
 
         $this->actingAs($finance);
         $this->post("/finance/payments/{$payment->id}/approve", [
             'comment' => 'Looks valid.',
         ])->assertRedirect();
 
-        $this->actingAs($user);
-        $this->post("/applicant/applications/{$application->id}/submit")->assertRedirect();
+        $application->refresh();
+        $this->assertSame(ApplicationStatus::Submitted, $application->current_status);
+        $this->assertNotNull($application->submitted_at);
     }
 
     public function test_document_download_requires_signed_url_and_is_audited(): void

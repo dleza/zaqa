@@ -137,6 +137,20 @@ watch(
               <option value="paid">Paid</option>
               <option value="unpaid">Unpaid</option>
             </select>
+            <select v-model="verificationState" class="zaqa-input h-10">
+              <option value="">All actionable</option>
+              <option value="awaiting_auto_verification">Awaiting auto-verification</option>
+              <option value="auto_verified_pending_level2">Auto-verified (pending Level 2)</option>
+              <option value="awaiting_assignment">Awaiting assignment</option>
+              <option value="assigned_to_level1">Assigned — Level 1</option>
+              <option value="under_level1_review">Under Level 1 review</option>
+              <option value="under_level2_review">Under Level 2 review</option>
+              <option value="returned_to_applicant">Returned to applicant</option>
+              <option value="approved_for_certificate">Approved for certificate</option>
+              <option value="certificate_issued">Certificate issued</option>
+              <option value="rejected">Rejected</option>
+              <option value="closed">Closed</option>
+            </select>
           </div>
         </div>
       </div>
@@ -196,4 +210,3 @@ watch(
     </div>
   </AdminLayout>
 </template>
-

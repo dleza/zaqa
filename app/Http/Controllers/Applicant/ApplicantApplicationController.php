@@ -3,7 +3,6 @@
 namespace App\Http\Controllers\Applicant;
 
 use App\Domain\Applications\ApplicationDraftService;
-use App\Domain\Applications\ApplicationSubmissionService;
 use App\Domain\Documents\ApplicantDocumentService;
 use App\Domain\Payments\ApplicationPaymentSatisfaction;
 use App\Enums\ApplicantType;
@@ -85,7 +84,7 @@ class ApplicantApplicationController extends Controller
     }
 
     /**
-     * Mirrors the applicant edit wizard: Applicant → Qualification → Declarations → Payment → Review & submit.
+     * Mirrors the applicant edit wizard: Applicant → Qualification → Declarations → Payment.
      * Subjects and per-qualification documents roll into the Qualification step (same as Edit.vue).
      */
     private function wizardSummary(Application $application, User $user): array
@@ -105,15 +104,12 @@ class ApplicantApplicationController extends Controller
         $declarationsDone = is_string($termsAt) && trim($termsAt) !== ''
             && is_string($confirmedAt) && trim($confirmedAt) !== '';
         $paymentDone = $this->wizardPaymentStepComplete($application);
-        // Final checkbox on Review is client-only; treat Review as pending until submit (matches Edit step gating).
-        $reviewDone = false;
 
         $steps = [
             ['key' => 'applicant', 'label' => 'Applicant', 'done' => $applicantDone],
             ['key' => 'qualification', 'label' => 'Qualification', 'done' => $qualificationDone],
             ['key' => 'consent', 'label' => 'Declarations', 'done' => $declarationsDone],
             ['key' => 'payment', 'label' => 'Payment', 'done' => $paymentDone],
-            ['key' => 'review', 'label' => 'Review & submit', 'done' => $reviewDone],
         ];
 
         $currentIndex = 0;
@@ -475,6 +471,7 @@ class ApplicantApplicationController extends Controller
             'statusHistories',
             'invoice',
             'payments.proofDocument',
+            'payments.latestAttempt',
         ]);
         $request->user()?->loadMissing(['applicantProfile', 'institutionProfile']);
 
@@ -519,6 +516,11 @@ class ApplicantApplicationController extends Controller
 
         return Inertia::render('Applicant/Applications/Edit', [
             'application' => $this->applicationPayload($request, $application),
+            'cgrate' => [
+                'enabled' => (bool) config('cgrate.enabled'),
+                'poll_interval_seconds' => (int) config('cgrate.poll_interval_seconds', 10),
+                'payment_expiry_minutes' => (int) config('cgrate.payment_expiry_minutes', 10),
+            ],
             'certificateSubjects' => $certificateSubjects,
             'serviceTypes' => array_map(
                 fn (ServiceType $type) => ['value' => $type->value, 'label' => ucfirst($type->value)],
@@ -628,16 +630,6 @@ class ApplicantApplicationController extends Controller
         return back()->with('success', 'Declarations saved.');
     }
 
-    public function submit(Request $request, Application $application, ApplicationSubmissionService $submission): RedirectResponse
-    {
-        $this->authorize('submit', $application);
-
-        $submission->submit($application, $request->user());
-
-        return redirect()->route('applicant.applications.feedback.show', $application)
-            ->with('success', 'Application submitted successfully.');
-    }
-
     public function destroy(Request $request, Application $application): RedirectResponse
     {
         $this->authorize('delete', $application);
@@ -651,7 +643,7 @@ class ApplicantApplicationController extends Controller
 
     private function applicationPayload(Request $request, Application $application): array
     {
-        $application->loadMissing('qualifications.certificates', 'payments', 'invoice');
+        $application->loadMissing('qualifications.certificates', 'payments', 'payments.latestAttempt', 'invoice');
 
         $signedExpiry = now()->addMinutes(15);
 
@@ -780,6 +772,9 @@ class ApplicantApplicationController extends Controller
                     'student_number' => $q->student_number,
                     'examination_number' => $q->examination_number,
                     'title_of_qualification' => $q->title_of_qualification,
+                    'applicant_entered_qualification_title' => $q->applicant_entered_qualification_title,
+                    'verified_qualification_title' => $q->verified_qualification_title,
+                    'qualification_title_source' => $q->qualification_title_source?->value ?? (string) ($q->qualification_title_source ?? ''),
                     'award_date' => optional($q->award_date)?->toDateString(),
                     'qualification_type' => (string) $q->qualification_type,
                     'qualification_type_id' => $q->qualification_type_id,
@@ -896,6 +891,25 @@ class ApplicantApplicationController extends Controller
                     'rejection_reason' => $displayPayment->rejection_reason,
                     'review_comment' => $displayPayment->review_comment,
                     'confirmed_at' => optional($displayPayment->confirmed_at)?->toIso8601String(),
+                    'latest_attempt' => $displayPayment->latestAttempt
+                        ? [
+                            'id' => $displayPayment->latestAttempt->id,
+                            'gateway' => $displayPayment->latestAttempt->gateway,
+                            'status' => $displayPayment->latestAttempt->status?->value ?? (string) $displayPayment->latestAttempt->status,
+                            'payment_reference' => $displayPayment->latestAttempt->payment_reference,
+                            'provider_transaction_id' => $displayPayment->latestAttempt->provider_transaction_id,
+                            'response_code' => $displayPayment->latestAttempt->response_code,
+                            'response_message' => $displayPayment->latestAttempt->response_message,
+                            'query_attempts' => $displayPayment->latestAttempt->query_attempts,
+                            'initiated_at' => optional($displayPayment->latestAttempt->initiated_at)?->toIso8601String(),
+                            'confirmed_at' => optional($displayPayment->latestAttempt->confirmed_at)?->toIso8601String(),
+                            'failed_at' => optional($displayPayment->latestAttempt->failed_at)?->toIso8601String(),
+                            'rejected_at' => optional($displayPayment->latestAttempt->rejected_at)?->toIso8601String(),
+                            'expired_at' => optional($displayPayment->latestAttempt->expired_at)?->toIso8601String(),
+                            'last_queried_at' => optional($displayPayment->latestAttempt->last_queried_at)?->toIso8601String(),
+                            'next_query_at' => optional($displayPayment->latestAttempt->next_query_at)?->toIso8601String(),
+                        ]
+                        : null,
                     'proof_document' => $paymentProof
                         ? [
                             'id' => $paymentProof->id,

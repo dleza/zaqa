@@ -3,6 +3,7 @@ import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { Link, router, useForm } from '@inertiajs/vue3'
 import ApplicantLayout from '@/Layouts/ApplicantLayout.vue'
 import InstitutionCombobox from '@/Components/InstitutionCombobox.vue'
+import QualificationTitleCombobox from '@/Components/QualificationTitleCombobox.vue'
 import InputError from '@/Components/InputError.vue'
 import Swal from 'sweetalert2'
 import { Building2, FileStack, GraduationCap, MapPin, Shield, Sparkles } from 'lucide-vue-next'
@@ -77,6 +78,8 @@ function blankQualificationForm() {
     student_number: '',
     examination_number: '',
     title_of_qualification: '',
+    qualification_title_source: 'catalog' as 'catalog' | 'other' | '',
+    applicant_entered_qualification_title: '',
     award_date: '',
     qualification_type_id: '' as number | string | '',
     transcript_reason: '',
@@ -85,6 +88,7 @@ function blankQualificationForm() {
 }
 
 const form = useForm(blankQualificationForm())
+const titleChoice = ref<string | 'other' | ''>('')
 
 /** Staged files uploaded in the same action as qualification save */
 const pendingCertificateFile = ref<File | null>(null)
@@ -134,6 +138,43 @@ function applyIdentifierToForm() {
 
 watch(identifierType, () => applyIdentifierToForm())
 watch(identifierValue, () => applyIdentifierToForm())
+
+watch(
+  () => form.awarding_institution_id,
+  () => {
+    titleChoice.value = ''
+    form.title_of_qualification = ''
+    form.applicant_entered_qualification_title = ''
+    form.qualification_title_source = 'catalog'
+  },
+)
+
+watch(titleChoice, (choice) => {
+  if (choice === 'other') {
+    form.qualification_title_source = 'other'
+    const manual = (form.applicant_entered_qualification_title ?? '').toString().trim()
+    form.title_of_qualification = manual
+    return
+  }
+
+  if (typeof choice === 'string' && choice.trim() !== '') {
+    form.qualification_title_source = 'catalog'
+    form.applicant_entered_qualification_title = ''
+    form.title_of_qualification = choice
+    return
+  }
+
+  form.qualification_title_source = 'catalog'
+  form.title_of_qualification = ''
+})
+
+watch(
+  () => form.applicant_entered_qualification_title,
+  (manual) => {
+    if (titleChoice.value !== 'other') return
+    form.title_of_qualification = (manual ?? '').toString()
+  },
+)
 
 function awardingDisplayName(): string {
   if (form.awarding_institution_id === 'other') {
@@ -211,6 +252,9 @@ async function loadFromQualification(q: any) {
   form.student_number = q.student_number ?? ''
   form.examination_number = q.examination_number ?? ''
   form.title_of_qualification = q.title_of_qualification ?? ''
+  form.qualification_title_source = (q.qualification_title_source ?? '') || (q.applicant_entered_qualification_title ? 'other' : 'catalog')
+  form.applicant_entered_qualification_title =
+    (q.applicant_entered_qualification_title ?? '') || (form.qualification_title_source === 'other' ? (q.title_of_qualification ?? '') : '')
   form.award_date = q.award_date ?? ''
   form.qualification_type_id = q.qualification_type_id ?? ''
   form.transcript_reason = q.transcript_reason ?? ''
@@ -236,6 +280,8 @@ async function loadFromQualification(q: any) {
       : q.awarding_institution_name_other
         ? 'other'
         : ''
+
+  titleChoice.value = form.qualification_title_source === 'other' ? 'other' : (form.title_of_qualification ?? '')
   syncIdentifierFromForm()
 }
 
@@ -642,9 +688,20 @@ const holderSummaryId = computed(() => {
                   </div>
                 </div>
                 <div class="sm:col-span-2">
-                  <label class="text-sm font-medium">Title of qualification</label>
-                  <input v-model="form.title_of_qualification" class="zaqa-input" :disabled="locked" />
-                  <InputError :message="form.errors.title_of_qualification" />
+                  <QualificationTitleCombobox
+                    v-model="titleChoice"
+                    :awarding-institution-id="form.awarding_institution_id && form.awarding_institution_id !== 'other' ? form.awarding_institution_id : null"
+                    query-endpoint="/applicant/reference/qualification-titles"
+                    :disabled="locked || !form.awarding_institution_id"
+                    :error="form.errors.title_of_qualification"
+                    label="Title of qualification"
+                  />
+                  <div v-if="titleChoice === 'other'" class="mt-3">
+                    <label class="text-sm font-medium">Type qualification title</label>
+                    <input v-model="form.applicant_entered_qualification_title" class="zaqa-input" :disabled="locked" />
+                    <InputError :message="form.errors.applicant_entered_qualification_title" />
+                    <div class="mt-1 text-xs text-text-muted">This title is for your application only and will be verified by ZAQA.</div>
+                  </div>
                 </div>
                 <div>
                   <label class="text-sm font-medium">Identifier type</label>

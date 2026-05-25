@@ -46,6 +46,7 @@ class QualificationCertificateService
             'qualificationTypeMaster',
             'awardingInstitution',
             'country',
+            'learnerRecord',
         ]);
 
         $application = $qualification->application;
@@ -245,6 +246,25 @@ class QualificationCertificateService
 
         $recognisedName = $type?->name ?? (string) ($qualification->title_of_qualification ?? '');
 
+        $verifiedTitle = trim((string) ($qualification->verified_qualification_title ?? ''));
+        $learnerRecordTitle = trim((string) ($qualification->learnerRecord?->program_of_study ?? ''));
+        $manualTitle = trim((string) ($qualification->applicant_entered_qualification_title ?? ''));
+        $applicantTitle = trim((string) ($qualification->title_of_qualification ?? ''));
+
+        $qualificationTitle = $verifiedTitle !== '' ? $verifiedTitle : ($learnerRecordTitle !== '' ? $learnerRecordTitle : '');
+
+        if ($qualificationTitle === '') {
+            // Safety: auto-verified certificates must not be issued using applicant-entered titles.
+            $isAutoVerified = in_array((string) ($qualification->verification_source ?? ''), ['internal_learner_record', 'institution_api'], true);
+            if ($isAutoVerified) {
+                throw ValidationException::withMessages([
+                    'qualification' => 'Cannot issue an auto-verified certificate without a verified qualification title.',
+                ]);
+            }
+
+            $qualificationTitle = $manualTitle !== '' ? $manualTitle : $applicantTitle;
+        }
+
         $logoPath = resource_path('images/zaqa_logo_clean.png');
         $logoDataUri = null;
         if (is_file($logoPath)) {
@@ -264,7 +284,7 @@ class QualificationCertificateService
             'holder_name' => $holderName !== '' ? $holderName : '—',
             'holder_id' => trim((string) ($qualification->nrc_passport_number ?? '')) ?: '—',
             'zaqa_reference' => (string) ($qualification->verification_reference_number ?? ''),
-            'qualification_title' => (string) ($qualification->title_of_qualification ?? ''),
+            'qualification_title' => $qualificationTitle !== '' ? $qualificationTitle : '—',
             'recognised_zambian_qualification' => $recognisedName,
             'awarding_institution' => $institutionName !== '' ? $institutionName : '—',
             'award_date' => optional($qualification->award_date)?->format('d/m/Y') ?? '—',

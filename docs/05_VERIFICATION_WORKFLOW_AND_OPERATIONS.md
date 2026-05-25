@@ -129,17 +129,62 @@ If country or awarding institution is not listed:
 ## Workflow states
 Recommended internal workflow states:
 - Submitted
+- Awaiting Auto-Verification
 - Awaiting Assignment
 - Assigned to Level 1
 - Under Level 1 Review
 - Returned to Applicant
 - Resubmitted
 - Under Level 2 Review
+- Auto Verified Pending Level 2
 - Approved for Certificate
 - Rejected
 - Certificate Issued
 - Certificate Reissued
 - Closed
+
+## Auto-verification (Learner Achievement Records)
+When an application is **paid and payment satisfaction is confirmed**, the system automatically:
+- locks the application from applicant edits
+- submits the application into verification
+- transitions each qualification into `awaiting_auto_verification`
+- dispatches an asynchronous job per qualification to attempt auto-verification
+
+### Learner records module
+Auto-verification uses internal **Learner Achievement Records** (`learner_records`) as the first lookup source.
+
+Records are populated primarily via:
+- admin Excel imports (`learner_record_imports`)
+- (future) institution integrations
+- (optional) manual/admin entry
+
+### Matching threshold and safety
+The matching engine produces a confidence score (0–100).
+
+Config:
+- `AUTO_VERIFICATION_ENABLED` (default true)
+- `AUTO_VERIFICATION_THRESHOLD` (default 70)
+- `AUTO_VERIFICATION_AUTO_ISSUE_ENABLED` (default false)
+
+Safety rules:
+- never auto-verify using only title, only institution, only year, or institution+year
+- require “strong evidence” such as Student ID, Certificate No, NRC, or Passport
+- ambiguous outcomes must not be auto-issued
+
+### Outcomes
+For each qualification in `awaiting_auto_verification`:
+- **Matched and safe** (confidence ≥ threshold, non-ambiguous):
+  - qualification is linked to the matched learner record
+  - qualification moves to:
+    - `auto_verified_pending_level2` when auto-issue is disabled (default), or
+    - `approved_for_certificate` and then auto-issued when auto-issue is enabled
+- **Possible / Ambiguous**:
+  - if confidence ≥ threshold → route to `auto_verified_pending_level2`
+  - otherwise → fall back to `awaiting_assignment`
+- **Not found / error**:
+  - fall back to `awaiting_assignment`
+
+All auto-verification attempts are audited in `learner_record_match_attempts`.
 
 ## Send-back flow
 ### From verification to applicant

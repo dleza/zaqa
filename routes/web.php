@@ -13,6 +13,8 @@ use App\Http\Controllers\Admin\AdminUsersController;
 use App\Http\Controllers\Admin\Finance\AdminFinanceDashboardController;
 use App\Http\Controllers\Admin\Finance\AdminFinancePaymentProofController;
 use App\Http\Controllers\Admin\Finance\AdminFinancePaymentsController;
+use App\Http\Controllers\Admin\LearnerRecords\AdminLearnerRecordImportsController;
+use App\Http\Controllers\Admin\LearnerRecords\AdminLearnerRecordsController;
 use App\Http\Controllers\Admin\Reports\ApplicationsReportController;
 use App\Http\Controllers\Admin\Reports\AwardingInstitutionsReportController;
 use App\Http\Controllers\Admin\Reports\CertificatesReportController;
@@ -28,6 +30,7 @@ use App\Http\Controllers\Admin\Settings\AdminQualificationTypesController;
 use App\Http\Controllers\Admin\Verification\AdminVerificationApplicationController;
 use App\Http\Controllers\Admin\Verification\AdminVerificationAssignedToMeController;
 use App\Http\Controllers\Admin\Verification\AdminVerificationAwaitingApplicantResubmissionController;
+use App\Http\Controllers\Admin\Verification\AdminVerificationAutoVerifiedController;
 use App\Http\Controllers\Admin\Verification\AdminVerificationCategoryController;
 use App\Http\Controllers\Admin\Verification\AdminVerificationDocumentController;
 use App\Http\Controllers\Admin\Verification\AdminVerificationPoolController;
@@ -123,12 +126,12 @@ Route::middleware('auth')->group(function () {
         Route::patch('/applications/{application}', [ApplicantApplicationController::class, 'update'])->name('applications.update');
         Route::patch('/applications/{application}/wizard-declarations', [ApplicantApplicationController::class, 'saveWizardDeclarations'])->name('applications.wizard_declarations.update');
         Route::delete('/applications/{application}', [ApplicantApplicationController::class, 'destroy'])->name('applications.destroy');
-        Route::post('/applications/{application}/submit', [ApplicantApplicationController::class, 'submit'])->name('applications.submit');
         Route::get('/applications/{application}/feedback', [ApplicantServiceFeedbackController::class, 'show'])->name('applications.feedback.show');
         Route::post('/applications/{application}/feedback', [ApplicantServiceFeedbackController::class, 'store'])->name('applications.feedback.store');
         Route::post('/applications/{application}/feedback/skip', [ApplicantServiceFeedbackController::class, 'skip'])->name('applications.feedback.skip');
 
         Route::get('/reference/awarding-institutions', [ApplicantReferenceController::class, 'awardingInstitutions'])->name('reference.awarding_institutions');
+        Route::get('/reference/qualification-titles', [ApplicantReferenceController::class, 'qualificationTitles'])->name('reference.qualification_titles');
         Route::get('/reference/awarding-institutions/{awardingInstitution}/consent-form', '\App\Http\Controllers\Applicant\ApplicantAwardingInstitutionConsentFormController@download')
             ->name('reference.awarding_institutions.consent_form')
             ->middleware('signed');
@@ -162,6 +165,7 @@ Route::middleware('auth')->group(function () {
         Route::post('/applications/{application}/payment/upload-proof', [ApplicantPaymentController::class, 'uploadProofForApplication'])->name('applications.payment.upload_proof');
         Route::post('/payments/{payment}/initiate-card', [ApplicantPaymentController::class, 'initiateCard'])->name('payments.initiate_card');
         Route::post('/payments/{payment}/initiate-mobile-money', [ApplicantPaymentController::class, 'initiateMobileMoney'])->name('payments.initiate_mobile_money');
+        Route::post('/payments/{payment}/mobile-money/status', [ApplicantPaymentController::class, 'mobileMoneyStatus'])->name('payments.mobile_money.status');
         Route::post('/payments/{payment}/upload-proof', [ApplicantPaymentController::class, 'uploadProof'])->name('payments.upload_proof');
         Route::get('/payments/{payment}/return', [ApplicantPaymentController::class, 'returnFromProvider'])->name('payments.return');
 
@@ -228,6 +232,26 @@ Route::middleware('auth')->group(function () {
                 ->middleware('can:finance.payment_proofs.view')
                 ->name('documents.download');
         });
+
+        Route::prefix('learner-records')->name('learner_records.')->group(function () {
+            Route::get('/', [AdminLearnerRecordsController::class, 'index'])
+                ->middleware('can:learner_records.view')
+                ->name('index');
+            Route::get('/records/{learnerRecord}', [AdminLearnerRecordsController::class, 'show'])
+                ->middleware('can:learner_records.view')
+                ->name('show');
+
+            Route::get('/imports', [AdminLearnerRecordImportsController::class, 'index'])
+                ->middleware('can:learner_records.view')
+                ->name('imports.index');
+            Route::post('/imports', [AdminLearnerRecordImportsController::class, 'store'])
+                ->middleware('can:learner_records.import')
+                ->name('imports.store');
+            Route::get('/imports/{import}', [AdminLearnerRecordImportsController::class, 'show'])
+                ->middleware('can:learner_records.view')
+                ->name('imports.show');
+        });
+
         Route::get('/users', [AdminUsersController::class, 'index'])->middleware('can:admin.users.view')->name('users.index');
         Route::get('/users/create', [AdminUsersController::class, 'create'])
             ->middleware('can:admin.users.create')
@@ -324,6 +348,10 @@ Route::middleware('auth')->group(function () {
                 ->middleware(['can:verification.pool.view', 'can:verification.send_back'])
                 ->name('awaiting_applicant_resubmission');
 
+            Route::get('/auto-verified', [AdminVerificationAutoVerifiedController::class, 'index'])
+                ->middleware('can:verification.level2.review')
+                ->name('auto_verified.index');
+
             Route::get('/applications/{application}', [AdminVerificationApplicationController::class, 'show'])
                 ->middleware('can:verification.pool.view')
                 ->name('applications.show');
@@ -389,6 +417,15 @@ Route::middleware('auth')->group(function () {
             Route::post('/qualifications/{qualification}/issue-certificate', [AdminVerificationQualificationController::class, 'issueCertificate'])
                 ->middleware('can:verification.certificate.issue')
                 ->name('qualifications.issue_certificate');
+            Route::post('/qualifications/{qualification}/level2-lock', [AdminVerificationQualificationController::class, 'lockForLevel2Review'])
+                ->middleware('can:verification.level2.review')
+                ->name('qualifications.level2_lock');
+            Route::post('/qualifications/{qualification}/level2-unlock', [AdminVerificationQualificationController::class, 'unlockLevel2Review'])
+                ->middleware('can:verification.level2.review')
+                ->name('qualifications.level2_unlock');
+            Route::post('/qualifications/{qualification}/send-to-manual-review', [AdminVerificationQualificationController::class, 'sendToManualReview'])
+                ->middleware('can:verification.level2.review')
+                ->name('qualifications.send_to_manual_review');
             Route::get('/qualifications/{qualification}/certificate.pdf', [AdminVerificationQualificationController::class, 'downloadCertificate'])
                 ->middleware('can:verification.pool.view')
                 ->name('qualifications.certificate.download');

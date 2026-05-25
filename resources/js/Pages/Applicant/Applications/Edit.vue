@@ -33,6 +33,7 @@ type ApplicantPayload = {
 const props = withDefaults(
   defineProps<{
     application: any
+    cgrate?: { enabled: boolean; poll_interval_seconds: number; payment_expiry_minutes: number }
     applicant: ApplicantPayload
     serviceTypes: Array<{ value: string; label: string }>
     qualificationTypes: Array<any>
@@ -47,20 +48,20 @@ const props = withDefaults(
     amendmentQualificationId?: number | null
   }>(),
   {
+    cgrate: () => ({ enabled: false, poll_interval_seconds: 10, payment_expiry_minutes: 10 }),
     certificateSubjects: () => [],
     declarationsCopy: () => ({}),
     amendmentQualificationId: null,
   },
 )
 
-type StepKey = 'applicant' | 'qualification' | 'consent' | 'payment' | 'review'
+type StepKey = 'applicant' | 'qualification' | 'consent' | 'payment'
 
 const steps = computed(() => [
   { key: 'applicant' as const, label: 'Applicant' },
   { key: 'qualification' as const, label: 'Qualification' },
   { key: 'consent' as const, label: 'Declarations' },
   { key: 'payment' as const, label: 'Payment' },
-  { key: 'review' as const, label: 'Review & submit' },
 ])
 
 const activeStep = ref<StepKey>('applicant')
@@ -431,43 +432,17 @@ function saveDeclarations() {
   })
 }
 
+// Manual application submission has been removed; payment confirmation triggers automatic submission.
+// Keep no-op bindings to avoid template errors if legacy review markup remains.
 const submitForm = useForm({})
 const declarationAccepted = ref(false)
-
-const submissionBlockReasons = computed(() => {
-  const reasons: string[] = []
-  if (!invoiceSettled.value) {
-    reasons.push('Your payments must cover the full fee for your qualifications (including any top-up after a type or locality change).')
-  }
-  if (!declarationAccepted.value) reasons.push('Please accept the declaration to proceed.')
-  return reasons
-})
-
-const canSubmitNow = computed(() => submissionBlockReasons.value.length === 0 && !submitForm.processing)
-
+const canSubmitNow = computed(() => false)
 async function submitApplication() {
-  if (!canSubmitNow.value) return
-
-  const result = await Swal.fire({
-    icon: 'warning',
-    title: 'Submit application?',
-    html: `<div style="text-align:left">
-      <div><strong>Once you submit, you will not be able to change this application</strong>.</div>
-    </div>`,
-    showCancelButton: true,
-    confirmButtonText: 'Submit application',
-    cancelButtonText: 'Cancel',
+  await Swal.fire({
+    icon: 'info',
+    title: 'Automatic submission',
+    text: 'Your application is automatically submitted once payment is confirmed.',
     confirmButtonColor: '#0076BD',
-  })
-
-  if (!result.isConfirmed) return
-
-  setSaving('Submitting…')
-  submitForm.post(`/applicant/applications/${props.application.id}/submit`, {
-    onError: () => setError('Could not submit. Please fix the issues and try again.'),
-    onFinish: () => {
-      if (saveState.value.state === 'saving') saveState.value = { state: 'idle' }
-    },
   })
 }
 
@@ -518,6 +493,75 @@ function initiateMobileMoney() {
     },
   })
 }
+
+const mobileMoneyLive = ref<{ payment: any; attempt: any } | null>(null)
+const mobileMoneyPollingId = ref<number | null>(null)
+
+const mobileMoneyAttempt = computed(() => mobileMoneyLive.value?.attempt ?? payment.value?.latest_attempt ?? null)
+const mobileMoneyPayment = computed(() => mobileMoneyLive.value?.payment ?? payment.value ?? null)
+const mobileMoneyIsPending = computed(() => (mobileMoneyPayment.value?.status ?? '') === 'pending_confirmation')
+
+watch(
+  () => payment.value?.id,
+  () => {
+    mobileMoneyLive.value = null
+  },
+)
+
+function stopMobileMoneyPolling() {
+  if (mobileMoneyPollingId.value) {
+    window.clearInterval(mobileMoneyPollingId.value)
+    mobileMoneyPollingId.value = null
+  }
+}
+
+async function checkMobileMoneyStatus(force = false) {
+  const p = mobileMoneyPayment.value
+  if (!p?.id) return
+
+  try {
+    const res = await (window as any).axios.post(`/applicant/payments/${p.id}/mobile-money/status`, { force })
+    mobileMoneyLive.value = res.data ?? null
+
+    const newStatus = (res.data?.payment?.status ?? '').toString()
+    if (newStatus === 'confirmed') {
+      setSaved('Payment confirmed.')
+      stopMobileMoneyPolling()
+      router.reload({ only: ['application'] })
+    }
+  } catch {
+    // Avoid noisy UI errors during auto-poll; allow manual retry via button.
+  }
+}
+
+function startMobileMoneyPolling() {
+  if (mobileMoneyPollingId.value) return
+
+  const seconds = Number(props.cgrate?.poll_interval_seconds ?? 10)
+  const intervalMs = Math.max(5000, Math.min(10000, Math.floor(seconds * 1000)))
+
+  mobileMoneyPollingId.value = window.setInterval(() => {
+    if (!mobileMoneyIsPending.value) {
+      stopMobileMoneyPolling()
+      return
+    }
+    void checkMobileMoneyStatus(false)
+  }, intervalMs)
+}
+
+watch(
+  () => [mobileMoneyPayment.value?.status, mobileMoneyAttempt.value?.status],
+  () => {
+    if (mobileMoneyIsPending.value) {
+      startMobileMoneyPolling()
+    } else {
+      stopMobileMoneyPolling()
+    }
+  },
+  { immediate: true },
+)
+
+onBeforeUnmount(() => stopMobileMoneyPolling())
 
 const cardInitiateForm = useForm({})
 function initiateCardPayment() {
@@ -679,7 +723,6 @@ const stepCompletion = computed(() => {
     qualification: qualificationDone,
     consent: declarationsSaved,
     payment: invoiceSettled.value,
-    review: invoiceSettled.value && declarationAccepted.value,
   } as Record<StepKey, boolean>
 })
 
@@ -761,9 +804,6 @@ function stepIncompleteHtml(step: StepKey): string | null {
   }
   if (step === 'payment') {
     return '<p class="text-sm text-left">Confirm payment for this application before continuing.</p>'
-  }
-  if (step === 'review') {
-    return '<p class="text-sm text-left">Confirm payment and accept the final confirmation on the review step.</p>'
   }
   return null
 }
@@ -848,7 +888,7 @@ onBeforeUnmount(() => {
           <div>
             <h1 class="text-2xl font-semibold tracking-tight text-text-primary">Application</h1>
             <p class="mt-1 text-sm text-text-muted">
-              {{ application.application_number }} • {{ application.status_label }} — work through Applicant, Qualification, Declarations, Payment, then review and submit.
+              {{ application.application_number }} • {{ application.status_label }} — work through Applicant, Qualification, Declarations, then Payment.
             </p>
           </div>
 
@@ -890,7 +930,7 @@ onBeforeUnmount(() => {
                 Step {{ wizardStepPosition.current }} / {{ wizardStepPosition.total }} — {{ wizardStepPosition.label }}
               </div>
             </div>
-            <span v-if="wizardCompletion.percent === 100" class="zaqa-badge zaqa-badge-success">Ready to submit</span>
+            <span v-if="wizardCompletion.percent === 100" class="zaqa-badge zaqa-badge-success">Payment confirmed</span>
           </div>
 
           <div class="mt-3 h-2.5 w-full overflow-hidden rounded-full border border-border bg-surface-muted">
@@ -1618,22 +1658,74 @@ onBeforeUnmount(() => {
               <!-- Mobile money -->
               <div v-else>
                 <div class="text-sm font-semibold text-text-primary">Mobile Money</div>
-                <div class="mt-1 text-xs text-text-muted">Enter your number and approve the payment prompt on your phone.</div>
+                <div v-if="!props.cgrate?.enabled" class="mt-2 rounded-xl border border-border bg-surface-muted p-4 text-sm text-text-muted">
+                  Mobile Money is temporarily unavailable. Please try again later.
+                </div>
+                <div v-else class="mt-1 text-xs text-text-muted">Enter your number and approve the payment prompt on your phone.</div>
 
-                <div class="mt-4">
+                <div v-if="props.cgrate?.enabled" class="mt-4">
                   <label class="text-sm font-medium">Mobile number</label>
                   <input v-model="mobileMoneyForm.mobile_number" class="zaqa-input" placeholder="e.g. 097XXXXXXX" />
                   <InputError :message="mobileMoneyForm.errors.mobile_number" />
                 </div>
 
-                <div class="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                  <button type="button" class="zaqa-btn zaqa-btn-primary w-full sm:w-auto" :disabled="mobileMoneyForm.processing || (payment?.status ?? '') === 'confirmed'" @click="initiateMobileMoney">
-                    Initiate Mobile Money
-                  </button>
-	                  <div class="text-xs text-text-muted">
-	                    Status: <span class="font-semibold text-text-primary">{{ payment?.status ?? 'not started' }}</span>
-	                  </div>
-	                </div>
+                <div v-if="props.cgrate?.enabled" class="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                  <div class="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
+                    <button
+                      type="button"
+                      class="zaqa-btn zaqa-btn-primary w-full sm:w-auto"
+                      :disabled="mobileMoneyForm.processing || (payment?.status ?? '') === 'confirmed' || mobileMoneyIsPending"
+                      @click="initiateMobileMoney"
+                    >
+                      Initiate Mobile Money
+                    </button>
+                    <button
+                      v-if="mobileMoneyIsPending"
+                      type="button"
+                      class="zaqa-btn zaqa-btn-secondary w-full sm:w-auto"
+                      @click="checkMobileMoneyStatus(true)"
+                    >
+                      Check status
+                    </button>
+                  </div>
+                  <div class="text-xs text-text-muted">
+                    Status: <span class="font-semibold text-text-primary">{{ mobileMoneyPayment?.status ?? payment?.status ?? 'not started' }}</span>
+                  </div>
+                </div>
+
+                <div v-if="props.cgrate?.enabled && (mobileMoneyAttempt || mobileMoneyPayment?.provider_reference)" class="mt-4 rounded-xl border border-border bg-surface-muted p-4 text-sm">
+                  <div class="grid gap-3 sm:grid-cols-2">
+                    <div>
+                      <div class="text-[11px] font-semibold uppercase tracking-wider text-text-muted">Payment reference</div>
+                      <div class="mt-1 font-semibold text-text-primary">{{ mobileMoneyAttempt?.payment_reference ?? mobileMoneyPayment?.provider_reference ?? '—' }}</div>
+                    </div>
+                    <div>
+                      <div class="text-[11px] font-semibold uppercase tracking-wider text-text-muted">Attempt status</div>
+                      <div class="mt-1 font-semibold text-text-primary">{{ mobileMoneyAttempt?.status ?? '—' }}</div>
+                    </div>
+                    <div v-if="mobileMoneyAttempt?.response_code !== null && mobileMoneyAttempt?.response_code !== undefined">
+                      <div class="text-[11px] font-semibold uppercase tracking-wider text-text-muted">Response code</div>
+                      <div class="mt-1 font-semibold text-text-primary">{{ mobileMoneyAttempt.response_code }}</div>
+                    </div>
+                    <div v-if="mobileMoneyAttempt?.query_attempts !== null && mobileMoneyAttempt?.query_attempts !== undefined">
+                      <div class="text-[11px] font-semibold uppercase tracking-wider text-text-muted">Query attempts</div>
+                      <div class="mt-1 font-semibold text-text-primary">{{ mobileMoneyAttempt.query_attempts }}</div>
+                    </div>
+                  </div>
+
+                  <div v-if="mobileMoneyAttempt?.response_message" class="mt-3 text-xs text-text-muted">
+                    Message: <span class="font-semibold text-text-primary">{{ mobileMoneyAttempt.response_message }}</span>
+                  </div>
+
+                  <div v-if="mobileMoneyIsPending" class="mt-3 inline-flex items-center gap-2 rounded-lg border border-border bg-surface px-3 py-2 text-xs text-text-muted">
+                    <AlertCircle class="h-4 w-4" aria-hidden="true" />
+                    <span>Payment request sent. Approve the prompt on your phone.</span>
+                  </div>
+                  <div v-else-if="(mobileMoneyPayment?.status ?? '') === 'confirmed'" class="mt-3 inline-flex items-center gap-2 rounded-lg border border-border bg-surface px-3 py-2 text-xs text-text-muted">
+                    <CheckCircle2 class="h-4 w-4 text-success" aria-hidden="true" />
+                    <span>Payment confirmed.</span>
+                  </div>
+                </div>
 	              </div>
             </div>
             </div>

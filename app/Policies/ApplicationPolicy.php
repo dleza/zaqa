@@ -20,7 +20,7 @@ class ApplicationPolicy
             return false;
         }
 
-        if (in_array($application->current_status, [ApplicationStatus::Draft, ApplicationStatus::SentBack], true)) {
+        if (in_array($application->current_status, [ApplicationStatus::Draft, ApplicationStatus::PendingPayment, ApplicationStatus::SentBack], true)) {
             return true;
         }
 

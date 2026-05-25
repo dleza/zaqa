@@ -19,6 +19,7 @@ import {
   Pencil,
   Shield,
   RotateCcw,
+  Sparkles,
   Timer,
   UserMinus,
   UserRound,
@@ -105,10 +106,12 @@ const state = computed(() => {
 
 const stateDisplay = computed(() => {
   const labels: Record<string, string> = {
+    awaiting_auto_verification: 'Awaiting auto-verification',
     awaiting_assignment: 'Awaiting assignment',
     assigned_to_level1: 'Assigned — Level 1',
     under_level1_review: 'Under Level 1 review',
     under_level2_review: 'Under Level 2 review',
+    auto_verified_pending_level2: 'Auto-verified — pending Level 2',
     returned_to_applicant: 'Returned to applicant',
     approved_for_certificate: 'Approved for certificate',
     rejected: 'Rejected',
@@ -162,8 +165,59 @@ const canShowLevel1Complete = computed(() => {
 /** Level 2 / Super Admin: remove Level 1 assignee and return task to the assignment pool. */
 const canEditQualificationDetails = computed(() => props.can.edit_qualification === true && restrictedLevel1CanAct.value)
 
-const canShowApprove = computed(() => props.can.approve === true && state.value === 'under_level2_review')
-const canShowReject = computed(() => props.can.reject === true && state.value === 'under_level2_review')
+const canShowApprove = computed(() => props.can.approve === true && ['under_level2_review', 'auto_verified_pending_level2'].includes(state.value))
+const canShowReject = computed(() => props.can.reject === true && ['under_level2_review', 'auto_verified_pending_level2'].includes(state.value))
+
+const level2Lock = computed(() => props.qualification.level2_review_lock ?? {})
+const isAutoVerifiedPendingL2 = computed(() => state.value === 'auto_verified_pending_level2')
+const isLevel2Viewer = computed(() => props.can.level2_review === true)
+const isSuperAdmin = computed(() => props.can.is_super_admin === true)
+const lockIsActive = computed(() => !!level2Lock.value?.is_locked)
+const viewerHasLock = computed(() => {
+  if (!props.viewerUserId) return false
+  return lockIsActive.value && Number(level2Lock.value?.locked_by_user_id ?? 0) === Number(props.viewerUserId)
+})
+const lockBlocksActions = computed(() => isAutoVerifiedPendingL2.value && lockIsActive.value && !viewerHasLock.value && !isSuperAdmin.value)
+const lockMissingForActions = computed(() => isAutoVerifiedPendingL2.value && !viewerHasLock.value && !isSuperAdmin.value)
+
+const canAcquireLock = computed(() => isAutoVerifiedPendingL2.value && isLevel2Viewer.value && (!lockIsActive.value || isSuperAdmin.value || viewerHasLock.value))
+const canReleaseLock = computed(() => isAutoVerifiedPendingL2.value && isLevel2Viewer.value && lockIsActive.value && (viewerHasLock.value || isSuperAdmin.value))
+
+function lockForReview() {
+  router.post(props.qualification.level2_lock_url, {}, { preserveScroll: true })
+}
+
+function unlockReview() {
+  router.post(props.qualification.level2_unlock_url, {}, { preserveScroll: true })
+}
+
+function sendToManualReview() {
+  if (!confirm('Send this auto-verified qualification to manual verification (Level 1 assignment queue)?')) return
+  router.post(props.qualification.send_to_manual_review_url, {}, { preserveScroll: true })
+}
+
+const autoStatus = computed(() => (props.qualification.auto_verification?.status ?? '').toString())
+const autoConfidence = computed(() => {
+  const v = props.qualification.auto_verification?.confidence
+  if (v == null) return null
+  const n = Number(v)
+  if (Number.isNaN(n)) return null
+  return Math.min(100, Math.max(0, Math.round(n)))
+})
+const autoMatchedFields = computed<Record<string, boolean>>(() => {
+  const raw = props.qualification.auto_verification?.match_summary?.matched_fields
+  if (!raw || typeof raw !== 'object') return {}
+  return raw as Record<string, boolean>
+})
+
+const autoRecommendation = computed(() => {
+  if (!isAutoVerifiedPendingL2.value) return null
+  const status = autoStatus.value
+  const conf = autoConfidence.value ?? 0
+  if (status === 'matched' && conf >= 70) return 'Recommended: Approve and issue certificate'
+  if (['ambiguous', 'possible_match'].includes(status) && conf >= 70) return 'Recommended: Level 2 review (do not auto-issue)'
+  return 'Recommended: Manual review'
+})
 
 const canShowRevokeAssignment = computed(() => {
   if (!props.can.assign) return false
@@ -175,9 +229,10 @@ const canShowRevokeAssignment = computed(() => {
 const workflowActiveStep = computed(() => {
   const s = state.value
   if (['returned_to_applicant'].includes(s)) return -1
+  if (s === 'awaiting_auto_verification') return 0
   if (s === 'awaiting_assignment') return 0
   if (['assigned_to_level1', 'under_level1_review'].includes(s)) return 1
-  if (s === 'under_level2_review') return 2
+  if (['under_level2_review', 'auto_verified_pending_level2'].includes(s)) return 2
   if (['approved_for_certificate', 'rejected', 'certificate_issued', 'closed'].includes(s)) return 3
   return 0
 })
@@ -473,41 +528,79 @@ function formatTimelineAt(iso: string | null | undefined) {
 	                Remove assignment
 	              </button>
 
-	              <button
-	                v-if="canShowSendBack"
-	                type="button"
-	                class="inline-flex shrink-0 items-center gap-2 rounded-xl border border-amber-300/40 bg-amber-500/15 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-amber-500/25"
-	                @click="sendBackOpen = true"
-	              >
-	                Send back
-	              </button>
+		              <button
+		                v-if="canShowSendBack"
+		                type="button"
+		                class="inline-flex shrink-0 items-center gap-2 rounded-xl border border-amber-300/40 bg-amber-500/15 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-amber-500/25"
+		                :disabled="isAutoVerifiedPendingL2 && lockMissingForActions"
+		                :title="isAutoVerifiedPendingL2 && lockMissingForActions ? 'Lock for review before taking Level 2 actions.' : ''"
+		                @click="sendBackOpen = true"
+		              >
+		                Send back
+		              </button>
 
-	              <button
-	                v-if="canShowLevel1Complete"
-	                type="button"
-	                class="inline-flex shrink-0 items-center gap-2 rounded-xl border border-sky-300/40 bg-sky-500/15 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-sky-500/25"
-	                @click="level1CompleteOpen = true"
+		              <button
+		                v-if="isAutoVerifiedPendingL2 && isLevel2Viewer && canAcquireLock"
+		                type="button"
+		                class="inline-flex shrink-0 items-center gap-2 rounded-xl border border-sky-300/40 bg-sky-500/15 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-sky-500/25"
+		                @click="lockForReview"
+		              >
+		                <Timer class="h-4 w-4 shrink-0 opacity-90" aria-hidden="true" />
+		                {{ lockIsActive ? 'Take over lock' : 'Start review' }}
+		              </button>
+
+		              <button
+		                v-if="isAutoVerifiedPendingL2 && isLevel2Viewer && canReleaseLock"
+		                type="button"
+		                class="inline-flex shrink-0 items-center gap-2 rounded-xl border border-white/25 bg-white/10 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-white/20"
+		                @click="unlockReview"
+		              >
+		                <RotateCcw class="h-4 w-4 shrink-0 opacity-90" aria-hidden="true" />
+		                Release lock
+		              </button>
+
+		              <button
+		                v-if="isAutoVerifiedPendingL2 && isLevel2Viewer"
+		                type="button"
+		                class="inline-flex shrink-0 items-center gap-2 rounded-xl border border-white/25 bg-white/10 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-white/20"
+		                :disabled="lockMissingForActions"
+		                :title="lockMissingForActions ? 'Lock for review before taking Level 2 actions.' : ''"
+		                @click="sendToManualReview"
+		              >
+		                <CornerDownLeft class="h-4 w-4 shrink-0 opacity-90" aria-hidden="true" />
+		                Manual review
+		              </button>
+
+		              <button
+		                v-if="canShowLevel1Complete"
+		                type="button"
+		                class="inline-flex shrink-0 items-center gap-2 rounded-xl border border-sky-300/40 bg-sky-500/15 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-sky-500/25"
+		                @click="level1CompleteOpen = true"
 	              >
 	                Mark Level 1 complete
 	              </button>
 
-	              <button
-	                v-if="canShowApprove"
-	                type="button"
-	                class="inline-flex shrink-0 items-center gap-2 rounded-xl border border-emerald-300/40 bg-emerald-500/15 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-emerald-500/25"
-	                @click="approveOpen = true"
-	              >
-	                Approve
-	              </button>
+		              <button
+		                v-if="canShowApprove"
+		                type="button"
+		                class="inline-flex shrink-0 items-center gap-2 rounded-xl border border-emerald-300/40 bg-emerald-500/15 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-emerald-500/25"
+		                :disabled="isAutoVerifiedPendingL2 && lockMissingForActions"
+		                :title="isAutoVerifiedPendingL2 && lockMissingForActions ? 'Lock for review before approving.' : ''"
+		                @click="approveOpen = true"
+		              >
+		                Approve
+		              </button>
 
-	              <button
-	                v-if="canShowReject"
-	                type="button"
-	                class="inline-flex shrink-0 items-center gap-2 rounded-xl border border-rose-300/40 bg-rose-600/20 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-rose-600/30"
-	                @click="rejectOpen = true"
-	              >
-	                Reject
-	              </button>
+		              <button
+		                v-if="canShowReject"
+		                type="button"
+		                class="inline-flex shrink-0 items-center gap-2 rounded-xl border border-rose-300/40 bg-rose-600/20 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-rose-600/30"
+		                :disabled="isAutoVerifiedPendingL2 && lockMissingForActions"
+		                :title="isAutoVerifiedPendingL2 && lockMissingForActions ? 'Lock for review before rejecting.' : ''"
+		                @click="rejectOpen = true"
+		              >
+		                Reject
+		              </button>
 
 	              <button
 	                v-if="qualification.can_issue_cveq_certificate && can.issue_certificate"
@@ -650,6 +743,258 @@ function formatTimelineAt(iso: string | null | undefined) {
                 <dd class="mt-1.5 text-sm font-semibold text-text-primary">{{ qualification.country ?? '—' }}</dd>
               </div>
             </dl>
+          </section>
+
+          <!-- Auto-verification -->
+          <section class="rounded-2xl border border-border bg-surface p-6 shadow-sm sm:p-7">
+            <div class="flex items-start gap-3 border-b border-border/80 pb-4">
+              <span class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-brand/10 text-brand">
+                <Sparkles class="h-5 w-5" aria-hidden="true" />
+              </span>
+              <div class="min-w-0">
+                <h2 class="text-base font-bold tracking-tight text-text-primary">Auto-verification result</h2>
+                <p class="mt-1 text-sm text-text-muted">Match details, confidence, and recommended next action for Level 2.</p>
+              </div>
+            </div>
+
+            <div v-if="isAutoVerifiedPendingL2" class="mt-5 rounded-2xl border border-border/70 bg-surface-muted/30 p-5">
+              <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <div class="text-[11px] font-bold uppercase tracking-wider text-text-muted">Level 2 review lock</div>
+                  <div class="mt-1 text-sm font-semibold text-text-primary">
+                    <span v-if="lockIsActive">Locked by {{ level2Lock.locked_by_name || '—' }}</span>
+                    <span v-else>Unlocked</span>
+                  </div>
+                  <div v-if="lockIsActive" class="mt-1 text-xs text-text-muted">
+                    Expires at {{ level2Lock.expires_at || '—' }}
+                  </div>
+                </div>
+                <div class="flex flex-wrap items-center gap-2">
+                  <button
+                    v-if="isLevel2Viewer && canAcquireLock"
+                    type="button"
+                    class="zaqa-btn zaqa-btn-secondary h-9 px-3 py-2 text-xs"
+                    @click="lockForReview"
+                  >
+                    {{ lockIsActive ? 'Take over lock' : 'Start review' }}
+                  </button>
+                  <button
+                    v-if="isLevel2Viewer && canReleaseLock"
+                    type="button"
+                    class="zaqa-btn zaqa-btn-ghost h-9 px-3 py-2 text-xs"
+                    @click="unlockReview"
+                  >
+                    Release lock
+                  </button>
+                </div>
+              </div>
+
+              <div v-if="lockBlocksActions" class="mt-3 rounded-xl border border-amber-300/40 bg-amber-500/10 px-4 py-3 text-xs text-text-primary">
+                This qualification is currently being reviewed by {{ level2Lock.locked_by_name || 'another officer' }}. Level 2 actions are disabled until the lock expires or is released.
+              </div>
+              <div v-else-if="lockMissingForActions" class="mt-3 rounded-xl border border-border/70 bg-surface px-4 py-3 text-xs text-text-muted">
+                Start review to lock this qualification before approving, rejecting, sending back, or routing to manual review.
+              </div>
+            </div>
+
+            <div class="mt-5 grid gap-3 sm:grid-cols-3">
+              <div class="rounded-2xl border border-border/70 bg-surface-muted/30 p-5">
+                <div class="text-[11px] font-bold uppercase tracking-wider text-text-muted">Confidence</div>
+                <div class="mt-2 text-2xl font-bold tracking-tight text-text-primary">
+                  <span v-if="autoConfidence != null">{{ autoConfidence }}%</span>
+                  <span v-else class="text-text-muted">—</span>
+                </div>
+              </div>
+              <div class="rounded-2xl border border-border/70 bg-surface-muted/30 p-5">
+                <div class="text-[11px] font-bold uppercase tracking-wider text-text-muted">Match status</div>
+                <div class="mt-2 text-sm font-semibold text-text-primary">{{ autoStatus || '—' }}</div>
+                <div v-if="['ambiguous', 'possible_match'].includes(autoStatus)" class="mt-2 text-xs text-amber-900">
+                  Warning: match is not definitive. Do not auto-issue.
+                </div>
+              </div>
+              <div class="rounded-2xl border border-border/70 bg-surface-muted/30 p-5">
+                <div class="text-[11px] font-bold uppercase tracking-wider text-text-muted">Recommendation</div>
+                <div class="mt-2 text-sm font-semibold text-text-primary">{{ autoRecommendation || '—' }}</div>
+                <div class="mt-2 text-xs text-text-muted">Source: {{ qualification.auto_verification?.source || '—' }}</div>
+              </div>
+            </div>
+
+            <dl class="mt-6 grid gap-5 sm:grid-cols-2">
+              <div>
+                <dt class="text-[11px] font-bold uppercase tracking-wider text-text-muted">Status</dt>
+                <dd class="mt-1.5 text-sm font-semibold text-text-primary">{{ qualification.auto_verification?.status || '—' }}</dd>
+              </div>
+              <div>
+                <dt class="text-[11px] font-bold uppercase tracking-wider text-text-muted">Confidence</dt>
+                <dd class="mt-1.5 text-sm font-semibold text-text-primary">
+                  <span v-if="autoConfidence != null">{{ autoConfidence }}%</span>
+                  <span v-else class="text-text-muted">—</span>
+                </dd>
+              </div>
+              <div>
+                <dt class="text-[11px] font-bold uppercase tracking-wider text-text-muted">Attempted</dt>
+                <dd class="mt-1.5 text-sm font-semibold text-text-primary">{{ qualification.auto_verification?.attempted_at || '—' }}</dd>
+              </div>
+              <div>
+                <dt class="text-[11px] font-bold uppercase tracking-wider text-text-muted">Source</dt>
+                <dd class="mt-1.5 text-sm font-semibold text-text-primary">{{ qualification.auto_verification?.source || '—' }}</dd>
+              </div>
+              <div class="sm:col-span-2">
+                <dt class="text-[11px] font-bold uppercase tracking-wider text-text-muted">Titles</dt>
+                <dd class="mt-1.5 grid gap-2 sm:grid-cols-3">
+                  <div class="rounded-xl border border-border/70 bg-surface-muted/40 px-4 py-3">
+                    <div class="text-[11px] font-bold uppercase tracking-wider text-text-muted">Applicant title</div>
+                    <div class="mt-1 text-sm font-semibold text-text-primary">{{ qualification.title ?? '—' }}</div>
+                    <div class="mt-1 text-xs text-text-muted">Source: {{ qualification.qualification_title_source || '—' }}</div>
+                  </div>
+                  <div class="rounded-xl border border-border/70 bg-surface-muted/40 px-4 py-3">
+                    <div class="text-[11px] font-bold uppercase tracking-wider text-text-muted">Applicant typed (Other)</div>
+                    <div class="mt-1 text-sm font-semibold text-text-primary">{{ qualification.applicant_entered_qualification_title || '—' }}</div>
+                  </div>
+                  <div class="rounded-xl border border-border/70 bg-surface-muted/40 px-4 py-3">
+                    <div class="text-[11px] font-bold uppercase tracking-wider text-text-muted">Verified title</div>
+                    <div class="mt-1 text-sm font-semibold text-text-primary">{{ qualification.verified_qualification_title || '—' }}</div>
+                  </div>
+                </dd>
+              </div>
+            </dl>
+
+            <div class="mt-6 rounded-2xl border border-border/70 bg-surface-muted/30 p-5">
+              <div class="text-[11px] font-bold uppercase tracking-wider text-text-muted">Matched fields</div>
+              <div class="mt-3 grid gap-2 sm:grid-cols-2">
+                <div class="flex items-center gap-2 text-xs text-text-primary">
+                  <span class="zaqa-badge" :class="autoMatchedFields.awarding_institution_id ? 'zaqa-badge-success' : 'zaqa-badge-secondary'">
+                    {{ autoMatchedFields.awarding_institution_id ? '✓' : '—' }}
+                  </span>
+                  Awarding institution
+                </div>
+                <div class="flex items-center gap-2 text-xs text-text-primary">
+                  <span class="zaqa-badge" :class="autoMatchedFields.year_awarded ? 'zaqa-badge-success' : 'zaqa-badge-secondary'">
+                    {{ autoMatchedFields.year_awarded ? '✓' : '—' }}
+                  </span>
+                  Award year
+                </div>
+                <div class="flex items-center gap-2 text-xs text-text-primary">
+                  <span class="zaqa-badge" :class="autoMatchedFields.student_id ? 'zaqa-badge-success' : 'zaqa-badge-secondary'">
+                    {{ autoMatchedFields.student_id ? '✓' : '—' }}
+                  </span>
+                  Student number
+                </div>
+                <div class="flex items-center gap-2 text-xs text-text-primary">
+                  <span class="zaqa-badge" :class="autoMatchedFields.certificate_no ? 'zaqa-badge-success' : 'zaqa-badge-secondary'">
+                    {{ autoMatchedFields.certificate_no ? '✓' : '—' }}
+                  </span>
+                  Certificate number
+                </div>
+                <div class="flex items-center gap-2 text-xs text-text-primary">
+                  <span class="zaqa-badge" :class="autoMatchedFields.nrc_number ? 'zaqa-badge-success' : 'zaqa-badge-secondary'">
+                    {{ autoMatchedFields.nrc_number ? '✓' : '—' }}
+                  </span>
+                  NRC match
+                </div>
+                <div class="flex items-center gap-2 text-xs text-text-primary">
+                  <span class="zaqa-badge" :class="autoMatchedFields.passport_no ? 'zaqa-badge-success' : 'zaqa-badge-secondary'">
+                    {{ autoMatchedFields.passport_no ? '✓' : '—' }}
+                  </span>
+                  Passport match
+                </div>
+                <div class="flex items-center gap-2 text-xs text-text-primary">
+                  <span class="zaqa-badge" :class="autoMatchedFields.name ? 'zaqa-badge-success' : 'zaqa-badge-secondary'">
+                    {{ autoMatchedFields.name ? '✓' : '—' }}
+                  </span>
+                  Name match
+                </div>
+                <div class="flex items-center gap-2 text-xs text-text-primary">
+                  <span class="zaqa-badge" :class="autoMatchedFields.program_of_study ? 'zaqa-badge-success' : 'zaqa-badge-secondary'">
+                    {{ autoMatchedFields.program_of_study ? '✓' : '—' }}
+                  </span>
+                  Program / title match
+                </div>
+              </div>
+            </div>
+
+            <div class="mt-6 rounded-2xl border border-border/70 bg-surface-muted/30 p-5">
+              <div class="text-[11px] font-bold uppercase tracking-wider text-text-muted">Evidence comparison</div>
+              <div class="mt-3 grid gap-3 sm:grid-cols-2">
+                <div class="rounded-xl border border-border/70 bg-surface px-4 py-3">
+                  <div class="text-xs font-semibold text-text-primary">Student number</div>
+                  <div class="mt-1 font-mono text-xs text-text-muted">
+                    Applicant: <span class="text-text-primary">{{ qualification.student_number || '—' }}</span>
+                    · Record: <span class="text-text-primary">{{ qualification.learner_record?.student_id || '—' }}</span>
+                  </div>
+                </div>
+                <div class="rounded-xl border border-border/70 bg-surface px-4 py-3">
+                  <div class="text-xs font-semibold text-text-primary">Certificate number</div>
+                  <div class="mt-1 font-mono text-xs text-text-muted">
+                    Applicant: <span class="text-text-primary">{{ qualification.certificate_number || '—' }}</span>
+                    · Record: <span class="text-text-primary">{{ qualification.learner_record?.certificate_no || '—' }}</span>
+                  </div>
+                </div>
+                <div class="rounded-xl border border-border/70 bg-surface px-4 py-3">
+                  <div class="text-xs font-semibold text-text-primary">Awarding institution</div>
+                  <div class="mt-1 text-xs text-text-muted">
+                    Applicant: <span class="text-text-primary">{{ qualification.awarding_institution || '—' }}</span>
+                    · Record:
+                    <span class="text-text-primary">{{
+                      qualification.learner_record?.awarding_institution?.name || qualification.learner_record?.institution_name_raw || '—'
+                    }}</span>
+                  </div>
+                </div>
+                <div class="rounded-xl border border-border/70 bg-surface px-4 py-3">
+                  <div class="text-xs font-semibold text-text-primary">Award year</div>
+                  <div class="mt-1 text-xs text-text-muted">
+                    Applicant: <span class="text-text-primary">{{ qualification.award_date ? new Date(qualification.award_date).getFullYear() : '—' }}</span>
+                    · Record: <span class="text-text-primary">{{ qualification.learner_record?.year_awarded || '—' }}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div v-if="qualification.learner_record" class="mt-6 rounded-2xl border border-border/70 bg-surface-muted/30 p-5">
+              <div class="text-[11px] font-bold uppercase tracking-wider text-text-muted">Matched learner record</div>
+              <div class="mt-3 grid gap-3 sm:grid-cols-2">
+                <div>
+                  <div class="text-xs font-semibold text-text-primary">Program</div>
+                  <div class="mt-1 text-sm text-text-primary">{{ qualification.learner_record.program_of_study || '—' }}</div>
+                </div>
+                <div>
+                  <div class="text-xs font-semibold text-text-primary">Institution</div>
+                  <div class="mt-1 text-sm text-text-primary">
+                    {{ qualification.learner_record.awarding_institution?.name || qualification.learner_record.institution_name_raw || '—' }}
+                  </div>
+                </div>
+                <div class="font-mono text-xs text-text-muted">Student ID: <span class="text-text-primary">{{ qualification.learner_record.student_id || '—' }}</span></div>
+                <div class="font-mono text-xs text-text-muted">Certificate #: <span class="text-text-primary">{{ qualification.learner_record.certificate_no || '—' }}</span></div>
+                <div class="font-mono text-xs text-text-muted">NRC: <span class="text-text-primary">{{ qualification.learner_record.nrc_number || '—' }}</span></div>
+                <div class="font-mono text-xs text-text-muted">Passport: <span class="text-text-primary">{{ qualification.learner_record.passport_no || '—' }}</span></div>
+              </div>
+            </div>
+
+            <div v-if="qualification.match_attempts?.length" class="mt-6 overflow-hidden rounded-xl border border-border/80">
+              <table class="min-w-full text-sm">
+                <thead class="bg-surface-muted/90 text-left text-[11px] font-bold uppercase tracking-wider text-text-muted">
+                  <tr>
+                    <th class="px-4 py-3">When</th>
+                    <th class="px-4 py-3">Status</th>
+                    <th class="px-4 py-3">Confidence</th>
+                    <th class="px-4 py-3">Source</th>
+                    <th class="px-4 py-3">Failure</th>
+                  </tr>
+                </thead>
+                <tbody class="divide-y divide-border/60 bg-surface">
+                  <tr v-for="a in qualification.match_attempts" :key="a.id" class="transition hover:bg-surface-muted/40">
+                    <td class="px-4 py-3 text-xs text-text-muted">{{ a.created_at ?? '—' }}</td>
+                    <td class="px-4 py-3 font-semibold text-text-primary">{{ a.status ?? '—' }}</td>
+                    <td class="px-4 py-3 text-text-primary">
+                      <span v-if="a.confidence != null">{{ a.confidence }}%</span>
+                      <span v-else class="text-text-muted">—</span>
+                    </td>
+                    <td class="px-4 py-3 text-text-primary">{{ a.source ?? '—' }}</td>
+                    <td class="px-4 py-3 text-xs text-text-muted">{{ a.failure_reason ?? '—' }}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
           </section>
 
           <!-- Documents -->

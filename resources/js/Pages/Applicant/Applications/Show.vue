@@ -60,13 +60,13 @@ const qualificationsNeedingAmendment = computed(() =>
 
 const isDraftLike = computed(() => {
   const s = (props.application?.current_status ?? '').toString().toLowerCase()
-  return s === 'draft'
+  return s === 'draft' || s === 'pending_payment'
 })
 
 const canContinueEditing = computed(() => {
   if (!props.application?.can_edit) return false
   const s = (props.application?.current_status ?? '').toString().toLowerCase()
-  return s === 'draft' || s === 'sent_back'
+  return s === 'draft' || s === 'pending_payment' || s === 'sent_back'
 })
 
 function formatDisplayDate(iso: string | null | undefined): string {
@@ -232,8 +232,14 @@ function money(cents: number, currency: string) {
                   Application overview
                 </h1>
                 <p class="mt-0.5 max-w-xl text-sm text-text-muted">
-                  Your submitted verification request with ZAQA — keep your references handy when you contact us about a
-                  specific qualification.
+                  <template v-if="isDraftLike">
+                    Your verification application — complete the wizard and proceed to payment. Once payment is confirmed,
+                    your application is automatically submitted for verification.
+                  </template>
+                  <template v-else>
+                    Your submitted verification request with ZAQA — keep your references handy when you contact us about a
+                    specific qualification.
+                  </template>
                 </p>
               </div>
             </div>
@@ -486,12 +492,12 @@ function money(cents: number, currency: string) {
                         >
                           {{ q.verification_reference_number }}
                         </p>
-                        <p v-else class="text-sm leading-relaxed text-text-muted">
-                          <template v-if="isDraftLike">
-                            This unique reference is generated when you submit your application. Finish the wizard and
-                            submit to receive a verification code for this qualification.
-                          </template>
-                          <template v-else>
+                      <p v-else class="text-sm leading-relaxed text-text-muted">
+                        <template v-if="isDraftLike">
+                            This unique reference is generated automatically once your payment is confirmed. Complete the
+                            wizard and proceed to payment to receive a verification reference for this qualification.
+                        </template>
+                        <template v-else>
                             A verification reference was not recorded for this row. If you submitted recently, refresh
                             the page or contact ZAQA with your application reference above.
                           </template>

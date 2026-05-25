@@ -20,6 +20,7 @@ class QualificationSendBackService
     public function __construct(
         private readonly AuditLogService $audit,
         private readonly ApplicationLifecycleService $lifecycle,
+        private readonly QualificationLevel2ReviewLockService $locks,
     ) {}
 
     public function sendBackToApplicant(Qualification $qualification, User $actor, string $comment): Qualification
@@ -60,6 +61,10 @@ class QualificationSendBackService
             ];
 
             $reopenLevel = $actor->can('verification.level2.review') ? 'level2' : 'level1';
+
+            if ($qualification->verification_state === VerificationState::AutoVerifiedPendingLevel2) {
+                $this->locks->clearLock($qualification);
+            }
 
             $qualification->forceFill([
                 'assigned_verifier_id' => null,

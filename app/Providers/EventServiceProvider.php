@@ -3,6 +3,7 @@
 namespace App\Providers;
 
 use App\Domain\Applications\Events\ApplicationSubmitted;
+use App\Domain\Applications\Listeners\DispatchQualificationAutoVerificationJobs;
 use App\Domain\Applications\Listeners\SendApplicationSubmittedNotification;
 use App\Domain\Audit\Listeners\LogEmailVerified;
 use App\Domain\Audit\Listeners\LogPasswordReset;
@@ -56,6 +57,7 @@ class EventServiceProvider extends ServiceProvider
         ],
         ApplicationSubmitted::class => [
             SendApplicationSubmittedNotification::class,
+            DispatchQualificationAutoVerificationJobs::class,
         ],
         ApplicationAssignedToLevel1::class => [
             SendAssignmentNotification::class,

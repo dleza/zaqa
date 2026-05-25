@@ -13,9 +13,11 @@ use App\Http\Requests\Applicant\InitiateMobileMoneyPaymentRequest;
 use App\Http\Requests\Applicant\SelectPaymentMethodRequest;
 use App\Http\Requests\Applicant\UploadApplicationPaymentProofRequest;
 use App\Http\Requests\Applicant\UploadPaymentProofRequest;
+use App\Jobs\Payments\QueryCGratePaymentAttemptJob;
 use App\Models\Application;
 use App\Models\Payment;
 use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Symfony\Component\HttpFoundation\Response;
@@ -43,7 +45,7 @@ class ApplicantPaymentController extends Controller
 
     public function initiateCard(Request $request, Payment $payment, PaymentService $payments): Response
     {
-        $this->authorize('update', $payment->application);
+        $this->authorize('view', $payment->application);
 
         $result = $payments->initiateOnline($payment, [], $request->user());
         $redirectUrl = $result['redirect_url'] ?? null;
@@ -61,7 +63,7 @@ class ApplicantPaymentController extends Controller
 
     public function initiateCardForApplication(Request $request, Application $application, PaymentService $payments): Response
     {
-        $this->authorize('update', $application);
+        $this->authorize('view', $application);
 
         $payment = $payments->createDraftPayment($application, PaymentMethod::Card, $request->user());
 
@@ -83,7 +85,7 @@ class ApplicantPaymentController extends Controller
         Application $application,
         PaymentService $payments,
     ): RedirectResponse {
-        $this->authorize('update', $application);
+        $this->authorize('view', $application);
 
         $payment = $payments->createDraftPayment($application, PaymentMethod::MobileMoney, $request->user());
 
@@ -98,7 +100,7 @@ class ApplicantPaymentController extends Controller
 
     public function initiateMobileMoney(InitiateMobileMoneyPaymentRequest $request, Payment $payment, PaymentService $payments): RedirectResponse
     {
-        $this->authorize('update', $payment->application);
+        $this->authorize('view', $payment->application);
 
         $payload = [
             'mobile_number' => (string) $request->validated()['mobile_number'],
@@ -115,7 +117,7 @@ class ApplicantPaymentController extends Controller
         ApplicantDocumentService $documents,
         PaymentService $payments,
     ): RedirectResponse {
-        $this->authorize('update', $application);
+        $this->authorize('view', $application);
 
         $payment = $payments->paymentForManualProofUpload($application, $request->user());
 
@@ -129,7 +131,7 @@ class ApplicantPaymentController extends Controller
 
     public function uploadProof(UploadPaymentProofRequest $request, Payment $payment, ApplicantDocumentService $documents, PaymentService $payments): RedirectResponse
     {
-        $this->authorize('update', $payment->application);
+        $this->authorize('view', $payment->application);
 
         $file = $request->file('file');
 
@@ -144,7 +146,7 @@ class ApplicantPaymentController extends Controller
 
     public function returnFromProvider(Request $request, Payment $payment, PaymentService $payments): RedirectResponse
     {
-        $this->authorize('update', $payment->application);
+        $this->authorize('view', $payment->application);
 
         $payments->handleGatewayReturn($payment, $request->all());
 
@@ -157,7 +159,7 @@ class ApplicantPaymentController extends Controller
      */
     public function testRedirect(Request $request, Payment $payment, PaymentService $payments): RedirectResponse
     {
-        $this->authorize('update', $payment->application);
+        $this->authorize('view', $payment->application);
 
         // Simulate provider redirect/return with success unless overridden.
         $status = (string) $request->query('status', 'success');
@@ -171,5 +173,66 @@ class ApplicantPaymentController extends Controller
 
         return redirect()->route('applicant.applications.edit', ['application' => $payment->application_id, 'step' => 'payment'])
             ->with('success', $status === 'success' ? 'Payment confirmed.' : 'Payment failed.');
+    }
+
+    /**
+     * cGrate Mobile Money status endpoint (polling).
+     */
+    public function mobileMoneyStatus(Request $request, Payment $payment): JsonResponse
+    {
+        $this->authorize('view', $payment->application);
+
+        $force = (bool) $request->boolean('force', false);
+
+        $payment->loadMissing('latestAttempt');
+        $attempt = $payment->latestAttempt;
+
+        if ($attempt && $attempt->gateway === 'cgrate' && ! $attempt->status?->isTerminal()) {
+            $attempt->forceFill([
+                'next_query_at' => now(),
+            ])->save();
+
+            if ($force) {
+                QueryCGratePaymentAttemptJob::dispatchSync((int) $attempt->id);
+            } else {
+                QueryCGratePaymentAttemptJob::dispatch((int) $attempt->id);
+            }
+
+            $payment->refresh()->loadMissing('latestAttempt');
+            $attempt = $payment->latestAttempt;
+        }
+
+        return response()->json([
+            'payment' => [
+                'id' => $payment->id,
+                'method' => $payment->method?->value ?? (string) $payment->method,
+                'status' => $payment->status?->value ?? (string) $payment->status,
+                'provider' => $payment->provider,
+                'provider_reference' => $payment->provider_reference,
+                'provider_transaction_id' => $payment->provider_transaction_id,
+                'mobile_number' => $payment->mobile_number,
+                'confirmed_at' => optional($payment->confirmed_at)?->toIso8601String(),
+                'failed_at' => optional($payment->failed_at)?->toIso8601String(),
+                'rejected_at' => optional($payment->rejected_at)?->toIso8601String(),
+                'expires_at' => optional($payment->expires_at)?->toIso8601String(),
+            ],
+            'attempt' => $attempt ? [
+                'id' => $attempt->id,
+                'gateway' => $attempt->gateway,
+                'status' => $attempt->status?->value ?? (string) $attempt->status,
+                'payment_reference' => $attempt->payment_reference,
+                'provider_transaction_id' => $attempt->provider_transaction_id,
+                'response_code' => $attempt->response_code,
+                'response_message' => $attempt->response_message,
+                'query_attempts' => $attempt->query_attempts,
+                'initiated_at' => optional($attempt->initiated_at)?->toIso8601String(),
+                'confirmed_at' => optional($attempt->confirmed_at)?->toIso8601String(),
+                'failed_at' => optional($attempt->failed_at)?->toIso8601String(),
+                'rejected_at' => optional($attempt->rejected_at)?->toIso8601String(),
+                'expired_at' => optional($attempt->expired_at)?->toIso8601String(),
+                'last_queried_at' => optional($attempt->last_queried_at)?->toIso8601String(),
+                'next_query_at' => optional($attempt->next_query_at)?->toIso8601String(),
+            ] : null,
+        ]);
     }
 }
