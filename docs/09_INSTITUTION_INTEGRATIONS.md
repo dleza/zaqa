@@ -12,7 +12,7 @@ ZAQA supports two complementary integration patterns with Awarding Institutions:
 Institutions push learner achievement records into ZAQA using the Institution Integration API.
 
 - API base: `/api/institution/v1`
-- Swagger UI: `/docs/institution-api` (admin-permission protected)
+- Swagger UI: `/docs/institution-api` (public, feature-flag protected)
 - Auth: Bearer token (Sanctum) scoped to a single awarding institution and abilities.
 
 ### Token handling

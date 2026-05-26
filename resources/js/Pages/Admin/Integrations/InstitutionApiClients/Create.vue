@@ -2,6 +2,7 @@
 import AdminLayout from '@/Layouts/AdminLayout.vue'
 import { Link, useForm } from '@inertiajs/vue3'
 import { KeyRound } from 'lucide-vue-next'
+import SingleSelectCombobox from '@/Components/SingleSelectCombobox.vue'
 
 const props = defineProps<{
   institutions: Array<{ id: number; name: string }>
@@ -53,15 +54,16 @@ function submit() {
       </div>
     </div>
 
-    <div class="mt-6 max-w-3xl rounded-2xl border border-border bg-surface p-6">
+    <div class="mt-6 max-w-3xl mx-auto rounded-2xl border border-border bg-surface p-6">
       <div class="grid gap-4 sm:grid-cols-2">
         <div class="sm:col-span-2">
-          <label class="text-xs font-semibold uppercase tracking-wider text-text-muted">Awarding institution</label>
-          <select v-model="form.awarding_institution_id" class="zaqa-input mt-2 h-10">
-            <option value="">Select…</option>
-            <option v-for="i in institutions" :key="i.id" :value="i.id">{{ i.name }}</option>
-          </select>
-          <p v-if="form.errors.awarding_institution_id" class="mt-2 text-xs text-danger">{{ form.errors.awarding_institution_id }}</p>
+          <SingleSelectCombobox
+            v-model="form.awarding_institution_id"
+            label="Awarding institution"
+            placeholder="Select…"
+            :options="institutions.map((i) => ({ id: i.id, label: i.name }))"
+            :error="form.errors.awarding_institution_id"
+          />
         </div>
 
         <div class="sm:col-span-2">

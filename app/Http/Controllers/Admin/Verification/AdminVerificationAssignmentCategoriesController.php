@@ -12,6 +12,7 @@ use App\Models\VerificationAssignmentCategoryUser;
 use App\Enums\VerificationState;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -27,7 +28,12 @@ class AdminVerificationAssignmentCategoriesController extends Controller
         $active = $request->query('active');
 
         $rows = VerificationAssignmentCategory::query()
-            ->with(['country:id,name,iso_code', 'awardingInstitution:id,name', 'lastAssignedUser:id,name'])
+            ->with([
+                'countries:id,name,iso_code',
+                'awardingInstitutions:id,name,is_active',
+                'lastAssignedUser:id,name',
+            ])
+            ->withCount(['countries', 'awardingInstitutions'])
             ->withCount(['memberships' => fn ($m) => $m->where('is_active', true)])
             ->when($q !== '', fn ($qq) => $qq->where('name', 'like', '%'.$q.'%'))
             ->when(in_array($type, ['foreign_country', 'local_institution'], true), fn ($qq) => $qq->where('type', $type))
@@ -37,19 +43,29 @@ class AdminVerificationAssignmentCategoriesController extends Controller
             ->orderBy('name')
             ->paginate(25)
             ->withQueryString()
-            ->through(fn (VerificationAssignmentCategory $c) => [
-                'id' => $c->id,
-                'name' => $c->name,
-                'type' => $c->type,
-                'is_active' => (bool) $c->is_active,
-                'country' => $c->country ? ['id' => $c->country->id, 'name' => $c->country->name, 'iso_code' => $c->country->iso_code] : null,
-                'awarding_institution' => $c->awardingInstitution ? ['id' => $c->awardingInstitution->id, 'name' => $c->awardingInstitution->name] : null,
-                'members_count' => (int) ($c->memberships_count ?? 0),
-                'last_assigned_user' => $c->lastAssignedUser ? ['id' => $c->lastAssignedUser->id, 'name' => $c->lastAssignedUser->name] : null,
-                'last_assigned_at' => optional($c->last_assigned_at)->toIso8601String(),
-                'show_url' => route('admin.verification.assignment_categories.show', ['assignmentCategory' => $c->id]),
-                'edit_url' => route('admin.verification.assignment_categories.edit', ['assignmentCategory' => $c->id]),
-            ]);
+            ->through(function (VerificationAssignmentCategory $c) {
+                $mapped = $c->type === 'foreign_country'
+                    ? $c->countries->map(fn (Country $co) => $co->name.' ('.$co->iso_code.')')
+                    : $c->awardingInstitutions->map(fn (AwardingInstitution $i) => $i->name.($i->is_active ? '' : ' (inactive)'));
+
+                $mappedCount = $c->type === 'foreign_country'
+                    ? (int) ($c->countries_count ?? 0)
+                    : (int) ($c->awarding_institutions_count ?? 0);
+
+                return [
+                    'id' => $c->id,
+                    'name' => $c->name,
+                    'type' => $c->type,
+                    'is_active' => (bool) $c->is_active,
+                    'mapped_count' => $mappedCount,
+                    'mapped_sample' => $mapped->take(3)->values()->all(),
+                    'members_count' => (int) ($c->memberships_count ?? 0),
+                    'last_assigned_user' => $c->lastAssignedUser ? ['id' => $c->lastAssignedUser->id, 'name' => $c->lastAssignedUser->name] : null,
+                    'last_assigned_at' => optional($c->last_assigned_at)->toIso8601String(),
+                    'show_url' => route('admin.verification.assignment_categories.show', ['assignmentCategory' => $c->id]),
+                    'edit_url' => route('admin.verification.assignment_categories.edit', ['assignmentCategory' => $c->id]),
+                ];
+            });
 
         return Inertia::render('Admin/Verification/AssignmentCategories/Index', [
             'categories' => $rows,
@@ -82,50 +98,64 @@ class AdminVerificationAssignmentCategoriesController extends Controller
 
         $validated = $request->validate([
             'type' => ['required', 'string', Rule::in(['foreign_country', 'local_institution'])],
-            'country_id' => ['nullable', 'integer', 'exists:countries,id'],
-            'awarding_institution_id' => ['nullable', 'integer', 'exists:awarding_institutions,id'],
-            'name' => ['nullable', 'string', 'max:255'],
+            'name' => ['required', 'string', 'max:255'],
             'is_active' => ['required', 'boolean'],
         ]);
 
         $type = (string) $validated['type'];
-        $countryId = isset($validated['country_id']) ? (int) $validated['country_id'] : null;
-        $instId = isset($validated['awarding_institution_id']) ? (int) $validated['awarding_institution_id'] : null;
+        $isActive = (bool) $validated['is_active'];
 
-        if ($type === 'foreign_country' && ! $countryId) {
-            return back()->withErrors(['country_id' => 'Country is required for foreign country categories.']);
-        }
-        if ($type === 'local_institution' && ! $instId) {
-            return back()->withErrors(['awarding_institution_id' => 'Awarding institution is required for local institution categories.']);
-        }
+        if ($type === 'foreign_country') {
+            $extra = $request->validate([
+                'countries' => ['required', 'array', 'min:1'],
+                'countries.*' => ['integer', 'exists:countries,id'],
+                'awarding_institutions' => ['prohibited'],
+            ]);
+            $countryIds = array_values(array_unique(array_map('intval', (array) ($extra['countries'] ?? []))));
 
-        $name = trim((string) ($validated['name'] ?? ''));
-        if ($name === '') {
-            if ($type === 'foreign_country') {
-                $country = Country::query()->find($countryId);
-                $name = $country ? (string) $country->name : 'Foreign country';
-            } else {
-                $inst = AwardingInstitution::query()->find($instId);
-                $name = $inst ? (string) $inst->name : 'Local institution';
+            if ($isActive) {
+                $conflicts = $this->findCountryOverlapConflicts($countryIds, excludingCategoryId: null);
+                if ($conflicts !== []) {
+                    return back()->withErrors([
+                        'countries' => 'These countries already belong to another active foreign category: '.implode(', ', $conflicts).'.',
+                    ]);
+                }
+            }
+        } else {
+            $extra = $request->validate([
+                'awarding_institutions' => ['required', 'array', 'min:1'],
+                'awarding_institutions.*' => ['integer', 'exists:awarding_institutions,id'],
+                'countries' => ['prohibited'],
+            ]);
+            $instIds = array_values(array_unique(array_map('intval', (array) ($extra['awarding_institutions'] ?? []))));
+
+            if ($isActive) {
+                $conflicts = $this->findInstitutionOverlapConflicts($instIds, excludingCategoryId: null);
+                if ($conflicts !== []) {
+                    return back()->withErrors([
+                        'awarding_institutions' => 'These institutions already belong to another active local category: '.implode(', ', $conflicts).'.',
+                    ]);
+                }
             }
         }
 
-        $uniqueRule = $type === 'foreign_country'
-            ? Rule::unique('verification_assignment_categories')->where(fn ($q) => $q->where('type', $type)->where('country_id', $countryId))
-            : Rule::unique('verification_assignment_categories')->where(fn ($q) => $q->where('type', $type)->where('awarding_institution_id', $instId));
-
-        $request->validate([
-            'type' => [$uniqueRule],
-        ], ['type.unique' => 'A category already exists for this selection.']);
+        $name = trim((string) $validated['name']);
 
         $category = VerificationAssignmentCategory::query()->create([
             'name' => $name,
             'type' => $type,
-            'country_id' => $type === 'foreign_country' ? $countryId : null,
-            'awarding_institution_id' => $type === 'local_institution' ? $instId : null,
-            'is_active' => (bool) $validated['is_active'],
+            // Legacy/deprecated columns are retained for backward compatibility but no longer used for routing.
+            'country_id' => null,
+            'awarding_institution_id' => null,
+            'is_active' => $isActive,
             'metadata' => null,
         ]);
+
+        if ($type === 'foreign_country') {
+            $category->countries()->sync($countryIds);
+        } else {
+            $category->awardingInstitutions()->sync($instIds);
+        }
 
         return redirect()->route('admin.verification.assignment_categories.show', ['assignmentCategory' => $category->id])
             ->with('success', 'Assignment category created.');
@@ -136,8 +166,8 @@ class AdminVerificationAssignmentCategoriesController extends Controller
         abort_unless($request->user()?->can('verification.assign'), 403);
 
         $assignmentCategory->loadMissing([
-            'country:id,name,iso_code',
-            'awardingInstitution:id,name,is_active',
+            'countries:id,name,iso_code',
+            'awardingInstitutions:id,name,is_active',
             'lastAssignedUser:id,name',
             'memberships.user:id,name,email,is_active',
         ]);
@@ -174,12 +204,16 @@ class AdminVerificationAssignmentCategoriesController extends Controller
                 'name' => $assignmentCategory->name,
                 'type' => $assignmentCategory->type,
                 'is_active' => (bool) $assignmentCategory->is_active,
-                'country' => $assignmentCategory->country ? ['id' => $assignmentCategory->country->id, 'name' => $assignmentCategory->country->name, 'iso_code' => $assignmentCategory->country->iso_code] : null,
-                'awarding_institution' => $assignmentCategory->awardingInstitution ? [
-                    'id' => $assignmentCategory->awardingInstitution->id,
-                    'name' => $assignmentCategory->awardingInstitution->name,
-                    'is_active' => (bool) $assignmentCategory->awardingInstitution->is_active,
-                ] : null,
+                'countries' => $assignmentCategory->countries
+                    ->sortBy('name')
+                    ->values()
+                    ->map(fn (Country $c) => ['id' => $c->id, 'name' => $c->name, 'iso_code' => $c->iso_code])
+                    ->all(),
+                'awarding_institutions' => $assignmentCategory->awardingInstitutions
+                    ->sortBy('name')
+                    ->values()
+                    ->map(fn (AwardingInstitution $i) => ['id' => $i->id, 'name' => $i->name, 'is_active' => (bool) $i->is_active])
+                    ->all(),
                 'last_assigned_user' => $assignmentCategory->lastAssignedUser ? ['id' => $assignmentCategory->lastAssignedUser->id, 'name' => $assignmentCategory->lastAssignedUser->name] : null,
                 'last_assigned_at' => optional($assignmentCategory->last_assigned_at)->toIso8601String(),
                 'created_at' => optional($assignmentCategory->created_at)->toIso8601String(),
@@ -214,7 +248,7 @@ class AdminVerificationAssignmentCategoriesController extends Controller
     {
         abort_unless($request->user()?->can('verification.assign'), 403);
 
-        $assignmentCategory->loadMissing(['country:id,name,iso_code', 'awardingInstitution:id,name,is_active']);
+        $assignmentCategory->loadMissing(['countries:id,name,iso_code', 'awardingInstitutions:id,name,is_active']);
 
         return Inertia::render('Admin/Verification/AssignmentCategories/Edit', [
             'category' => [
@@ -222,8 +256,8 @@ class AdminVerificationAssignmentCategoriesController extends Controller
                 'name' => $assignmentCategory->name,
                 'type' => $assignmentCategory->type,
                 'is_active' => (bool) $assignmentCategory->is_active,
-                'country_id' => $assignmentCategory->country_id,
-                'awarding_institution_id' => $assignmentCategory->awarding_institution_id,
+                'country_ids' => $assignmentCategory->countries->pluck('id')->map(fn ($v) => (int) $v)->values()->all(),
+                'awarding_institution_ids' => $assignmentCategory->awardingInstitutions->pluck('id')->map(fn ($v) => (int) $v)->values()->all(),
             ],
             'countries' => Country::query()->where('is_active', true)->orderBy('name')->get(['id', 'name', 'iso_code'])
                 ->map(fn (Country $c) => ['id' => $c->id, 'name' => $c->name, 'iso_code' => $c->iso_code])->values(),
@@ -241,10 +275,54 @@ class AdminVerificationAssignmentCategoriesController extends Controller
             'is_active' => ['required', 'boolean'],
         ]);
 
+        $type = (string) $assignmentCategory->type;
+        $isActive = (bool) $validated['is_active'];
+
+        if ($type === 'foreign_country') {
+            $extra = $request->validate([
+                'countries' => ['required', 'array', 'min:1'],
+                'countries.*' => ['integer', 'exists:countries,id'],
+                'awarding_institutions' => ['prohibited'],
+            ]);
+            $countryIds = array_values(array_unique(array_map('intval', (array) ($extra['countries'] ?? []))));
+
+            if ($isActive) {
+                $conflicts = $this->findCountryOverlapConflicts($countryIds, excludingCategoryId: (int) $assignmentCategory->id);
+                if ($conflicts !== []) {
+                    return back()->withErrors([
+                        'countries' => 'These countries already belong to another active foreign category: '.implode(', ', $conflicts).'.',
+                    ]);
+                }
+            }
+        } else {
+            $extra = $request->validate([
+                'awarding_institutions' => ['required', 'array', 'min:1'],
+                'awarding_institutions.*' => ['integer', 'exists:awarding_institutions,id'],
+                'countries' => ['prohibited'],
+            ]);
+            $instIds = array_values(array_unique(array_map('intval', (array) ($extra['awarding_institutions'] ?? []))));
+
+            if ($isActive) {
+                $conflicts = $this->findInstitutionOverlapConflicts($instIds, excludingCategoryId: (int) $assignmentCategory->id);
+                if ($conflicts !== []) {
+                    return back()->withErrors([
+                        'awarding_institutions' => 'These institutions already belong to another active local category: '.implode(', ', $conflicts).'.',
+                    ]);
+                }
+            }
+        }
+
         $assignmentCategory->forceFill([
             'name' => (string) $validated['name'],
-            'is_active' => (bool) $validated['is_active'],
-        ])->save();
+            'is_active' => $isActive,
+        ]);
+        $assignmentCategory->save();
+
+        if ($type === 'foreign_country') {
+            $assignmentCategory->countries()->sync($countryIds);
+        } else {
+            $assignmentCategory->awardingInstitutions()->sync($instIds);
+        }
 
         return back()->with('success', 'Assignment category updated.');
     }
@@ -259,6 +337,27 @@ class AdminVerificationAssignmentCategoriesController extends Controller
     public function reactivate(Request $request, VerificationAssignmentCategory $assignmentCategory): RedirectResponse
     {
         abort_unless($request->user()?->can('verification.assign'), 403);
+
+        $assignmentCategory->loadMissing(['countries:id,name,iso_code', 'awardingInstitutions:id,name,is_active']);
+
+        if ((string) $assignmentCategory->type === 'foreign_country') {
+            $countryIds = $assignmentCategory->countries->pluck('id')->map(fn ($v) => (int) $v)->values()->all();
+            $conflicts = $this->findCountryOverlapConflicts($countryIds, excludingCategoryId: (int) $assignmentCategory->id);
+            if ($conflicts !== []) {
+                return back()->withErrors([
+                    'is_active' => 'Cannot reactivate. These countries already belong to another active foreign category: '.implode(', ', $conflicts).'.',
+                ]);
+            }
+        } else {
+            $instIds = $assignmentCategory->awardingInstitutions->pluck('id')->map(fn ($v) => (int) $v)->values()->all();
+            $conflicts = $this->findInstitutionOverlapConflicts($instIds, excludingCategoryId: (int) $assignmentCategory->id);
+            if ($conflicts !== []) {
+                return back()->withErrors([
+                    'is_active' => 'Cannot reactivate. These institutions already belong to another active local category: '.implode(', ', $conflicts).'.',
+                ]);
+            }
+        }
+
         $assignmentCategory->forceFill(['is_active' => true])->save();
         return back()->with('success', 'Category reactivated.');
     }
@@ -327,5 +426,64 @@ class AdminVerificationAssignmentCategoriesController extends Controller
 
         return back()->with('success', 'Officer removed from category.');
     }
-}
 
+    /**
+     * @param  array<int, int>  $countryIds
+     * @return array<int, string>
+     */
+    private function findCountryOverlapConflicts(array $countryIds, ?int $excludingCategoryId): array
+    {
+        $countryIds = array_values(array_unique(array_map('intval', $countryIds)));
+        if ($countryIds === []) {
+            return [];
+        }
+
+        $q = DB::table('verification_assignment_category_countries as m')
+            ->join('verification_assignment_categories as c', 'c.id', '=', 'm.verification_assignment_category_id')
+            ->join('countries as co', 'co.id', '=', 'm.country_id')
+            ->where('c.type', 'foreign_country')
+            ->where('c.is_active', true)
+            ->whereIn('m.country_id', $countryIds);
+
+        if ($excludingCategoryId !== null) {
+            $q->where('c.id', '!=', (int) $excludingCategoryId);
+        }
+
+        return $q->orderBy('co.name')
+            ->pluck('co.name')
+            ->map(fn ($v) => (string) $v)
+            ->unique()
+            ->values()
+            ->all();
+    }
+
+    /**
+     * @param  array<int, int>  $institutionIds
+     * @return array<int, string>
+     */
+    private function findInstitutionOverlapConflicts(array $institutionIds, ?int $excludingCategoryId): array
+    {
+        $institutionIds = array_values(array_unique(array_map('intval', $institutionIds)));
+        if ($institutionIds === []) {
+            return [];
+        }
+
+        $q = DB::table('verification_assignment_category_awarding_institutions as m')
+            ->join('verification_assignment_categories as c', 'c.id', '=', 'm.verification_assignment_category_id')
+            ->join('awarding_institutions as ai', 'ai.id', '=', 'm.awarding_institution_id')
+            ->where('c.type', 'local_institution')
+            ->where('c.is_active', true)
+            ->whereIn('m.awarding_institution_id', $institutionIds);
+
+        if ($excludingCategoryId !== null) {
+            $q->where('c.id', '!=', (int) $excludingCategoryId);
+        }
+
+        return $q->orderBy('ai.name')
+            ->pluck('ai.name')
+            ->map(fn ($v) => (string) $v)
+            ->unique()
+            ->values()
+            ->all();
+    }
+}

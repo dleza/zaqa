@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class VerificationAssignmentCategory extends Model
@@ -37,6 +38,26 @@ class VerificationAssignmentCategory extends Model
         return $this->belongsTo(AwardingInstitution::class);
     }
 
+    public function countries(): BelongsToMany
+    {
+        return $this->belongsToMany(
+            Country::class,
+            'verification_assignment_category_countries',
+            'verification_assignment_category_id',
+            'country_id',
+        )->withTimestamps();
+    }
+
+    public function awardingInstitutions(): BelongsToMany
+    {
+        return $this->belongsToMany(
+            AwardingInstitution::class,
+            'verification_assignment_category_awarding_institutions',
+            'verification_assignment_category_id',
+            'awarding_institution_id',
+        )->withTimestamps();
+    }
+
     public function lastAssignedUser(): BelongsTo
     {
         return $this->belongsTo(User::class, 'last_assigned_user_id');
@@ -46,5 +67,14 @@ class VerificationAssignmentCategory extends Model
     {
         return $this->hasMany(VerificationAssignmentCategoryUser::class, 'verification_assignment_category_id');
     }
-}
 
+    public function isForeignCountryType(): bool
+    {
+        return (string) $this->type === 'foreign_country';
+    }
+
+    public function isLocalInstitutionType(): bool
+    {
+        return (string) $this->type === 'local_institution';
+    }
+}

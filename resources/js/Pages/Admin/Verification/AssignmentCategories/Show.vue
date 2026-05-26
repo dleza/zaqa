@@ -108,8 +108,18 @@ async function reactivate() {
             <div class="mt-2 flex flex-wrap items-center gap-2">
               <span class="zaqa-badge zaqa-badge-secondary">{{ typeLabel }}</span>
               <span class="zaqa-badge" :class="category.is_active ? 'zaqa-badge-success' : 'zaqa-badge-warning'">{{ category.is_active ? 'Active' : 'Inactive' }}</span>
-              <span v-if="category.country" class="zaqa-badge zaqa-badge-secondary">{{ category.country.name }}</span>
-              <span v-if="category.awarding_institution" class="zaqa-badge zaqa-badge-secondary">{{ category.awarding_institution.name }}</span>
+              <template v-if="category.type === 'foreign_country'">
+                <span v-for="c in (category.countries ?? []).slice(0, 4)" :key="`c-${c.id}`" class="zaqa-badge zaqa-badge-secondary">
+                  {{ c.name }} ({{ c.iso_code }})
+                </span>
+                <span v-if="(category.countries ?? []).length > 4" class="zaqa-badge zaqa-badge-secondary">+{{ (category.countries ?? []).length - 4 }} more</span>
+              </template>
+              <template v-else>
+                <span v-for="i in (category.awarding_institutions ?? []).slice(0, 4)" :key="`i-${i.id}`" class="zaqa-badge zaqa-badge-secondary">
+                  {{ i.name }}{{ i.is_active ? '' : ' (inactive)' }}
+                </span>
+                <span v-if="(category.awarding_institutions ?? []).length > 4" class="zaqa-badge zaqa-badge-secondary">+{{ (category.awarding_institutions ?? []).length - 4 }} more</span>
+              </template>
             </div>
             <div class="mt-3 text-xs text-text-muted">
               Last assigned: {{ category.last_assigned_user?.name ?? '—' }} <span v-if="category.last_assigned_at">• {{ new Date(category.last_assigned_at).toLocaleString() }}</span>
@@ -260,4 +270,3 @@ async function reactivate() {
     </AdminActionModal>
   </AdminLayout>
 </template>
-

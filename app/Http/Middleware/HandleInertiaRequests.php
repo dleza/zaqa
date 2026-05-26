@@ -29,6 +29,7 @@ class HandleInertiaRequests extends Middleware
                         'name' => $request->user()->name,
                         'email' => $request->user()->email,
                         'phone_primary' => $request->user()->phone_primary,
+                        'profile_photo_url' => $request->user()->profile_photo_url,
                         'applicant_type' => $request->user()->applicant_type?->value,
                         'is_active' => (bool) $request->user()->is_active,
                         'email_verified_at' => $request->user()->email_verified_at,

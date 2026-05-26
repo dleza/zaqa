@@ -70,9 +70,9 @@ class QualificationAutoAssignmentEngineTest extends TestCase
         $category = VerificationAssignmentCategory::query()->create([
             'name' => 'USA',
             'type' => 'foreign_country',
-            'country_id' => $usa->id,
             'is_active' => true,
         ]);
+        $category->countries()->attach($usa->id);
 
         $level1A = $this->makeLevel1('Officer A');
         $level1B = $this->makeLevel1('Officer B');
@@ -149,9 +149,9 @@ class QualificationAutoAssignmentEngineTest extends TestCase
         $category = VerificationAssignmentCategory::query()->create([
             'name' => 'USA',
             'type' => 'foreign_country',
-            'country_id' => $usa->id,
             'is_active' => true,
         ]);
+        $category->countries()->attach($usa->id);
 
         $level1A = $this->makeLevel1('Officer A');
         $level1B = $this->makeLevel1('Officer B');
@@ -242,9 +242,9 @@ class QualificationAutoAssignmentEngineTest extends TestCase
         $category = VerificationAssignmentCategory::query()->create([
             'name' => $inst->name,
             'type' => 'local_institution',
-            'awarding_institution_id' => $inst->id,
             'is_active' => true,
         ]);
+        $category->awardingInstitutions()->attach($inst->id);
 
         $level1 = $this->makeLevel1('Officer A');
         VerificationAssignmentCategoryUser::query()->create([
@@ -291,9 +291,9 @@ class QualificationAutoAssignmentEngineTest extends TestCase
         $category = VerificationAssignmentCategory::query()->create([
             'name' => $inst->name,
             'type' => 'local_institution',
-            'awarding_institution_id' => $inst->id,
             'is_active' => true,
         ]);
+        $category->awardingInstitutions()->attach($inst->id);
 
         $level1 = $this->makeLevel1('Officer A');
         VerificationAssignmentCategoryUser::query()->create([
@@ -332,4 +332,3 @@ class QualificationAutoAssignmentEngineTest extends TestCase
         $this->assertSame($level1->id, (int) $q->assigned_verifier_id);
     }
 }
-

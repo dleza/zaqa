@@ -2,9 +2,11 @@
 import AdminLayout from '@/Layouts/AdminLayout.vue'
 import { Link, useForm } from '@inertiajs/vue3'
 import { Save, ShieldCheck } from 'lucide-vue-next'
+import { computed } from 'vue'
+import MultiSelectCombobox from '@/Components/MultiSelectCombobox.vue'
 
 const props = defineProps<{
-  category: { id: number; name: string; type: string; is_active: boolean; country_id: number | null; awarding_institution_id: number | null }
+  category: { id: number; name: string; type: string; is_active: boolean; country_ids: number[]; awarding_institution_ids: number[] }
   countries: Array<{ id: number; name: string; iso_code: string }>
   institutions: Array<{ id: number; name: string; is_active: boolean }>
 }>()
@@ -13,7 +15,17 @@ const form = useForm({
   _method: 'put',
   name: props.category.name,
   is_active: props.category.is_active,
+  countries: props.category.country_ids ?? ([] as number[]),
+  awarding_institutions: props.category.awarding_institution_ids ?? ([] as number[]),
 })
+
+const isForeign = computed(() => props.category.type === 'foreign_country')
+
+if (isForeign.value) {
+  form.awarding_institutions = []
+} else {
+  form.countries = []
+}
 
 function submit() {
   form.post(`/admin/verification/assignment-categories/${props.category.id}`, { preserveScroll: true })
@@ -44,21 +56,29 @@ function submit() {
             {{ category.type === 'foreign_country' ? 'Foreign (Country)' : 'Local (Institution)' }}
           </div>
         </div>
-        <div class="rounded-xl border border-border bg-surface-muted p-4">
-          <div class="text-xs font-semibold uppercase tracking-wider text-text-muted">Country</div>
-          <div class="mt-2 text-sm font-semibold text-text-primary">
-            {{ category.country_id ? (countries.find((c) => c.id === category.country_id)?.name ?? '—') : '—' }}
-          </div>
-        </div>
-        <div class="rounded-xl border border-border bg-surface-muted p-4">
-          <div class="text-xs font-semibold uppercase tracking-wider text-text-muted">Institution</div>
-          <div class="mt-2 text-sm font-semibold text-text-primary">
-            {{ category.awarding_institution_id ? (institutions.find((i) => i.id === category.awarding_institution_id)?.name ?? '—') : '—' }}
-          </div>
-        </div>
       </div>
 
       <form class="mt-6 space-y-5" @submit.prevent="submit">
+        <div v-if="isForeign">
+          <MultiSelectCombobox
+            v-model="form.countries"
+            label="Countries"
+            placeholder="Select one or more countries…"
+            :options="countries.map((c) => ({ id: c.id, label: `${c.name} (${c.iso_code})` }))"
+            :error="form.errors.countries"
+          />
+        </div>
+
+        <div v-else>
+          <MultiSelectCombobox
+            v-model="form.awarding_institutions"
+            label="Awarding institutions"
+            placeholder="Select one or more institutions…"
+            :options="institutions.map((i) => ({ id: i.id, label: `${i.name}${i.is_active ? '' : ' (inactive)'}` }))"
+            :error="form.errors.awarding_institutions"
+          />
+        </div>
+
         <div>
           <label class="text-xs font-semibold uppercase tracking-wider text-text-muted">Name</label>
           <input v-model="form.name" class="zaqa-input mt-2 h-10" />
@@ -83,4 +103,3 @@ function submit() {
     </div>
   </AdminLayout>
 </template>
-

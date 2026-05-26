@@ -186,6 +186,31 @@ For each qualification in `awaiting_auto_verification`:
 
 All auto-verification attempts are audited in `learner_record_match_attempts`.
 
+## Level 1 category-based auto-assignment
+When auto-verification (and optional institution pull lookup) does not produce a safe match, the qualification falls back to the Level 1 manual workflow.
+
+To reduce manual triage effort, the system supports **category-based auto-assignment** to Level 1 officers.
+
+### Category pools
+Assignment categories are **pools** that Level 2 / Super Admin configure:
+- **Foreign qualifications** route by **Country of award**
+  - one category can include **multiple countries**
+- **Local qualifications** route by **Awarding Institution**
+  - one category can include **multiple awarding institutions**
+
+### No-overlap rule (deterministic routing)
+To keep routing deterministic and avoid ambiguous assignments:
+- a given **country** may belong to **only one active** foreign assignment category
+- a given **awarding institution** may belong to **only one active** local assignment category
+
+Inactive categories may retain mappings, but cannot be reactivated if their mappings conflict with another active category.
+
+### Fallback behavior
+If no active category exists (or no eligible Level 1 officer is available):
+- the qualification remains in `awaiting_assignment`
+- the failure reason is stored for Level 2 / Super Admin visibility
+- the pipeline must not crash
+
 ## Send-back flow
 ### From verification to applicant
 Both Level 1 and Level 2 can send back an application.

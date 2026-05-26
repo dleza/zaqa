@@ -86,7 +86,7 @@ function typeLabel(t: string): string {
           <thead class="bg-surface-muted text-xs font-semibold text-text-muted">
             <tr>
               <th class="px-5 py-3 text-left">Category</th>
-              <th class="px-5 py-3 text-left">Target</th>
+              <th class="px-5 py-3 text-left">Mappings</th>
               <th class="px-5 py-3 text-left">Status</th>
               <th class="px-5 py-3 text-left">Officers</th>
               <th class="px-5 py-3 text-left">Last assigned</th>
@@ -100,8 +100,16 @@ function typeLabel(t: string): string {
                 <div class="mt-0.5 text-xs text-text-muted">{{ typeLabel(c.type) }}</div>
               </td>
               <td class="px-5 py-3 text-text-primary">
-                <span v-if="c.type === 'foreign_country'">{{ c.country?.name ?? '—' }}</span>
-                <span v-else>{{ c.awarding_institution?.name ?? '—' }}</span>
+                <div class="text-xs text-text-muted">{{ (c.mapped_count ?? 0) }} mapped</div>
+                <div class="mt-0.5 text-xs font-semibold text-text-primary">
+                  <span v-if="(c.mapped_sample ?? []).length === 0">—</span>
+                  <span v-else>
+                    {{ (c.mapped_sample ?? []).join(', ') }}
+                    <span v-if="(c.mapped_count ?? 0) > (c.mapped_sample ?? []).length" class="text-text-muted">
+                      +{{ (c.mapped_count ?? 0) - (c.mapped_sample ?? []).length }} more
+                    </span>
+                  </span>
+                </div>
               </td>
               <td class="px-5 py-3">
                 <span class="zaqa-badge" :class="c.is_active ? 'zaqa-badge-success' : 'zaqa-badge-warning'">
@@ -126,4 +134,3 @@ function typeLabel(t: string): string {
     </div>
   </AdminLayout>
 </template>
-

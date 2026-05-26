@@ -2,7 +2,8 @@
 import AdminLayout from '@/Layouts/AdminLayout.vue'
 import { Link, useForm } from '@inertiajs/vue3'
 import { Save, ShieldCheck } from 'lucide-vue-next'
-import { computed } from 'vue'
+import { computed, watch } from 'vue'
+import MultiSelectCombobox from '@/Components/MultiSelectCombobox.vue'
 
 const props = defineProps<{
   countries: Array<{ id: number; name: string; iso_code: string }>
@@ -11,14 +12,25 @@ const props = defineProps<{
 
 const form = useForm({
   type: 'foreign_country',
-  country_id: '' as any,
-  awarding_institution_id: '' as any,
+  countries: [] as number[],
+  awarding_institutions: [] as number[],
   name: '',
   is_active: true,
 })
 
 const showCountry = computed(() => form.type === 'foreign_country')
 const showInstitution = computed(() => form.type === 'local_institution')
+
+watch(
+  () => form.type,
+  (t) => {
+    if (t === 'foreign_country') {
+      form.awarding_institutions = []
+    } else {
+      form.countries = []
+    }
+  },
+)
 
 function submit() {
   form.post('/admin/verification/assignment-categories', { preserveScroll: true })
@@ -53,26 +65,30 @@ function submit() {
         </div>
 
         <div v-if="showCountry">
-          <label class="text-xs font-semibold uppercase tracking-wider text-text-muted">Country</label>
-          <select v-model="form.country_id" class="zaqa-input mt-2 h-10">
-            <option value="" disabled>Select country…</option>
-            <option v-for="c in countries" :key="c.id" :value="c.id">{{ c.name }} ({{ c.iso_code }})</option>
-          </select>
-          <div v-if="form.errors.country_id" class="mt-1 text-xs text-danger">{{ form.errors.country_id }}</div>
+          <MultiSelectCombobox
+            v-model="form.countries"
+            label="Countries"
+            placeholder="Select one or more countries…"
+            :options="countries.map((c) => ({ id: c.id, label: `${c.name} (${c.iso_code})` }))"
+            :error="form.errors.countries"
+            help-text="One category can cover multiple countries. Countries cannot overlap across active foreign categories."
+          />
         </div>
 
         <div v-if="showInstitution">
-          <label class="text-xs font-semibold uppercase tracking-wider text-text-muted">Awarding institution</label>
-          <select v-model="form.awarding_institution_id" class="zaqa-input mt-2 h-10">
-            <option value="" disabled>Select institution…</option>
-            <option v-for="i in institutions" :key="i.id" :value="i.id">{{ i.name }}{{ i.is_active ? '' : ' (inactive)' }}</option>
-          </select>
-          <div v-if="form.errors.awarding_institution_id" class="mt-1 text-xs text-danger">{{ form.errors.awarding_institution_id }}</div>
+          <MultiSelectCombobox
+            v-model="form.awarding_institutions"
+            label="Awarding institutions"
+            placeholder="Select one or more institutions…"
+            :options="institutions.map((i) => ({ id: i.id, label: `${i.name}${i.is_active ? '' : ' (inactive)'}` }))"
+            :error="form.errors.awarding_institutions"
+            help-text="One category can cover multiple institutions. Institutions cannot overlap across active local categories."
+          />
         </div>
 
         <div>
-          <label class="text-xs font-semibold uppercase tracking-wider text-text-muted">Category name (optional)</label>
-          <input v-model="form.name" class="zaqa-input mt-2 h-10" placeholder="Defaults to the selected country/institution name" />
+          <label class="text-xs font-semibold uppercase tracking-wider text-text-muted">Category name</label>
+          <input v-model="form.name" class="zaqa-input mt-2 h-10" placeholder="e.g. Southern Africa (Foreign) / Public Universities (Local)" />
           <div v-if="form.errors.name" class="mt-1 text-xs text-danger">{{ form.errors.name }}</div>
         </div>
 
@@ -94,4 +110,3 @@ function submit() {
     </div>
   </AdminLayout>
 </template>
-

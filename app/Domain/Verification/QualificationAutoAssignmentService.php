@@ -45,11 +45,22 @@ class QualificationAutoAssignmentService
             );
         }
 
-        $category = $this->resolveCategory($qualification);
+        ['category' => $category, 'ambiguous' => $ambiguous] = $this->resolveCategoryMatch($qualification);
+
+        if ($ambiguous) {
+            return $this->failAndPersist(
+                qualification: $qualification,
+                categoryId: null,
+                reason: 'Ambiguous assignment category mapping.',
+                actor: $actor,
+                contextReason: $reason,
+            );
+        }
+
         if (! $category) {
             $missing = $qualification->is_foreign_qualification
-                ? ($qualification->country_id ? 'No active country assignment category found' : 'Missing country for foreign qualification')
-                : ($qualification->awarding_institution_id ? 'No active institution assignment category found' : 'Missing awarding institution for local qualification');
+                ? ($qualification->country_id ? 'No active assignment category found' : 'Missing country for foreign qualification')
+                : ($qualification->awarding_institution_id ? 'No active assignment category found' : 'Missing awarding institution for local qualification');
 
             return $this->failAndPersist(
                 qualification: $qualification,
@@ -148,29 +159,46 @@ class QualificationAutoAssignmentService
         );
     }
 
-    private function resolveCategory(Qualification $qualification): ?VerificationAssignmentCategory
+    /**
+     * @return array{category: VerificationAssignmentCategory|null, ambiguous: bool}
+     */
+    private function resolveCategoryMatch(Qualification $qualification): array
     {
         if ($qualification->is_foreign_qualification) {
             if (! $qualification->country_id) {
-                return null;
+                return ['category' => null, 'ambiguous' => false];
             }
 
-            return VerificationAssignmentCategory::query()
+            $matches = VerificationAssignmentCategory::query()
                 ->where('type', 'foreign_country')
-                ->where('country_id', (int) $qualification->country_id)
                 ->where('is_active', true)
-                ->first();
+                ->whereHas('countries', fn ($q) => $q->where('countries.id', (int) $qualification->country_id))
+                ->limit(2)
+                ->get();
+
+            if ($matches->count() > 1) {
+                return ['category' => null, 'ambiguous' => true];
+            }
+
+            return ['category' => $matches->first(), 'ambiguous' => false];
         }
 
         if (! $qualification->awarding_institution_id) {
-            return null;
+            return ['category' => null, 'ambiguous' => false];
         }
 
-        return VerificationAssignmentCategory::query()
+        $matches = VerificationAssignmentCategory::query()
             ->where('type', 'local_institution')
-            ->where('awarding_institution_id', (int) $qualification->awarding_institution_id)
             ->where('is_active', true)
-            ->first();
+            ->whereHas('awardingInstitutions', fn ($q) => $q->where('awarding_institutions.id', (int) $qualification->awarding_institution_id))
+            ->limit(2)
+            ->get();
+
+        if ($matches->count() > 1) {
+            return ['category' => null, 'ambiguous' => true];
+        }
+
+        return ['category' => $matches->first(), 'ambiguous' => false];
     }
 
     /**

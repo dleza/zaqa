@@ -51,6 +51,9 @@ components:
           additionalProperties: true
     LearnerRecordPayload:
       type: object
+      description: >
+        Learner achievement record payload.
+        At least one identifier is required: `student_id` OR `certificate_no` OR `nrc_number` OR `passport_no`.
       required: [first_name, last_name, program_of_study, year_awarded]
       properties:
         student_id:
@@ -98,6 +101,19 @@ components:
           type: string
           nullable: true
           example: "INSTITUTION-REF-0001"
+      example:
+        student_id: "STU-12345"
+        certificate_no: "CERT-2024-0001"
+        nrc_number: "123456/12/1"
+        passport_no: null
+        first_name: "Mary"
+        last_name: "Banda"
+        other_names: "Chanda"
+        gender: "F"
+        program_of_study: "Bachelor of Science in Nursing"
+        year_awarded: 2024
+        award_date: "2024-09-30"
+        source_reference: "INSTITUTION-REF-0001"
     LearnerRecordResult:
       type: object
       required: [learner_record_id, created]
@@ -173,6 +189,21 @@ paths:
             schema:
               $ref: '#/components/schemas/LearnerRecordPayload'
             examples:
+              fullRecord:
+                summary: Full payload example
+                value:
+                  student_id: "STU-12345"
+                  certificate_no: "CERT-2024-0001"
+                  nrc_number: "123456/12/1"
+                  passport_no: null
+                  first_name: "Mary"
+                  last_name: "Banda"
+                  other_names: "Chanda"
+                  gender: "F"
+                  program_of_study: "Bachelor of Science in Nursing"
+                  year_awarded: 2024
+                  award_date: "2024-09-30"
+                  source_reference: "INSTITUTION-REF-0001"
               withStudentId:
                 summary: Student ID example
                 value:

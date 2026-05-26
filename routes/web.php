@@ -197,17 +197,21 @@ Route::middleware('auth')->group(function () {
     });
 
     Route::prefix('docs')->name('docs.')->group(function () {
+        // NOTE: Institution API docs are intentionally public-facing (behind a feature flag) to support
+        // third-party developers. They only document institution-facing endpoints and do not expose
+        // applicant/admin/payment routes.
         Route::get('/institution-api', [InstitutionApiDocsController::class, 'ui'])
-            ->middleware('can:institution_api.docs.view')
             ->name('institution_api.ui');
         Route::get('/institution-api/openapi.yaml', [InstitutionApiDocsController::class, 'spec'])
-            ->middleware('can:institution_api.docs.view')
             ->name('institution_api.spec');
     });
 
     Route::prefix('admin')->name('admin.')->middleware(['auth', 'can:dashboard.view'])->group(function () {
         Route::get('/dashboard', [AdminDashboardController::class, 'index'])->name('dashboard');
         Route::get('/profile', [AdminProfileController::class, 'show'])->name('profile.show');
+        Route::put('/profile', [AdminProfileController::class, 'update'])->name('profile.update');
+        Route::post('/profile/photo', [AdminProfileController::class, 'storePhoto'])->name('profile.photo.store');
+        Route::delete('/profile/photo', [AdminProfileController::class, 'destroyPhoto'])->name('profile.photo.destroy');
         Route::get('/change-password', [AdminProfileController::class, 'editPassword'])->name('profile.password.edit');
         Route::post('/change-password', [AdminProfileController::class, 'updatePassword'])->name('profile.password.update');
         Route::get('/notifications', [AdminNotificationsController::class, 'index'])->name('notifications.index');

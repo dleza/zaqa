@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Admin\LearnerRecords;
 
 use App\Http\Controllers\Controller;
 use App\Models\AwardingInstitution;
+use App\Models\Country;
 use App\Models\LearnerRecord;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -16,11 +17,13 @@ class AdminLearnerRecordsController extends Controller
         abort_unless($request->user()?->can('learner_records.view'), 403);
 
         $q = trim((string) $request->query('q', ''));
+        $countryId = $request->query('country_id');
         $institutionId = $request->query('awarding_institution_id');
         $yearAwarded = $request->query('year_awarded');
 
         $records = LearnerRecord::query()
             ->with(['awardingInstitution:id,name'])
+            ->when($countryId, fn ($qq) => $qq->whereHas('awardingInstitution', fn ($ai) => $ai->where('country_id', (int) $countryId)))
             ->when($institutionId, fn ($qq) => $qq->where('awarding_institution_id', (int) $institutionId))
             ->when($yearAwarded, fn ($qq) => $qq->where('year_awarded', (int) $yearAwarded))
             ->when($q !== '', fn ($qq) => $qq->where(function ($w) use ($q) {
@@ -56,18 +59,27 @@ class AdminLearnerRecordsController extends Controller
                 'created_at' => optional($r->created_at)->toIso8601String(),
             ]);
 
-        $institutions = AwardingInstitution::query()
+        $countries = Country::query()
             ->where('is_active', true)
             ->orderBy('name')
-            ->get(['id', 'name'])
-            ->map(fn (AwardingInstitution $i) => ['id' => $i->id, 'name' => $i->name])
+            ->get(['id', 'name', 'iso_code'])
+            ->map(fn (Country $c) => ['id' => $c->id, 'name' => $c->name, 'iso_code' => $c->iso_code])
+            ->values();
+
+        $institutions = AwardingInstitution::query()
+            ->when($countryId, fn ($qq) => $qq->where('country_id', (int) $countryId))
+            ->orderBy('name')
+            ->get(['id', 'name', 'is_active'])
+            ->map(fn (AwardingInstitution $i) => ['id' => $i->id, 'name' => $i->name, 'is_active' => (bool) $i->is_active])
             ->values();
 
         return Inertia::render('Admin/LearnerRecords/Index', [
             'records' => $records,
+            'countries' => $countries,
             'institutions' => $institutions,
             'filters' => [
                 'q' => $q,
+                'country_id' => is_string($countryId) ? $countryId : null,
                 'awarding_institution_id' => is_string($institutionId) ? $institutionId : null,
                 'year_awarded' => is_string($yearAwarded) ? $yearAwarded : null,
             ],
@@ -115,4 +127,3 @@ class AdminLearnerRecordsController extends Controller
         ]);
     }
 }
-

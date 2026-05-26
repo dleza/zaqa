@@ -11,6 +11,7 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
+use Illuminate\Support\Facades\Storage;
 use Spatie\Permission\Traits\HasRoles;
 
 class User extends Authenticatable
@@ -33,6 +34,7 @@ class User extends Authenticatable
         'phone_primary',
         'phone_secondary',
         'department_id',
+        'profile_photo_path',
         'password',
         'applicant_type',
         'is_active',
@@ -89,5 +91,15 @@ class User extends Authenticatable
     public function verificationAssignmentCategoryMemberships(): HasMany
     {
         return $this->hasMany(VerificationAssignmentCategoryUser::class);
+    }
+
+    public function getProfilePhotoUrlAttribute(): ?string
+    {
+        $path = trim((string) ($this->profile_photo_path ?? ''));
+        if ($path === '') {
+            return null;
+        }
+
+        return Storage::disk('public')->url($path);
     }
 }

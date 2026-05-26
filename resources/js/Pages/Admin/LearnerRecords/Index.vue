@@ -6,20 +6,30 @@ import { ref, watch } from 'vue'
 
 const props = defineProps<{
   records: any
-  institutions: Array<{ id: number; name: string }>
-  filters: { q: string; awarding_institution_id: string | null; year_awarded: string | null }
+  countries: Array<{ id: number; name: string; iso_code: string }>
+  institutions: Array<{ id: number; name: string; is_active: boolean }>
+  filters: { q: string; country_id: string | null; awarding_institution_id: string | null; year_awarded: string | null }
   can: { view: boolean; import: boolean }
 }>()
 
 const q = ref(props.filters.q ?? '')
+const countryId = ref(props.filters.country_id ?? '')
 const awardingInstitutionId = ref(props.filters.awarding_institution_id ?? '')
 const yearAwarded = ref(props.filters.year_awarded ?? '')
 
-watch([q, awardingInstitutionId, yearAwarded], () => {
+watch(
+  () => countryId.value,
+  () => {
+    awardingInstitutionId.value = ''
+  },
+)
+
+watch([q, countryId, awardingInstitutionId, yearAwarded], () => {
   router.get(
     '/admin/learner-records',
     {
       q: q.value || null,
+      country_id: countryId.value || null,
       awarding_institution_id: awardingInstitutionId.value || null,
       year_awarded: yearAwarded.value || null,
     },
@@ -64,9 +74,13 @@ watch([q, awardingInstitutionId, yearAwarded], () => {
               <Search class="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-text-muted" aria-hidden="true" />
               <input v-model="q" class="zaqa-input h-10 pl-9" placeholder="Search..." />
             </div>
+            <select v-model="countryId" class="zaqa-input h-10">
+              <option value="">All countries</option>
+              <option v-for="c in countries" :key="c.id" :value="String(c.id)">{{ c.name }} ({{ c.iso_code }})</option>
+            </select>
             <select v-model="awardingInstitutionId" class="zaqa-input h-10">
               <option value="">All institutions</option>
-              <option v-for="i in institutions" :key="i.id" :value="String(i.id)">{{ i.name }}</option>
+              <option v-for="i in institutions" :key="i.id" :value="String(i.id)">{{ i.name }}{{ i.is_active ? '' : ' (inactive)' }}</option>
             </select>
             <input v-model="yearAwarded" class="zaqa-input h-10 w-32" placeholder="Year" inputmode="numeric" />
           </div>
@@ -131,4 +145,3 @@ watch([q, awardingInstitutionId, yearAwarded], () => {
     </div>
   </AdminLayout>
 </template>
-

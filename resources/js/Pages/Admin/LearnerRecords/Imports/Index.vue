@@ -2,6 +2,7 @@
 import AdminLayout from '@/Layouts/AdminLayout.vue'
 import { Link, useForm } from '@inertiajs/vue3'
 import { FileSpreadsheet, UploadCloud } from 'lucide-vue-next'
+import SingleSelectCombobox from '@/Components/SingleSelectCombobox.vue'
 
 const props = defineProps<{
   imports: any
@@ -52,12 +53,15 @@ function submit() {
 
         <div class="mt-4 space-y-3">
           <div>
-            <label class="text-xs font-semibold uppercase tracking-wider text-text-muted">Awarding institution (optional)</label>
-            <select v-model="form.awarding_institution_id" class="zaqa-input mt-2 h-10" :disabled="!can.import">
-              <option value="">Auto-detect from file</option>
-              <option v-for="i in institutions" :key="i.id" :value="i.id">{{ i.name }}</option>
-            </select>
-            <p v-if="form.errors.awarding_institution_id" class="mt-2 text-xs text-danger">{{ form.errors.awarding_institution_id }}</p>
+            <SingleSelectCombobox
+              v-model="form.awarding_institution_id"
+              label="Awarding institution (optional)"
+              placeholder="Auto-detect from file"
+              :options="institutions.map((i) => ({ id: i.id, label: i.name }))"
+              :disabled="!can.import"
+              :error="form.errors.awarding_institution_id"
+              help-text="Use this to force a specific institution. Leave empty to auto-detect from the file."
+            />
           </div>
 
           <div>
@@ -138,4 +142,3 @@ function submit() {
     </div>
   </AdminLayout>
 </template>
-
