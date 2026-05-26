@@ -95,7 +95,7 @@ watch(
           <div class="max-w-3xl">
             <h1 class="text-3xl font-semibold tracking-tight text-text-primary sm:text-4xl">New application</h1>
             <p class="mt-2 text-base leading-relaxed text-text-muted">
-              Guided verification request—your progress is saved as you move through each step.
+              Your progress is saved as you move through each step.
             </p>
           </div>
 
@@ -110,6 +110,7 @@ watch(
       </div>
     </template>
 
+
     <div
       class="w-full max-w-none mx-auto -mx-4 px-4 sm:-mx-6 sm:px-6 lg:-mx-6 lg:px-8 2xl:-mx-10 2xl:px-10 xl:grid xl:grid-cols-12 xl:items-start xl:gap-10"
     >
@@ -119,9 +120,7 @@ watch(
         <div class="flex items-start justify-between gap-4">
           <div>
             <h2 class="text-lg font-semibold text-text-primary sm:text-xl">Applicant information</h2>
-            <p class="mt-2 text-sm leading-relaxed text-text-muted sm:text-base">
-              Tell us who this verification is for. You can use your profile or enter details for someone else.
-            </p>
+   
           </div>
           <div class="hidden rounded-full border border-brand/20 bg-brand/10 px-3 py-1.5 text-xs font-semibold text-brand sm:block">
             Step 1
@@ -160,7 +159,7 @@ watch(
           >
             <div class="text-base font-semibold text-text-primary">Your profile</div>
             <p class="mt-1 text-sm text-text-muted">
-              Provide at least one identification number. We save it to your profile so you do not need to enter it again next time.
+              Provide at least one identification number.
             </p>
             <div class="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
               <div class="text-sm">
@@ -199,9 +198,7 @@ watch(
                 class="sm:col-span-2 rounded-xl border border-border bg-surface px-4 py-4 lg:col-span-3"
               >
                 <div class="text-sm font-semibold text-text-primary">Upload NRC or passport copy (optional here)</div>
-                <p class="mt-1 text-xs text-text-muted">
-                  You can upload now or on the Applicant step later. If you already uploaded an identity document on your profile, you usually do not need to upload again.
-                </p>
+         
                 <div class="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2 sm:items-end">
                   <div>
                     <label class="text-sm font-medium text-text-primary">Document type</label>
