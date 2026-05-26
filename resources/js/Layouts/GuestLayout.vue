@@ -57,7 +57,11 @@ const isRegisterPage = computed(() => currentPath.value === '/register')
     </header>
 
     <main class="relative flex flex-1">
-      <div aria-hidden="true" class="pointer-events-none absolute inset-0 overflow-hidden">
+      <div
+        aria-hidden="true"
+        class="pointer-events-none absolute inset-0 overflow-hidden"
+        :class="isLoginPage || isRegisterPage ? 'hidden' : ''"
+      >
         <div class="absolute -top-24 left-1/2 h-96 w-96 -translate-x-1/2 rounded-full bg-brand/15 blur-3xl" />
         <div class="absolute -bottom-32 -right-24 h-[28rem] w-[28rem] rounded-full bg-accent/10 blur-3xl" />
         <div class="absolute inset-0 bg-gradient-to-b from-white/40 via-transparent to-white/25" />
@@ -78,10 +82,10 @@ const isRegisterPage = computed(() => currentPath.value === '/register')
       </div>
     </main>
 
-    <footer class="zaqa-footer">
-      <div class="zaqa-footer-inner">
+    <footer class="zaqa-footer" :class="isLoginPage || isRegisterPage ? 'hidden md:block' : ''">
+      <div class="zaqa-footer-inner py-4 sm:py-6 lg:py-8">
         <span class="text-text-on-dark/90">© {{ new Date().getFullYear() }} Zambia Qualifications Authority (ZAQA)</span>
-        <span class="text-text-on-dark/75">Secure qualification verification and certificate validation.</span>
+        <span class="hidden sm:inline text-text-on-dark/75">Secure qualification verification and certificate validation.</span>
       </div>
     </footer>
   </div>

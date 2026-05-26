@@ -22,10 +22,11 @@ function submit() {
 <template>
   <GuestLayout :card="false" max-width-class="max-w-none" content-padding-class="p-0" :hide-header="true" :center-content="false">
     <div class="relative min-h-screen w-full">
-      <AuthTopBar right-href="/register" right-label="Register and Apply" />
+      <AuthTopBar right-href="/register" right-label="Register and Apply" right-label-short="Register" />
 
       <div class="grid w-full lg:min-h-[calc(100vh-56px)] lg:grid-cols-2">
-        <aside class="relative overflow-hidden bg-gradient-to-br from-[#061a3a] via-[#0b3a66] to-[#092a48] px-10 py-10 text-white sm:px-14 sm:py-14 lg:px-16 lg:py-16">
+        <!-- Desktop branding panel (hidden on mobile) -->
+        <aside class="relative hidden overflow-hidden bg-gradient-to-br from-[#061a3a] via-[#0b3a66] to-[#092a48] px-10 py-10 text-white sm:px-14 sm:py-14 lg:block lg:px-16 lg:py-16">
             <div aria-hidden="true" class="pointer-events-none absolute inset-0">
               <div class="absolute -top-20 -left-20 h-72 w-72 rounded-full bg-white/10 blur-3xl" />
               <div class="absolute -bottom-28 -right-20 h-[26rem] w-[26rem] rounded-full bg-amber-400/10 blur-3xl" />
@@ -90,24 +91,27 @@ function submit() {
             </div>
           </aside>
 
-        <section class="relative overflow-hidden bg-[#eef4fb] px-6 py-8 sm:px-10 sm:py-10 lg:px-16 lg:py-12">
-          <div aria-hidden="true" class="pointer-events-none absolute inset-0">
+        <section class="relative overflow-hidden bg-white px-4 py-6 sm:bg-[#eef4fb] sm:px-10 sm:py-10 lg:px-16 lg:py-12">
+          <!-- Desktop/tablet decorative background (hidden on small screens) -->
+          <div aria-hidden="true" class="pointer-events-none absolute inset-0 hidden sm:block">
             <div class="absolute -top-28 left-1/2 h-[46rem] w-[46rem] -translate-x-1/2 rounded-full bg-brand/18 blur-3xl" />
             <div class="absolute -bottom-28 -right-28 h-[40rem] w-[40rem] rounded-full bg-accent/10 blur-3xl" />
             <div class="absolute inset-0 bg-[radial-gradient(circle_at_65%_35%,rgba(11,58,102,0.08),transparent_55%)]" />
           </div>
 
           <div class="relative flex h-full flex-col">
-            <div class="flex flex-1 items-center justify-center py-6 lg:py-10">
-              <div class="w-full max-w-[560px] rounded-3xl border border-border/70 bg-white/70 px-8 py-10 text-center shadow-2xl backdrop-blur-sm sm:px-10">
-              <div class="flex h-16 w-16 items-center justify-center rounded-2xl bg-brand/10">
+            <div class="flex flex-1 items-center justify-center py-2 sm:py-6 lg:py-10">
+              <div
+                class="w-full max-w-[560px] rounded-2xl border border-border/70 bg-white px-5 py-7 text-center shadow-sm sm:rounded-3xl sm:bg-white/70 sm:px-8 sm:py-10 sm:shadow-2xl sm:backdrop-blur-sm"
+              >
+              <div class="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-brand/10 sm:h-16 sm:w-16">
                 <Lock class="h-7 w-7 text-brand" aria-hidden="true" />
               </div>
 
-              <h2 class="mt-6 text-3xl font-semibold tracking-tight text-text-primary">Welcome back</h2>
+              <h2 class="mt-5 text-2xl font-semibold tracking-tight text-text-primary sm:mt-6 sm:text-3xl">Welcome back</h2>
               <p class="mt-2 text-sm text-text-muted">Log in using your email or phone number.</p>
 
-              <form class="mt-8 w-full space-y-5 text-left" @submit.prevent="submit">
+              <form class="mt-6 w-full space-y-5 text-left sm:mt-8" @submit.prevent="submit">
             <div>
               <label class="text-xs font-semibold uppercase tracking-wider text-text-muted">Email or phone number</label>
               <div class="relative">
@@ -209,7 +213,7 @@ function submit() {
             </button>
           </form>
 
-              <div class="my-5 flex items-center gap-3 text-xs text-text-muted">
+              <div class="my-5 flex items-center gap-3 text-xs text-text-muted sm:my-6">
                 <div class="h-px flex-1 bg-border" />
                 <span>or</span>
                 <div class="h-px flex-1 bg-border" />
@@ -221,7 +225,7 @@ function submit() {
                 <ArrowRight class="inline h-4 w-4 translate-y-[1px] text-text-muted" aria-hidden="true" />
               </div>
 
-              <div class="mt-10 flex items-center justify-center gap-2 text-xs text-text-muted">
+              <div class="mt-8 flex items-center justify-center gap-2 text-xs text-text-muted sm:mt-10">
                 <ShieldCheck class="h-4 w-4 text-text-muted" aria-hidden="true" />
                 <span>Your information is secure and protected.</span>
               </div>
@@ -233,4 +237,3 @@ function submit() {
     </div>
   </GuestLayout>
 </template>
-
