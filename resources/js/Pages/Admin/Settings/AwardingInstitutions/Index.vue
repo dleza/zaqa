@@ -1,10 +1,10 @@
 <script setup lang="ts">
 import AdminLayout from '@/Layouts/AdminLayout.vue'
 import AdminExcelImportModal from '@/Components/AdminExcelImportModal.vue'
-import AdminViewModal from '@/Components/AdminViewModal.vue'
 import { Link, router } from '@inertiajs/vue3'
 import { Building2, FileSpreadsheet, Plus, Search } from 'lucide-vue-next'
 import { ref, watch } from 'vue'
+import Swal from 'sweetalert2'
 
 const props = defineProps<{
   institutions: any
@@ -17,8 +17,6 @@ const props = defineProps<{
 const q = ref(props.filters.q ?? '')
 const countryId = ref<string>(props.filters.country_id ?? '')
 const active = ref<string>(props.filters.active ?? '')
-const viewOpen = ref(false)
-const selected = ref<any | null>(null)
 const excelImportOpen = ref(false)
 
 watch([q, countryId, active], () => {
@@ -29,14 +27,17 @@ watch([q, countryId, active], () => {
   )
 })
 
-function deactivate(id: number) {
-  if (!confirm('Deactivate this awarding institution?')) return
-  router.delete(`/admin/settings/awarding-institutions/${id}`, { preserveScroll: true })
-}
-
-function openView(i: any) {
-  selected.value = i
-  viewOpen.value = true
+async function deactivate(id: number) {
+  const res = await Swal.fire({
+    icon: 'warning',
+    title: 'Deactivate institution?',
+    html: `<div class="text-left text-sm text-text-muted">This institution will no longer be available for new applicant selections. Existing applications and learner records will remain unchanged.</div>`,
+    showCancelButton: true,
+    confirmButtonText: 'Deactivate',
+    cancelButtonText: 'Cancel',
+  })
+  if (!res.isConfirmed) return
+  router.post(`/admin/settings/awarding-institutions/${id}/deactivate`, {}, { preserveScroll: true })
 }
 </script>
 
@@ -132,9 +133,7 @@ function openView(i: any) {
               </td>
               <td class="px-5 py-3 text-right">
                 <div class="inline-flex items-center gap-2">
-                  <button type="button" class="zaqa-btn zaqa-btn-secondary h-9 px-3 py-2 text-xs" @click="openView(i)">
-                    View
-                  </button>
+                  <Link :href="i.show_url" class="zaqa-btn zaqa-btn-secondary h-9 px-3 py-2 text-xs">View</Link>
                   <Link v-if="can.edit" :href="`/admin/settings/awarding-institutions/${i.id}/edit`" class="zaqa-btn zaqa-btn-secondary h-9 px-3 py-2 text-xs">
                     Edit
                   </Link>
@@ -153,32 +152,5 @@ function openView(i: any) {
         </table>
       </div>
     </div>
-
-    <AdminViewModal
-      v-model="viewOpen"
-      :title="selected ? `Awarding Institution: ${selected.name}` : 'Awarding Institution'"
-      description="Quick view (read-only)."
-    >
-      <div v-if="selected" class="grid gap-4 sm:grid-cols-2">
-        <div class="rounded-xl border border-border bg-surface-muted p-4 sm:col-span-2">
-          <div class="text-xs font-semibold uppercase tracking-wider text-text-muted">Name</div>
-          <div class="mt-2 text-sm font-semibold text-text-primary">{{ selected.name }}</div>
-        </div>
-        <div class="rounded-xl border border-border bg-surface-muted p-4">
-          <div class="text-xs font-semibold uppercase tracking-wider text-text-muted">Country</div>
-          <div class="mt-2 text-sm font-semibold text-text-primary">{{ selected.country?.name ?? '—' }}</div>
-          <div class="mt-1 text-xs text-text-muted">{{ selected.country?.iso_code ?? '' }}</div>
-        </div>
-        <div class="rounded-xl border border-border bg-surface-muted p-4">
-          <div class="text-xs font-semibold uppercase tracking-wider text-text-muted">Status</div>
-          <div class="mt-2">
-            <span class="zaqa-badge" :class="selected.is_active ? 'zaqa-badge-success' : 'zaqa-badge-warning'">
-              {{ selected.is_active ? 'Active' : 'Inactive' }}
-            </span>
-          </div>
-        </div>
-      </div>
-    </AdminViewModal>
   </AdminLayout>
 </template>
-

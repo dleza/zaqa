@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Support\Facades\URL;
 
 class AwardingInstitution extends Model
@@ -34,6 +35,11 @@ class AwardingInstitution extends Model
     public function learnerRecordImports(): HasMany
     {
         return $this->hasMany(LearnerRecordImport::class);
+    }
+
+    public function integration(): HasOne
+    {
+        return $this->hasOne(InstitutionIntegration::class);
     }
 
     public function getHasConsentFormAttribute(): bool

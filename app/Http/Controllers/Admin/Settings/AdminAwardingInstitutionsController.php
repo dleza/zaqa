@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Admin\Settings;
 
 use App\Domain\Audit\AuditLogService;
 use App\Domain\Settings\AwardingInstitutionExcelImportService;
+use App\Domain\Settings\AwardingInstitutionProfileService;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Admin\Settings\ImportAwardingInstitutionsExcelRequest;
 use App\Http\Requests\Admin\Settings\StoreAwardingInstitutionRequest;
@@ -45,6 +46,7 @@ class AdminAwardingInstitutionsController extends Controller
                 'country' => $i->country ? ['id' => $i->country->id, 'name' => $i->country->name, 'iso_code' => $i->country->iso_code] : null,
                 'is_active' => (bool) $i->is_active,
                 'sort_order' => (int) ($i->sort_order ?? 0),
+                'show_url' => route('admin.settings.awarding_institutions.show', ['awardingInstitution' => $i->id]),
             ]);
 
         $countries = Country::query()
@@ -178,6 +180,28 @@ class AdminAwardingInstitutionsController extends Controller
         ]);
     }
 
+    public function show(Request $request, AwardingInstitution $awardingInstitution, AwardingInstitutionProfileService $profile): Response
+    {
+        abort_unless($request->user()?->can('settings.awarding_institutions.view'), 403);
+
+        $data = $profile->build($awardingInstitution);
+
+        $user = $request->user();
+
+        return Inertia::render('Admin/Settings/AwardingInstitutions/Show', [
+            ...$data,
+            'can' => [
+                'edit' => (bool) $user?->can('settings.awarding_institutions.edit'),
+                'deactivate' => (bool) $user?->can('settings.awarding_institutions.delete'),
+                'view_learner_records' => (bool) $user?->can('learner_records.view'),
+                'manage_integrations' => (bool) $user?->can('institution_api.manage'),
+                'view_integration_logs' => (bool) $user?->can('institution_api.logs.view'),
+                'view_qualifications_pool' => (bool) $user?->can('verification.pool.view'),
+                'view_auto_verified' => (bool) $user?->can('verification.level2.review'),
+            ],
+        ]);
+    }
+
     public function update(UpdateAwardingInstitutionRequest $request, AwardingInstitution $awardingInstitution, AuditLogService $audit): RedirectResponse
     {
         $before = $awardingInstitution->toArray();
@@ -227,6 +251,52 @@ class AdminAwardingInstitutionsController extends Controller
         );
 
         return back()->with('success', 'Awarding institution updated.');
+    }
+
+    public function deactivate(Request $request, AwardingInstitution $awardingInstitution, AuditLogService $audit): RedirectResponse
+    {
+        abort_unless($request->user()?->can('settings.awarding_institutions.delete'), 403);
+
+        $before = $awardingInstitution->toArray();
+
+        $awardingInstitution->forceFill(['is_active' => false])->save();
+
+        $audit->record(
+            eventType: 'settings.awarding_institution_deactivated',
+            module: 'Settings',
+            actionName: 'awarding_institution_deactivated',
+            message: 'Awarding institution deactivated.',
+            entityType: $awardingInstitution::class,
+            entityId: $awardingInstitution->id,
+            beforeState: $before,
+            afterState: $awardingInstitution->toArray(),
+            actor: $request->user(),
+        );
+
+        return back()->with('success', 'Awarding institution deactivated.');
+    }
+
+    public function reactivate(Request $request, AwardingInstitution $awardingInstitution, AuditLogService $audit): RedirectResponse
+    {
+        abort_unless($request->user()?->can('settings.awarding_institutions.delete'), 403);
+
+        $before = $awardingInstitution->toArray();
+
+        $awardingInstitution->forceFill(['is_active' => true])->save();
+
+        $audit->record(
+            eventType: 'settings.awarding_institution_reactivated',
+            module: 'Settings',
+            actionName: 'awarding_institution_reactivated',
+            message: 'Awarding institution reactivated.',
+            entityType: $awardingInstitution::class,
+            entityId: $awardingInstitution->id,
+            beforeState: $before,
+            afterState: $awardingInstitution->toArray(),
+            actor: $request->user(),
+        );
+
+        return back()->with('success', 'Awarding institution reactivated.');
     }
 
     public function destroy(Request $request, AwardingInstitution $awardingInstitution, AuditLogService $audit): RedirectResponse

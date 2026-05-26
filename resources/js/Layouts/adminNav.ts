@@ -14,6 +14,7 @@ import {
   GraduationCap,
   Coins,
   BarChart3,
+  KeyRound,
 } from 'lucide-vue-next'
 
 export type AdminNavItem = {
@@ -306,6 +307,47 @@ export const adminNavSections: AdminNavSection[] = [
         icon: Users,
         activeStartsWith: '/admin/settings/departments',
         requiredAnyPermissions: ['settings.departments.view'],
+      },
+    ],
+  },
+  {
+    label: 'Integrations',
+    requiredAnyPermissions: ['institution_api.manage', 'institution_api.logs.view', 'institution_api.docs.view'],
+    items: [
+      {
+        label: 'Institution API Clients',
+        href: '/admin/integrations/institution-api-clients',
+        icon: KeyRound,
+        activeStartsWith: '/admin/integrations/institution-api-clients',
+        requiredAnyPermissions: ['institution_api.manage'],
+      },
+      {
+        label: 'Institution Pull Integrations',
+        href: '/admin/integrations/institution-integrations',
+        icon: Globe,
+        activeStartsWith: '/admin/integrations/institution-integrations',
+        requiredAnyPermissions: ['institution_api.manage'],
+      },
+      {
+        label: 'Institution API Logs',
+        href: '/admin/integrations/institution-api-logs',
+        icon: FileText,
+        activeStartsWith: '/admin/integrations/institution-api-logs',
+        requiredAnyPermissions: ['institution_api.logs.view'],
+      },
+      {
+        label: 'Institution Pull Lookup Logs',
+        href: '/admin/integrations/institution-pull-lookup-logs',
+        icon: FileText,
+        activeStartsWith: '/admin/integrations/institution-pull-lookup-logs',
+        requiredAnyPermissions: ['institution_api.logs.view'],
+      },
+      {
+        label: 'Institution API Docs',
+        href: '/docs/institution-api',
+        icon: BookOpen,
+        activeStartsWith: '/docs/institution-api',
+        requiredAnyPermissions: ['institution_api.docs.view'],
       },
     ],
   },

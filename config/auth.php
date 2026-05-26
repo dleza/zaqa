@@ -1,6 +1,7 @@
 <?php
 
 use App\Models\User;
+use App\Models\InstitutionApiClient;
 
 return [
 
@@ -42,6 +43,18 @@ return [
             'driver' => 'session',
             'provider' => 'users',
         ],
+
+        // User-scoped API tokens (Sanctum).
+        'sanctum' => [
+            'driver' => 'sanctum',
+            'provider' => 'users',
+        ],
+
+        // Awarding Institution integration tokens (Sanctum).
+        'institution-api' => [
+            'driver' => 'sanctum',
+            'provider' => 'institution_api_clients',
+        ],
     ],
 
     /*
@@ -65,6 +78,11 @@ return [
         'users' => [
             'driver' => 'eloquent',
             'model' => env('AUTH_MODEL', User::class),
+        ],
+
+        'institution_api_clients' => [
+            'driver' => 'eloquent',
+            'model' => InstitutionApiClient::class,
         ],
 
         // 'users' => [

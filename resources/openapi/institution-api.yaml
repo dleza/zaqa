@@ -1,0 +1,355 @@
+openapi: 3.0.3
+info:
+  title: ZAQA Institution Integration API
+  version: "1.0.0"
+  description: >
+    Institution-facing API for submitting and querying Learner Achievement Records.
+    This OpenAPI spec is intentionally limited to `/api/institution/v1/*` endpoints and does not expose internal admin/applicant APIs.
+    
+    **Push vs Pull**
+    - **Push (institution → ZAQA):** Institutions should normally push learner achievement records to ZAQA using the endpoints in this spec.
+    - **Pull (ZAQA → institution):** ZAQA may optionally configure a separate institution-specific pull lookup during auto-verification when internal records are not sufficient.
+      That pull lookup endpoint is **not** part of this ZAQA Institution API spec.
+
+servers:
+  - url: /
+
+tags:
+  - name: Learner Records
+    description: Submit and query learner achievement records scoped to the authenticated awarding institution.
+  - name: Batches
+    description: Track asynchronous batch ingestion.
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: Token
+  schemas:
+    SuccessEnvelope:
+      type: object
+      required: [success, data]
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          type: object
+    ErrorEnvelope:
+      type: object
+      required: [success, message]
+      properties:
+        success:
+          type: boolean
+          example: false
+        message:
+          type: string
+          example: Validation failed
+        errors:
+          type: object
+          additionalProperties: true
+    LearnerRecordPayload:
+      type: object
+      required: [first_name, last_name, program_of_study, year_awarded]
+      properties:
+        student_id:
+          type: string
+          nullable: true
+          example: "STU-12345"
+        certificate_no:
+          type: string
+          nullable: true
+          example: "CERT-2024-0001"
+        nrc_number:
+          type: string
+          nullable: true
+          example: "123456/12/1"
+        passport_no:
+          type: string
+          nullable: true
+          example: "ZN1234567"
+        first_name:
+          type: string
+          example: "Mary"
+        last_name:
+          type: string
+          example: "Banda"
+        other_names:
+          type: string
+          nullable: true
+          example: "Chanda"
+        gender:
+          type: string
+          nullable: true
+          example: "F"
+        program_of_study:
+          type: string
+          example: "Bachelor of Science in Nursing"
+        year_awarded:
+          type: integer
+          example: 2024
+        award_date:
+          type: string
+          format: date
+          nullable: true
+          example: "2024-09-30"
+        source_reference:
+          type: string
+          nullable: true
+          example: "INSTITUTION-REF-0001"
+    LearnerRecordResult:
+      type: object
+      required: [learner_record_id, created]
+      properties:
+        learner_record_id:
+          type: integer
+          example: 123
+        created:
+          type: boolean
+          example: true
+    BatchCreateResult:
+      type: object
+      required: [batch_id, status]
+      properties:
+        batch_id:
+          type: integer
+          example: 10
+        status:
+          type: string
+          example: pending
+    BatchStatusResult:
+      type: object
+      required: [id, status, total, processed, inserted, updated, failed]
+      properties:
+        id:
+          type: integer
+          example: 10
+        status:
+          type: string
+          example: processing
+        total:
+          type: integer
+          example: 500
+        processed:
+          type: integer
+          example: 100
+        inserted:
+          type: integer
+          example: 80
+        updated:
+          type: integer
+          example: 20
+        failed:
+          type: integer
+          example: 0
+        errors:
+          type: array
+          items:
+            type: object
+            properties:
+              row:
+                type: integer
+              message:
+                type: string
+
+security:
+  - BearerAuth: []
+
+paths:
+  /api/institution/v1/learner-records:
+    post:
+      tags: [Learner Records]
+      summary: Submit one learner record (upsert)
+      description: >
+        Creates or updates a learner record within ZAQA.
+        The awarding institution is inferred from the bearer token and not accepted from the payload.
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LearnerRecordPayload'
+            examples:
+              withStudentId:
+                summary: Student ID example
+                value:
+                  student_id: "STU-12345"
+                  first_name: "Mary"
+                  last_name: "Banda"
+                  program_of_study: "Bachelor of Science in Nursing"
+                  year_awarded: 2024
+              withCertificateNo:
+                summary: Certificate number example
+                value:
+                  certificate_no: "CERT-2024-0001"
+                  first_name: "Mary"
+                  last_name: "Banda"
+                  program_of_study: "Bachelor of Science in Nursing"
+                  year_awarded: 2024
+      responses:
+        "201":
+          description: Created/updated
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/LearnerRecordResult'
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        "403":
+          description: Forbidden
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        "422":
+          description: Validation failed
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        "429":
+          description: Rate limited
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+
+  /api/institution/v1/learner-records/batch:
+    post:
+      tags: [Learner Records, Batches]
+      summary: Submit batch learner records
+      description: >
+        Accepts a batch array of learner records. Small batches may process inline; larger batches are queued.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [records]
+              properties:
+                records:
+                  type: array
+                  items:
+                    $ref: '#/components/schemas/LearnerRecordPayload'
+      responses:
+        "200":
+          description: Processed inline (small batch)
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/BatchStatusResult'
+        "202":
+          description: Accepted for asynchronous processing
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/BatchCreateResult'
+        "422":
+          description: Validation failed
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+
+  /api/institution/v1/learner-records/search:
+    get:
+      tags: [Learner Records]
+      summary: Search learner records by identifiers (scoped)
+      description: >
+        Returns learner records belonging to the authenticated awarding institution only.
+      parameters:
+        - in: query
+          name: student_id
+          schema: { type: string }
+        - in: query
+          name: certificate_no
+          schema: { type: string }
+        - in: query
+          name: nrc_number
+          schema: { type: string }
+        - in: query
+          name: passport_no
+          schema: { type: string }
+        - in: query
+          name: year_awarded
+          schema: { type: integer }
+        - in: query
+          name: program_of_study
+          schema: { type: string }
+        - in: query
+          name: per_page
+          schema: { type: integer, default: 25, maximum: 100 }
+      responses:
+        "200":
+          description: Search results
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessEnvelope'
+
+  /api/institution/v1/learner-records/{id}:
+    get:
+      tags: [Learner Records]
+      summary: Fetch a learner record by ID (scoped)
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Learner record
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessEnvelope'
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+
+  /api/institution/v1/batches/{batchId}:
+    get:
+      tags: [Batches]
+      summary: Batch ingestion status
+      parameters:
+        - in: path
+          name: batchId
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Batch status
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/BatchStatusResult'
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }

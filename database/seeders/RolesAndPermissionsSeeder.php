@@ -48,6 +48,11 @@ class RolesAndPermissionsSeeder extends Seeder
         'learner_records.view',
         'learner_records.import',
 
+        // Institution integration API
+        'institution_api.manage',
+        'institution_api.logs.view',
+        'institution_api.docs.view',
+
         // Reports
         'reports.sla.view',
         'reports.view',
@@ -167,4 +172,3 @@ class RolesAndPermissionsSeeder extends Seeder
         $superAdmin->syncPermissions(Permission::query()->where('guard_name', 'web')->get());
     }
 }
-

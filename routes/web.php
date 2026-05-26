@@ -13,6 +13,10 @@ use App\Http\Controllers\Admin\AdminUsersController;
 use App\Http\Controllers\Admin\Finance\AdminFinanceDashboardController;
 use App\Http\Controllers\Admin\Finance\AdminFinancePaymentProofController;
 use App\Http\Controllers\Admin\Finance\AdminFinancePaymentsController;
+use App\Http\Controllers\Admin\Integrations\AdminInstitutionApiClientsController;
+use App\Http\Controllers\Admin\Integrations\AdminInstitutionIntegrationLogsController;
+use App\Http\Controllers\Admin\Integrations\AdminInstitutionIntegrationsController;
+use App\Http\Controllers\Admin\Integrations\AdminInstitutionPullLookupLogsController;
 use App\Http\Controllers\Admin\LearnerRecords\AdminLearnerRecordImportsController;
 use App\Http\Controllers\Admin\LearnerRecords\AdminLearnerRecordsController;
 use App\Http\Controllers\Admin\Reports\ApplicationsReportController;
@@ -58,6 +62,7 @@ use App\Http\Controllers\Auth\PasswordResetLinkController;
 use App\Http\Controllers\Auth\RegisteredApplicantController;
 use App\Http\Controllers\Finance\FinanceApplicationTrackingController;
 use App\Http\Controllers\Finance\FinancePaymentProofController;
+use App\Http\Controllers\Docs\InstitutionApiDocsController;
 use App\Http\Middleware\EnsureAccountIsActive;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Route;
@@ -190,6 +195,15 @@ Route::middleware('auth')->group(function () {
         Route::get('/applications/{application}/track', [FinanceApplicationTrackingController::class, 'show'])->name('applications.track');
     });
 
+    Route::prefix('docs')->name('docs.')->group(function () {
+        Route::get('/institution-api', [InstitutionApiDocsController::class, 'ui'])
+            ->middleware('can:institution_api.docs.view')
+            ->name('institution_api.ui');
+        Route::get('/institution-api/openapi.yaml', [InstitutionApiDocsController::class, 'spec'])
+            ->middleware('can:institution_api.docs.view')
+            ->name('institution_api.spec');
+    });
+
     Route::prefix('admin')->name('admin.')->middleware(['auth', 'can:dashboard.view'])->group(function () {
         Route::get('/dashboard', [AdminDashboardController::class, 'index'])->name('dashboard');
         Route::get('/profile', [AdminProfileController::class, 'show'])->name('profile.show');
@@ -250,6 +264,60 @@ Route::middleware('auth')->group(function () {
             Route::get('/imports/{import}', [AdminLearnerRecordImportsController::class, 'show'])
                 ->middleware('can:learner_records.view')
                 ->name('imports.show');
+        });
+
+        Route::prefix('integrations')->name('integrations.')->group(function () {
+            Route::get('/institution-api-clients', [AdminInstitutionApiClientsController::class, 'index'])
+                ->middleware('can:institution_api.manage')
+                ->name('institution_api_clients.index');
+            Route::get('/institution-api-clients/create', [AdminInstitutionApiClientsController::class, 'create'])
+                ->middleware('can:institution_api.manage')
+                ->name('institution_api_clients.create');
+            Route::post('/institution-api-clients', [AdminInstitutionApiClientsController::class, 'store'])
+                ->middleware('can:institution_api.manage')
+                ->name('institution_api_clients.store');
+            Route::get('/institution-api-clients/{institutionApiClient}', [AdminInstitutionApiClientsController::class, 'show'])
+                ->middleware('can:institution_api.manage')
+                ->name('institution_api_clients.show');
+            Route::post('/institution-api-clients/{institutionApiClient}/tokens', [AdminInstitutionApiClientsController::class, 'issueToken'])
+                ->middleware('can:institution_api.manage')
+                ->name('institution_api_clients.tokens.issue');
+            Route::post('/institution-api-clients/{institutionApiClient}/tokens/rotate', [AdminInstitutionApiClientsController::class, 'rotateToken'])
+                ->middleware('can:institution_api.manage')
+                ->name('institution_api_clients.tokens.rotate');
+            Route::post('/institution-api-clients/{institutionApiClient}/tokens/email-latest', [AdminInstitutionApiClientsController::class, 'emailLatestToken'])
+                ->middleware('can:institution_api.manage')
+                ->name('institution_api_clients.tokens.email_latest');
+            Route::post('/institution-api-clients/{institutionApiClient}/tokens/{tokenId}/revoke', [AdminInstitutionApiClientsController::class, 'revokeToken'])
+                ->middleware('can:institution_api.manage')
+                ->name('institution_api_clients.tokens.revoke');
+            Route::post('/institution-api-clients/{institutionApiClient}/disable', [AdminInstitutionApiClientsController::class, 'disable'])
+                ->middleware('can:institution_api.manage')
+                ->name('institution_api_clients.disable');
+            Route::post('/institution-api-clients/{institutionApiClient}/enable', [AdminInstitutionApiClientsController::class, 'enable'])
+                ->middleware('can:institution_api.manage')
+                ->name('institution_api_clients.enable');
+
+            Route::get('/institution-api-logs', [AdminInstitutionIntegrationLogsController::class, 'index'])
+                ->middleware('can:institution_api.logs.view')
+                ->name('institution_api_logs.index');
+
+            Route::get('/institution-integrations', [AdminInstitutionIntegrationsController::class, 'index'])
+                ->middleware('can:institution_api.manage')
+                ->name('institution_integrations.index');
+            Route::get('/institution-integrations/{awardingInstitution}', [AdminInstitutionIntegrationsController::class, 'edit'])
+                ->middleware('can:institution_api.manage')
+                ->name('institution_integrations.edit');
+            Route::post('/institution-integrations/{awardingInstitution}', [AdminInstitutionIntegrationsController::class, 'update'])
+                ->middleware('can:institution_api.manage')
+                ->name('institution_integrations.update');
+            Route::post('/institution-integrations/{awardingInstitution}/test', [AdminInstitutionIntegrationsController::class, 'test'])
+                ->middleware('can:institution_api.manage')
+                ->name('institution_integrations.test');
+
+            Route::get('/institution-pull-lookup-logs', [AdminInstitutionPullLookupLogsController::class, 'index'])
+                ->middleware('can:institution_api.logs.view')
+                ->name('institution_pull_lookup_logs.index');
         });
 
         Route::get('/users', [AdminUsersController::class, 'index'])->middleware('can:admin.users.view')->name('users.index');
@@ -497,6 +565,15 @@ Route::middleware('auth')->group(function () {
             Route::get('/awarding-institutions/{awardingInstitution}/edit', [AdminAwardingInstitutionsController::class, 'edit'])
                 ->middleware('can:settings.awarding_institutions.edit')
                 ->name('awarding_institutions.edit');
+            Route::get('/awarding-institutions/{awardingInstitution}', [AdminAwardingInstitutionsController::class, 'show'])
+                ->middleware('can:settings.awarding_institutions.view')
+                ->name('awarding_institutions.show');
+            Route::post('/awarding-institutions/{awardingInstitution}/deactivate', [AdminAwardingInstitutionsController::class, 'deactivate'])
+                ->middleware('can:settings.awarding_institutions.delete')
+                ->name('awarding_institutions.deactivate');
+            Route::post('/awarding-institutions/{awardingInstitution}/reactivate', [AdminAwardingInstitutionsController::class, 'reactivate'])
+                ->middleware('can:settings.awarding_institutions.delete')
+                ->name('awarding_institutions.reactivate');
             Route::put('/awarding-institutions/{awardingInstitution}', [AdminAwardingInstitutionsController::class, 'update'])
                 ->middleware('can:settings.awarding_institutions.edit')
                 ->name('awarding_institutions.update');
