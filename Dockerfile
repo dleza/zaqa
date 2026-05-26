@@ -48,10 +48,9 @@ RUN set -eux; \
 
 COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
 
-COPY composer.json composer.lock ./
-RUN composer install --no-dev --no-interaction --no-progress --prefer-dist --optimize-autoloader
-
 COPY . .
+
+RUN composer install --no-dev --no-interaction --no-progress --prefer-dist --optimize-autoloader
 
 COPY --from=frontend /app/public/build ./public/build
 
