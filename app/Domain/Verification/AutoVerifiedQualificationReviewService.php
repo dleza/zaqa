@@ -4,6 +4,7 @@ namespace App\Domain\Verification;
 
 use App\Domain\Audit\AuditLogService;
 use App\Domain\Tracking\ApplicationLifecycleService;
+use App\Domain\Verification\QualificationAutoAssignmentService;
 use App\Enums\LifecycleStage;
 use App\Enums\LifecycleVisibility;
 use App\Enums\VerificationState;
@@ -19,11 +20,12 @@ class AutoVerifiedQualificationReviewService
         private readonly AuditLogService $audit,
         private readonly ApplicationLifecycleService $lifecycle,
         private readonly QualificationLevel2ReviewLockService $locks,
+        private readonly QualificationAutoAssignmentService $autoAssignments,
     ) {}
 
     public function sendToManualReview(Qualification $qualification, User $actor): Qualification
     {
-        return DB::transaction(function () use ($qualification, $actor) {
+        $qualification = DB::transaction(function () use ($qualification, $actor) {
             $qualification->refresh();
             $qualification->loadMissing('application');
 
@@ -105,6 +107,12 @@ class AutoVerifiedQualificationReviewService
 
             return $qualification;
         });
+
+        // After routing to manual review queue, attempt auto-assignment to Level 1 (category-based).
+        if ($qualification->verification_state === VerificationState::AwaitingAssignment && ! $qualification->assigned_verifier_id) {
+            $this->autoAssignments->autoAssign($qualification, actor: $actor, reason: 'sent_to_manual_review');
+        }
+
+        return $qualification->refresh();
     }
 }
-

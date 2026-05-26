@@ -3,7 +3,6 @@
 namespace App\Http\Controllers\Admin\Verification;
 
 use App\Domain\Tracking\ApplicationLifecycleService;
-use App\Domain\Verification\AssignmentService;
 use App\Domain\Verification\DecisionService;
 use App\Domain\Verification\SendBackService;
 use App\Domain\Verification\VerificationQualificationAccess;
@@ -12,7 +11,6 @@ use App\Enums\LifecycleStage;
 use App\Enums\LifecycleVisibility;
 use App\Enums\PaymentStatus;
 use App\Http\Controllers\Controller;
-use App\Http\Requests\Admin\Verification\AssignApplicationRequest;
 use App\Http\Requests\Admin\Verification\DecisionApproveRequest;
 use App\Http\Requests\Admin\Verification\DecisionRejectRequest;
 use App\Http\Requests\Admin\Verification\IssueCertificateRequest;
@@ -56,14 +54,6 @@ class AdminVerificationApplicationController extends Controller
         $paymentsSorted = $application->payments->sortByDesc('id');
         $displayPayment = $paymentsSorted->first(fn ($p) => $p->status === PaymentStatus::Confirmed)
             ?? $paymentsSorted->first();
-
-        $level1Users = User::query()
-            ->whereNull('applicant_type')
-            ->whereHas('roles', fn ($q) => $q->where('name', 'Verification Officer Level 1'))
-            ->orderBy('name')
-            ->get(['id', 'name', 'email'])
-            ->map(fn (User $u) => ['id' => $u->id, 'name' => $u->name, 'email' => $u->email])
-            ->values();
 
         $viewer = $request->user();
         $restricted = VerificationQualificationAccess::mustRestrictToAssignedQualifications($viewer);
@@ -250,7 +240,6 @@ class AdminVerificationApplicationController extends Controller
                     ]),
             ],
             'viewerUserId' => $request->user()?->id,
-            'level1Users' => $level1Users,
             'can' => [
                 'assign' => (bool) $request->user()?->can('verification.assign'),
                 'send_back' => (bool) $request->user()?->can('verification.send_back'),
@@ -262,16 +251,6 @@ class AdminVerificationApplicationController extends Controller
                 'finance_view' => (bool) $request->user()?->can('admin.finance.view'),
             ],
         ]);
-    }
-
-    public function assign(AssignApplicationRequest $request, Application $application, AssignmentService $assignments): RedirectResponse
-    {
-        /** @var User $assignee */
-        $assignee = User::query()->findOrFail((int) $request->validated('assigned_to_user_id'));
-
-        $assignments->assign($application, $request->user(), $assignee, $request->validated('comment'));
-
-        return back()->with('success', 'Assigned to Level 1.');
     }
 
     public function sendBack(SendBackRequest $request, Application $application, SendBackService $sendBack): RedirectResponse

@@ -35,6 +35,7 @@ use App\Http\Controllers\Admin\Verification\AdminVerificationApplicationControll
 use App\Http\Controllers\Admin\Verification\AdminVerificationAssignedToMeController;
 use App\Http\Controllers\Admin\Verification\AdminVerificationAwaitingApplicantResubmissionController;
 use App\Http\Controllers\Admin\Verification\AdminVerificationAutoVerifiedController;
+use App\Http\Controllers\Admin\Verification\AdminVerificationAssignmentCategoriesController;
 use App\Http\Controllers\Admin\Verification\AdminVerificationCategoryController;
 use App\Http\Controllers\Admin\Verification\AdminVerificationDocumentController;
 use App\Http\Controllers\Admin\Verification\AdminVerificationPoolController;
@@ -420,12 +421,46 @@ Route::middleware('auth')->group(function () {
                 ->middleware('can:verification.level2.review')
                 ->name('auto_verified.index');
 
+            Route::prefix('assignment-categories')->name('assignment_categories.')->group(function () {
+                Route::get('/', [AdminVerificationAssignmentCategoriesController::class, 'index'])
+                    ->middleware('can:verification.assign')
+                    ->name('index');
+                Route::get('/create', [AdminVerificationAssignmentCategoriesController::class, 'create'])
+                    ->middleware('can:verification.assign')
+                    ->name('create');
+                Route::post('/', [AdminVerificationAssignmentCategoriesController::class, 'store'])
+                    ->middleware('can:verification.assign')
+                    ->name('store');
+                Route::get('/{assignmentCategory}', [AdminVerificationAssignmentCategoriesController::class, 'show'])
+                    ->middleware('can:verification.assign')
+                    ->name('show');
+                Route::get('/{assignmentCategory}/edit', [AdminVerificationAssignmentCategoriesController::class, 'edit'])
+                    ->middleware('can:verification.assign')
+                    ->name('edit');
+                Route::put('/{assignmentCategory}', [AdminVerificationAssignmentCategoriesController::class, 'update'])
+                    ->middleware('can:verification.assign')
+                    ->name('update');
+                Route::post('/{assignmentCategory}/deactivate', [AdminVerificationAssignmentCategoriesController::class, 'deactivate'])
+                    ->middleware('can:verification.assign')
+                    ->name('deactivate');
+                Route::post('/{assignmentCategory}/reactivate', [AdminVerificationAssignmentCategoriesController::class, 'reactivate'])
+                    ->middleware('can:verification.assign')
+                    ->name('reactivate');
+
+                Route::post('/{assignmentCategory}/members', [AdminVerificationAssignmentCategoriesController::class, 'storeMember'])
+                    ->middleware('can:verification.assign')
+                    ->name('members.store');
+                Route::post('/{assignmentCategory}/members/{member}', [AdminVerificationAssignmentCategoriesController::class, 'updateMember'])
+                    ->middleware('can:verification.assign')
+                    ->name('members.update');
+                Route::delete('/{assignmentCategory}/members/{member}', [AdminVerificationAssignmentCategoriesController::class, 'destroyMember'])
+                    ->middleware('can:verification.assign')
+                    ->name('members.destroy');
+            });
+
             Route::get('/applications/{application}', [AdminVerificationApplicationController::class, 'show'])
                 ->middleware('can:verification.pool.view')
                 ->name('applications.show');
-            Route::post('/applications/{application}/assign', [AdminVerificationApplicationController::class, 'assign'])
-                ->middleware('can:verification.assign')
-                ->name('applications.assign');
             Route::post('/applications/{application}/send-back', [AdminVerificationApplicationController::class, 'sendBack'])
                 ->middleware('can:verification.send_back')
                 ->name('applications.send_back');

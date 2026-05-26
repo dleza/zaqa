@@ -264,6 +264,7 @@ export const adminNavSections: AdminNavSection[] = [
       'settings.qualification_types.view',
       'settings.fees.view',
       'settings.departments.view',
+      'verification.assign',
     ],
     items: [
       {
@@ -307,6 +308,13 @@ export const adminNavSections: AdminNavSection[] = [
         icon: Users,
         activeStartsWith: '/admin/settings/departments',
         requiredAnyPermissions: ['settings.departments.view'],
+      },
+      {
+        label: 'Assignment Categories',
+        href: '/admin/verification/assignment-categories',
+        icon: Users,
+        activeStartsWith: '/admin/verification/assignment-categories',
+        requiredAnyPermissions: ['verification.assign'],
       },
     ],
   },

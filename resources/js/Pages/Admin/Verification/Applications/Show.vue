@@ -9,11 +9,9 @@ import { formatMoneyFromCents } from '@/utils/money'
 const props = defineProps<{
   application: any
   viewerUserId: number | null
-  level1Users: Array<{ id: number; name: string; email: string }>
   can: { assign: boolean; send_back: boolean; level1_process: boolean; level2_review: boolean; approve: boolean; reject: boolean; issue: boolean }
 }>()
 
-const assignOpen = ref(false)
 const sendBackOpen = ref(false)
 const level1CompleteOpen = ref(false)
 const returnOpen = ref(false)
@@ -22,7 +20,6 @@ const rejectOpen = ref(false)
 const issueOpen = ref(false)
 const commentOpen = ref(false)
 
-const assignForm = useForm({ assigned_to_user_id: props.application.assigned_level1_user_id ?? '', comment: '' })
 const sendBackForm = useForm({ comment: '' })
 const level1CompleteForm = useForm({ findings: '' })
 const returnForm = useForm({ comment: '' })
@@ -35,18 +32,10 @@ const commentForm = useForm<{ body: string; visibility: 'internal' | 'applicant_
   type: 'general',
 })
 
-const isAssignedToSomeone = computed(() => !!props.application.assigned_level1_user_id)
 const state = computed<string>(() => (props.application.verification_state ?? '').toString())
 const isViewerAssignedLevel1 = computed<boolean>(() => {
   if (!props.viewerUserId) return false
   return (props.application.assigned_level1_user_id ?? null) === props.viewerUserId
-})
-
-const canShowAssign = computed(() => {
-  // Level 2 assignment action: only show when assignment is relevant,
-  // not during Level 2 final review (where "Return to Level 1" is the correct action).
-  if (!props.can.assign) return false
-  return ['awaiting_assignment', 'assigned_to_level1', 'under_level1_review'].includes(state.value)
 })
 
 const canShowReturnToLevel1 = computed(() => props.can.level2_review && state.value === 'under_level2_review')
@@ -437,14 +426,9 @@ const slaProgressPct = computed(() => {
         <div class="rounded-2xl border border-border bg-surface p-6 shadow-sm space-y-3">
           <div class="text-sm font-semibold text-text-primary">Actions</div>
 
-          <button
-            v-if="canShowAssign"
-            type="button"
-            class="zaqa-btn zaqa-btn-secondary w-full justify-center border border-border bg-surface-muted hover:bg-surface-muted/70"
-            @click="assignOpen = true"
-          >
-            {{ isAssignedToSomeone ? 'Reassign Level 1' : 'Assign Level 1' }}
-          </button>
+          <div v-if="can.assign" class="rounded-xl border border-border bg-surface-muted p-4 text-xs text-text-muted">
+            Level 1 assignment is handled per qualification item. Open a qualification below to assign or reassign.
+          </div>
 
           <button
             v-if="canShowSendBack"
@@ -576,35 +560,6 @@ const slaProgressPct = computed(() => {
 
       </div>
     </div>
-
-    <AdminActionModal v-model="assignOpen" :title="isAssignedToSomeone ? 'Reassign Level 1 reviewer' : 'Assign Level 1 reviewer'" description="Only Level 2 can assign work to Level 1.">
-      <div class="space-y-4">
-        <div>
-          <label class="text-sm font-semibold text-text-primary">Assign to</label>
-          <select v-model="assignForm.assigned_to_user_id" class="zaqa-input mt-2">
-            <option value="" disabled>Select reviewer…</option>
-            <option v-for="u in level1Users" :key="u.id" :value="u.id">{{ u.name }} ({{ u.email }})</option>
-          </select>
-          <div v-if="assignForm.errors.assigned_to_user_id" class="mt-1 text-xs text-danger">{{ assignForm.errors.assigned_to_user_id }}</div>
-        </div>
-        <div>
-          <label class="text-sm font-semibold text-text-primary">Comment (optional)</label>
-          <textarea v-model="assignForm.comment" class="zaqa-input mt-2 h-auto min-h-[6rem] py-3" placeholder="Optional comment for the reviewer" />
-          <div v-if="assignForm.errors.comment" class="mt-1 text-xs text-danger">{{ assignForm.errors.comment }}</div>
-        </div>
-      </div>
-      <template #footer>
-        <button type="button" class="zaqa-btn zaqa-btn-secondary px-4 py-2 text-sm" @click="assignOpen = false">Cancel</button>
-        <button
-          type="button"
-          class="zaqa-btn zaqa-btn-primary px-4 py-2 text-sm"
-          :disabled="assignForm.processing"
-          @click="assignForm.post(`/admin/verification/applications/${application.id}/assign`, { preserveScroll: true, onSuccess: () => (assignOpen = false) })"
-        >
-          Save
-        </button>
-      </template>
-    </AdminActionModal>
 
     <AdminActionModal v-model="sendBackOpen" title="Send back to applicant" description="A comment is required and will be visible to the applicant.">
       <div>

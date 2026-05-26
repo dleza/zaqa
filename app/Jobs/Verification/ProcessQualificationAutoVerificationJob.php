@@ -5,6 +5,7 @@ namespace App\Jobs\Verification;
 use App\Domain\Audit\AuditLogService;
 use App\Domain\Certificates\QualificationCertificateService;
 use App\Domain\LearnerRecords\LearnerRecordMatchingService;
+use App\Domain\Verification\QualificationAutoAssignmentService;
 use App\Jobs\InstitutionIntegrations\PerformInstitutionPullLookupJob;
 use App\Enums\LifecycleStage;
 use App\Enums\LifecycleVisibility;
@@ -45,6 +46,7 @@ class ProcessQualificationAutoVerificationJob implements ShouldQueue
         ApplicationLifecycleService $lifecycle,
         LearnerRecordMatchingService $matching,
         QualificationCertificateService $certificates,
+        QualificationAutoAssignmentService $autoAssignments,
     ): void
     {
         $qualification = Qualification::query()
@@ -253,6 +255,31 @@ class ProcessQualificationAutoVerificationJob implements ShouldQueue
             default => 'Auto-verification completed; qualification routed to Level 1 assignment pool.',
         };
 
+        if ($action === 'dispatch_institution_pull') {
+            PerformInstitutionPullLookupJob::dispatch((int) ($result['qualification_id'] ?? $qualification->id));
+        }
+
+        if ($action === 'issue_certificate') {
+            $this->issueCertificateIfPossible(
+                qualificationId: (int) ($result['qualification_id'] ?? $qualification->id),
+                certificates: $certificates,
+            );
+        }
+
+        if ($action === 'fallback_level1') {
+            $qId = (int) ($result['qualification_id'] ?? $qualification->id);
+            $toAssign = Qualification::query()->find($qId);
+            if ($toAssign && ! $toAssign->assigned_verifier_id && $toAssign->verification_state === VerificationState::AwaitingAssignment) {
+                $assignRes = $autoAssignments->autoAssign($toAssign, actor: null, reason: 'auto_verification_fallback');
+                if ($assignRes->assigned) {
+                    $action = 'auto_assigned_level1';
+                    $auditMessage = 'Auto-verification completed; qualification auto-assigned to Level 1 based on category.';
+                } else {
+                    $auditMessage = 'Auto-verification completed; qualification routed to Level 1 queue (unassigned).';
+                }
+            }
+        }
+
         $audit->record(
             eventType: 'auto_verification.processed',
             module: 'Verification',
@@ -271,15 +298,7 @@ class ProcessQualificationAutoVerificationJob implements ShouldQueue
         );
 
         if ($action === 'dispatch_institution_pull') {
-            PerformInstitutionPullLookupJob::dispatch((int) ($result['qualification_id'] ?? $qualification->id));
             return;
-        }
-
-        if ($action === 'issue_certificate') {
-            $this->issueCertificateIfPossible(
-                qualificationId: (int) ($result['qualification_id'] ?? $qualification->id),
-                certificates: $certificates,
-            );
         }
 
         if ($application) {

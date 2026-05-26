@@ -21,6 +21,8 @@ class AdminVerificationPoolController extends Controller
                 'is_foreign' => (bool) $q->is_foreign_qualification,
                 'assigned_verifier' => $q->assignedVerifier?->name,
                 'assigned_verifier_id' => $q->assigned_verifier_id,
+                'assignment_source' => $q->assignment_source,
+                'assignment_failure_reason' => $q->assignment_failure_reason,
                 'updated_at' => optional($q->updated_at)?->toIso8601String(),
                 'application' => [
                     'id' => $q->application?->id,
@@ -64,4 +66,3 @@ class AdminVerificationPoolController extends Controller
         ]);
     }
 }
-

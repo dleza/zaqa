@@ -185,6 +185,9 @@ watch(
                   <span class="text-text-muted">Assigned to:</span>
                   <span class="font-medium text-text-primary">{{ row.assigned_verifier ?? 'Unassigned' }}</span>
                 </div>
+                <div v-if="!row.assigned_verifier && row.assignment_failure_reason" class="mt-1 text-xs text-amber-800">
+                  Auto-assignment: {{ row.assignment_failure_reason }}
+                </div>
               </td>
               <td class="px-5 py-3 text-text-primary">{{ row.applicant_name ?? '—' }}</td>
               <td class="px-5 py-3">

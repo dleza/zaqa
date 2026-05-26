@@ -39,6 +39,10 @@ class Qualification extends Model
         'is_foreign_qualification',
         'verification_state',
         'assigned_verifier_id',
+        'verification_assignment_category_id',
+        'assignment_source',
+        'assignment_failure_reason',
+        'auto_assigned_at',
         'assigned_at',
         'reviewed_at',
         'returned_to_applicant_at',
@@ -71,6 +75,7 @@ class Qualification extends Model
         'award_date' => 'date',
         'transcript_required' => 'bool',
         'is_foreign_qualification' => 'bool',
+        'auto_assigned_at' => 'datetime',
         'assigned_at' => 'datetime',
         'reviewed_at' => 'datetime',
         'returned_to_applicant_at' => 'datetime',
@@ -118,6 +123,11 @@ class Qualification extends Model
     public function learnerRecord(): BelongsTo
     {
         return $this->belongsTo(LearnerRecord::class);
+    }
+
+    public function verificationAssignmentCategory(): BelongsTo
+    {
+        return $this->belongsTo(VerificationAssignmentCategory::class, 'verification_assignment_category_id');
     }
 
     public function learnerRecordMatchAttempts(): HasMany

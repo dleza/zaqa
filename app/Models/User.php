@@ -85,4 +85,9 @@ class User extends Authenticatable
     {
         return $this->belongsTo(Department::class);
     }
+
+    public function verificationAssignmentCategoryMemberships(): HasMany
+    {
+        return $this->hasMany(VerificationAssignmentCategoryUser::class);
+    }
 }

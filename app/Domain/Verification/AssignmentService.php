@@ -25,7 +25,28 @@ class AssignmentService
 
     public function assign(Qualification $qualification, User $level2Actor, User $verifierAssignee, ?string $comment = null): Qualification
     {
-        if ($level2Actor->id === $verifierAssignee->id) {
+        return $this->assignWithContext(
+            qualification: $qualification,
+            assignedBy: $level2Actor,
+            assignedTo: $verifierAssignee,
+            comment: $comment,
+            context: [],
+        );
+    }
+
+    /**
+     * Assign a qualification to a Level 1 verifier with optional metadata.
+     *
+     * Context keys:
+     * - source: auto|manual|reassigned
+     * - category_id: int|null
+     * - reason: string|null
+     *
+     * @param  array<string, mixed>  $context
+     */
+    public function assignWithContext(Qualification $qualification, User $assignedBy, User $assignedTo, ?string $comment = null, array $context = []): Qualification
+    {
+        if ($assignedBy->id === $assignedTo->id) {
             throw ValidationException::withMessages([
                 'assignee' => 'Level 1 assignee cannot be the assigner.',
             ]);
@@ -36,12 +57,16 @@ class AssignmentService
             $comment = null;
         }
 
-        return DB::transaction(function () use ($qualification, $level2Actor, $verifierAssignee, $comment) {
+        $source = isset($context['source']) && is_string($context['source']) ? trim((string) $context['source']) : '';
+        $categoryId = isset($context['category_id']) && is_numeric($context['category_id']) ? (int) $context['category_id'] : null;
+        $reason = isset($context['reason']) && is_string($context['reason']) ? trim((string) $context['reason']) : null;
+
+        return DB::transaction(function () use ($qualification, $assignedBy, $assignedTo, $comment, $source, $categoryId, $reason) {
             $qualification->refresh();
             $qualification->loadMissing('application');
             $application = $qualification->application;
             $previousAssigneeId = (int) ($qualification->assigned_verifier_id ?? 0);
-            $previousAssignee = $previousAssigneeId > 0 && $previousAssigneeId !== (int) $verifierAssignee->id
+            $previousAssignee = $previousAssigneeId > 0 && $previousAssigneeId !== (int) $assignedTo->id
                 ? User::query()->whereKey($previousAssigneeId)->first()
                 : null;
 
@@ -54,8 +79,8 @@ class AssignmentService
 
             QualificationAssignment::create([
                 'qualification_id' => $qualification->id,
-                'assigned_by_user_id' => $level2Actor->id,
-                'assigned_to_user_id' => $verifierAssignee->id,
+                'assigned_by_user_id' => $assignedBy->id,
+                'assigned_to_user_id' => $assignedTo->id,
                 'comment' => $comment,
                 'assigned_at' => now(),
                 'unassigned_at' => null,
@@ -64,7 +89,7 @@ class AssignmentService
             if ($comment) {
                 ApplicationComment::create([
                     'application_id' => $application->id,
-                    'author_user_id' => $level2Actor->id,
+                    'author_user_id' => $assignedBy->id,
                     'type' => 'assignment_note',
                     'visibility' => 'internal',
                     'body' => $comment,
@@ -75,12 +100,20 @@ class AssignmentService
                 'assigned_verifier_id',
                 'assigned_at',
                 'verification_state',
+                'verification_assignment_category_id',
+                'assignment_source',
+                'assignment_failure_reason',
+                'auto_assigned_at',
             ]);
 
             $qualification->forceFill([
-                'assigned_verifier_id' => $verifierAssignee->id,
+                'assigned_verifier_id' => $assignedTo->id,
                 'assigned_at' => now(),
                 'verification_state' => VerificationState::AssignedToLevel1,
+                'verification_assignment_category_id' => $categoryId ?: $qualification->verification_assignment_category_id,
+                'assignment_source' => $source !== '' ? $source : ($previousAssigneeId > 0 ? 'reassigned' : 'manual'),
+                'assignment_failure_reason' => null,
+                'auto_assigned_at' => ($source === 'auto') ? now() : null,
             ])->save();
 
             // Keep application status progression simple: when any qualification is assigned,
@@ -90,7 +123,7 @@ class AssignmentService
                     application: $application,
                     toVerificationState: VerificationState::AssignedToLevel1,
                     toApplicationStatus: ApplicationStatus::InProgress,
-                    actor: $level2Actor,
+                    actor: $assignedBy,
                     eventType: 'review',
                     eventCode: 'review.started',
                     stage: LifecycleStage::Review,
@@ -100,7 +133,7 @@ class AssignmentService
                     comment: null,
                     metadata: [
                         'qualification_id' => $qualification->id,
-                        'assigned_to_user_id' => $verifierAssignee->id,
+                        'assigned_to_user_id' => $assignedTo->id,
                     ],
                 );
             }
@@ -109,6 +142,10 @@ class AssignmentService
                 'assigned_verifier_id',
                 'assigned_at',
                 'verification_state',
+                'verification_assignment_category_id',
+                'assignment_source',
+                'assignment_failure_reason',
+                'auto_assigned_at',
             ]);
 
             $this->audit->record(
@@ -123,14 +160,17 @@ class AssignmentService
                 metadata: [
                     'application_id' => $application->id,
                     'qualification_id' => $qualification->id,
-                    'assigned_to_user_id' => $verifierAssignee->id,
-                    'assigned_by_user_id' => $level2Actor->id,
+                    'assigned_to_user_id' => $assignedTo->id,
+                    'assigned_by_user_id' => $assignedBy->id,
                     'comment' => $comment,
+                    'assignment_source' => $after['assignment_source'] ?? null,
+                    'assignment_category_id' => $after['verification_assignment_category_id'] ?? null,
+                    'reason' => $reason,
                 ],
-                actor: $level2Actor,
+                actor: $assignedBy,
             );
 
-            event(new QualificationAssignedToVerifier($qualification, $level2Actor, $verifierAssignee, $comment, $previousAssignee));
+            event(new QualificationAssignedToVerifier($qualification, $assignedBy, $assignedTo, $comment, $previousAssignee));
 
             return $qualification;
         });
