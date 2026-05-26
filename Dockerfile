@@ -71,3 +71,21 @@ COPY docker/nginx/default.conf /etc/nginx/conf.d/default.conf
 COPY --from=app /var/www/html/public /var/www/html/public
 
 RUN ln -sf /var/www/html/storage/app/public /var/www/html/public/storage
+
+# Single-container target (Render/other PaaS): Nginx + PHP-FPM in one container.
+# Render does not support Docker Compose networking, so `fastcgi_pass app:9000` will fail.
+FROM app AS web
+WORKDIR /var/www/html
+
+RUN set -eux; \
+    apt-get update; \
+    apt-get install -y --no-install-recommends nginx; \
+    rm -rf /var/lib/apt/lists/*; \
+    rm -f /etc/nginx/sites-enabled/default /etc/nginx/sites-available/default || true
+
+COPY docker/nginx/default.single.conf /etc/nginx/conf.d/default.conf
+COPY docker/php/entrypoint-web.sh /usr/local/bin/docker-entrypoint-web
+RUN chmod +x /usr/local/bin/docker-entrypoint-web
+
+EXPOSE 80
+ENTRYPOINT ["docker-entrypoint-web"]

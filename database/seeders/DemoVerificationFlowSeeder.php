@@ -22,21 +22,39 @@ class DemoVerificationFlowSeeder extends Seeder
 
         $users = [
             [
-                'email' => 'verifier.l2@zaqa.local',
+                'email' => 'verifier.l2.one@zaqa.gov.zm',
                 'name' => 'Demo Verification Officer L2',
-                'phone_primary' => '260977000002',
+                'phone_primary' => '260977000012',
                 'role' => 'Verification Officer Level 2',
             ],
             [
-                'email' => 'verifier.l1@zaqa.local',
+                'email' => 'verifier.l2.two@zaqa.gov.zm',
+                'name' => 'Demo Verification Officer L2',
+                'phone_primary' => '260977000022',
+                'role' => 'Verification Officer Level 2',
+            ],
+            [
+                'email' => 'verifier.l1@zaqa.gov.zm',
                 'name' => 'Demo Verification Officer L1',
                 'phone_primary' => '260977000001',
                 'role' => 'Verification Officer Level 1',
             ],
             [
-                'email' => 'finance@zaqa.local',
-                'name' => 'Demo Finance Officer',
+                'email' => 'verifier.l1.two@zaqa.gov.zm',
+                'name' => 'Demo Verification Officer L1',
+                'phone_primary' => '260977000002',
+                'role' => 'Verification Officer Level 1',
+            ],
+            [
+                'email' => 'verifier.l1.foreign@zaqa.gov.zm',
+                'name' => 'Demo Verification Officer L1',
                 'phone_primary' => '260977000003',
+                'role' => 'Verification Officer Level 1',
+            ],
+            [
+                'email' => 'finance@zaqa.gov.zm',
+                'name' => 'Demo Finance Officer',
+                'phone_primary' => '260977000033',
                 'role' => 'Finance Officer',
             ],
         ];

@@ -16,7 +16,7 @@ class SuperAdminSeeder extends Seeder
     {
         app(PermissionRegistrar::class)->forgetCachedPermissions();
 
-        $email = (string) (config('zaqa.super_admin.email') ?: 'superadmin@zaqa.local');
+        $email = (string) (config('zaqa.super_admin.email') ?: 'superadmin@zaqa.gov.zm');
         $phone = (string) (config('zaqa.super_admin.phone') ?: '260000000000');
         $password = (string) (config('zaqa.super_admin.password') ?: 'ChangeMe@2026');
 

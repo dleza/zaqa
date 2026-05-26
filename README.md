@@ -84,3 +84,9 @@ App will be available on:
 - Database host in Docker is `mysql` (see `.env.docker.example`).
 - `storage/` and `bootstrap/cache/` are mounted as writable volumes.
 - The `nginx` container only serves the `public/` directory and proxies PHP to the `app` (php-fpm) container.
+
+### Render / single-container PaaS
+Some platforms (like Render) run a **single** Docker container and do not support Docker Compose networking.
+For these environments, the default Docker build produces a **single-container** image that runs **Nginx + PHP-FPM** together (using `fastcgi_pass 127.0.0.1:9000`).
+
+If your platform requires a specific internal port, configure it to route traffic to port `80`.
