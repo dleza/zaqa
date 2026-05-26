@@ -1,9 +1,10 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { Link, useForm } from '@inertiajs/vue3'
 import GuestLayout from '@/Layouts/GuestLayout.vue'
 import InputError from '@/Components/InputError.vue'
-import { CheckCircle2, Info, Mail, ShieldCheck, Smartphone } from 'lucide-vue-next'
+import ActionModal from '@/Components/ActionModal.vue'
+import { CheckCircle2, Info, Mail, Pencil, ShieldCheck, Smartphone } from 'lucide-vue-next'
 
 const props = defineProps<{
   emailVerified: boolean
@@ -12,6 +13,8 @@ const props = defineProps<{
   loginIdentifierType?: string | null
   hasEmail?: boolean
   hasPhone?: boolean
+  email?: string | null
+  phonePrimary?: string | null
 }>()
 
 const otpForm = useForm({
@@ -20,6 +23,16 @@ const otpForm = useForm({
 
 const resendEmailForm = useForm({})
 const resendOtpForm = useForm({})
+
+const emailAddress = computed(() => {
+  const v = (props.email ?? '').toString().trim()
+  return v.length > 0 ? v : null
+})
+
+const phonePrimary = computed(() => {
+  const v = (props.phonePrimary ?? '').toString().trim()
+  return v.length > 0 ? v : null
+})
 
 const activationComplete = computed(() => props.isActive)
 const identifierType = computed<'email' | 'phone' | 'legacy'>(() => {
@@ -47,10 +60,75 @@ function resendEmail() {
 function resendOtp() {
   resendOtpForm.post('/activate/resend-otp')
 }
+
+const editEmailOpen = ref(false)
+const editPhoneOpen = ref(false)
+
+const updateEmailForm = useForm({
+  email: emailAddress.value ?? '',
+})
+
+const updatePhoneForm = useForm({
+  phone_primary: phonePrimary.value ?? '',
+})
+
+watch(
+  () => props.email,
+  (v) => {
+    if (!editEmailOpen.value) {
+      updateEmailForm.email = (v ?? '').toString()
+    }
+  },
+)
+
+watch(
+  () => props.phonePrimary,
+  (v) => {
+    if (!editPhoneOpen.value) {
+      updatePhoneForm.phone_primary = (v ?? '').toString()
+    }
+  },
+)
+
+function openEditEmail() {
+  updateEmailForm.email = emailAddress.value ?? ''
+  updateEmailForm.clearErrors()
+  editEmailOpen.value = true
+}
+
+function openEditPhone() {
+  updatePhoneForm.phone_primary = phonePrimary.value ?? ''
+  updatePhoneForm.clearErrors()
+  editPhoneOpen.value = true
+}
+
+function updateEmail() {
+  updateEmailForm.post('/activate/update-email', {
+    preserveScroll: true,
+    onSuccess: () => {
+      editEmailOpen.value = false
+      updateEmailForm.clearErrors()
+    },
+  })
+}
+
+function updatePhone() {
+  updatePhoneForm.post('/activate/update-phone', {
+    preserveScroll: true,
+    onSuccess: () => {
+      editPhoneOpen.value = false
+      updatePhoneForm.clearErrors()
+    },
+  })
+}
 </script>
 
 <template>
-  <GuestLayout max-width-class="max-w-lg sm:max-w-xl md:max-w-2xl lg:max-w-3xl">
+  <GuestLayout
+    max-width-class="max-w-lg sm:max-w-xl md:max-w-2xl lg:max-w-3xl"
+    content-padding-class="px-4 py-8 sm:px-6 sm:py-12 lg:py-14"
+    :header-compact="true"
+  >
     <div class="space-y-8">
       <header class="space-y-5">
         <div class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
@@ -106,12 +184,26 @@ function resendOtp() {
                   <span v-else class="zaqa-badge zaqa-badge-warning">Pending</span>
                 </div>
                 <p class="mt-1 text-sm text-text-muted">
-                  Open the verification link sent to your email address. You can resend it if it hasn’t arrived.
+                  Open the verification link sent to
+                  <span v-if="emailAddress" class="font-semibold text-text-primary">{{ emailAddress }}</span>
+                  <span v-else class="font-semibold text-text-primary">your email address</span>.
+                  You can resend it if it hasn’t arrived.
                 </p>
               </div>
             </div>
 
             <div class="flex flex-col gap-2 lg:items-end">
+              <button
+                v-if="!emailVerified"
+                type="button"
+                class="zaqa-btn zaqa-btn-secondary h-11 w-full px-5 lg:w-auto"
+                @click="openEditEmail"
+              >
+                <span class="inline-flex items-center justify-center gap-2">
+                  <Pencil class="h-4 w-4" aria-hidden="true" />
+                  Update email
+                </span>
+              </button>
               <button
                 v-if="!emailVerified"
                 type="button"
@@ -153,12 +245,26 @@ function resendOtp() {
                   <span v-else class="zaqa-badge zaqa-badge-warning">Pending</span>
                 </div>
                 <p class="mt-1 text-sm text-text-muted">
-                  Enter the 6-digit OTP sent to your primary phone number to confirm it’s really you.
+                  Enter the 6-digit OTP sent to
+                  <span v-if="phonePrimary" class="font-semibold text-text-primary">{{ phonePrimary }}</span>
+                  <span v-else class="font-semibold text-text-primary">your primary phone number</span>
+                  to confirm it’s really you.
                 </p>
               </div>
             </div>
 
             <div class="flex flex-col gap-2 lg:items-end">
+              <button
+                v-if="!phoneVerified"
+                type="button"
+                class="zaqa-btn zaqa-btn-secondary h-11 w-full px-5 lg:w-auto"
+                @click="openEditPhone"
+              >
+                <span class="inline-flex items-center justify-center gap-2">
+                  <Pencil class="h-4 w-4" aria-hidden="true" />
+                  Update phone
+                </span>
+              </button>
               <button
                 v-if="!phoneVerified"
                 type="button"
@@ -241,5 +347,76 @@ function resendOtp() {
         </div>
       </div>
     </div>
+
+    <ActionModal
+      v-model="editEmailOpen"
+      title="Update email address"
+      description="Correct your email address and we’ll resend a new verification link."
+      max-width-class="max-w-xl"
+    >
+      <form class="space-y-5" @submit.prevent="updateEmail">
+        <div>
+          <label for="activation-email" class="text-xs font-semibold uppercase tracking-wider text-text-muted">Email address</label>
+          <input
+            id="activation-email"
+            v-model="updateEmailForm.email"
+            type="email"
+            class="zaqa-input h-12 rounded-lg"
+            autocomplete="email"
+            :disabled="updateEmailForm.processing"
+          />
+          <InputError :message="updateEmailForm.errors.email" />
+        </div>
+      </form>
+
+      <template #footer>
+        <button type="button" class="zaqa-btn zaqa-btn-secondary px-4 py-2 text-sm" @click="editEmailOpen = false">Cancel</button>
+        <button
+          type="button"
+          class="zaqa-btn zaqa-btn-primary px-4 py-2 text-sm"
+          :disabled="updateEmailForm.processing"
+          :aria-busy="updateEmailForm.processing ? 'true' : 'false'"
+          @click="updateEmail"
+        >
+          {{ updateEmailForm.processing ? 'Updating…' : 'Update and resend' }}
+        </button>
+      </template>
+    </ActionModal>
+
+    <ActionModal
+      v-model="editPhoneOpen"
+      title="Update phone number"
+      description="Correct your number and we’ll resend a new OTP code."
+      max-width-class="max-w-xl"
+    >
+      <form class="space-y-5" @submit.prevent="updatePhone">
+        <div>
+          <label for="activation-phone" class="text-xs font-semibold uppercase tracking-wider text-text-muted">Primary phone number</label>
+          <input
+            id="activation-phone"
+            v-model="updatePhoneForm.phone_primary"
+            inputmode="tel"
+            class="zaqa-input h-12 rounded-lg"
+            autocomplete="tel"
+            :disabled="updatePhoneForm.processing"
+          />
+          <InputError :message="updatePhoneForm.errors.phone_primary" />
+          <div class="mt-2 text-xs text-text-muted">Example formats: `097xxxxxxx`, `26097xxxxxxx`, or `+26097xxxxxxx`.</div>
+        </div>
+      </form>
+
+      <template #footer>
+        <button type="button" class="zaqa-btn zaqa-btn-secondary px-4 py-2 text-sm" @click="editPhoneOpen = false">Cancel</button>
+        <button
+          type="button"
+          class="zaqa-btn zaqa-btn-primary px-4 py-2 text-sm"
+          :disabled="updatePhoneForm.processing"
+          :aria-busy="updatePhoneForm.processing ? 'true' : 'false'"
+          @click="updatePhone"
+        >
+          {{ updatePhoneForm.processing ? 'Updating…' : 'Update and resend' }}
+        </button>
+      </template>
+    </ActionModal>
   </GuestLayout>
 </template>

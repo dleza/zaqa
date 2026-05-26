@@ -31,6 +31,7 @@ const currentPath = computed(() => {
 
 const isLoginPage = computed(() => currentPath.value === '/login')
 const isRegisterPage = computed(() => currentPath.value === '/register')
+const isActivatePage = computed(() => currentPath.value === '/activate')
 </script>
 
 <template>
@@ -38,10 +39,10 @@ const isRegisterPage = computed(() => currentPath.value === '/register')
     <header v-if="!props.hideHeader" class="zaqa-topbar">
       <div class="zaqa-topbar-inner" :class="props.headerCompact ? 'py-3' : 'py-5'">
         <a href="/" class="zaqa-brand" aria-label="ZAQA Portal">
-          <img :src="zaqaLogoUrl" alt="ZAQA logo" class="h-10 w-auto shrink-0 object-contain" />
-          <div class="flex flex-col">
-            <span class="zaqa-brand-kicker">Zambia Qualifications Authority</span>
-            <span class="zaqa-brand-name">Verification Portal</span>
+          <img :src="zaqaLogoUrl" alt="ZAQA logo" class="h-9 w-auto shrink-0 object-contain sm:h-10" />
+          <div class="flex flex-col leading-tight">
+            <span class="hidden sm:block zaqa-brand-kicker">Zambia Qualifications Authority</span>
+            <span class="zaqa-brand-name text-sm sm:text-base">Verification Portal</span>
           </div>
         </a>
 
@@ -60,7 +61,7 @@ const isRegisterPage = computed(() => currentPath.value === '/register')
       <div
         aria-hidden="true"
         class="pointer-events-none absolute inset-0 overflow-hidden"
-        :class="isLoginPage || isRegisterPage ? 'hidden' : ''"
+        :class="isLoginPage || isRegisterPage || isActivatePage ? 'hidden' : ''"
       >
         <div class="absolute -top-24 left-1/2 h-96 w-96 -translate-x-1/2 rounded-full bg-brand/15 blur-3xl" />
         <div class="absolute -bottom-32 -right-24 h-[28rem] w-[28rem] rounded-full bg-accent/10 blur-3xl" />
@@ -82,7 +83,7 @@ const isRegisterPage = computed(() => currentPath.value === '/register')
       </div>
     </main>
 
-    <footer class="zaqa-footer" :class="isLoginPage || isRegisterPage ? 'hidden md:block' : ''">
+    <footer class="zaqa-footer" :class="isLoginPage || isRegisterPage || isActivatePage ? 'hidden md:block' : ''">
       <div class="zaqa-footer-inner py-4 sm:py-6 lg:py-8">
         <span class="text-text-on-dark/90">© {{ new Date().getFullYear() }} Zambia Qualifications Authority (ZAQA)</span>
         <span class="hidden sm:inline text-text-on-dark/75">Secure qualification verification and certificate validation.</span>

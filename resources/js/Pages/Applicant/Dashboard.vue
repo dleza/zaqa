@@ -119,12 +119,9 @@ function qualBadgeClass(state: string) {
         <div class="max-w-4xl">
           <div class="inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-text-muted">
             <LayoutDashboard class="h-4 w-4" aria-hidden="true" />
-            Applicant portal
+            Applicant Dashboard
           </div>
-          <h2 class="mt-3 text-3xl font-semibold tracking-tight text-text-primary sm:text-4xl">Dashboard</h2>
-          <p class="mt-2 text-base leading-relaxed text-text-muted">
-            {{ greeting }}{{ authUserName ? ` ${authUserName}` : '' }}. Track verification applications, invoices, and what to do next—all in one place.
-          </p>
+          <h2 class="mt-3 text-3xl font-semibold tracking-tight text-text-primary sm:text-4xl">{{ greeting }}{{ authUserName ? ` ${authUserName}` : '' }}.</h2>
         </div>
       </div>
 

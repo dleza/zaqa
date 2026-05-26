@@ -110,6 +110,8 @@ Route::middleware('auth')->group(function () {
     Route::post('/activate/phone-otp', [AccountActivationController::class, 'verifyPhoneOtp'])->name('activation.phone.verify');
     Route::post('/activate/resend-email', [AccountActivationController::class, 'resendEmail'])->name('activation.resend.email');
     Route::post('/activate/resend-otp', [AccountActivationController::class, 'resendOtp'])->name('activation.resend.otp');
+    Route::post('/activate/update-email', [AccountActivationController::class, 'updateEmail'])->name('activation.update.email');
+    Route::post('/activate/update-phone', [AccountActivationController::class, 'updatePhone'])->name('activation.update.phone');
 
     Route::middleware(EnsureAccountIsActive::class)->prefix('applicant')->name('applicant.')->group(function () {
         Route::get('/dashboard', [DashboardController::class, 'index'])->name('dashboard');

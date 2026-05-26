@@ -90,7 +90,8 @@ function submit() {
       <AuthTopBar right-href="/login" right-label="Log in" />
 
       <div class="grid w-full lg:min-h-[calc(100vh-56px)] lg:grid-cols-2">
-        <aside class="relative overflow-hidden bg-gradient-to-br from-[#061a3a] via-[#0b3a66] to-[#092a48] px-10 py-10 text-white sm:px-14 sm:py-14 lg:px-16 lg:py-16">
+        <!-- Desktop branding panel (hidden on mobile) -->
+        <aside class="relative hidden overflow-hidden bg-gradient-to-br from-[#061a3a] via-[#0b3a66] to-[#092a48] px-10 py-10 text-white sm:px-14 sm:py-14 lg:block lg:px-16 lg:py-16">
           <div aria-hidden="true" class="pointer-events-none absolute inset-0">
             <div class="absolute -top-20 -left-20 h-72 w-72 rounded-full bg-white/10 blur-3xl" />
             <div class="absolute -bottom-28 -right-20 h-[26rem] w-[26rem] rounded-full bg-amber-400/10 blur-3xl" />
@@ -145,16 +146,19 @@ function submit() {
           </div>
         </aside>
 
-        <section class="relative overflow-hidden bg-[#eef4fb] px-6 py-8 sm:px-10 sm:py-10 lg:px-16 lg:py-12">
-          <div aria-hidden="true" class="pointer-events-none absolute inset-0">
+        <section class="relative overflow-hidden bg-white px-4 py-6 sm:bg-[#eef4fb] sm:px-10 sm:py-10 lg:px-16 lg:py-12">
+          <!-- Desktop/tablet decorative background (hidden on small screens) -->
+          <div aria-hidden="true" class="pointer-events-none absolute inset-0 hidden sm:block">
             <div class="absolute -top-28 left-1/2 h-[46rem] w-[46rem] -translate-x-1/2 rounded-full bg-brand/18 blur-3xl" />
             <div class="absolute -bottom-28 -right-28 h-[40rem] w-[40rem] rounded-full bg-accent/10 blur-3xl" />
             <div class="absolute inset-0 bg-[radial-gradient(circle_at_65%_35%,rgba(11,58,102,0.08),transparent_55%)]" />
           </div>
 
           <div class="relative flex h-full flex-col">
-            <div class="flex flex-1 items-center justify-center py-6 lg:py-10">
-              <div class="w-full max-w-[780px] rounded-3xl border border-border/70 bg-white/70 px-8 py-10 shadow-2xl backdrop-blur-sm sm:px-10">
+            <div class="flex flex-1 items-center justify-center py-2 sm:py-6 lg:py-10">
+              <div
+                class="w-full max-w-[780px] rounded-2xl border border-border/70 bg-white px-5 py-7 shadow-sm sm:rounded-3xl sm:bg-white/70 sm:px-10 sm:py-10 sm:shadow-2xl sm:backdrop-blur-sm"
+              >
                 <div class="transition-all duration-500 ease-out" :class="mounted ? 'translate-y-0 opacity-100' : 'translate-y-2 opacity-0'">
       <div>
         <h2 class="text-2xl font-semibold tracking-tight text-text-primary">Create account</h2>
@@ -163,7 +167,7 @@ function submit() {
 
       <div class="mt-6 h-px bg-border/60" />
 
-      <div class="mt-8">
+      <div class="mt-6 sm:mt-8">
         <div class="text-xs font-semibold uppercase tracking-wider text-text-muted">Account type</div>
         <div class="relative mt-3 flex rounded-full border border-border bg-surface-muted p-1">
           <span
@@ -192,7 +196,7 @@ function submit() {
         </div>
       </div>
 
-      <form class="mt-8 space-y-6" @submit.prevent="submit">
+      <form class="mt-6 space-y-6 sm:mt-8" @submit.prevent="submit">
         <template v-if="mode === 'individual'">
           <div class="grid grid-cols-1 gap-5 sm:grid-cols-2">
             <div>

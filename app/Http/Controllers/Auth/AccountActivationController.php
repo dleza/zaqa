@@ -5,11 +5,14 @@ namespace App\Http\Controllers\Auth;
 use App\Domain\Audit\AuditLogService;
 use App\Domain\Identity\AccountActivationService;
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Auth\UpdateActivationEmailRequest;
+use App\Http\Requests\Auth\UpdateActivationPhoneRequest;
 use App\Http\Requests\Auth\VerifyPhoneOtpRequest;
 use App\Models\UserVerificationToken;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
@@ -28,6 +31,8 @@ class AccountActivationController extends Controller
             'loginIdentifierType' => $user?->login_identifier_type,
             'hasEmail' => trim((string) ($user?->email ?? '')) !== '',
             'hasPhone' => trim((string) ($user?->phone_primary ?? '')) !== '',
+            'email' => $user?->email,
+            'phonePrimary' => $user?->phone_primary,
         ]);
     }
 
@@ -150,5 +155,120 @@ class AccountActivationController extends Controller
 
         return back()->with('success', 'OTP code resent.');
     }
-}
 
+    public function updateEmail(UpdateActivationEmailRequest $request, AccountActivationService $activation, AuditLogService $audit): RedirectResponse
+    {
+        $user = $request->user();
+
+        if (! $user) {
+            return redirect()->route('login');
+        }
+
+        if ((bool) $user->is_active) {
+            return redirect('/')
+                ->with('success', 'Your account is already active.');
+        }
+
+        $throttleKey = 'update-email|'.$user->id.'|'.$request->ip();
+
+        if (RateLimiter::tooManyAttempts($throttleKey, 3)) {
+            return back()->with('error', 'Too many requests. Please try again later.');
+        }
+
+        RateLimiter::hit($throttleKey, 60);
+
+        $email = trim((string) $request->validated()['email']);
+        $changed = $email !== trim((string) ($user->email ?? ''));
+
+        DB::transaction(function () use ($user, $email, $changed) {
+            if ($changed) {
+                $user->forceFill([
+                    'email' => $email,
+                    'email_verified_at' => null,
+                    'is_active' => false,
+                ])->save();
+
+                $user->applicantProfile?->forceFill(['email' => $email])->save();
+                $user->institutionProfile?->forceFill(['email' => $email])->save();
+            }
+        });
+
+        $user->refresh();
+
+        $activation->issueEmailActivationToken($user);
+
+        $audit->record(
+            eventType: 'identity.activation_email_updated',
+            module: 'Identity',
+            actionName: 'activation_email_updated',
+            message: 'Activation email updated and activation link resent.',
+            entityType: $user::class,
+            entityId: $user->id,
+            metadata: [
+                'changed' => $changed,
+                'sent_to' => $user->email,
+            ],
+            actor: $user,
+        );
+
+        return back()->with('success', 'Email updated. A new activation link has been sent.');
+    }
+
+    public function updatePhone(UpdateActivationPhoneRequest $request, AccountActivationService $activation, AuditLogService $audit): RedirectResponse
+    {
+        $user = $request->user();
+
+        if (! $user) {
+            return redirect()->route('login');
+        }
+
+        if ((bool) $user->is_active) {
+            return redirect('/')
+                ->with('success', 'Your account is already active.');
+        }
+
+        $throttleKey = 'update-phone|'.$user->id.'|'.$request->ip();
+
+        if (RateLimiter::tooManyAttempts($throttleKey, 3)) {
+            return back()->with('error', 'Too many requests. Please try again later.');
+        }
+
+        RateLimiter::hit($throttleKey, 60);
+
+        $phone = trim((string) $request->validated()['phone_primary']);
+        $changed = $phone !== trim((string) ($user->phone_primary ?? ''));
+
+        DB::transaction(function () use ($user, $phone, $changed) {
+            if ($changed) {
+                $user->forceFill([
+                    'phone_primary' => $phone,
+                    'phone_verified_at' => null,
+                    'is_active' => false,
+                ])->save();
+
+                $user->applicantProfile?->forceFill(['phone_primary' => $phone])->save();
+                $user->institutionProfile?->forceFill(['phone_primary' => $phone])->save();
+            }
+        });
+
+        $user->refresh();
+
+        $activation->issuePhoneOtp($user);
+
+        $audit->record(
+            eventType: 'identity.activation_phone_updated',
+            module: 'Identity',
+            actionName: 'activation_phone_updated',
+            message: 'Activation phone updated and OTP resent.',
+            entityType: $user::class,
+            entityId: $user->id,
+            metadata: [
+                'changed' => $changed,
+                'phone_primary' => $user->phone_primary,
+            ],
+            actor: $user,
+        );
+
+        return back()->with('success', 'Phone number updated. A new OTP has been sent.');
+    }
+}
