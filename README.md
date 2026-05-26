@@ -57,3 +57,30 @@ If you discover a security vulnerability within Laravel, please send an e-mail t
 ## License
 
 The Laravel framework is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT).
+
+## Optional Docker Deployment
+
+Docker support is provided as an **optional** developer / test / staging deployment method.
+It is **not required** for the normal VPS deployment (Nginx/Apache + Supervisor + cron), and it does **not** replace any existing non-Docker workflow.
+
+### Prerequisites
+- Docker + Docker Compose v2
+
+### Quick start (local)
+1. Create a Docker env file:
+   - `cp .env.docker.example .env.docker`
+   - Set `APP_KEY` (recommended) or generate it after boot using Artisan.
+2. Build + start containers:
+   - `docker compose up -d --build`
+3. Run migrations:
+   - `docker compose exec app php artisan migrate --force`
+4. (Optional) run queue worker and scheduler as separate services:
+   - `docker compose --profile worker --profile scheduler up -d`
+
+App will be available on:
+- `http://localhost:8080` (or set `DOCKER_WEB_PORT`)
+
+### Notes
+- Database host in Docker is `mysql` (see `.env.docker.example`).
+- `storage/` and `bootstrap/cache/` are mounted as writable volumes.
+- The `nginx` container only serves the `public/` directory and proxies PHP to the `app` (php-fpm) container.

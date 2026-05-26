@@ -1,0 +1,91 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: app
+    env_file:
+      - path: .env.docker
+        required: false
+    depends_on:
+      - mysql
+    volumes:
+      - laravel-storage:/var/www/html/storage
+      - laravel-bootstrap-cache:/var/www/html/bootstrap/cache
+    networks:
+      - zaqa
+
+  nginx:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: nginx
+    depends_on:
+      - app
+    ports:
+      - "${DOCKER_WEB_PORT:-8080}:80"
+    volumes:
+      - laravel-storage:/var/www/html/storage:ro
+    networks:
+      - zaqa
+
+  mysql:
+    image: mysql:8.0
+    environment:
+      MYSQL_DATABASE: zaqa_portal
+      MYSQL_USER: zaqa
+      MYSQL_PASSWORD: zaqa_password
+      MYSQL_ROOT_PASSWORD: root_password
+    volumes:
+      - mysql-data:/var/lib/mysql
+    networks:
+      - zaqa
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -proot_password"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  queue:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: app
+    profiles: ["worker"]
+    env_file:
+      - path: .env.docker
+        required: false
+    depends_on:
+      - mysql
+    volumes:
+      - laravel-storage:/var/www/html/storage
+      - laravel-bootstrap-cache:/var/www/html/bootstrap/cache
+    command: ["php", "artisan", "queue:work", "--tries=3", "--timeout=90"]
+    networks:
+      - zaqa
+
+  scheduler:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: app
+    profiles: ["scheduler"]
+    env_file:
+      - path: .env.docker
+        required: false
+    depends_on:
+      - mysql
+    volumes:
+      - laravel-storage:/var/www/html/storage
+      - laravel-bootstrap-cache:/var/www/html/bootstrap/cache
+    command: ["php", "artisan", "schedule:work"]
+    networks:
+      - zaqa
+
+volumes:
+  mysql-data:
+  laravel-storage:
+  laravel-bootstrap-cache:
+
+networks:
+  zaqa:
