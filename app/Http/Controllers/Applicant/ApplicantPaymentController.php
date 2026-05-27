@@ -133,10 +133,10 @@ class ApplicantPaymentController extends Controller
     {
         $this->authorize('view', $payment->application);
 
-        $file = $request->file('file');
-
         $application = $payment->application()->firstOrFail();
+        $payment = $payments->paymentForManualProofUpload($application, $request->user());
 
+        $file = $request->file('file');
         $document = $documents->upload($application, DocumentType::PaymentProof, $file, $request->user());
 
         $payments->attachProof($payment, $document, $request->user());

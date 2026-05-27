@@ -4,6 +4,8 @@ namespace App\Models;
 
 use App\Enums\ApplicantType;
 use App\Enums\ApplicationStatus;
+use App\Enums\PaymentMethod;
+use App\Enums\PaymentStatus;
 use App\Enums\ServiceType;
 use App\Enums\VerificationState;
 use Illuminate\Database\Eloquent\Casts\AsArrayObject;
@@ -139,6 +141,14 @@ class Application extends Model
     public function serviceFeedback(): HasOne
     {
         return $this->hasOne(ServiceFeedback::class);
+    }
+
+    public function hasPendingFinanceProofReview(): bool
+    {
+        return $this->payments()
+            ->whereIn('method', [PaymentMethod::BankDeposit->value, PaymentMethod::BankTransfer->value])
+            ->where('status', PaymentStatus::AwaitingFinanceReview->value)
+            ->exists();
     }
 
     public function applicantStatusLabel(): string

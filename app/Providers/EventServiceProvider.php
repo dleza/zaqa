@@ -13,6 +13,8 @@ use App\Domain\Audit\Listeners\LogUserLoginFailed;
 use App\Domain\Audit\Listeners\LogUserRegistered;
 use App\Domain\Finance\Events\PaymentProofApproved;
 use App\Domain\Finance\Events\PaymentProofRejected;
+use App\Domain\Finance\Events\PaymentProofSubmitted;
+use App\Domain\Finance\Listeners\SendBankTransferProofSubmittedNotification;
 use App\Domain\Finance\Listeners\SendPaymentProofApprovedNotification;
 use App\Domain\Finance\Listeners\SendPaymentProofRejectedNotification;
 use App\Domain\Identity\Events\ActivationEmailTokenIssued;
@@ -85,6 +87,9 @@ class EventServiceProvider extends ServiceProvider
         ],
         PaymentProofRejected::class => [
             SendPaymentProofRejectedNotification::class,
+        ],
+        PaymentProofSubmitted::class => [
+            SendBankTransferProofSubmittedNotification::class,
         ],
         Registered::class => [
             LogUserRegistered::class,

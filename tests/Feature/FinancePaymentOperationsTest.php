@@ -4,13 +4,18 @@ namespace Tests\Feature;
 
 use App\Domain\Finance\Events\PaymentProofApproved;
 use App\Domain\Finance\Events\PaymentProofRejected;
+use App\Domain\Applications\Events\ApplicationSubmitted;
 use App\Domain\Finance\Listeners\SendPaymentProofApprovedNotification;
 use App\Domain\Finance\Listeners\SendPaymentProofRejectedNotification;
 use App\Domain\Finance\PaymentProofReviewService;
+use App\Domain\Payments\InvoiceService;
+use App\Jobs\Verification\ProcessQualificationAutoVerificationJob;
 use App\Enums\DocumentType;
+use App\Enums\ApplicationStatus;
 use App\Enums\InvoiceStatus;
 use App\Enums\PaymentMethod;
 use App\Enums\PaymentStatus;
+use App\Mail\Finance\BankTransferProofSubmittedMail;
 use App\Mail\Finance\PaymentProofApprovedMail;
 use App\Mail\Finance\PaymentProofRejectedMail;
 use App\Models\ApplicantProfile;
@@ -19,10 +24,18 @@ use App\Models\Invoice;
 use App\Models\Payment;
 use App\Models\Qualification;
 use App\Models\QualificationDocument;
+use App\Models\QualificationType;
 use App\Models\User;
+use Database\Seeders\BillingCategoriesSeeder;
+use Database\Seeders\FeeStructuresSeeder;
+use Database\Seeders\QualificationTypesSeeder;
 use Database\Seeders\RolesAndPermissionsSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\Queue;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 use Tests\TestCase;
@@ -34,12 +47,18 @@ class FinancePaymentOperationsTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
+        $this->seed(BillingCategoriesSeeder::class);
+        $this->seed(QualificationTypesSeeder::class);
+        $this->seed(FeeStructuresSeeder::class);
         $this->seed(RolesAndPermissionsSeeder::class);
     }
 
-    private function makeManualProofPayment(): array
+    private function makePaymentReadyApplication(): array
     {
         $applicant = User::factory()->activated()->create(['applicant_type' => 'individual', 'email' => 'applicant@example.test']);
+        $qualificationType = QualificationType::query()
+            ->where('zqf_level_code', 'L6')
+            ->firstOrFail();
 
         ApplicantProfile::create([
             'user_id' => $applicant->id,
@@ -82,6 +101,7 @@ class FinancePaymentOperationsTest extends TestCase
             'title_of_qualification' => 'Diploma in Finance Testing',
             'award_date' => now()->subYear()->toDateString(),
             'qualification_type' => 'diploma',
+            'qualification_type_id' => $qualificationType->id,
             'is_foreign_qualification' => false,
             'verification_state' => null,
         ]);
@@ -104,14 +124,31 @@ class FinancePaymentOperationsTest extends TestCase
             'is_current_version' => true,
         ]);
 
-        $invoice = Invoice::query()->create([
+        $invoice = app(InvoiceService::class)->ensureInvoice($application->fresh(), $applicant);
+
+        return [$applicant, $application, $invoice, $qualification];
+    }
+
+    private function makeManualProofPayment(): array
+    {
+        [$applicant, $application, $invoice] = $this->makePaymentReadyApplication();
+
+        $proof = QualificationDocument::query()->create([
             'application_id' => $application->id,
-            'invoice_number' => 'INV-FIN-'.rand(1000, 9999),
-            'currency' => 'ZMW',
-            'amount_cents' => 5000,
-            'status' => InvoiceStatus::Issued,
-            'issued_at' => now(),
-            'metadata' => [],
+            'qualification_id' => null,
+            'document_type' => DocumentType::PaymentProof->value,
+            'original_name' => 'proof.pdf',
+            'stored_name' => 'proof.pdf',
+            'disk' => 'local',
+            'path' => 'applications/'.$application->id.'/proof.pdf',
+            'mime_type' => 'application/pdf',
+            'extension' => 'pdf',
+            'size_bytes' => 2048,
+            'sha256_hash' => hash('sha256', 'proof'),
+            'visibility' => 'private',
+            'uploaded_by_user_id' => $applicant->id,
+            'version_number' => 1,
+            'is_current_version' => true,
         ]);
 
         $payment = Payment::query()->create([
@@ -120,8 +157,9 @@ class FinancePaymentOperationsTest extends TestCase
             'method' => PaymentMethod::BankTransfer,
             'status' => PaymentStatus::AwaitingFinanceReview,
             'currency' => 'ZMW',
-            'amount_cents' => 5000,
+            'amount_cents' => (int) $invoice->amount_cents,
             'provider' => 'test',
+            'proof_document_id' => $proof->id,
             'awaiting_finance_review_at' => now(),
         ]);
 
@@ -170,6 +208,202 @@ class FinancePaymentOperationsTest extends TestCase
         $reviews->approve($payment, $finance, 'Second click');
         $payment->refresh();
         $this->assertSame(PaymentStatus::Confirmed, $payment->status);
+    }
+
+    public function test_uploading_proof_can_send_bank_transfer_notification_email_to_single_recipient(): void
+    {
+        Storage::fake('local');
+        Mail::fake();
+        config(['payments.bank_transfer.pop_notification_emails' => ['finance@example.test']]);
+
+        [$applicant, $application] = $this->makePaymentReadyApplication();
+
+        $this->actingAs($applicant)
+            ->post("/applicant/applications/{$application->id}/payment/upload-proof", [
+                'file' => UploadedFile::fake()->create('proof.pdf', 120, 'application/pdf'),
+            ])
+            ->assertRedirect();
+
+        $application->refresh();
+        $payment = Payment::query()->where('application_id', $application->id)->latest('id')->firstOrFail();
+
+        Mail::assertQueued(BankTransferProofSubmittedMail::class, function (BankTransferProofSubmittedMail $mail) use ($application, $payment) {
+            $rendered = $mail->render();
+
+            return $mail->hasTo('finance@example.test')
+                && ! $mail->hasCc('records@example.test')
+                && str_contains($rendered, $application->application_number)
+                && str_contains($rendered, (string) $payment->invoice?->invoice_number)
+                && ! str_contains($rendered, '/applicant/documents/');
+        });
+    }
+
+    public function test_uploading_proof_uses_first_recipient_as_to_and_remaining_as_cc(): void
+    {
+        Storage::fake('local');
+        Mail::fake();
+        config(['payments.bank_transfer.pop_notification_emails' => ['finance@example.test', 'records@example.test', 'audit@example.test']]);
+
+        [$applicant, $application] = $this->makePaymentReadyApplication();
+
+        $this->actingAs($applicant)
+            ->post("/applicant/applications/{$application->id}/payment/upload-proof", [
+                'file' => UploadedFile::fake()->create('proof.pdf', 120, 'application/pdf'),
+            ])
+            ->assertRedirect();
+
+        Mail::assertQueued(BankTransferProofSubmittedMail::class, fn (BankTransferProofSubmittedMail $mail) => $mail->hasTo('finance@example.test')
+            && $mail->hasCc('records@example.test')
+            && $mail->hasCc('audit@example.test'));
+    }
+
+    public function test_uploading_proof_skips_email_when_no_recipient_is_configured(): void
+    {
+        Storage::fake('local');
+        Mail::fake();
+        config(['payments.bank_transfer.pop_notification_emails' => []]);
+
+        [$applicant, $application] = $this->makePaymentReadyApplication();
+
+        $this->actingAs($applicant)
+            ->post("/applicant/applications/{$application->id}/payment/upload-proof", [
+                'file' => UploadedFile::fake()->create('proof.pdf', 120, 'application/pdf'),
+            ])
+            ->assertRedirect();
+
+        Mail::assertNothingQueued();
+    }
+
+    public function test_mail_failure_does_not_fail_proof_upload(): void
+    {
+        Storage::fake('local');
+        config(['payments.bank_transfer.pop_notification_emails' => ['finance@example.test']]);
+
+        [$applicant, $application] = $this->makePaymentReadyApplication();
+
+        Mail::shouldReceive('to')->once()->andThrow(new \RuntimeException('mail down'));
+
+        $this->actingAs($applicant)
+            ->post("/applicant/applications/{$application->id}/payment/upload-proof", [
+                'file' => UploadedFile::fake()->create('proof.pdf', 120, 'application/pdf'),
+            ])
+            ->assertRedirect()
+            ->assertSessionHas('success');
+
+        $payment = Payment::query()->where('application_id', $application->id)->latest('id')->firstOrFail();
+        $this->assertSame(PaymentStatus::AwaitingFinanceReview, $payment->status);
+    }
+
+    public function test_pending_proof_locks_applicant_editing_until_finance_rejects(): void
+    {
+        Storage::fake('local');
+        config(['payments.bank_transfer.pop_notification_emails' => []]);
+
+        [$applicant, $application, , $qualification] = $this->makePaymentReadyApplication();
+
+        $this->actingAs($applicant)
+            ->post("/applicant/applications/{$application->id}/payment/upload-proof", [
+                'file' => UploadedFile::fake()->create('proof.pdf', 120, 'application/pdf'),
+            ])
+            ->assertRedirect();
+
+        $this->actingAs($applicant)
+            ->post("/applicant/applications/{$application->id}/documents", [
+                'document_type' => 'transcript',
+                'qualification_id' => $qualification->id,
+                'file' => UploadedFile::fake()->create('transcript.pdf', 10, 'application/pdf'),
+            ])
+            ->assertForbidden();
+
+        $this->assertFalse($applicant->can('update', $application->fresh()));
+
+        $this->actingAs($applicant)
+            ->post("/applicant/applications/{$application->id}/payment/initiate-card")
+            ->assertSessionHasErrors(['payment']);
+
+        $payment = Payment::query()->where('application_id', $application->id)->latest('id')->firstOrFail();
+        $finance = User::factory()->activated()->create(['applicant_type' => null]);
+        $finance->assignRole('Finance Officer');
+
+        app(PaymentProofReviewService::class)->reject($payment, $finance, 'Proof is unreadable');
+
+        $this->assertTrue($applicant->fresh()->can('update', $application->fresh()));
+
+        $this->actingAs($applicant)
+            ->post("/applicant/applications/{$application->id}/documents", [
+                'document_type' => 'transcript',
+                'qualification_id' => $qualification->id,
+                'file' => UploadedFile::fake()->create('transcript.pdf', 10, 'application/pdf'),
+            ])
+            ->assertRedirect();
+    }
+
+    public function test_finance_proof_approval_uses_application_submitted_pipeline_and_queues_auto_verification(): void
+    {
+        Queue::fake();
+
+        [, $application, $invoice, $payment] = $this->makeManualProofPayment();
+        $finance = User::factory()->activated()->create(['applicant_type' => null]);
+        $finance->assignRole('Finance Officer');
+
+        app(PaymentProofReviewService::class)->approve($payment, $finance, 'Valid');
+
+        $application->refresh();
+        $payment->refresh();
+        $invoice->refresh();
+
+        $this->assertSame(PaymentStatus::Confirmed, $payment->status);
+        $this->assertSame(InvoiceStatus::Paid, $invoice->status);
+        $this->assertSame(ApplicationStatus::Submitted, $application->current_status);
+        $this->assertNotNull($application->submitted_at);
+
+        Queue::assertPushed(ProcessQualificationAutoVerificationJob::class);
+    }
+
+    public function test_finance_proof_approval_dispatches_application_submitted_event_once(): void
+    {
+        Event::fake([ApplicationSubmitted::class]);
+
+        [, $application, , $payment] = $this->makeManualProofPayment();
+        $finance = User::factory()->activated()->create(['applicant_type' => null]);
+        $finance->assignRole('Finance Officer');
+
+        $reviews = app(PaymentProofReviewService::class);
+        $reviews->approve($payment, $finance, 'Valid');
+        $reviews->approve($payment->fresh(), $finance, 'Second click');
+
+        Event::assertDispatchedTimes(ApplicationSubmitted::class, 1);
+        $application->refresh();
+        $this->assertSame(ApplicationStatus::Submitted, $application->current_status);
+    }
+
+    public function test_finance_rejection_leaves_invoice_unpaid_and_applicant_can_retry_proof_upload(): void
+    {
+        Storage::fake('local');
+        config(['payments.bank_transfer.pop_notification_emails' => []]);
+
+        [$applicant, $application, $invoice, $payment] = $this->makeManualProofPayment();
+        $finance = User::factory()->activated()->create(['applicant_type' => null]);
+        $finance->assignRole('Finance Officer');
+
+        app(PaymentProofReviewService::class)->reject($payment, $finance, 'Mismatch on deposit slip');
+
+        $payment->refresh();
+        $invoice->refresh();
+
+        $this->assertSame(PaymentStatus::Rejected, $payment->status);
+        $this->assertSame(InvoiceStatus::Issued, $invoice->status);
+
+        $this->actingAs($applicant)
+            ->post("/applicant/applications/{$application->id}/payment/upload-proof", [
+                'file' => UploadedFile::fake()->create('retry-proof.pdf', 100, 'application/pdf'),
+            ])
+            ->assertRedirect()
+            ->assertSessionHas('success');
+
+        $payment->refresh();
+        $this->assertSame(PaymentStatus::AwaitingFinanceReview, $payment->status);
+        $this->assertNull($payment->rejection_reason);
     }
 
     public function test_finance_reject_requires_reason_and_cannot_reject_confirmed_payment(): void

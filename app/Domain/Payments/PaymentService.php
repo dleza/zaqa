@@ -5,6 +5,7 @@ namespace App\Domain\Payments;
 use App\Domain\Applications\ApplicationAutoSubmissionService;
 use App\Domain\Applications\ApplicationSubmissionReadinessService;
 use App\Domain\Audit\AuditLogService;
+use App\Domain\Finance\Events\PaymentProofSubmitted;
 use App\Domain\Tracking\ApplicationLifecycleService;
 use App\Enums\InvoiceStatus;
 use App\Enums\LifecycleStage;
@@ -47,6 +48,8 @@ class PaymentService
 
     public function rememberSelectedMethod(Application $application, PaymentMethod $method, User $actor): void
     {
+        $this->assertApplicationNotLockedByPendingProofReview($application);
+
         // Persist the choice for UX (tabs), but don't create a payment attempt.
         // A Payment row should be created only when the applicant actually initiates a payment or uploads proof.
         $this->invoices->ensureInvoice($application, $actor);
@@ -94,6 +97,8 @@ class PaymentService
 
     public function createDraftPayment(Application $application, PaymentMethod $method, User $actor): Payment
     {
+        $this->assertApplicationNotLockedByPendingProofReview($application);
+
         $invoice = $this->invoices->ensureInvoice($application, $actor);
 
         return DB::transaction(function () use ($application, $invoice, $method, $actor) {
@@ -188,6 +193,8 @@ class PaymentService
 
     public function paymentForManualProofUpload(Application $application, User $actor): Payment
     {
+        $this->assertApplicationNotLockedByPendingProofReview($application);
+
         $invoice = $this->invoices->ensureInvoice($application, $actor);
 
         return DB::transaction(function () use ($application, $invoice, $actor) {
@@ -267,6 +274,7 @@ class PaymentService
     public function initiateOnline(Payment $payment, array $payload, User $actor): array
     {
         $application = $payment->application()->firstOrFail();
+        $this->assertApplicationNotLockedByPendingProofReview($application);
         $this->submissionReadiness->assertReadyForPayment($application, $actor);
 
         $payment->loadMissing('invoice');
@@ -601,6 +609,7 @@ class PaymentService
     {
         $application = $payment->application()->firstOrFail();
         $this->submissionReadiness->assertReadyForPayment($application, $actor);
+        $this->assertApplicationNotLockedByPendingProofReview($application, $payment);
 
         $payment->loadMissing('invoice');
         if ($payment->invoice && $payment->invoice->status === InvoiceStatus::Paid) {
@@ -629,11 +638,22 @@ class PaymentService
             ]);
         }
 
-        return DB::transaction(function () use ($payment, $document, $actor) {
+        if ($payment->status === PaymentStatus::AwaitingFinanceReview) {
+            throw ValidationException::withMessages([
+                'payment' => 'Proof already submitted. Wait for finance review before making changes.',
+            ]);
+        }
+
+        $updated = DB::transaction(function () use ($payment, $document, $actor) {
             $payment->forceFill([
                 'proof_document_id' => $document->id,
                 'status' => PaymentStatus::AwaitingFinanceReview,
                 'awaiting_finance_review_at' => now(),
+                'reviewed_by_user_id' => null,
+                'reviewed_at' => null,
+                'review_comment' => null,
+                'rejection_reason' => null,
+                'rejected_at' => null,
                 'last_status_at' => now(),
             ])->save();
 
@@ -669,6 +689,11 @@ class PaymentService
 
             return $payment;
         });
+
+        $updated->loadMissing(['application.applicant', 'invoice', 'proofDocument']);
+        event(new PaymentProofSubmitted($updated, $actor));
+
+        return $updated;
     }
 
     public function financeApprove(Payment $payment, User $actor, ?string $comment = null): Payment
@@ -980,6 +1005,26 @@ class PaymentService
 
         // Payment satisfaction is the submission trigger (idempotent).
         $this->autoSubmission->submitAfterPaymentSatisfied($application, $payment, $actor);
+    }
+
+    private function assertApplicationNotLockedByPendingProofReview(Application $application, ?Payment $ignoringPayment = null): void
+    {
+        $query = Payment::query()
+            ->where('application_id', $application->id)
+            ->whereIn('method', [PaymentMethod::BankDeposit, PaymentMethod::BankTransfer])
+            ->where('status', PaymentStatus::AwaitingFinanceReview);
+
+        if ($ignoringPayment) {
+            $query->where('id', '!=', $ignoringPayment->id);
+        }
+
+        if (! $query->exists()) {
+            return;
+        }
+
+        throw ValidationException::withMessages([
+            'payment' => 'A proof of payment is already awaiting finance review. Wait for approval or rejection before making changes.',
+        ]);
     }
 
     private function logWebhookLikeEvent(Payment $payment, string $eventType, array $payload): void

@@ -702,6 +702,9 @@ class ApplicantApplicationController extends Controller
         $paymentsSorted = $application->payments->sortByDesc('id');
         $displayPayment = $paymentsSorted->first(fn ($p) => $p->status === PaymentStatus::Confirmed)
             ?? $paymentsSorted->first();
+        $paymentReviewPending = $paymentsSorted->contains(
+            fn ($p) => $p->status === PaymentStatus::AwaitingFinanceReview
+        );
 
         $paymentProof = $displayPayment?->proofDocument;
 
@@ -914,6 +917,9 @@ class ApplicantApplicationController extends Controller
                     'proof_document_id' => $displayPayment->proof_document_id,
                     'rejection_reason' => $displayPayment->rejection_reason,
                     'review_comment' => $displayPayment->review_comment,
+                    'awaiting_finance_review_at' => optional($displayPayment->awaiting_finance_review_at)?->toIso8601String(),
+                    'reviewed_at' => optional($displayPayment->reviewed_at)?->toIso8601String(),
+                    'rejected_at' => optional($displayPayment->rejected_at)?->toIso8601String(),
                     'confirmed_at' => optional($displayPayment->confirmed_at)?->toIso8601String(),
                     'latest_attempt' => $displayPayment->latestAttempt
                         ? [
@@ -944,6 +950,7 @@ class ApplicantApplicationController extends Controller
                         : null,
                 ]
                 : null,
+            'payment_review_pending' => $paymentReviewPending,
             'qualification' => $application->qualification
                 ? [
                     'id' => $application->qualification->id,

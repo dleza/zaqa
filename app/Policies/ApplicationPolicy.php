@@ -20,6 +20,10 @@ class ApplicationPolicy
             return false;
         }
 
+        if ($application->hasPendingFinanceProofReview()) {
+            return false;
+        }
+
         if (in_array($application->current_status, [ApplicationStatus::Draft, ApplicationStatus::PendingPayment, ApplicationStatus::SentBack], true)) {
             return true;
         }
@@ -37,6 +41,7 @@ class ApplicationPolicy
     public function delete(User $user, Application $application): bool
     {
         return $this->view($user, $application)
+            && ! $application->hasPendingFinanceProofReview()
             && $application->current_status === ApplicationStatus::Draft;
     }
 }

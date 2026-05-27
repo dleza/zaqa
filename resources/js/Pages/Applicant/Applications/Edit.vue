@@ -96,6 +96,15 @@ function formatCveqIssuedAt(iso: string | null | undefined): string {
   }
 }
 
+function formatDateTimeValue(iso: string | null | undefined): string {
+  if (!iso) return '—'
+  try {
+    return new Date(iso).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })
+  } catch {
+    return iso
+  }
+}
+
 function goToStep(key: StepKey) {
   activeStep.value = key
   try {
@@ -471,11 +480,15 @@ function saveApplicantDetails(nextStep?: StepKey) {
 
 const applicationLocked = computed(() => {
   if (props.amendmentQualificationId) return false
-  if (qualifications.value.some((q: any) => (q.verification_state ?? '') === 'returned_to_applicant')) {
-    return false
-  }
-  return invoiceSettled.value || !!props.application?.paid_at
+  return props.application?.can_edit === false
 })
+
+const paymentAwaitingFinanceReview = computed(() => (payment.value?.status ?? '') === 'awaiting_finance_review')
+const applicationLockMessage = computed(() =>
+  paymentAwaitingFinanceReview.value
+    ? 'Proof submitted and awaiting finance review. This application is temporarily read-only.'
+    : 'Payment is confirmed. This application is read-only.',
+)
 
 const qualifications = computed<any[]>(() => {
   const list = (props.application as any)?.qualifications
@@ -1521,7 +1534,7 @@ onBeforeUnmount(() => {
           </div>
 
           <div v-if="applicationLocked" class="mt-6 rounded-xl border border-warning/25 bg-warning/10 px-4 py-3 text-sm text-warning">
-            Payment is confirmed. This application is read-only.
+            {{ applicationLockMessage }}
           </div>
 
           <div class="mt-8 grid gap-8">
@@ -1646,7 +1659,7 @@ onBeforeUnmount(() => {
           </div>
 
           <div v-if="applicationLocked" class="mt-4 rounded-xl border border-warning/20 bg-warning/10 px-4 py-3 text-sm text-warning">
-            Payment is confirmed. This application is now read-only.
+            {{ applicationLockMessage }}
           </div>
 
           <div class="mx-auto mt-6 w-full max-w-4xl space-y-6">
@@ -1953,6 +1966,51 @@ onBeforeUnmount(() => {
             </div>
 
 		            <div v-else-if="invoice">
+              <div
+                v-if="paymentAwaitingFinanceReview"
+                class="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950 shadow-sm ring-1 ring-black/[0.04] sm:p-5"
+              >
+                <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                  <div>
+                    <div class="text-sm font-semibold text-text-primary">Proof submitted - awaiting finance review</div>
+                    <div class="mt-1 text-xs text-text-muted">
+                      Finance will review your proof of payment before your application can proceed.
+                    </div>
+                  </div>
+                  <span class="zaqa-badge zaqa-badge-warning">{{ paymentStatusLabel(payment?.status) }}</span>
+                </div>
+
+                <div class="mt-4 grid gap-3 sm:grid-cols-2">
+                  <div class="rounded-xl bg-surface px-4 py-3 ring-1 ring-black/[0.04]">
+                    <div class="text-[11px] font-semibold uppercase tracking-wider text-text-muted">Submitted</div>
+                    <div class="mt-1 text-sm font-semibold text-text-primary">
+                      {{ formatDateTimeValue(payment?.awaiting_finance_review_at ?? payment?.created_at) }}
+                    </div>
+                  </div>
+                  <div class="rounded-xl bg-surface px-4 py-3 ring-1 ring-black/[0.04]">
+                    <div class="text-[11px] font-semibold uppercase tracking-wider text-text-muted">Proof file</div>
+                    <div class="mt-1 truncate text-sm font-semibold text-text-primary">
+                      {{ payment?.proof_document?.original_name ?? 'Uploaded proof' }}
+                    </div>
+                  </div>
+                </div>
+
+                <div v-if="payment?.proof_document" class="mt-4 flex flex-col gap-2 sm:flex-row sm:items-center">
+                  <a :href="payment.proof_document.preview_url" target="_blank" rel="noopener" class="zaqa-btn zaqa-btn-secondary w-full sm:w-auto">
+                    Preview proof
+                  </a>
+                  <a :href="payment.proof_document.download_url" target="_blank" rel="noopener" class="zaqa-btn zaqa-btn-secondary w-full sm:w-auto">
+                    Download proof
+                  </a>
+                </div>
+
+                <div class="mt-4 inline-flex items-start gap-2 rounded-xl bg-surface px-3 py-2 text-xs text-text-muted ring-1 ring-black/[0.04]">
+                  <Lock class="mt-0.5 h-4 w-4 text-brand" aria-hidden="true" />
+                  <span>You can make changes again only if finance rejects this proof.</span>
+                </div>
+              </div>
+
+		              <template v-else>
 		              <div
 		                class="flex gap-2 overflow-x-auto rounded-2xl bg-surface p-2 shadow-sm ring-1 ring-black/[0.04] sm:grid sm:grid-cols-3 sm:overflow-visible"
 		                role="tablist"
@@ -2018,7 +2076,7 @@ onBeforeUnmount(() => {
 	              <div v-else-if="activePaymentTab === 'bank_transfer'">
 	                <div class="text-sm font-semibold text-text-primary">Upload proof of payment</div>
 	                <div class="mt-1 text-xs text-text-muted">
-	                  Upload your bank transfer proof. Finance will review and confirm your payment.
+	                  Upload your bank transfer proof or bank deposit slip. Finance will review and confirm your payment.
 	                </div>
 	
 	                <div class="mt-3 flex items-center justify-between gap-3">
@@ -2136,6 +2194,7 @@ onBeforeUnmount(() => {
                 <span>Payments are securely processed and verified by ZAQA.</span>
               </div>
             </div>
+              </template>
           </div>
 
             <div v-else class="rounded-xl border border-border bg-surface-muted px-4 py-4 text-sm text-text-muted">
