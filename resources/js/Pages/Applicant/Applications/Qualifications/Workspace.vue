@@ -416,11 +416,11 @@ function stripHolderFields(data: Record<string, unknown>) {
 async function promptAfterQualificationAdded(): Promise<'add_another' | 'back_to_step'> {
   const result = await Swal.fire({
     icon: 'success',
-    title: 'Qualification saved',
-    text: 'Your qualification has been added. You can add another qualification now, or go back to Step 2 (Qualifications) to review your list and continue.',
+    title: 'Qualification added',
+    text: 'What would you like to do next?',
     showDenyButton: true,
-    confirmButtonText: 'Back to Step 2 (Qualifications)',
-    denyButtonText: 'Add another qualification',
+    confirmButtonText: 'Review qualifications',
+    denyButtonText: 'Add another',
     denyButtonColor: '#16a34a',
     reverseButtons: true,
     allowOutsideClick: false,
@@ -534,32 +534,33 @@ const holderSummaryId = computed(() => {
   const p = (verificationSubject.value.passport_number ?? '').toString().trim()
   return n || p || '—'
 })
+
+const pendingCertificateName = computed(() => pendingCertificateFile.value?.name ?? '')
+const pendingTranscriptName = computed(() => pendingTranscriptFile.value?.name ?? '')
+const pendingConsentName = computed(() => pendingConsentFile.value?.name ?? '')
 </script>
 
 <template>
   <ApplicantLayout>
     <template #pageHeader>
-      <div class="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+      <div class="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div class="min-w-0">
-          <div class="flex flex-wrap items-center gap-2">
+          <div class="flex flex-wrap items-center gap-2 text-xs font-semibold text-text-muted">
             <Link :href="returnUrl" class="zaqa-btn zaqa-btn-secondary px-3 py-2 text-sm">
               Back
             </Link>
-            <div class="text-xs font-semibold text-text-muted">
-              {{ application.application_number }} • Qualification workspace
-            </div>
+            <span class="hidden sm:inline">•</span>
+            <span class="hidden sm:inline">{{ application.application_number }}</span>
           </div>
           <h1 class="mt-3 text-2xl font-semibold tracking-tight text-text-primary">
             {{ mode === 'add' ? 'Add qualification' : 'Edit qualification' }}
           </h1>
+          <p class="mt-1 text-sm text-text-muted">Enter the details exactly as shown on your certificate.</p>
+        </div>
 
-        </div>
-        <div class="hidden sm:flex">
-          <div class="inline-flex items-center gap-2 rounded-full border border-brand/20 bg-brand/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-wider text-brand">
-            <Sparkles class="h-3.5 w-3.5" aria-hidden="true" />
-            Workspace
-          </div>
-        </div>
+        <Link :href="returnUrl" class="zaqa-btn zaqa-btn-secondary px-4 py-2 text-sm">
+          Cancel
+        </Link>
       </div>
     </template>
 
@@ -567,50 +568,37 @@ const holderSummaryId = computed(() => {
       <div
         class="overflow-hidden rounded-2xl border border-border bg-surface shadow-sm ring-1 ring-black/[0.04]"
       >
-        <!-- Header -->
-        <div
-          class="relative overflow-hidden border-b border-border bg-gradient-to-br from-[#0B3A66] via-[#0d4d8c] to-[#0B3A66] px-6 py-5 text-white sm:px-8 sm:py-6"
-        >
-          <div class="pointer-events-none absolute -right-16 -top-16 h-48 w-48 rounded-full bg-white/10 blur-3xl" />
-          <div class="pointer-events-none absolute -bottom-12 -left-10 h-36 w-36 rounded-full bg-brand/25 blur-2xl" />
-          <div class="relative flex items-start justify-between gap-4">
-            <div class="flex min-w-0 items-start gap-3">
-              <div class="mt-0.5 inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-white/15 ring-1 ring-white/25">
-                <Sparkles class="h-5 w-5 text-white" aria-hidden="true" />
-              </div>
-              <div class="min-w-0">
-                <p class="text-[11px] font-semibold uppercase tracking-[0.2em] text-white/75">Qualification workspace</p>
-                <h2 class="mt-1 text-xl font-semibold tracking-tight sm:text-2xl">
-                  {{ mode === 'add' ? 'Add qualification' : 'Edit qualification' }}
-                </h2>
-                <p class="mt-2 max-w-2xl text-sm leading-relaxed text-white/85">
-                  Save your draft with the button at the bottom. If the award is outside Zambia, you will also upload the signed institution consent here.
-                </p>
-              </div>
+        <!-- Compact intro (kept light for mobile) -->
+        <div class="border-b border-border bg-surface-muted/40 px-6 py-5 sm:px-8">
+          <div class="flex items-start gap-3">
+            <div class="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-border bg-surface text-brand">
+              <Sparkles class="h-5 w-5" aria-hidden="true" />
             </div>
-            <Link
-              :href="returnUrl"
-              class="rounded-xl border border-white/25 bg-white/10 px-4 py-2 text-sm font-semibold text-white transition hover:bg-white/20"
-            >
-              Close
-            </Link>
+            <div class="min-w-0">
+              <div class="text-sm font-semibold text-text-primary">You are adding one qualification</div>
+              <p class="mt-1 text-sm text-text-muted">
+                Start with the awarding country and institution, then fill in the certificate details and upload your documents.
+              </p>
+            </div>
           </div>
         </div>
 
         <div class="min-h-0">
           <div class="space-y-8 px-6 py-6 sm:px-8 sm:py-8">
-            <!-- Location -->
-            <section class="rounded-2xl border border-border bg-surface-muted/40 p-5 ring-1 ring-black/[0.03]">
-              <div class="flex items-center gap-2 text-text-primary">
-                <MapPin class="h-5 w-5 shrink-0 text-brand" aria-hidden="true" />
-                <h3 class="text-base font-semibold">Award location & institution</h3>
-              </div>
-              <p class="mt-1 text-sm text-text-muted">Country of award and the institution that issued this qualification.</p>
-              <div class="mt-5 grid grid-cols-1 gap-4 sm:grid-cols-2">
-                <div class="sm:col-span-2">
-                  <label class="text-sm font-medium text-text-primary">Country of award</label>
-                  <select v-model="form.country_id" class="zaqa-input" :disabled="locked">
-                    <option value="">Select country</option>
+          <!-- Location -->
+          <section class="rounded-2xl border border-border bg-surface-muted/40 p-5 ring-1 ring-black/[0.03]">
+            <div class="flex items-center gap-2 text-text-primary">
+              <MapPin class="h-5 w-5 shrink-0 text-brand" aria-hidden="true" />
+              <h3 class="text-base font-semibold">Where did you study?</h3>
+            </div>
+            <p class="mt-1 text-sm text-text-muted">
+              Select the country and institution that issued this qualification.
+            </p>
+            <div class="mt-5 grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <div class="sm:col-span-2">
+                <label class="text-sm font-medium text-text-primary">Country of award</label>
+                <select v-model="form.country_id" class="zaqa-input" :disabled="locked">
+                  <option value="">Select country</option>
                     <option v-for="c in countries" :key="c.id" :value="c.id">{{ c.name }}</option>
                   </select>
                   <InputError :message="form.errors.country_id" />
@@ -627,7 +615,7 @@ const holderSummaryId = computed(() => {
                   />
                 </div>
                 <div v-if="form.awarding_institution_id === 'other'" class="sm:col-span-2">
-                  <label class="text-sm font-medium">Institution name (other)</label>
+                  <label class="text-sm font-medium">Institution name</label>
                   <input
                     v-model="form.awarding_institution_name_other"
                     class="zaqa-input"
@@ -639,13 +627,13 @@ const holderSummaryId = computed(() => {
               </div>
             </section>
 
-            <!-- Qualification -->
-            <section class="rounded-2xl border border-border bg-surface p-5 ring-1 ring-black/[0.03]">
-              <div class="flex items-center gap-2 text-text-primary">
-                <GraduationCap class="h-5 w-5 shrink-0 text-brand" aria-hidden="true" />
-                <h3 class="text-base font-semibold">Qualification details</h3>
-              </div>
-              <p class="mt-1 text-sm text-text-muted">Must match the certificate or transcript exactly.</p>
+          <!-- Qualification -->
+          <section class="rounded-2xl border border-border bg-surface p-5 ring-1 ring-black/[0.03]">
+            <div class="flex items-center gap-2 text-text-primary">
+              <GraduationCap class="h-5 w-5 shrink-0 text-brand" aria-hidden="true" />
+              <h3 class="text-base font-semibold">Qualification information</h3>
+            </div>
+            <p class="mt-1 text-sm text-text-muted">Use the details shown on your certificate.</p>
 
               <div
                 v-if="mode === 'edit'"
@@ -669,7 +657,7 @@ const holderSummaryId = computed(() => {
 
               <div class="mt-5 grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <div class="sm:col-span-2">
-                  <label class="text-sm font-medium">Qualification type (ZQF)</label>
+                  <label class="text-sm font-medium">Qualification type</label>
                   <select v-model="form.qualification_type_id" class="zaqa-input" :disabled="locked">
                     <option value="" disabled>Select type…</option>
                     <option v-for="t in qualificationTypes" :key="t.id" :value="t.id">{{ t.name }}</option>
@@ -692,17 +680,17 @@ const holderSummaryId = computed(() => {
                     query-endpoint="/applicant/reference/qualification-titles"
                     :disabled="locked || !form.awarding_institution_id"
                     :error="form.errors.title_of_qualification"
-                    label="Title of qualification"
+                    label="Qualification title"
                   />
                   <div v-if="titleChoice === 'other'" class="mt-3">
-                    <label class="text-sm font-medium">Type qualification title</label>
+                    <label class="text-sm font-medium">Qualification title (other)</label>
                     <input v-model="form.applicant_entered_qualification_title" class="zaqa-input" :disabled="locked" />
                     <InputError :message="form.errors.applicant_entered_qualification_title" />
                     <div class="mt-1 text-xs text-text-muted">This title is for your application only and will be verified by ZAQA.</div>
                   </div>
                 </div>
                 <div>
-                  <label class="text-sm font-medium">Identifier type</label>
+                  <label class="text-sm font-medium">Reference type</label>
                   <select v-model="identifierType" class="zaqa-input" :disabled="locked">
                     <option value="certificate_number">Certificate number</option>
                     <option value="student_number">Student number</option>
@@ -710,7 +698,7 @@ const holderSummaryId = computed(() => {
                   </select>
                 </div>
                 <div>
-                  <label class="text-sm font-medium">Identifier value</label>
+                  <label class="text-sm font-medium">Reference number</label>
                   <input v-model="identifierValue" class="zaqa-input" :disabled="locked" />
                   <InputError :message="form.errors.certificate_number" />
                 </div>
@@ -755,19 +743,17 @@ const holderSummaryId = computed(() => {
               </div>
             </section>
 
-            <!-- Documents (staged — uploaded together with qualification via footer Save) -->
-            <section class="rounded-2xl border border-border bg-surface p-5 ring-1 ring-black/[0.03]">
-              <div class="flex items-center gap-2 text-text-primary">
-                <FileStack class="h-5 w-5 shrink-0 text-brand" aria-hidden="true" />
-                <h3 class="text-base font-semibold">Qualification documents</h3>
-              </div>
-              <p class="mt-1 text-sm text-text-muted">
-                Choose files here first, then press <span class="font-semibold text-text-primary">Save changes</span> below to update your draft.
-              </p>
-              <p v-if="modalQualId && hasExistingDoc('certificate_copy')" class="mt-2 text-xs text-success">
-                Certificate already on file — upload again only if you want to replace it.
-              </p>
-              <p v-if="modalQualId && transcriptRequiredForDocs && hasExistingDoc('transcript')" class="mt-1 text-xs text-success">
+          <!-- Documents (staged — uploaded together with qualification via footer Save) -->
+          <section class="rounded-2xl border border-border bg-surface p-5 ring-1 ring-black/[0.03]">
+            <div class="flex items-center gap-2 text-text-primary">
+              <FileStack class="h-5 w-5 shrink-0 text-brand" aria-hidden="true" />
+              <h3 class="text-base font-semibold">Upload documents</h3>
+            </div>
+            <p class="mt-1 text-sm text-text-muted">Upload your certificate or supporting document.</p>
+            <p v-if="modalQualId && hasExistingDoc('certificate_copy')" class="mt-2 text-xs text-success">
+              Certificate already on file — upload again only if you want to replace it.
+            </p>
+            <p v-if="modalQualId && transcriptRequiredForDocs && hasExistingDoc('transcript')" class="mt-1 text-xs text-success">
                 Transcript already on file — upload again only if you want to replace it.
               </p>
 
@@ -782,6 +768,9 @@ const holderSummaryId = computed(() => {
                     :disabled="locked"
                     @change="onPendingCertificateChange"
                   />
+                  <p v-if="pendingCertificateName" class="mt-2 text-xs text-text-muted">
+                    Selected: <span class="font-semibold text-text-primary">{{ pendingCertificateName }}</span>
+                  </p>
                 </div>
                 <div v-if="transcriptRequiredForDocs" class="sm:col-span-2">
                   <label class="text-sm font-medium">
@@ -796,6 +785,9 @@ const holderSummaryId = computed(() => {
                     :disabled="locked"
                     @change="onPendingTranscriptChange"
                   />
+                  <p v-if="pendingTranscriptName" class="mt-2 text-xs text-text-muted">
+                    Selected: <span class="font-semibold text-text-primary">{{ pendingTranscriptName }}</span>
+                  </p>
                 </div>
               </div>
             </section>
@@ -807,9 +799,9 @@ const holderSummaryId = computed(() => {
                   <Shield class="h-5 w-5" aria-hidden="true" />
                 </div>
                 <div class="min-w-0">
-                  <h3 class="text-base font-semibold text-text-primary">Awarding institution consent</h3>
+                  <h3 class="text-base font-semibold text-text-primary">Institution consent required</h3>
                   <p class="mt-1 text-sm text-text-muted">
-                    This institution sits outside Zambia. When available, download our template below—otherwise use your own signed consent from the institution and attach it here. Everything uploads when you save at the bottom.
+                    Download the form, sign it, then upload the signed copy.
                   </p>
                 </div>
               </div>
@@ -823,7 +815,7 @@ const holderSummaryId = computed(() => {
                   class="zaqa-btn zaqa-btn-secondary inline-flex items-center gap-2 text-sm"
                 >
                   <Building2 class="h-4 w-4" aria-hidden="true" />
-                  Download consent template
+                  Download consent form
                 </a>
                 <p v-else class="text-xs leading-relaxed text-text-muted">
                   No portal-hosted template for this institution—you can still upload a signed consent you obtained from them.
@@ -832,7 +824,7 @@ const holderSummaryId = computed(() => {
 
               <div class="mt-5 grid grid-cols-1 gap-3 sm:max-w-lg">
                 <div>
-                  <label class="text-sm font-medium">Signed consent file</label>
+                  <label class="text-sm font-medium">Upload signed consent</label>
                   <input
                     ref="consentFileInputEl"
                     type="file"
@@ -841,6 +833,9 @@ const holderSummaryId = computed(() => {
                     :disabled="locked"
                     @change="onPendingConsentChange"
                   />
+                  <p v-if="pendingConsentName" class="mt-2 text-xs text-text-muted">
+                    Selected: <span class="font-semibold text-text-primary">{{ pendingConsentName }}</span>
+                  </p>
                 </div>
               </div>
             </section>
@@ -849,9 +844,7 @@ const holderSummaryId = computed(() => {
 
         <div class="shrink-0 border-t border-border bg-surface-muted/60 px-6 py-4 sm:px-8">
           <div class="flex flex-wrap items-center justify-between gap-3">
-            <p class="max-w-xl text-xs text-text-muted">
-              This saves your draft only. Submit back to ZAQA from the qualification step when you are finished.
-            </p>
+            <p class="max-w-xl text-xs text-text-muted">Your qualification is saved when you click Save qualification.</p>
             <div class="flex flex-wrap gap-2">
               <Link :href="returnUrl" class="zaqa-btn zaqa-btn-secondary">Cancel</Link>
               <button
@@ -860,7 +853,7 @@ const holderSummaryId = computed(() => {
                 :disabled="!canSubmitAll"
                 @click="submitQualificationAndDocuments"
               >
-                {{ savingAll ? 'Uploading…' : form.processing ? 'Saving…' : 'Save changes' }}
+                {{ savingAll ? 'Uploading…' : form.processing ? 'Saving…' : 'Save qualification' }}
               </button>
             </div>
           </div>
