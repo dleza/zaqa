@@ -4,7 +4,7 @@ namespace App\Http\Controllers\Admin;
 
 use App\Domain\Audit\AuditLogService;
 use App\Http\Controllers\Controller;
-use App\Http\Requests\Applicant\UpdateApplicantPasswordRequest;
+use App\Http\Requests\Admin\UpdateAdminPasswordRequest;
 use App\Models\AuditLog;
 use App\Models\Department;
 use App\Models\Qualification;
@@ -224,7 +224,7 @@ class AdminProfileController extends Controller
         return redirect('/admin/profile')->with('success', 'Profile photo removed.');
     }
 
-    public function updatePassword(UpdateApplicantPasswordRequest $request): RedirectResponse
+    public function updatePassword(UpdateAdminPasswordRequest $request): RedirectResponse
     {
         $user = $request->user();
 

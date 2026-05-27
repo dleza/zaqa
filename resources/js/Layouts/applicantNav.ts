@@ -46,13 +46,6 @@ export const applicantNavSections: ApplicantNavSection[] = [
       { key: 'payments', label: 'Payments', href: '/applicant/payments', icon: CreditCard },
     ],
   },
-  {
-    key: 'profile',
-    label: 'My Profile',
-    items: [
-      { key: 'view-profile', label: 'View Profile', href: '/applicant/profile', icon: UserCircle },
-      { key: 'change-password', label: 'Change Password', href: '/applicant/change-password', icon: KeyRound },
-    ],
-  },
+
 ];
 

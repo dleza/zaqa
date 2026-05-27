@@ -2,10 +2,9 @@
 import { Link, useForm } from '@inertiajs/vue3'
 import ApplicantLayout from '@/Layouts/ApplicantLayout.vue'
 import InputError from '@/Components/InputError.vue'
-import { ArrowLeft, KeyRound, Lock, ShieldCheck } from 'lucide-vue-next'
+import { ArrowLeft, KeyRound, ShieldCheck } from 'lucide-vue-next'
 
 const form = useForm({
-  current_password: '',
   password: '',
   password_confirmation: '',
 })
@@ -64,20 +63,6 @@ function submit() {
           </div>
 
           <form class="space-y-6 px-6 py-8 sm:px-8" @submit.prevent="submit">
-            <div>
-              <label class="flex items-center gap-2 text-sm font-medium text-text-primary">
-                <Lock class="h-4 w-4 text-text-muted" aria-hidden="true" />
-                Current password
-              </label>
-              <input
-                v-model="form.current_password"
-                type="password"
-                class="zaqa-input mt-2"
-                autocomplete="current-password"
-              />
-              <InputError class="mt-2" :message="form.errors.current_password" />
-            </div>
-
             <div class="grid grid-cols-1 gap-6 sm:grid-cols-2">
               <div class="sm:col-span-2">
                 <label class="text-sm font-medium text-text-primary">New password</label>

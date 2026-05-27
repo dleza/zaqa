@@ -4,6 +4,7 @@ import { Link, usePage } from '@inertiajs/vue3'
 import FlashMessages from '@/Components/FlashMessages.vue'
 import ApplicantSidebar from '@/Components/ApplicantSidebar.vue'
 import TopbarNotificationsMenu from '@/Components/TopbarNotificationsMenu.vue'
+import TopbarUserMenu from '@/Components/TopbarUserMenu.vue'
 import { applicantNavSections } from '@/Layouts/applicantNav'
 import { Menu, X } from 'lucide-vue-next'
 import { zaqaLogoUrl } from '@/constants/zaqaLogo'
@@ -21,12 +22,6 @@ const page = usePage()
 
 const mobileSidebarOpen = ref(false)
 const user = computed(() => (page.props as any).auth?.user)
-const applicantTypeLabel = computed(() => {
-  const t = user.value?.applicant_type
-  if (t === 'individual') return 'Individual'
-  if (t === 'institution') return 'Institution'
-  return null
-})
 </script>
 
 <template>
@@ -53,9 +48,14 @@ const applicantTypeLabel = computed(() => {
 
         <div class="flex items-center gap-2">
           <TopbarNotificationsMenu v-if="user" variant="brand" basePath="/applicant/notifications" />
-          <Link href="/logout" method="post" as="button" class="zaqa-btn zaqa-btn-ghost-on-brand px-3 py-2 text-sm">
-            Log out
-          </Link>
+          <TopbarUserMenu
+            v-if="user"
+            :user="user"
+            variant="brand"
+            profile-href="/applicant/profile"
+            password-href="/applicant/change-password"
+            :hide-label-on-mobile="true"
+          />
         </div>
       </div>
     </header>
@@ -124,22 +124,11 @@ const applicantTypeLabel = computed(() => {
           <div class="mx-auto flex w-full items-center justify-between px-4 py-4 lg:px-6 2xl:px-10" :class="props.containerMaxWidthClass">
             <div>
               <div class="text-sm font-semibold text-text-primary">Applicant Portal</div>
-              <div class="mt-0.5 text-xs text-text-muted">Qualification verification services</div>
             </div>
 
             <div class="flex items-center gap-3">
               <TopbarNotificationsMenu v-if="user" basePath="/applicant/notifications" />
-              <div class="text-right">
-                <div class="text-sm font-semibold text-text-primary">{{ user?.name }}</div>
-                <div class="text-xs text-text-muted">
-                  <span v-if="applicantTypeLabel">{{ applicantTypeLabel }}</span>
-                  <span v-if="applicantTypeLabel && user?.email"> • </span>
-                  <span>{{ user?.email }}</span>
-                </div>
-              </div>
-              <Link href="/logout" method="post" as="button" class="zaqa-btn zaqa-btn-secondary px-3 py-2 text-sm">
-                Log out
-              </Link>
+              <TopbarUserMenu v-if="user" :user="user" profile-href="/applicant/profile" password-href="/applicant/change-password" />
             </div>
           </div>
         </header>
@@ -150,7 +139,7 @@ const applicantTypeLabel = computed(() => {
           <slot />
         </main>
 
-        <footer class="zaqa-footer">
+        <footer class="zaqa-footer hidden md:block">
           <div class="zaqa-footer-inner" :class="props.containerMaxWidthClass">
             <span class="text-text-on-dark/90">© {{ new Date().getFullYear() }} Zambia Qualifications Authority (ZAQA)</span>
             <span class="text-text-on-dark/75">Applicant services • Verification workflow • Secure downloads</span>

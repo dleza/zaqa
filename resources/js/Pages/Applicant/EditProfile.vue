@@ -6,9 +6,71 @@ import InputError from '@/Components/InputError.vue'
 
 const props = defineProps<{
   profile: any
+  change_trail: Array<{
+    id: number
+    event_type: string
+    message: string
+    created_at: string | null
+    changed_fields: string[]
+  }>
 }>()
 
 const isInstitution = computed(() => (props.profile?.applicant_type ?? '') === 'institution')
+const emailLocked = computed(() => !!props.profile?.email_verified_at)
+const phoneLocked = computed(() => !!props.profile?.phone_verified_at)
+
+const fieldLabels: Record<string, string> = {
+  'user.name': 'Display name',
+  'user.email': 'Email',
+  'user.phone_primary': 'Primary phone',
+  'user.phone_secondary': 'Secondary phone',
+
+  'applicant_profile.first_name': 'First name',
+  'applicant_profile.middle_name': 'Middle name',
+  'applicant_profile.surname': 'Surname',
+  'applicant_profile.nrc_number': 'NRC number',
+  'applicant_profile.passport_number': 'Passport number',
+  'applicant_profile.email': 'Email',
+  'applicant_profile.phone_primary': 'Primary phone',
+  'applicant_profile.phone_secondary': 'Secondary phone',
+  'applicant_profile.address_line_1': 'Address line 1',
+  'applicant_profile.address_line_2': 'Address line 2',
+  'applicant_profile.city': 'City / Town',
+  'applicant_profile.province': 'Province',
+  'applicant_profile.postal_code': 'Postal code',
+  'applicant_profile.country': 'Country',
+
+  'institution_profile.institution_name': 'Institution name',
+  'institution_profile.tpin': 'TPIN',
+  'institution_profile.contact_person_name': 'Contact person name',
+  'institution_profile.email': 'Email',
+  'institution_profile.phone_primary': 'Primary phone',
+  'institution_profile.phone_secondary': 'Secondary phone',
+  'institution_profile.address_line_1': 'Address line 1',
+  'institution_profile.address_line_2': 'Address line 2',
+  'institution_profile.city': 'City / Town',
+  'institution_profile.province': 'Province',
+  'institution_profile.postal_code': 'Postal code',
+  'institution_profile.country': 'Country',
+}
+
+function labelForField(field: string): string {
+  if (fieldLabels[field]) return fieldLabels[field]
+  const cleaned = field.split('.').pop() ?? field
+  return cleaned
+    .replace(/_/g, ' ')
+    .replace(/\b\w/g, (c) => c.toUpperCase())
+}
+
+function formatWhen(iso: string | null | undefined): string {
+  if (!iso) return ''
+  try {
+    const d = new Date(iso)
+    return new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(d)
+  } catch {
+    return String(iso)
+  }
+}
 
 const form = useForm<any>({
   email: props.profile?.email ?? '',
@@ -75,8 +137,9 @@ function removeIdentityDocument() {
       </div>
     </template>
 
-    <div class="mx-auto w-full max-w-4xl">
-      <form class="rounded-xl border border-border bg-surface p-6" @submit.prevent="save">
+    <div class="mx-auto w-full max-w-5xl">
+      <div class="grid grid-cols-1 gap-6 lg:grid-cols-3">
+        <form class="rounded-xl border border-border bg-surface p-6 lg:col-span-2" @submit.prevent="save">
         <div class="flex items-start justify-between gap-4">
           <div>
             <h2 class="text-base font-semibold text-text-primary">Account details</h2>
@@ -86,14 +149,33 @@ function removeIdentityDocument() {
 
         <div class="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div class="sm:col-span-2">
-            <label class="text-sm font-medium">Email (optional)</label>
-            <input v-model="form.email" type="email" class="zaqa-input" />
+            <div class="flex items-center justify-between gap-2">
+              <label class="text-sm font-medium">Email</label>
+              <span v-if="emailLocked" class="text-xs font-semibold text-emerald-700">Verified • Locked</span>
+              <span v-else class="text-xs text-text-muted">Required if no primary phone</span>
+            </div>
+            <input
+              v-model="form.email"
+              type="email"
+              class="zaqa-input"
+              :readonly="emailLocked"
+              :class="emailLocked ? 'cursor-not-allowed bg-surface-muted/60 text-text-muted' : ''"
+            />
             <InputError :message="form.errors.email" />
           </div>
 
           <div>
-            <label class="text-sm font-medium">Primary phone (optional)</label>
-            <input v-model="form.phone_primary" class="zaqa-input" />
+            <div class="flex items-center justify-between gap-2">
+              <label class="text-sm font-medium">Primary phone</label>
+              <span v-if="phoneLocked" class="text-xs font-semibold text-emerald-700">Verified • Locked</span>
+              <span v-else class="text-xs text-text-muted">Required if no email</span>
+            </div>
+            <input
+              v-model="form.phone_primary"
+              class="zaqa-input"
+              :readonly="phoneLocked"
+              :class="phoneLocked ? 'cursor-not-allowed bg-surface-muted/60 text-text-muted' : ''"
+            />
             <InputError :message="form.errors.phone_primary" />
           </div>
           <div>
@@ -104,6 +186,10 @@ function removeIdentityDocument() {
 
           <div class="sm:col-span-2 text-xs text-text-muted">
             Provide at least one contact method: <span class="font-semibold text-text-primary">email</span> or <span class="font-semibold text-text-primary">primary phone</span>.
+          </div>
+
+          <div v-if="emailLocked || phoneLocked" class="sm:col-span-2 rounded-lg border border-border bg-surface-muted/50 px-4 py-3 text-xs text-text-muted">
+            Verified contact details are locked for security and cannot be changed from this page.
           </div>
         </div>
 
@@ -244,6 +330,48 @@ function removeIdentityDocument() {
           </Link>
         </div>
       </form>
+
+        <aside class="rounded-xl border border-border bg-surface p-6 lg:sticky lg:top-6">
+          <div class="flex items-start justify-between gap-3">
+            <div>
+              <h2 class="text-base font-semibold text-text-primary">Change trail</h2>
+              <p class="mt-1 text-sm text-text-muted">Recent updates to your profile details.</p>
+            </div>
+          </div>
+
+          <div v-if="!change_trail?.length" class="mt-5 rounded-lg border border-dashed border-border bg-surface-muted/40 px-4 py-3 text-sm text-text-muted">
+            No recent profile changes recorded.
+          </div>
+
+          <ol v-else class="mt-5 space-y-4">
+            <li v-for="item in change_trail" :key="item.id" class="rounded-lg border border-border/70 bg-surface-muted/40 px-4 py-3">
+              <div class="flex items-start justify-between gap-3">
+                <div class="min-w-0">
+                  <div class="text-sm font-semibold text-text-primary">{{ item.message }}</div>
+                  <div class="mt-0.5 text-xs text-text-muted">{{ formatWhen(item.created_at) }}</div>
+                </div>
+              </div>
+
+              <div v-if="item.changed_fields?.length" class="mt-2 flex flex-wrap gap-1.5">
+                <span
+                  v-for="f in item.changed_fields.slice(0, 6)"
+                  :key="f"
+                  class="inline-flex items-center rounded-full bg-brand/10 px-2 py-0.5 text-[11px] font-semibold text-brand"
+                >
+                  {{ labelForField(f) }}
+                </span>
+                <span v-if="item.changed_fields.length > 6" class="text-[11px] font-semibold text-text-muted">
+                  +{{ item.changed_fields.length - 6 }} more
+                </span>
+              </div>
+            </li>
+          </ol>
+
+          <div class="mt-6 rounded-lg border border-border/70 bg-surface-muted/40 px-4 py-3 text-xs text-text-muted">
+            Changes to identity and contact details are recorded for security and accountability.
+          </div>
+        </aside>
+      </div>
     </div>
   </ApplicantLayout>
 </template>

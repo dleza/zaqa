@@ -73,12 +73,6 @@ class ApplicantProfileController extends Controller
 
         $validated = $request->validated();
 
-        if (! Hash::check((string) $validated['current_password'], (string) $user->password)) {
-            return back()->withErrors([
-                'current_password' => 'Your current password is incorrect.',
-            ]);
-        }
-
         $user->forceFill([
             'password' => Hash::make((string) $validated['password']),
         ])->save();
@@ -87,4 +81,3 @@ class ApplicantProfileController extends Controller
             ->with('success', 'Password updated successfully.');
     }
 }
-

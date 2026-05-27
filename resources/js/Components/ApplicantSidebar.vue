@@ -180,9 +180,7 @@ const initials = computed(() => {
           </div>
         </div>
 
-        <Link href="/logout" method="post" as="button" class="zaqa-btn zaqa-btn-secondary px-3 py-2 text-xs" aria-label="Log out">
-          Log out
-        </Link>
+   
       </div>
     </div>
   </aside>

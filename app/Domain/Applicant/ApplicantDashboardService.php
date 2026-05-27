@@ -8,7 +8,9 @@ use App\Enums\PaymentStatus;
 use App\Enums\VerificationState;
 use App\Models\Application;
 use App\Models\ApplicationStatusHistory;
+use App\Models\Qualification;
 use App\Models\User;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Collection;
 
 class ApplicantDashboardService
@@ -26,55 +28,102 @@ class ApplicantDashboardService
      */
     public function build(User $user): array
     {
-        $apps = Application::query()
-            ->where('applicant_user_id', $user->id)
+        $userId = $user->id;
+
+        $countsByStatus = Application::query()
+            ->where('applicant_user_id', $userId)
+            ->select('current_status')
+            ->selectRaw('COUNT(*) as aggregate')
+            ->groupBy('current_status')
+            ->pluck('aggregate', 'current_status');
+
+        $counts = [
+            'total' => (int) $countsByStatus->sum(),
+            'draft' => (int) ($countsByStatus[ApplicationStatus::Draft->value] ?? 0),
+            'submitted' => (int) ($countsByStatus[ApplicationStatus::Submitted->value] ?? 0),
+            'sent_back' => (int) ($countsByStatus[ApplicationStatus::SentBack->value] ?? 0),
+            'approved' => (int) ($countsByStatus[ApplicationStatus::Approved->value] ?? 0),
+            'rejected' => (int) ($countsByStatus[ApplicationStatus::Rejected->value] ?? 0),
+        ];
+
+        $continueDraft = Application::query()
+            ->where('applicant_user_id', $userId)
+            ->where('current_status', ApplicationStatus::Draft)
+            ->latest('id')
+            ->first();
+
+        $appsForAlerts = Application::query()
+            ->where('applicant_user_id', $userId)
             ->with([
-                'qualifications.qualificationTypeMaster',
+                'qualifications:id,application_id,verification_state,returned_to_applicant_at',
+                'invoice:id,application_id,invoice_number,amount_cents,currency,status',
+                'payments:id,application_id,method,status,confirmed_at',
+            ])
+            ->latest('id')
+            ->limit(12)
+            ->get();
+
+        $alerts = $this->alertsFor($appsForAlerts);
+        $activity = $this->activityFor($user, $appsForAlerts);
+
+        $returnedQualificationsCount = Qualification::query()
+            ->where('verification_state', VerificationState::ReturnedToApplicant)
+            ->whereHas('application', fn (Builder $q) => $q->where('applicant_user_id', $userId))
+            ->count();
+
+        $returnedQualifications = Qualification::query()
+            ->where('verification_state', VerificationState::ReturnedToApplicant)
+            ->whereHas('application', fn (Builder $q) => $q->where('applicant_user_id', $userId))
+            ->with(['application:id,application_number'])
+            ->orderByDesc('returned_to_applicant_at')
+            ->limit(10)
+            ->get()
+            ->map(fn (Qualification $q) => [
+                'qualification_id' => (int) $q->id,
+                'application_id' => (int) $q->application_id,
+                'application_number' => $q->application?->application_number,
+                'title_of_qualification' => $q->title_of_qualification,
+                'returned_to_applicant_at' => optional($q->returned_to_applicant_at)?->toIso8601String(),
+                'href' => route('applicant.applications.qualifications.amend', ['application' => $q->application_id, 'qualification' => $q->id]),
+            ])
+            ->values()
+            ->all();
+
+        $recentApps = Application::query()
+            ->where('applicant_user_id', $userId)
+            ->with([
                 'invoice',
                 'payments',
             ])
+            ->withCount('qualifications')
+            ->withCount([
+                'qualifications as returned_qualifications_count' => fn (Builder $q) => $q->where('verification_state', VerificationState::ReturnedToApplicant),
+            ])
             ->latest('id')
+            ->limit(5)
             ->get();
 
-        $counts = [
-            'total' => $apps->count(),
-            'draft' => $apps->where('current_status', ApplicationStatus::Draft)->count(),
-            'submitted' => $apps->where('current_status', ApplicationStatus::Submitted)->count(),
-            'sent_back' => $apps->where('current_status', ApplicationStatus::SentBack)->count(),
-            'approved' => $apps->where('current_status', ApplicationStatus::Approved)->count(),
-            'rejected' => $apps->where('current_status', ApplicationStatus::Rejected)->count(),
-        ];
-
-        $applications = $apps->map(function (Application $a) {
+        $applications = $recentApps->map(function (Application $a) {
             $paymentsSorted = $a->payments->sortByDesc('id');
             $displayPayment = $paymentsSorted->first(fn ($p) => $p->status === PaymentStatus::Confirmed)
                 ?? $paymentsSorted->first();
 
-            $quals = $a->qualifications
-                ->sortBy('id')
-                ->values()
-                ->map(fn ($q) => [
-                    'id' => $q->id,
-                    'title_of_qualification' => $q->title_of_qualification,
-                    'verification_state' => $q->verification_state?->value ?? (string) $q->verification_state,
-                    'is_foreign_qualification' => (bool) ($q->is_foreign_qualification ?? false),
-                    'qualification_type' => $q->qualificationTypeMaster
-                        ? [
-                            'level_label' => $q->qualificationTypeMaster->level_label,
-                            'name' => $q->qualificationTypeMaster->name,
-                          ]
-                        : null,
-                ])
-                ->all();
+            $returnedCount = (int) ($a->returned_qualifications_count ?? 0);
+            $amendAction = null;
+            if ($returnedCount > 0) {
+                $firstReturnedId = $a->qualifications()
+                    ->where('verification_state', VerificationState::ReturnedToApplicant)
+                    ->orderByDesc('returned_to_applicant_at')
+                    ->value('id');
 
-            $returned = $a->qualifications
-                ->filter(fn ($q) => ($q->verification_state?->value ?? (string) $q->verification_state) === VerificationState::ReturnedToApplicant->value)
-                ->sortByDesc(fn ($q) => optional($q->returned_to_applicant_at)?->getTimestamp() ?? 0)
-                ->values();
-            $returnedCount = $returned->count();
-            $firstReturned = $returned->first();
-
-            $firstQualificationType = $a->qualifications->first()?->qualificationTypeMaster;
+                if (is_int($firstReturnedId) || (is_string($firstReturnedId) && $firstReturnedId !== '')) {
+                    $amendAction = [
+                        'label' => $returnedCount === 1 ? 'Update qualification' : "Update {$returnedCount} qualifications",
+                        'href' => route('applicant.applications.qualifications.amend', ['application' => $a->id, 'qualification' => $firstReturnedId]),
+                        'kind' => 'amend',
+                    ];
+                }
+            }
 
             return [
                 'id' => $a->id,
@@ -86,10 +135,7 @@ class ApplicantDashboardService
                 'updated_at' => optional($a->updated_at)?->toIso8601String(),
                 'created_at' => optional($a->created_at)?->toIso8601String(),
                 'submitted_at' => optional($a->submitted_at)?->toIso8601String(),
-                'qualification_type' => $firstQualificationType
-                    ? ['level_label' => $firstQualificationType->level_label, 'name' => $firstQualificationType->name]
-                    : null,
-                'qualifications' => $quals,
+                'qualification_count' => (int) ($a->qualifications_count ?? 0),
                 'invoice' => $a->invoice
                     ? [
                         'invoice_number' => $a->invoice->invoice_number,
@@ -106,39 +152,10 @@ class ApplicantDashboardService
                       ]
                     : null,
                 'primary_action' => $this->primaryActionFor($a),
-                'amend_action' => $firstReturned
-                    ? [
-                        'label' => $returnedCount === 1 ? 'Update qualification' : "Update {$returnedCount} qualifications",
-                        'href' => route('applicant.applications.qualifications.amend', ['application' => $a->id, 'qualification' => $firstReturned->id]),
-                        'kind' => 'amend',
-                      ]
-                    : null,
+                'amend_action' => $amendAction,
                 'returned_qualifications_count' => $returnedCount,
             ];
         })->values()->all();
-
-        $continueDraft = $apps
-            ->first(fn (Application $a) => ($a->current_status?->value ?? (string) $a->current_status) === ApplicationStatus::Draft->value);
-
-        $alerts = $this->alertsFor($apps);
-
-        $activity = $this->activityFor($user, $apps);
-
-        $returnedModels = $apps
-            ->flatMap(fn (Application $a) => $a->qualifications
-                ->filter(fn ($q) => ($q->verification_state?->value ?? (string) $q->verification_state) === VerificationState::ReturnedToApplicant->value)
-                ->map(fn ($q) => [
-                    'qualification_id' => (int) $q->id,
-                    'application_id' => (int) $a->id,
-                    'application_number' => $a->application_number,
-                    'title_of_qualification' => $q->title_of_qualification,
-                    'returned_to_applicant_at' => optional($q->returned_to_applicant_at)?->toIso8601String(),
-                    'href' => route('applicant.applications.qualifications.amend', ['application' => $a->id, 'qualification' => $q->id]),
-                ]))
-            ->sortByDesc('returned_to_applicant_at')
-            ->values();
-        $returnedQualificationsCount = $returnedModels->count();
-        $returnedQualifications = $returnedModels->take(10)->values()->all();
 
         return [
             'counts' => $counts,

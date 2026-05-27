@@ -6,8 +6,10 @@ use App\Domain\Audit\AuditLogService;
 use App\Enums\ApplicantType;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Applicant\UpdateApplicantProfileRequest;
+use App\Models\AuditLog;
 use App\Models\ApplicantProfile;
 use App\Models\InstitutionProfile;
+use App\Models\User;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -23,6 +25,7 @@ class ApplicantProfileEditController extends Controller
 
         return Inertia::render('Applicant/EditProfile', [
             'profile' => $this->profilePayload($request),
+            'change_trail' => $user instanceof User ? $this->changeTrailPayload($user) : [],
         ]);
     }
 
@@ -35,11 +38,7 @@ class ApplicantProfileEditController extends Controller
 
         $user->loadMissing(['applicantProfile', 'institutionProfile']);
 
-        $before = [
-            'user' => $user->only(['name', 'email', 'phone_primary', 'phone_secondary', 'applicant_type']),
-            'applicant_profile' => $user->applicantProfile?->toArray(),
-            'institution_profile' => $user->institutionProfile?->toArray(),
-        ];
+        $before = $this->auditProfileSnapshot($user);
 
         $validated = $request->validated();
 
@@ -98,11 +97,8 @@ class ApplicantProfileEditController extends Controller
         $user->refresh();
         $user->loadMissing(['applicantProfile', 'institutionProfile']);
 
-        $after = [
-            'user' => $user->only(['name', 'email', 'phone_primary', 'phone_secondary', 'applicant_type']),
-            'applicant_profile' => $user->applicantProfile?->toArray(),
-            'institution_profile' => $user->institutionProfile?->toArray(),
-        ];
+        $after = $this->auditProfileSnapshot($user);
+        $changedFields = $this->changedFields($before, $after);
 
         $audit->record(
             eventType: 'applicants.profile_updated',
@@ -113,6 +109,10 @@ class ApplicantProfileEditController extends Controller
             entityId: $user->id,
             beforeState: $before,
             afterState: $after,
+            metadata: [
+                'changed_fields' => $changedFields,
+                'changed_count' => count($changedFields),
+            ],
             actor: $user,
         );
 
@@ -133,6 +133,8 @@ class ApplicantProfileEditController extends Controller
             'phone_primary' => $user->phone_primary,
             'phone_secondary' => $user->phone_secondary,
             'applicant_type' => $user->applicant_type?->value ?? (string) $user->applicant_type,
+            'email_verified_at' => $user->email_verified_at,
+            'phone_verified_at' => $user->phone_verified_at,
             'applicant_profile' => $user->applicantProfile?->only([
                 'first_name',
                 'middle_name',
@@ -168,5 +170,122 @@ class ApplicantProfileEditController extends Controller
         $str = trim((string) ($value ?? ''));
 
         return $str === '' ? null : $str;
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function auditProfileSnapshot(User $user): array
+    {
+        return [
+            'user' => $user->only(['name', 'email', 'phone_primary', 'phone_secondary', 'applicant_type']),
+            'applicant_profile' => $user->applicantProfile?->only([
+                'first_name',
+                'middle_name',
+                'surname',
+                'nrc_number',
+                'passport_number',
+                'email',
+                'phone_primary',
+                'phone_secondary',
+                'address_line_1',
+                'address_line_2',
+                'city',
+                'province',
+                'postal_code',
+                'country',
+            ]),
+            'institution_profile' => $user->institutionProfile?->only([
+                'institution_name',
+                'tpin',
+                'contact_person_name',
+                'email',
+                'phone_primary',
+                'phone_secondary',
+                'address_line_1',
+                'address_line_2',
+                'city',
+                'province',
+                'postal_code',
+                'country',
+            ]),
+        ];
+    }
+
+    /**
+     * @param array<string, mixed> $before
+     * @param array<string, mixed> $after
+     * @return list<string>
+     */
+    private function changedFields(array $before, array $after): array
+    {
+        $beforeFlat = $this->flattenForDiff($before);
+        $afterFlat = $this->flattenForDiff($after);
+
+        $keys = array_unique(array_merge(array_keys($beforeFlat), array_keys($afterFlat)));
+        sort($keys);
+
+        $changed = [];
+        foreach ($keys as $key) {
+            $b = $beforeFlat[$key] ?? null;
+            $a = $afterFlat[$key] ?? null;
+            if ($b !== $a) {
+                $changed[] = $key;
+            }
+        }
+
+        return $changed;
+    }
+
+    /**
+     * @param array<string, mixed> $data
+     * @return array<string, scalar|null>
+     */
+    private function flattenForDiff(array $data, string $prefix = ''): array
+    {
+        $out = [];
+        foreach ($data as $key => $value) {
+            $path = $prefix === '' ? (string) $key : $prefix.'.'.$key;
+
+            if (is_array($value)) {
+                $out += $this->flattenForDiff($value, $path);
+                continue;
+            }
+
+            $out[$path] = is_scalar($value) || $value === null ? $value : json_encode($value);
+        }
+
+        return $out;
+    }
+
+    /**
+     * @return list<array<string, mixed>>
+     */
+    private function changeTrailPayload(User $user): array
+    {
+        return AuditLog::query()
+            ->where('actor_user_id', $user->id)
+            ->whereIn('event_type', [
+                'applicants.profile_updated',
+                'applicants.profile_identity_document_uploaded',
+                'applicants.profile_identity_document_removed',
+            ])
+            ->orderByDesc('created_at')
+            ->limit(10)
+            ->get(['id', 'event_type', 'message', 'metadata', 'created_at'])
+            ->map(function (AuditLog $log) {
+                $changedFields = data_get($log->metadata, 'changed_fields');
+                $changedFields = is_array($changedFields) ? array_values($changedFields) : [];
+
+                return [
+                    'id' => (int) $log->id,
+                    'event_type' => (string) $log->event_type,
+                    'message' => (string) $log->message,
+                    'created_at' => optional($log->created_at)->toIso8601String(),
+                    'changed_fields' => $changedFields,
+                ];
+            })
+            ->values()
+            ->all();
     }
 }

@@ -1,11 +1,11 @@
 <?php
 
-namespace App\Http\Requests\Applicant;
+namespace App\Http\Requests\Admin;
 
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rules\Password;
 
-class UpdateApplicantPasswordRequest extends FormRequest
+class UpdateAdminPasswordRequest extends FormRequest
 {
     /**
      * @return array<string, mixed>
@@ -13,7 +13,9 @@ class UpdateApplicantPasswordRequest extends FormRequest
     public function rules(): array
     {
         return [
+            'current_password' => ['required', 'string'],
             'password' => ['required', 'confirmed', Password::min(8)],
         ];
     }
 }
+

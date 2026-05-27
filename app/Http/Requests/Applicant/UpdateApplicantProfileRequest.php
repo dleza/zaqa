@@ -68,7 +68,28 @@ class UpdateApplicantProfileRequest extends FormRequest
     {
         $validator->after(function (Validator $validator) {
             $user = $this->user();
-            if (! $user || ($user->applicant_type?->value ?? null) !== 'individual') {
+            if (! $user) {
+                return;
+            }
+
+            $incomingEmail = $this->nullIfBlank($this->input('email'));
+            $incomingPhonePrimary = $this->nullIfBlank($this->input('phone_primary'));
+
+            if ($user->email_verified_at) {
+                $currentEmail = $this->nullIfBlank($user->email);
+                if ($incomingEmail !== $currentEmail) {
+                    $validator->errors()->add('email', 'Email cannot be changed after it has been verified.');
+                }
+            }
+
+            if ($user->phone_verified_at) {
+                $currentPhonePrimary = $this->nullIfBlank($user->phone_primary);
+                if ($incomingPhonePrimary !== $currentPhonePrimary) {
+                    $validator->errors()->add('phone_primary', 'Primary phone cannot be changed after it has been verified.');
+                }
+            }
+
+            if (($user->applicant_type?->value ?? null) !== 'individual') {
                 return;
             }
 
@@ -80,5 +101,12 @@ class UpdateApplicantProfileRequest extends FormRequest
                 $validator->errors()->add('passport_number', 'Provide NRC or passport number.');
             }
         });
+    }
+
+    private function nullIfBlank(mixed $value): ?string
+    {
+        $str = trim((string) ($value ?? ''));
+
+        return $str === '' ? null : $str;
     }
 }

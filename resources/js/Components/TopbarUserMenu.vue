@@ -7,10 +7,16 @@ const props = withDefaults(
   defineProps<{
     user?: any | null
     variant?: 'surface' | 'brand'
+    profileHref?: string
+    passwordHref?: string
+    hideLabelOnMobile?: boolean
   }>(),
   {
     user: null,
     variant: 'surface',
+    profileHref: '/admin/profile',
+    passwordHref: '/admin/change-password',
+    hideLabelOnMobile: false,
   },
 )
 
@@ -129,10 +135,22 @@ watch(
           <UserIcon v-else class="h-4 w-4" aria-hidden="true" />
         </span>
 
-        <span class="max-w-[7rem] truncate font-semibold sm:max-w-[10rem]">{{ buttonName }}</span>
+        <span
+          class="max-w-[7rem] truncate font-semibold sm:max-w-[10rem]"
+          :class="props.hideLabelOnMobile ? 'hidden sm:inline' : ''"
+        >
+          {{ buttonName }}
+        </span>
       </span>
 
-      <ChevronDown class="h-4 w-4 shrink-0 opacity-80 transition-transform" :class="menuOpen ? 'rotate-180' : 'rotate-0'" aria-hidden="true" />
+      <ChevronDown
+        class="h-4 w-4 shrink-0 opacity-80 transition-transform"
+        :class="[
+          menuOpen ? 'rotate-180' : 'rotate-0',
+          props.hideLabelOnMobile ? 'hidden sm:inline' : '',
+        ]"
+        aria-hidden="true"
+      />
     </button>
 
     <div
@@ -147,7 +165,7 @@ watch(
 
       <div class="py-1">
         <Link
-          href="/admin/profile"
+          :href="props.profileHref"
           class="flex w-full items-center px-4 py-2.5 text-sm font-semibold text-text-primary transition hover:bg-surface-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
           role="menuitem"
           @click="closeMenu"
@@ -155,7 +173,7 @@ watch(
           View Profile
         </Link>
         <Link
-          href="/admin/change-password"
+          :href="props.passwordHref"
           class="flex w-full items-center px-4 py-2.5 text-sm font-semibold text-text-primary transition hover:bg-surface-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
           role="menuitem"
           @click="closeMenu"
