@@ -41,6 +41,7 @@ use App\Http\Controllers\Admin\Verification\AdminVerificationDocumentController;
 use App\Http\Controllers\Admin\Verification\AdminVerificationPoolController;
 use App\Http\Controllers\Admin\Verification\AdminVerificationQualificationController;
 use App\Http\Controllers\Applicant\ApplicantApplicationController;
+use App\Http\Controllers\Applicant\ApplicantApplicationIdentityDocumentController;
 use App\Http\Controllers\Applicant\ApplicantApplicationTrackingController;
 use App\Http\Controllers\Applicant\ApplicantBillingController;
 use App\Http\Controllers\Applicant\ApplicantConsentController;
@@ -159,6 +160,7 @@ Route::middleware('auth')->group(function () {
         Route::delete('/applications/{application}/qualifications/{qualification}', [ApplicantQualificationController::class, 'destroy'])->name('applications.qualifications.destroy');
 
         Route::post('/applications/{application}/documents', [ApplicantDocumentController::class, 'store'])->name('applications.documents.store');
+        Route::post('/applications/{application}/identity-document', [ApplicantApplicationIdentityDocumentController::class, 'store'])->name('applications.identity_document.store');
         Route::get('/documents/{document}/preview', [ApplicantDocumentController::class, 'preview'])->name('documents.preview')->middleware('signed');
         Route::get('/documents/{document}/download', [ApplicantDocumentController::class, 'download'])->name('documents.download')->middleware('signed');
         Route::delete('/documents/{document}', [ApplicantDocumentController::class, 'destroy'])->name('documents.destroy');

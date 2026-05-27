@@ -26,14 +26,14 @@ class CreateApplicationDraftRequest extends FormRequest
             'qualification_category' => ['required', new Enum(QualificationType::class)],
             'is_foreign' => ['required', 'boolean'],
             'submitting_for' => ['nullable', 'string', 'in:self,other'],
-            'subject_full_name' => ['nullable', 'string', 'max:255'],
+            'subject_first_name' => ['nullable', 'string', 'max:255'],
+            'subject_other_names' => ['nullable', 'string', 'max:255'],
+            'subject_last_name' => ['nullable', 'string', 'max:255'],
             'subject_email' => ['nullable', 'email:rfc,dns', 'max:255'],
             'subject_phone' => ['nullable', 'string', 'max:30'],
-            'subject_nrc_number' => ['nullable', 'string', 'max:100'],
-            'subject_passport_number' => ['nullable', 'string', 'max:100'],
-            'profile_nrc_number' => ['nullable', 'string', 'max:100'],
-            'profile_passport_number' => ['nullable', 'string', 'max:100'],
-            'identity_document_type' => ['nullable', 'string', 'in:nrc_copy,passport_copy'],
+            'gender' => ['nullable', 'string', 'in:male,female'],
+            'identity_type' => ['nullable', 'string', 'in:nrc,passport'],
+            'identity_number' => ['nullable', 'string', 'max:100'],
             'identity_file' => ['nullable', 'file', 'max:'.((int) config('documents.max_upload_kb', 10240)), 'mimetypes:'.implode(',', (array) config('documents.allowed_mimetypes', [
                 'application/pdf',
                 'image/jpeg',
@@ -60,30 +60,67 @@ class CreateApplicationDraftRequest extends FormRequest
                 }
 
                 $user->loadMissing('applicantProfile');
-                $nrcIn = trim((string) $this->input('profile_nrc_number', ''));
-                $passIn = trim((string) $this->input('profile_passport_number', ''));
-                $nrcEff = $nrcIn !== '' ? $nrcIn : trim((string) ($user->applicantProfile?->nrc_number ?? ''));
-                $passEff = $passIn !== '' ? $passIn : trim((string) ($user->applicantProfile?->passport_number ?? ''));
+                $profile = $user->applicantProfile;
 
-                if ($nrcEff === '' && $passEff === '') {
-                    $validator->errors()->add('profile_nrc_number', 'Provide NRC or passport number.');
-                    $validator->errors()->add('profile_passport_number', 'Provide NRC or passport number.');
+                $genderIn = strtolower(trim((string) $this->input('gender', '')));
+                $genderEff = $genderIn !== '' ? $genderIn : strtolower(trim((string) ($profile?->gender ?? '')));
+                if ($genderEff === '' || ! in_array($genderEff, ['male', 'female'], true)) {
+                    $validator->errors()->add('gender', 'Gender is required.');
+                }
+
+                $typeIn = strtolower(trim((string) $this->input('identity_type', '')));
+                $typeEff = $typeIn !== '' ? $typeIn : strtolower(trim((string) ($profile?->identity_type ?? '')));
+                if ($typeEff === '') {
+                    $hasNrc = trim((string) ($profile?->nrc_number ?? '')) !== '';
+                    $hasPassport = trim((string) ($profile?->passport_number ?? '')) !== '';
+                    $typeEff = $hasNrc ? 'nrc' : ($hasPassport ? 'passport' : '');
+                }
+
+                if ($typeEff === '' || ! in_array($typeEff, ['nrc', 'passport'], true)) {
+                    $validator->errors()->add('identity_type', 'Select NRC or Passport.');
+                }
+
+                $numberIn = trim((string) $this->input('identity_number', ''));
+                $numberEff = $numberIn !== '' ? $numberIn : (
+                    $typeEff === 'passport'
+                        ? trim((string) ($profile?->passport_number ?? ''))
+                        : trim((string) ($profile?->nrc_number ?? ''))
+                );
+                if ($numberEff === '') {
+                    $validator->errors()->add('identity_number', 'Provide NRC or passport number.');
+                }
+
+                $profileHasIdentityDoc = (bool) ($profile?->identity_document_uploaded_at ?? false);
+                if (! $profileHasIdentityDoc && ! $this->hasFile('identity_file')) {
+                    $validator->errors()->add('identity_file', 'Upload a clear copy of your NRC or passport.');
                 }
 
                 return;
             }
 
-            $nrc = trim((string) $this->input('subject_nrc_number', ''));
-            $passport = trim((string) $this->input('subject_passport_number', ''));
-
-            if ($nrc === '' && $passport === '') {
-                $validator->errors()->add('subject_nrc_number', 'Provide NRC or passport number.');
-                $validator->errors()->add('subject_passport_number', 'Provide NRC or passport number.');
+            $firstName = trim((string) $this->input('subject_first_name', ''));
+            if ($firstName === '') {
+                $validator->errors()->add('subject_first_name', 'First name is required when submitting on behalf of someone.');
             }
 
-            $fullName = trim((string) $this->input('subject_full_name', ''));
-            if ($fullName === '') {
-                $validator->errors()->add('subject_full_name', 'Full name is required when submitting on behalf of someone.');
+            $lastName = trim((string) $this->input('subject_last_name', ''));
+            if ($lastName === '') {
+                $validator->errors()->add('subject_last_name', 'Last name is required when submitting on behalf of someone.');
+            }
+
+            $gender = strtolower(trim((string) $this->input('gender', '')));
+            if ($gender === '' || ! in_array($gender, ['male', 'female'], true)) {
+                $validator->errors()->add('gender', 'Gender is required.');
+            }
+
+            $type = strtolower(trim((string) $this->input('identity_type', '')));
+            if ($type === '' || ! in_array($type, ['nrc', 'passport'], true)) {
+                $validator->errors()->add('identity_type', 'Select NRC or Passport.');
+            }
+
+            $number = trim((string) $this->input('identity_number', ''));
+            if ($number === '') {
+                $validator->errors()->add('identity_number', 'Provide NRC or passport number.');
             }
 
             if (! $this->hasFile('identity_file')) {
@@ -92,4 +129,3 @@ class CreateApplicationDraftRequest extends FormRequest
         });
     }
 }
-

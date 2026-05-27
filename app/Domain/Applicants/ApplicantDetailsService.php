@@ -56,8 +56,17 @@ class ApplicantDetailsService
                 $profile->first_name = (string) $data['first_name'];
                 $profile->middle_name = $data['middle_name'] ?? null;
                 $profile->surname = (string) $data['surname'];
-                $profile->nrc_number = $data['nrc_number'] ?? null;
-                $profile->passport_number = $data['passport_number'] ?? null;
+                $profile->gender = (string) $data['gender'];
+                $profile->identity_type = (string) $data['identity_type'];
+
+                $identityNumber = $data['identity_number'] ?? null;
+                if ((string) $data['identity_type'] === 'passport') {
+                    $profile->passport_number = $identityNumber;
+                    $profile->nrc_number = null;
+                } else {
+                    $profile->nrc_number = $identityNumber;
+                    $profile->passport_number = null;
+                }
                 $profile->email = $email;
                 $profile->phone_primary = $phonePrimary;
                 $profile->phone_secondary = $phoneSecondary;

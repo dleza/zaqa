@@ -35,6 +35,7 @@ class AdminVerificationApplicationController extends Controller
 
         $application->loadMissing([
             'applicant',
+            'applicant.applicantProfile',
             'qualifications.country',
             'qualifications.awardingInstitution.country',
             'qualifications.qualificationTypeMaster',
@@ -125,6 +126,17 @@ class AdminVerificationApplicationController extends Controller
                 'applicant' => [
                     'id' => $application->applicant?->id,
                     'name' => $application->metadata['verification_subject']['full_name'] ?? $application->applicant?->name,
+                    'gender' => (function () use ($application) {
+                        $subject = $application->metadata['verification_subject'] ?? null;
+                        if (is_array($subject)) {
+                            $g = trim((string) ($subject['gender'] ?? ''));
+                            if ($g !== '') {
+                                return $g;
+                            }
+                        }
+
+                        return $application->applicant?->applicantProfile?->gender;
+                    })(),
                     'email' => $application->applicant?->email,
                     'phone' => $application->applicant?->phone_primary,
                     'nrc_passport' => ($restricted ? $primaryQualification?->nrc_passport_number : $application->qualification?->nrc_passport_number)

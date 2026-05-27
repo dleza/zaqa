@@ -52,9 +52,12 @@ class ApplicantApplicationFlowTest extends TestCase
             'user_id' => $user->id,
             'first_name' => 'John',
             'surname' => 'Doe',
+            'gender' => 'male',
             'nrc_number' => '111111/11/1',
+            'identity_type' => 'nrc',
             'email' => $user->email,
             'phone_primary' => $user->phone_primary,
+            'identity_document_uploaded_at' => now(),
         ]);
 
         $this->actingAs($user);
@@ -241,9 +244,12 @@ class ApplicantApplicationFlowTest extends TestCase
             'user_id' => $user->id,
             'first_name' => 'John',
             'surname' => 'Doe',
+            'gender' => 'male',
             'passport_number' => 'P1234567',
+            'identity_type' => 'passport',
             'email' => $user->email,
             'phone_primary' => $user->phone_primary,
+            'identity_document_uploaded_at' => now(),
         ]);
 
         $this->actingAs($user);
@@ -355,9 +361,12 @@ class ApplicantApplicationFlowTest extends TestCase
             'user_id' => $user->id,
             'first_name' => 'Jane',
             'surname' => 'Doe',
+            'gender' => 'female',
             'nrc_number' => '222222/22/2',
+            'identity_type' => 'nrc',
             'email' => $user->email,
             'phone_primary' => $user->phone_primary,
+            'identity_document_uploaded_at' => now(),
         ]);
 
         $this->actingAs($user);
@@ -421,9 +430,12 @@ class ApplicantApplicationFlowTest extends TestCase
             'user_id' => $user->id,
             'first_name' => 'John',
             'surname' => 'Doe',
+            'gender' => 'male',
             'nrc_number' => '111111/11/1',
+            'identity_type' => 'nrc',
             'email' => $user->email,
             'phone_primary' => $user->phone_primary,
+            'identity_document_uploaded_at' => now(),
         ]);
 
         $finance = User::factory()->activated()->create([
@@ -521,9 +533,12 @@ class ApplicantApplicationFlowTest extends TestCase
             'user_id' => $user->id,
             'first_name' => 'John',
             'surname' => 'Doe',
+            'gender' => 'male',
             'nrc_number' => '111111/11/1',
+            'identity_type' => 'nrc',
             'email' => $user->email,
             'phone_primary' => $user->phone_primary,
+            'identity_document_uploaded_at' => now(),
         ]);
 
         $this->actingAs($user);
@@ -590,9 +605,12 @@ class ApplicantApplicationFlowTest extends TestCase
             'user_id' => $user->id,
             'first_name' => 'John',
             'surname' => 'Doe',
+            'gender' => 'male',
             'nrc_number' => '111111/11/1',
+            'identity_type' => 'nrc',
             'email' => $user->email,
             'phone_primary' => $user->phone_primary,
+            'identity_document_uploaded_at' => now(),
         ]);
 
         $this->actingAs($user);
@@ -650,6 +668,8 @@ class ApplicantApplicationFlowTest extends TestCase
 
     public function test_create_draft_saves_inline_nrc_to_applicant_profile_when_missing(): void
     {
+        Storage::fake('local');
+
         $user = User::factory()->activated()->create([
             'applicant_type' => ApplicantType::Individual,
         ]);
@@ -660,8 +680,11 @@ class ApplicantApplicationFlowTest extends TestCase
             'surname' => 'Doe',
             'nrc_number' => null,
             'passport_number' => null,
+            'gender' => null,
+            'identity_type' => null,
             'email' => $user->email,
             'phone_primary' => $user->phone_primary,
+            'identity_document_uploaded_at' => null,
         ]);
 
         $this->actingAs($user);
@@ -671,13 +694,55 @@ class ApplicantApplicationFlowTest extends TestCase
             'qualification_category' => 'diploma',
             'is_foreign' => false,
             'submitting_for' => 'self',
-            'profile_nrc_number' => '888888/88/8',
-            'profile_passport_number' => '',
+            'gender' => 'female',
+            'identity_type' => 'nrc',
+            'identity_number' => '888888/88/8',
+            'identity_file' => UploadedFile::fake()->image('nrc.png')->size(200),
         ]);
 
         $response->assertRedirect();
 
         $user->refresh();
         $this->assertSame('888888/88/8', $user->applicantProfile?->nrc_number);
+        $this->assertSame('nrc', $user->applicantProfile?->identity_type);
+        $this->assertSame('female', $user->applicantProfile?->gender);
+        $this->assertNotNull($user->applicantProfile?->identity_document_uploaded_at);
+    }
+
+    public function test_on_behalf_application_draft_persists_subject_gender_on_application_metadata(): void
+    {
+        Storage::fake('local');
+
+        $user = User::factory()->activated()->create([
+            'applicant_type' => ApplicantType::Individual,
+        ]);
+
+        $this->actingAs($user);
+
+        $this->post('/applicant/applications', [
+            'service_type' => 'verification',
+            'qualification_category' => 'diploma',
+            'is_foreign' => false,
+            'submitting_for' => 'other',
+            'subject_first_name' => 'Mary',
+            'subject_other_names' => 'Jane',
+            'subject_last_name' => 'Mwale',
+            'gender' => 'female',
+            'identity_type' => 'passport',
+            'identity_number' => 'P1234567',
+            'identity_file' => UploadedFile::fake()->image('passport.png')->size(200),
+        ])->assertRedirect();
+
+        $application = Application::query()->firstOrFail();
+        $meta = (array) ($application->metadata ?? []);
+
+        $this->assertSame('other', $meta['submitting_for'] ?? null);
+
+        $subject = $meta['verification_subject'] ?? null;
+        $this->assertIsArray($subject);
+        $this->assertSame('Mary Jane Mwale', $subject['full_name'] ?? null);
+        $this->assertSame('female', $subject['gender'] ?? null);
+        $this->assertSame('passport', $subject['identity_type'] ?? null);
+        $this->assertSame('P1234567', $subject['passport_number'] ?? null);
     }
 }

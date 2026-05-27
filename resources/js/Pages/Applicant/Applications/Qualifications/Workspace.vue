@@ -552,9 +552,7 @@ const holderSummaryId = computed(() => {
           <h1 class="mt-3 text-2xl font-semibold tracking-tight text-text-primary">
             {{ mode === 'add' ? 'Add qualification' : 'Edit qualification' }}
           </h1>
-          <p class="mt-1 text-sm text-text-muted">
-            Enter qualification details and attach documents, then save your draft at the bottom. Submitting back to ZAQA happens on the Qualification step.
-          </p>
+
         </div>
         <div class="hidden sm:flex">
           <div class="inline-flex items-center gap-2 rounded-full border border-brand/20 bg-brand/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-wider text-brand">

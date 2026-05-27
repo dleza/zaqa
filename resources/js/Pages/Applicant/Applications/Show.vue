@@ -108,6 +108,19 @@ const subjectIdNumber = computed(() => {
   return selfNrc.length ? selfNrc : selfPassport.length ? selfPassport : ''
 })
 
+const subjectGender = computed(() => {
+  const vs = props.application?.metadata?.verification_subject ?? null
+  const v = (vs?.gender ?? '').toString().trim().toLowerCase()
+  if (v === 'male') return 'Male'
+  if (v === 'female') return 'Female'
+
+  const self = (props.applicant?.applicant_profile?.gender ?? '').toString().trim().toLowerCase()
+  if (self === 'male') return 'Male'
+  if (self === 'female') return 'Female'
+
+  return ''
+})
+
 function countryLabel(countryId: number | null, other: string | null) {
   if (countryId) return countryNameById.value.get(countryId) ?? `#${countryId}`
   return other && other.length > 0 ? other : '—'
@@ -391,6 +404,12 @@ function money(cents: number, currency: string) {
                 >
                   <div class="text-[10px] font-semibold uppercase tracking-wider text-text-muted">Subject NRC / Passport</div>
                   <div class="mt-1.5 font-mono text-sm font-semibold text-text-primary">{{ subjectIdNumber || '—' }}</div>
+                </div>
+                <div
+                  class="group rounded-2xl border border-border/80 bg-surface-muted/50 p-4 transition hover:border-brand/20 hover:shadow-sm"
+                >
+                  <div class="text-[10px] font-semibold uppercase tracking-wider text-text-muted">Subject gender</div>
+                  <div class="mt-1.5 text-sm font-semibold text-text-primary">{{ subjectGender || '—' }}</div>
                 </div>
                 <div
                   class="group rounded-2xl border border-border/80 bg-surface-muted/50 p-4 transition hover:border-brand/20 hover:shadow-sm"

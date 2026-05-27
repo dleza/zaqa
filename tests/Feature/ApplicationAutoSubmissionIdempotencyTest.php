@@ -46,9 +46,12 @@ class ApplicationAutoSubmissionIdempotencyTest extends TestCase
             'user_id' => $user->id,
             'first_name' => 'John',
             'surname' => 'Doe',
+            'gender' => 'male',
             'nrc_number' => '111111/11/1',
+            'identity_type' => 'nrc',
             'email' => $user->email,
             'phone_primary' => $user->phone_primary,
+            'identity_document_uploaded_at' => now(),
         ]);
 
         $this->actingAs($user);
@@ -127,4 +130,3 @@ class ApplicationAutoSubmissionIdempotencyTest extends TestCase
         $this->assertSame(1, $submittedHistoryCount);
     }
 }
-

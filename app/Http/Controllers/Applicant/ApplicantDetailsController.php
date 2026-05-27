@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Applicant;
 
 use App\Domain\Applicants\ApplicantDetailsService;
+use App\Domain\Applications\ApplicationDraftService;
 use App\Domain\Tracking\ApplicationLifecycleService;
 use App\Enums\LifecycleStage;
 use App\Enums\LifecycleVisibility;
@@ -17,12 +18,19 @@ class ApplicantDetailsController extends Controller
         UpdateApplicantDetailsRequest $request,
         Application $application,
         ApplicantDetailsService $service,
+        ApplicationDraftService $drafts,
         ApplicationLifecycleService $lifecycle,
     ): RedirectResponse
     {
         $this->authorize('update', $application);
 
         $service->update($request->user(), $request->validated(), $request->user());
+
+        $meta = (array) ($application->metadata ?? []);
+        $submittingFor = (string) ($meta['submitting_for'] ?? 'self');
+        if ($submittingFor === 'self') {
+            $drafts->updateDraft($application, $request->user(), ['submitting_for' => 'self']);
+        }
 
         $lifecycle->milestone(
             application: $application,
@@ -42,4 +50,3 @@ class ApplicantDetailsController extends Controller
         return back()->with('success', 'Applicant details saved.');
     }
 }
-

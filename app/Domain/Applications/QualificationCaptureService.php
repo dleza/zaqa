@@ -323,12 +323,31 @@ class QualificationCaptureService
 
         $holderName = is_array($verificationSubject) ? trim((string) ($verificationSubject['full_name'] ?? '')) : '';
         if ($holderName === '') {
+            if (is_array($verificationSubject)) {
+                $holderName = trim((string) implode(' ', array_filter([
+                    (string) ($verificationSubject['first_name'] ?? ''),
+                    (string) ($verificationSubject['other_names'] ?? ''),
+                    (string) ($verificationSubject['last_name'] ?? ''),
+                ], fn ($v) => trim((string) $v) !== '')));
+            }
+        }
+        if ($holderName === '') {
             $holderName = trim((string) $actor->name);
         }
 
-        $idNumber = is_array($verificationSubject)
-            ? trim((string) (($verificationSubject['nrc_number'] ?? '') ?: ($verificationSubject['passport_number'] ?? '')))
-            : '';
+        $idNumber = '';
+        if (is_array($verificationSubject)) {
+            $identityType = strtolower(trim((string) ($verificationSubject['identity_type'] ?? '')));
+            if ($identityType === 'passport') {
+                $idNumber = trim((string) ($verificationSubject['passport_number'] ?? ''));
+            } else {
+                $idNumber = trim((string) ($verificationSubject['nrc_number'] ?? ''));
+            }
+
+            if ($idNumber === '') {
+                $idNumber = trim((string) (($verificationSubject['nrc_number'] ?? '') ?: ($verificationSubject['passport_number'] ?? '')));
+            }
+        }
 
         return [
             'holder_name' => $holderName,

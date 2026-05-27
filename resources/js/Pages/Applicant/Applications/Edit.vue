@@ -178,27 +178,49 @@ function evaluateApplicantStep(): { ok: boolean; missing: string[] } {
   const applicantTypeStr = trimStr(props.applicant?.applicant_type ?? props.application?.applicant_type)
 
   if (submittingFor === 'other') {
-    const fullName =
-      trimStr(props.application?.metadata?.verification_subject?.full_name) ||
-      trimStr(submittingForForm.subject_full_name)
-    const nrc =
-      trimStr(props.application?.metadata?.verification_subject?.nrc_number) ||
-      trimStr(submittingForForm.subject_nrc_number)
-    const passport =
-      trimStr(props.application?.metadata?.verification_subject?.passport_number) ||
-      trimStr(submittingForForm.subject_passport_number)
-    if (!fullName) missing.push('Enter the verification subject’s full name.')
-    if (!nrc && !passport) missing.push('Enter the subject’s NRC or passport number (at least one).')
+    const firstName =
+      trimStr(props.application?.metadata?.verification_subject?.first_name) ||
+      trimStr(submittingForForm.subject_first_name)
+    const lastName =
+      trimStr(props.application?.metadata?.verification_subject?.last_name) ||
+      trimStr(submittingForForm.subject_last_name)
+    if (!firstName) missing.push('Enter the holder’s first name.')
+    if (!lastName) missing.push('Enter the holder’s last name.')
+
+    const gender =
+      trimStr(props.application?.metadata?.verification_subject?.gender) ||
+      trimStr(submittingForForm.gender)
+    if (!gender) missing.push('Select the holder’s gender.')
+
+    const identityType =
+      trimStr(props.application?.metadata?.verification_subject?.identity_type) ||
+      trimStr(submittingForForm.identity_type)
+    const identityNumberFromMeta =
+      identityType.toLowerCase() === 'passport'
+        ? trimStr(props.application?.metadata?.verification_subject?.passport_number)
+        : trimStr(props.application?.metadata?.verification_subject?.nrc_number)
+    const identityNumber = identityNumberFromMeta || trimStr(submittingForForm.identity_number)
+    if (!identityType) missing.push('Select identity type (NRC or Passport).')
+    if (!identityNumber) missing.push('Enter the holder’s NRC or passport number.')
   } else if (applicantTypeStr === 'individual') {
-    const nrc =
-      trimStr(props.applicant?.applicant_profile?.nrc_number) ||
-      trimStr(applicantForm.nrc_number) ||
-      trimStr(submittingForForm.profile_nrc_number)
-    const passport =
-      trimStr(props.applicant?.applicant_profile?.passport_number) ||
-      trimStr(applicantForm.passport_number) ||
-      trimStr(submittingForForm.profile_passport_number)
-    if (!nrc && !passport) missing.push('Enter your NRC or passport number under Biodata (at least one).')
+    const gender =
+      trimStr(props.applicant?.applicant_profile?.gender) ||
+      trimStr(applicantForm.gender)
+    if (!gender) missing.push('Select your gender under Biodata.')
+
+    const identityType =
+      trimStr(applicantForm.identity_type) ||
+      trimStr(props.applicant?.applicant_profile?.identity_type) ||
+      (trimStr(props.applicant?.applicant_profile?.nrc_number) ? 'nrc' : trimStr(props.applicant?.applicant_profile?.passport_number) ? 'passport' : '')
+
+    const identityNumber =
+      trimStr(applicantForm.identity_number) ||
+      (identityType.toLowerCase() === 'passport'
+        ? trimStr(props.applicant?.applicant_profile?.passport_number)
+        : trimStr(props.applicant?.applicant_profile?.nrc_number))
+
+    if (!identityType) missing.push('Select identity type under Biodata.')
+    if (!identityNumber) missing.push('Enter your NRC or passport number under Biodata.')
   }
 
   const identityUploadOk =
@@ -279,31 +301,74 @@ const applicantForm = useForm<any>({
         first_name: props.applicant?.applicant_profile?.first_name ?? '',
         middle_name: props.applicant?.applicant_profile?.middle_name ?? '',
         surname: props.applicant?.applicant_profile?.surname ?? '',
-        nrc_number: props.applicant?.applicant_profile?.nrc_number ?? '',
-        passport_number: props.applicant?.applicant_profile?.passport_number ?? '',
+        gender: (props.applicant?.applicant_profile?.gender ?? '').toString(),
+        identity_type: (
+          trimStr(props.applicant?.applicant_profile?.identity_type) ||
+          (trimStr(props.applicant?.applicant_profile?.nrc_number) ? 'nrc' : trimStr(props.applicant?.applicant_profile?.passport_number) ? 'passport' : 'nrc')
+        ).toString(),
+        identity_number: (
+          (trimStr(props.applicant?.applicant_profile?.identity_type) || (trimStr(props.applicant?.applicant_profile?.nrc_number) ? 'nrc' : trimStr(props.applicant?.applicant_profile?.passport_number) ? 'passport' : 'nrc')).toString().toLowerCase() === 'passport'
+            ? trimStr(props.applicant?.applicant_profile?.passport_number)
+            : trimStr(props.applicant?.applicant_profile?.nrc_number)
+        ).toString(),
       }),
 })
 
 type SubmittingFor = 'self' | 'other'
 const institutionOnlyOnBehalf = computed(() => applicantType.value === 'institution')
+
+const applicantIdentityNumberCache = ref<{ nrc: string; passport: string }>({
+  nrc: trimStr(props.applicant?.applicant_profile?.nrc_number),
+  passport: trimStr(props.applicant?.applicant_profile?.passport_number),
+})
+
+watch(
+  () => applicantForm.identity_type,
+  (next, prev) => {
+    if (applicantType.value === 'institution') return
+    const prevKey = (prev ?? '').toString().toLowerCase() === 'passport' ? 'passport' : 'nrc'
+    applicantIdentityNumberCache.value[prevKey as 'nrc' | 'passport'] = trimStr(applicantForm.identity_number)
+    const nextKey = (next ?? '').toString().toLowerCase() === 'passport' ? 'passport' : 'nrc'
+    applicantForm.identity_number = (applicantIdentityNumberCache.value[nextKey as 'nrc' | 'passport'] ?? '').toString()
+    applicantForm.clearErrors()
+  },
+)
+
+const applicantIdentityNumberLabel = computed(() =>
+  (applicantForm.identity_type ?? '').toString().toLowerCase() === 'passport' ? 'Passport number' : 'NRC number',
+)
 const submittingForForm = useForm<{
   submitting_for: SubmittingFor
-  subject_full_name: string
+  subject_first_name: string
+  subject_other_names: string
+  subject_last_name: string
   subject_email: string
   subject_phone: string
-  subject_nrc_number: string
-  subject_passport_number: string
-  profile_nrc_number: string
-  profile_passport_number: string
+  gender: string
+  identity_type: string
+  identity_number: string
 }>({
   submitting_for: (props.application?.metadata?.submitting_for ?? (institutionOnlyOnBehalf.value ? 'other' : 'self')) as SubmittingFor,
-  subject_full_name: (props.application?.metadata?.verification_subject?.full_name ?? '').toString(),
+  subject_first_name: (props.application?.metadata?.verification_subject?.first_name ?? '').toString(),
+  subject_other_names: (props.application?.metadata?.verification_subject?.other_names ?? '').toString(),
+  subject_last_name: (props.application?.metadata?.verification_subject?.last_name ?? '').toString(),
   subject_email: (props.application?.metadata?.verification_subject?.email ?? '').toString(),
   subject_phone: (props.application?.metadata?.verification_subject?.phone ?? '').toString(),
-  subject_nrc_number: (props.application?.metadata?.verification_subject?.nrc_number ?? '').toString(),
-  subject_passport_number: (props.application?.metadata?.verification_subject?.passport_number ?? '').toString(),
-  profile_nrc_number: (props.applicant?.applicant_profile?.nrc_number ?? '').toString(),
-  profile_passport_number: (props.applicant?.applicant_profile?.passport_number ?? '').toString(),
+  gender: (props.application?.metadata?.verification_subject?.gender ?? '').toString(),
+  identity_type: (
+    trimStr(props.application?.metadata?.verification_subject?.identity_type) ||
+    (trimStr(props.application?.metadata?.verification_subject?.nrc_number) ? 'nrc' : trimStr(props.application?.metadata?.verification_subject?.passport_number) ? 'passport' : 'nrc')
+  ).toString(),
+  identity_number: (
+    (trimStr(props.application?.metadata?.verification_subject?.identity_type) || (trimStr(props.application?.metadata?.verification_subject?.nrc_number) ? 'nrc' : trimStr(props.application?.metadata?.verification_subject?.passport_number) ? 'passport' : 'nrc')).toString().toLowerCase() === 'passport'
+      ? trimStr(props.application?.metadata?.verification_subject?.passport_number)
+      : trimStr(props.application?.metadata?.verification_subject?.nrc_number)
+  ).toString(),
+})
+
+const subjectIdentityNumberCache = ref<{ nrc: string; passport: string }>({
+  nrc: trimStr(props.application?.metadata?.verification_subject?.nrc_number),
+  passport: trimStr(props.application?.metadata?.verification_subject?.passport_number),
 })
 
 watch(
@@ -317,15 +382,58 @@ watch(
   { immediate: true },
 )
 
-/** Keep PATCH payloads aligned when “Myself” uses only the main biodata fields (no duplicate NRC inputs). */
 watch(
-  () => [applicantForm.nrc_number, applicantForm.passport_number],
-  ([nrc, passport]) => {
-    submittingForForm.profile_nrc_number = (nrc ?? '').toString()
-    submittingForForm.profile_passport_number = (passport ?? '').toString()
+  () => submittingForForm.identity_type,
+  (next, prev) => {
+    const prevKey = (prev ?? '').toString().toLowerCase() === 'passport' ? 'passport' : 'nrc'
+    subjectIdentityNumberCache.value[prevKey as 'nrc' | 'passport'] = trimStr(submittingForForm.identity_number)
+    const nextKey = (next ?? '').toString().toLowerCase() === 'passport' ? 'passport' : 'nrc'
+    submittingForForm.identity_number = (subjectIdentityNumberCache.value[nextKey as 'nrc' | 'passport'] ?? '').toString()
+    submittingForForm.clearErrors()
   },
-  { immediate: true },
 )
+
+const submittingForIdentityNumberLabel = computed(() =>
+  (submittingForForm.identity_type ?? '').toString().toLowerCase() === 'passport' ? 'Passport number' : 'NRC number',
+)
+
+const identityUploadForm = useForm<{ identity_type: string; file: File | null }>({
+  identity_type: 'nrc',
+  file: null,
+})
+
+const savedSubmittingFor = computed(() => trimStr(props.application?.metadata?.submitting_for ?? 'self') || 'self')
+const effectiveSubmittingFor = computed(() => (institutionOnlyOnBehalf.value ? 'other' : submittingForForm.submitting_for))
+
+const identityUploadDisabled = computed(() => {
+  if (identityUploadForm.processing) return true
+  return trimStr(effectiveSubmittingFor.value) !== savedSubmittingFor.value
+})
+
+const identityUploadLabel = computed(() => {
+  const type =
+    effectiveSubmittingFor.value === 'other'
+      ? trimStr(submittingForForm.identity_type).toLowerCase()
+      : trimStr(applicantForm.identity_type).toLowerCase()
+  return type === 'passport' ? 'Upload passport copy' : 'Upload NRC copy'
+})
+
+function uploadIdentityDocument() {
+  const type =
+    effectiveSubmittingFor.value === 'other'
+      ? trimStr(submittingForForm.identity_type).toLowerCase()
+      : trimStr(applicantForm.identity_type).toLowerCase()
+  identityUploadForm.identity_type = type === 'passport' ? 'passport' : 'nrc'
+
+  identityUploadForm.post(`/applicant/applications/${props.application.id}/identity-document`, {
+    forceFormData: true,
+    preserveScroll: true,
+    onSuccess: () => {
+      identityUploadForm.reset('file')
+      router.reload({ only: ['application', 'applicant'] })
+    },
+  })
+}
 
 function saveSubmittingFor() {
   setSaving('Saving verification subject…')
@@ -1007,33 +1115,54 @@ onBeforeUnmount(() => {
             </div>
 
             <div v-else class="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
-              <div class="sm:col-span-2">
-                <label class="text-sm font-medium">Full name (as on NRC/Passport)</label>
-                <input v-model="submittingForForm.subject_full_name" class="zaqa-input" />
-                <InputError :message="(submittingForForm.errors as any).subject_full_name" />
+              <div>
+                <label class="text-sm font-medium">First name</label>
+                <input v-model="submittingForForm.subject_first_name" class="zaqa-input" autocomplete="off" />
+                <InputError :message="(submittingForForm.errors as any).subject_first_name" />
               </div>
               <div>
-                <label class="text-sm font-medium">Email (optional)</label>
+                <label class="text-sm font-medium">Other names (optional)</label>
+                <input v-model="submittingForForm.subject_other_names" class="zaqa-input" autocomplete="off" />
+                <InputError :message="(submittingForForm.errors as any).subject_other_names" />
+              </div>
+              <div>
+                <label class="text-sm font-medium">Last name</label>
+                <input v-model="submittingForForm.subject_last_name" class="zaqa-input" autocomplete="off" />
+                <InputError :message="(submittingForForm.errors as any).subject_last_name" />
+              </div>
+              <div>
+                <label class="text-sm font-medium">Gender</label>
+                <select v-model="submittingForForm.gender" class="zaqa-input">
+                  <option value="" disabled>Select gender</option>
+                  <option value="male">Male</option>
+                  <option value="female">Female</option>
+                </select>
+                <InputError :message="(submittingForForm.errors as any).gender" />
+              </div>
+
+              <div>
+                <label class="text-sm font-medium">Email (required if no phone provided)</label>
                 <input v-model="submittingForForm.subject_email" type="email" class="zaqa-input" />
                 <InputError :message="(submittingForForm.errors as any).subject_email" />
               </div>
               <div>
-                <label class="text-sm font-medium">Phone (optional)</label>
+                <label class="text-sm font-medium">Phone (required if no email provided)</label>
                 <input v-model="submittingForForm.subject_phone" class="zaqa-input" />
                 <InputError :message="(submittingForForm.errors as any).subject_phone" />
               </div>
+
               <div>
-                <label class="text-sm font-medium">NRC number</label>
-                <input v-model="submittingForForm.subject_nrc_number" class="zaqa-input" />
-                <InputError :message="(submittingForForm.errors as any).subject_nrc_number" />
+                <label class="text-sm font-medium">Identity type</label>
+                <select v-model="submittingForForm.identity_type" class="zaqa-input">
+                  <option value="nrc">NRC</option>
+                  <option value="passport">Passport</option>
+                </select>
+                <InputError :message="(submittingForForm.errors as any).identity_type" />
               </div>
               <div>
-                <label class="text-sm font-medium">Passport number</label>
-                <input v-model="submittingForForm.subject_passport_number" class="zaqa-input" />
-                <InputError :message="(submittingForForm.errors as any).subject_passport_number" />
-              </div>
-              <div class="sm:col-span-2 text-xs text-text-muted">
-                You must provide <span class="font-semibold text-text-primary">either NRC or Passport</span> (or both).
+                <label class="text-sm font-medium">{{ submittingForIdentityNumberLabel }}</label>
+                <input v-model="submittingForForm.identity_number" class="zaqa-input" autocomplete="off" />
+                <InputError :message="(submittingForForm.errors as any).identity_number" />
               </div>
             </div>
           </div>
@@ -1056,12 +1185,33 @@ onBeforeUnmount(() => {
               "
               class="mt-4"
             >
-              <DocumentManager
-                :upload-url="`/applicant/applications/${application.id}/documents`"
-                :documents="application.documents"
-                :transcript-required="false"
-                documents-scope="identity_only"
+              <div v-if="identityUploadDisabled" class="mb-3 rounded-lg border border-warning/25 bg-warning/10 px-3 py-2 text-xs text-warning">
+                Save the verification subject selection above before uploading an identity document.
+              </div>
+
+              <label class="text-sm font-medium text-text-primary">{{ identityUploadLabel }}</label>
+              <input
+                type="file"
+                class="zaqa-input mt-2"
+                accept=".pdf,.jpg,.jpeg,.png,.webp,application/pdf,image/jpeg,image/png,image/webp"
+                :disabled="identityUploadDisabled"
+                @change="(e) => {
+                  const t = e.target as HTMLInputElement
+                  identityUploadForm.file = t.files?.[0] ?? null
+                }"
               />
+              <InputError :message="identityUploadForm.errors.file" class="mt-1" />
+
+              <div class="mt-3 flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  class="zaqa-btn zaqa-btn-primary px-4 py-2 text-sm"
+                  :disabled="identityUploadDisabled || !identityUploadForm.file"
+                  @click="uploadIdentityDocument"
+                >
+                  Upload document
+                </button>
+              </div>
             </div>
             <div
               v-else
@@ -1083,13 +1233,13 @@ onBeforeUnmount(() => {
 
           <form class="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2" @submit.prevent="saveApplicantDetails">
             <div class="sm:col-span-2">
-              <label class="text-sm font-medium">Email (optional)</label>
+              <label class="text-sm font-medium">Email (required if no phone number provided)</label>
               <input v-model="applicantForm.email" type="email" class="zaqa-input" />
               <InputError :message="applicantForm.errors.email" />
             </div>
 
             <div>
-              <label class="text-sm font-medium">Primary phone (optional)</label>
+              <label class="text-sm font-medium">Primary phone (required if no email provided)</label>
               <input v-model="applicantForm.phone_primary" class="zaqa-input" />
               <InputError :message="applicantForm.errors.phone_primary" />
             </div>
@@ -1138,17 +1288,26 @@ onBeforeUnmount(() => {
                 <InputError :message="applicantForm.errors.surname" />
               </div>
               <div>
-                <label class="text-sm font-medium">NRC number</label>
-                <input v-model="applicantForm.nrc_number" class="zaqa-input" />
-                <InputError :message="applicantForm.errors.nrc_number" />
+                <label class="text-sm font-medium">Gender</label>
+                <select v-model="applicantForm.gender" class="zaqa-input">
+                  <option value="" disabled>Select gender</option>
+                  <option value="male">Male</option>
+                  <option value="female">Female</option>
+                </select>
+                <InputError :message="applicantForm.errors.gender" />
+              </div>
+              <div>
+                <label class="text-sm font-medium">Identity type</label>
+                <select v-model="applicantForm.identity_type" class="zaqa-input">
+                  <option value="nrc">NRC</option>
+                  <option value="passport">Passport</option>
+                </select>
+                <InputError :message="applicantForm.errors.identity_type" />
               </div>
               <div class="sm:col-span-2">
-                <label class="text-sm font-medium">Passport number</label>
-                <input v-model="applicantForm.passport_number" class="zaqa-input" />
-                <InputError :message="applicantForm.errors.passport_number" />
-              </div>
-              <div class="sm:col-span-2 text-xs text-text-muted">
-                You must provide <span class="font-semibold text-text-primary">either NRC or Passport</span> (or both).
+                <label class="text-sm font-medium">{{ applicantIdentityNumberLabel }}</label>
+                <input v-model="applicantForm.identity_number" class="zaqa-input" autocomplete="off" />
+                <InputError :message="applicantForm.errors.identity_number" />
               </div>
             </template>
 
@@ -1181,9 +1340,9 @@ onBeforeUnmount(() => {
                 <GraduationCap class="h-3.5 w-3.5" aria-hidden="true" />
                 Qualifications
               </div>
-              <h2 class="mt-3 text-2xl font-semibold tracking-tight text-text-primary">Verification portfolio</h2>
+              <h2 class="mt-3 text-2xl font-semibold tracking-tight text-text-primary">Qualifications for verification</h2>
               <p class="mt-2 text-sm leading-relaxed text-text-muted">
-                Each qualification opens in a dedicated workspace: awarding country and institution, programme details, certificate uploads, and — when the award is outside Zambia — the institution consent template.
+                Add the qualifications you want verified.
               </p>
             </div>
             <button
@@ -1255,7 +1414,7 @@ onBeforeUnmount(() => {
                 </div>
                 <p class="mt-4 text-base font-semibold text-text-primary">No qualifications yet</p>
                 <p class="mt-2 max-w-md mx-auto text-sm text-text-muted">
-                  Add each programme or certificate you want verified. You can manage documents and institution consent inside the workspace.
+                  Certificates, diplomas, and degrees can be added here..
                 </p>
                 <button
                   type="button"
@@ -1814,13 +1973,19 @@ onBeforeUnmount(() => {
                     <div class="text-[11px] font-semibold uppercase tracking-wider text-text-muted">Surname</div>
                     <div class="mt-1 text-sm font-semibold text-text-primary">{{ applicantForm.surname || '—' }}</div>
                   </div>
-                  <div v-if="trimStr(applicantForm.nrc_number)" class="rounded-xl border border-border bg-surface-muted px-4 py-3">
-                    <div class="text-[11px] font-semibold uppercase tracking-wider text-text-muted">NRC number</div>
-                    <div class="mt-1 text-sm font-semibold text-text-primary">{{ applicantForm.nrc_number }}</div>
+                  <div v-if="trimStr(applicantForm.gender)" class="rounded-xl border border-border bg-surface-muted px-4 py-3">
+                    <div class="text-[11px] font-semibold uppercase tracking-wider text-text-muted">Gender</div>
+                    <div class="mt-1 text-sm font-semibold text-text-primary">{{ applicantForm.gender }}</div>
                   </div>
-                  <div v-if="trimStr(applicantForm.passport_number)" class="rounded-xl border border-border bg-surface-muted px-4 py-3 sm:col-span-2">
-                    <div class="text-[11px] font-semibold uppercase tracking-wider text-text-muted">Passport number</div>
-                    <div class="mt-1 text-sm font-semibold text-text-primary">{{ applicantForm.passport_number }}</div>
+                  <div v-if="trimStr(applicantForm.identity_type)" class="rounded-xl border border-border bg-surface-muted px-4 py-3">
+                    <div class="text-[11px] font-semibold uppercase tracking-wider text-text-muted">Identity type</div>
+                    <div class="mt-1 text-sm font-semibold text-text-primary">{{ applicantForm.identity_type }}</div>
+                  </div>
+                  <div v-if="trimStr(applicantForm.identity_number)" class="rounded-xl border border-border bg-surface-muted px-4 py-3 sm:col-span-2">
+                    <div class="text-[11px] font-semibold uppercase tracking-wider text-text-muted">
+                      {{ (trimStr(applicantForm.identity_type).toLowerCase() === 'passport') ? 'Passport number' : 'NRC number' }}
+                    </div>
+                    <div class="mt-1 text-sm font-semibold text-text-primary">{{ applicantForm.identity_number }}</div>
                   </div>
                 </template>
               </div>

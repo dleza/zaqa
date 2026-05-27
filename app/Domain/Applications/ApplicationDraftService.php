@@ -10,6 +10,7 @@ use App\Enums\LifecycleStage;
 use App\Enums\LifecycleVisibility;
 use App\Models\Application;
 use App\Models\ApplicationStatusHistory;
+use App\Models\ApplicantProfile;
 use App\Models\User;
 use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\DB;
@@ -26,7 +27,20 @@ class ApplicationDraftService
     }
 
     /**
-     * @param array{service_type:string, qualification_category:string, is_foreign:bool, submitting_for?:string, subject_full_name?:string, subject_email?:string, subject_phone?:string, subject_nrc_number?:string, subject_passport_number?:string, profile_nrc_number?:string, profile_passport_number?:string} $data
+     * @param array{
+     *   service_type:string,
+     *   qualification_category:string,
+     *   is_foreign:bool,
+     *   submitting_for?:string,
+     *   subject_first_name?:string,
+     *   subject_other_names?:string,
+     *   subject_last_name?:string,
+     *   subject_email?:string,
+     *   subject_phone?:string,
+     *   gender?:string,
+     *   identity_type?:string,
+     *   identity_number?:string
+     * } $data
      */
     public function createDraft(User $user, array $data): Application
     {
@@ -42,27 +56,27 @@ class ApplicationDraftService
             $this->persistApplicantIdentityFromWizard($user, $data);
             $user->load(['applicantProfile', 'institutionProfile']);
 
+            $identityTypeIn = $this->normalizeIdentityType($data['identity_type'] ?? null);
+            $identityNumberIn = trim((string) ($data['identity_number'] ?? ''));
+            $genderIn = $this->normalizeGender($data['gender'] ?? null);
+
             $metadata['verification_subject'] = $submittingFor === 'other'
-                ? array_filter([
-                    'full_name' => $data['subject_full_name'] ?? null,
-                    'email' => $data['subject_email'] ?? null,
-                    'phone' => $data['subject_phone'] ?? null,
-                    'nrc_number' => $data['subject_nrc_number'] ?? null,
-                    'passport_number' => $data['subject_passport_number'] ?? null,
-                ], fn ($v) => $v !== null && $v !== '')
-                : array_filter([
-                    'full_name' => ($user->applicantProfile
-                        ? trim((string) implode(' ', array_filter([
-                            $user->applicantProfile->first_name,
-                            $user->applicantProfile->middle_name,
-                            $user->applicantProfile->surname,
-                        ], fn ($v) => is_string($v) && trim($v) !== '')))
-                        : ($user->institutionProfile?->institution_name ?? $user->name)),
-                    'email' => $user->email,
-                    'phone' => $user->phone_primary,
-                    'nrc_number' => $user->applicantProfile?->nrc_number ?? null,
-                    'passport_number' => $user->applicantProfile?->passport_number ?? null,
-                ], fn ($v) => $v !== null && $v !== '');
+                ? array_filter($this->buildOtherVerificationSubject(
+                    firstName: $data['subject_first_name'] ?? null,
+                    otherNames: $data['subject_other_names'] ?? null,
+                    lastName: $data['subject_last_name'] ?? null,
+                    email: $data['subject_email'] ?? null,
+                    phone: $data['subject_phone'] ?? null,
+                    gender: $genderIn,
+                    identityType: $identityTypeIn,
+                    identityNumber: $identityNumberIn,
+                ), fn ($v) => $v !== null && $v !== '')
+                : array_filter($this->buildSelfVerificationSubject(
+                    user: $user,
+                    genderOverride: $genderIn,
+                    identityTypeOverride: $identityTypeIn,
+                    identityNumberOverride: $identityNumberIn,
+                ), fn ($v) => $v !== null && $v !== '');
             $metadata['submitting_for'] = $submittingFor;
 
             $application = $this->createWithUniqueNumber([
@@ -167,27 +181,27 @@ class ApplicationDraftService
 
             $actor->loadMissing(['applicantProfile', 'institutionProfile']);
 
+            $identityTypeIn = $this->normalizeIdentityType($data['identity_type'] ?? null);
+            $identityNumberIn = trim((string) ($data['identity_number'] ?? ''));
+            $genderIn = $this->normalizeGender($data['gender'] ?? null);
+
             $meta['verification_subject'] = $submittingFor === 'other'
-                ? array_filter([
-                    'full_name' => $data['subject_full_name'] ?? null,
-                    'email' => $data['subject_email'] ?? null,
-                    'phone' => $data['subject_phone'] ?? null,
-                    'nrc_number' => $data['subject_nrc_number'] ?? null,
-                    'passport_number' => $data['subject_passport_number'] ?? null,
-                ], fn ($v) => $v !== null && $v !== '')
-                : array_filter([
-                    'full_name' => ($actor->applicantProfile
-                        ? trim((string) implode(' ', array_filter([
-                            $actor->applicantProfile->first_name,
-                            $actor->applicantProfile->middle_name,
-                            $actor->applicantProfile->surname,
-                        ], fn ($v) => is_string($v) && trim($v) !== '')))
-                        : ($actor->institutionProfile?->institution_name ?? $actor->name)),
-                    'email' => $actor->email,
-                    'phone' => $actor->phone_primary,
-                    'nrc_number' => $actor->applicantProfile?->nrc_number ?? null,
-                    'passport_number' => $actor->applicantProfile?->passport_number ?? null,
-                ], fn ($v) => $v !== null && $v !== '');
+                ? array_filter($this->buildOtherVerificationSubject(
+                    firstName: $data['subject_first_name'] ?? null,
+                    otherNames: $data['subject_other_names'] ?? null,
+                    lastName: $data['subject_last_name'] ?? null,
+                    email: $data['subject_email'] ?? null,
+                    phone: $data['subject_phone'] ?? null,
+                    gender: $genderIn,
+                    identityType: $identityTypeIn,
+                    identityNumber: $identityNumberIn,
+                ), fn ($v) => $v !== null && $v !== '')
+                : array_filter($this->buildSelfVerificationSubject(
+                    user: $actor,
+                    genderOverride: $genderIn,
+                    identityTypeOverride: $identityTypeIn,
+                    identityNumberOverride: $identityNumberIn,
+                ), fn ($v) => $v !== null && $v !== '');
 
             $application->metadata = $meta;
         }
@@ -198,10 +212,29 @@ class ApplicationDraftService
         if (array_key_exists('submitting_for', $data)) {
             $application->loadMissing('qualifications');
             $subject = $application->metadata['verification_subject'] ?? null;
-            $holderName = is_array($subject) ? trim((string) ($subject['full_name'] ?? '')) : '';
-            $holderId = is_array($subject)
-                ? trim((string) (($subject['nrc_number'] ?? '') ?: ($subject['passport_number'] ?? '')))
-                : '';
+            $holderName = '';
+            if (is_array($subject)) {
+                $holderName = trim((string) ($subject['full_name'] ?? ''));
+                if ($holderName === '') {
+                    $holderName = trim((string) implode(' ', array_filter([
+                        (string) ($subject['first_name'] ?? ''),
+                        (string) ($subject['other_names'] ?? ''),
+                        (string) ($subject['last_name'] ?? ''),
+                    ], fn ($v) => trim((string) $v) !== '')));
+                }
+            }
+
+            $holderId = '';
+            if (is_array($subject)) {
+                $identityType = $this->normalizeIdentityType($subject['identity_type'] ?? null);
+                $holderId = $identityType === 'passport'
+                    ? trim((string) ($subject['passport_number'] ?? ''))
+                    : trim((string) ($subject['nrc_number'] ?? ''));
+
+                if ($holderId === '') {
+                    $holderId = trim((string) (($subject['nrc_number'] ?? '') ?: ($subject['passport_number'] ?? '')));
+                }
+            }
 
             foreach ($application->qualifications as $qualification) {
                 if ($holderName !== '') {
@@ -332,22 +365,53 @@ class ApplicationDraftService
             return;
         }
 
-        $nrcIn = trim((string) ($data['profile_nrc_number'] ?? ''));
-        $passIn = trim((string) ($data['profile_passport_number'] ?? ''));
-        if ($nrcIn === '' && $passIn === '') {
+        $genderIn = $this->normalizeGender($data['gender'] ?? null);
+        $identityType = $this->normalizeIdentityType($data['identity_type'] ?? null);
+        $identityNumber = trim((string) ($data['identity_number'] ?? ''));
+
+        if ($genderIn === null && $identityType === null && $identityNumber === '') {
             return;
         }
 
-        $profile = $user->applicantProfile;
-        if (! $profile) {
-            return;
+        $profile = $user->applicantProfile ?: new ApplicantProfile(['user_id' => $user->id]);
+        $profile->user_id = $user->id;
+
+        $dirty = false;
+
+        if ($genderIn !== null && $genderIn !== '' && $profile->gender !== $genderIn) {
+            $profile->gender = $genderIn;
+            $dirty = true;
         }
 
-        if ($nrcIn !== '') {
-            $profile->nrc_number = $nrcIn;
+        if ($identityType !== null && $identityType !== '' && $profile->identity_type !== $identityType) {
+            $profile->identity_type = $identityType;
+            $dirty = true;
         }
-        if ($passIn !== '') {
-            $profile->passport_number = $passIn;
+
+        if ($identityType !== null && $identityType !== '' && $identityNumber !== '') {
+            if ($identityType === 'passport') {
+                if ($profile->passport_number !== $identityNumber) {
+                    $profile->passport_number = $identityNumber;
+                    $dirty = true;
+                }
+                if ($profile->nrc_number !== null) {
+                    $profile->nrc_number = null;
+                    $dirty = true;
+                }
+            } else {
+                if ($profile->nrc_number !== $identityNumber) {
+                    $profile->nrc_number = $identityNumber;
+                    $dirty = true;
+                }
+                if ($profile->passport_number !== null) {
+                    $profile->passport_number = null;
+                    $dirty = true;
+                }
+            }
+        }
+
+        if (! $dirty) {
+            return;
         }
 
         $profile->save();
@@ -399,5 +463,122 @@ class ApplicationDraftService
             return $application;
         });
     }
-}
 
+    private function normalizeGender(mixed $value): ?string
+    {
+        $v = strtolower(trim((string) ($value ?? '')));
+        if ($v === '') {
+            return null;
+        }
+        if (in_array($v, ['m', 'male'], true)) {
+            return 'male';
+        }
+        if (in_array($v, ['f', 'female'], true)) {
+            return 'female';
+        }
+
+        return null;
+    }
+
+    private function normalizeIdentityType(mixed $value): ?string
+    {
+        $v = strtolower(trim((string) ($value ?? '')));
+        if ($v === '') {
+            return null;
+        }
+        if (in_array($v, ['nrc'], true)) {
+            return 'nrc';
+        }
+        if (in_array($v, ['passport'], true)) {
+            return 'passport';
+        }
+
+        return null;
+    }
+
+    /**
+     * @return array<string, string|null>
+     */
+    private function buildOtherVerificationSubject(
+        mixed $firstName,
+        mixed $otherNames,
+        mixed $lastName,
+        mixed $email,
+        mixed $phone,
+        ?string $gender,
+        ?string $identityType,
+        string $identityNumber,
+    ): array
+    {
+        $first = trim((string) ($firstName ?? ''));
+        $other = trim((string) ($otherNames ?? ''));
+        $last = trim((string) ($lastName ?? ''));
+
+        $fullName = trim((string) implode(' ', array_filter([$first, $other, $last], fn ($v) => trim((string) $v) !== '')));
+
+        $email = trim((string) ($email ?? ''));
+        $phone = trim((string) ($phone ?? ''));
+
+        return [
+            'first_name' => $first !== '' ? $first : null,
+            'other_names' => $other !== '' ? $other : null,
+            'last_name' => $last !== '' ? $last : null,
+            'full_name' => $fullName !== '' ? $fullName : null,
+            'gender' => $gender,
+            'identity_type' => $identityType,
+            'email' => $email !== '' ? $email : null,
+            'phone' => $phone !== '' ? $phone : null,
+            'nrc_number' => $identityType === 'nrc' && $identityNumber !== '' ? $identityNumber : null,
+            'passport_number' => $identityType === 'passport' && $identityNumber !== '' ? $identityNumber : null,
+        ];
+    }
+
+    /**
+     * @return array<string, string|null>
+     */
+    private function buildSelfVerificationSubject(
+        User $user,
+        ?string $genderOverride,
+        ?string $identityTypeOverride,
+        string $identityNumberOverride,
+    ): array
+    {
+        $profile = $user->applicantProfile;
+
+        $first = trim((string) ($profile?->first_name ?? ''));
+        $other = trim((string) ($profile?->middle_name ?? ''));
+        $last = trim((string) ($profile?->surname ?? ''));
+        $fullName = $profile
+            ? trim((string) implode(' ', array_filter([$first, $other, $last], fn ($v) => trim((string) $v) !== '')))
+            : trim((string) ($user->institutionProfile?->institution_name ?? $user->name));
+
+        $gender = $genderOverride ?: $this->normalizeGender($profile?->gender ?? null);
+
+        $identityType = $identityTypeOverride ?: $this->normalizeIdentityType($profile?->identity_type ?? null);
+        if ($identityType === null) {
+            $hasNrc = trim((string) ($profile?->nrc_number ?? '')) !== '';
+            $hasPassport = trim((string) ($profile?->passport_number ?? '')) !== '';
+            $identityType = $hasNrc ? 'nrc' : ($hasPassport ? 'passport' : null);
+        }
+
+        $idNumber = '';
+        if ($identityType === 'passport') {
+            $idNumber = $identityNumberOverride !== '' ? $identityNumberOverride : trim((string) ($profile?->passport_number ?? ''));
+        } elseif ($identityType === 'nrc') {
+            $idNumber = $identityNumberOverride !== '' ? $identityNumberOverride : trim((string) ($profile?->nrc_number ?? ''));
+        }
+
+        return [
+            'first_name' => $first !== '' ? $first : null,
+            'other_names' => $other !== '' ? $other : null,
+            'last_name' => $last !== '' ? $last : null,
+            'full_name' => $fullName !== '' ? $fullName : null,
+            'gender' => $gender,
+            'identity_type' => $identityType,
+            'email' => trim((string) ($user->email ?? '')) !== '' ? (string) $user->email : null,
+            'phone' => trim((string) ($user->phone_primary ?? '')) !== '' ? (string) $user->phone_primary : null,
+            'nrc_number' => $identityType === 'nrc' && $idNumber !== '' ? $idNumber : null,
+            'passport_number' => $identityType === 'passport' && $idNumber !== '' ? $idNumber : null,
+        ];
+    }
+}

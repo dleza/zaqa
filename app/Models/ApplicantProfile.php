@@ -12,8 +12,10 @@ class ApplicantProfile extends Model
         'first_name',
         'middle_name',
         'surname',
+        'gender',
         'nrc_number',
         'passport_number',
+        'identity_type',
         'email',
         'phone_primary',
         'phone_secondary',
@@ -40,4 +42,3 @@ class ApplicantProfile extends Model
         return $this->belongsTo(User::class);
     }
 }
-

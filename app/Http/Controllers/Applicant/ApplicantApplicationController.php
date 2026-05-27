@@ -350,7 +350,12 @@ class ApplicantApplicationController extends Controller
         ]);
     }
 
-    public function store(CreateApplicationDraftRequest $request, ApplicationDraftService $drafts, ApplicantDocumentService $documents): RedirectResponse
+    public function store(
+        CreateApplicationDraftRequest $request,
+        ApplicationDraftService $drafts,
+        ApplicantDocumentService $documents,
+        \App\Domain\Applicants\ApplicantIdentityDocumentService $identityDocuments,
+    ): RedirectResponse
     {
         $validated = $request->validated();
         $validated['service_type'] = ServiceType::Verification->value;
@@ -358,12 +363,15 @@ class ApplicantApplicationController extends Controller
         $application = $drafts->createDraft($request->user(), $validated);
 
         if ($request->hasFile('identity_file')) {
-            $raw = (string) $request->input('identity_document_type', DocumentType::NrcCopy->value);
-            $type = DocumentType::tryFrom($raw) ?? DocumentType::NrcCopy;
-            if (! in_array($type, [DocumentType::NrcCopy, DocumentType::PassportCopy], true)) {
-                $type = DocumentType::NrcCopy;
+            $submittingFor = (string) ($validated['submitting_for'] ?? 'self');
+            $rawIdentityType = strtolower(trim((string) ($validated['identity_type'] ?? 'nrc')));
+            $type = $rawIdentityType === 'passport' ? DocumentType::PassportCopy : DocumentType::NrcCopy;
+
+            if ($submittingFor === 'other') {
+                $documents->upload($application, $type, $request->file('identity_file'), $request->user(), null);
+            } else {
+                $identityDocuments->saveProfileIdentityDocument($request->user(), $request->file('identity_file'), $request->user());
             }
-            $documents->upload($application, $type, $request->file('identity_file'), $request->user(), null);
         }
 
         return redirect()->route('applicant.applications.edit', ['application' => $application, 'step' => 'qualification'])
@@ -1039,8 +1047,10 @@ class ApplicantApplicationController extends Controller
                     'first_name',
                     'middle_name',
                     'surname',
+                    'gender',
                     'nrc_number',
                     'passport_number',
+                    'identity_type',
                     'email',
                     'phone_primary',
                     'phone_secondary',

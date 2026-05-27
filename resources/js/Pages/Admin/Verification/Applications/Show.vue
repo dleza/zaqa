@@ -38,6 +38,13 @@ const isViewerAssignedLevel1 = computed<boolean>(() => {
   return (props.application.assigned_level1_user_id ?? null) === props.viewerUserId
 })
 
+const applicantGenderLabel = computed<string | null>(() => {
+  const v = (props.application?.applicant?.gender ?? '').toString().trim().toLowerCase()
+  if (v === 'male') return 'Male'
+  if (v === 'female') return 'Female'
+  return null
+})
+
 const canShowReturnToLevel1 = computed(() => props.can.level2_review && state.value === 'under_level2_review')
 const canShowApprove = computed(() => props.can.approve && state.value === 'under_level2_review')
 const canShowReject = computed(() => props.can.reject && state.value === 'under_level2_review')
@@ -229,6 +236,7 @@ const slaProgressPct = computed(() => {
               <div class="mt-1 text-sm font-semibold text-text-primary">{{ application.applicant?.name ?? '—' }}</div>
               <div class="mt-1 text-xs text-text-muted">{{ application.applicant?.email ?? '—' }}</div>
               <div class="mt-1 text-xs text-text-muted">{{ application.applicant?.phone ?? '—' }}</div>
+              <div class="mt-1 text-xs text-text-muted">Gender: {{ applicantGenderLabel ?? '—' }}</div>
               <div class="mt-1 text-xs text-text-muted">NRC/Passport: {{ application.applicant?.nrc_passport ?? '—' }}</div>
             </div>
             <div class="sm:col-span-2">

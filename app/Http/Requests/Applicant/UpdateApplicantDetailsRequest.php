@@ -54,26 +54,14 @@ class UpdateApplicantDetailsRequest extends FormRequest
             'first_name' => ['required', 'string', 'max:255'],
             'middle_name' => ['nullable', 'string', 'max:255'],
             'surname' => ['required', 'string', 'max:255'],
-            'nrc_number' => ['nullable', 'string', 'max:100'],
-            'passport_number' => ['nullable', 'string', 'max:100'],
+            'gender' => ['required', 'string', 'in:male,female'],
+            'identity_type' => ['required', 'string', 'in:nrc,passport'],
+            'identity_number' => ['required', 'string', 'max:100'],
         ];
     }
 
     public function withValidator(Validator $validator): void
     {
-        $validator->after(function (Validator $validator) {
-            $user = $this->user();
-            if (! $user || ($user->applicant_type?->value ?? null) !== ApplicantType::Individual->value) {
-                return;
-            }
-
-            $nrc = trim((string) $this->input('nrc_number', ''));
-            $passport = trim((string) $this->input('passport_number', ''));
-
-            if ($nrc === '' && $passport === '') {
-                $validator->errors()->add('nrc_number', 'Provide NRC or passport number.');
-                $validator->errors()->add('passport_number', 'Provide NRC or passport number.');
-            }
-        });
+        // no-op (rules handle all validation)
     }
 }
