@@ -633,6 +633,63 @@ function formatMoneyCents(cents: number) {
   return new Intl.NumberFormat(undefined, { style: 'currency', currency: c }).format((cents || 0) / 100)
 }
 
+function paymentStatusLabel(status: unknown): string {
+  const s = (status ?? '').toString().trim()
+  if (!s) return 'Pending payment'
+  switch (s) {
+    case 'draft':
+      return 'Pending payment'
+    case 'initiated':
+      return 'Payment started'
+    case 'pending_confirmation':
+      return 'Awaiting confirmation'
+    case 'awaiting_finance_review':
+      return 'Awaiting finance review'
+    case 'confirmed':
+      return 'Payment confirmed'
+    case 'rejected':
+      return 'Rejected'
+    case 'failed':
+      return 'Failed'
+    case 'expired':
+      return 'Expired'
+    default:
+      return s.replaceAll('_', ' ')
+  }
+}
+
+function paymentStatusBadgeClass(status: unknown): string {
+  const s = (status ?? '').toString().trim()
+  if (s === 'confirmed') return 'zaqa-badge-success'
+  if (s === 'rejected' || s === 'failed' || s === 'expired') return 'zaqa-badge-danger'
+  if (s === 'awaiting_finance_review' || s === 'pending_confirmation' || s === 'initiated') return 'zaqa-badge-warning'
+  return 'zaqa-badge-warning'
+}
+
+function invoiceStatusLabel(status: unknown): string {
+  const s = (status ?? '').toString().trim()
+  if (!s) return 'Pending payment'
+  switch (s) {
+    case 'draft':
+      return 'Preparing'
+    case 'issued':
+      return 'Pending payment'
+    case 'paid':
+      return 'Paid'
+    case 'void':
+      return 'Voided'
+    default:
+      return s.replaceAll('_', ' ')
+  }
+}
+
+function invoiceStatusBadgeClass(status: unknown): string {
+  const s = (status ?? '').toString().trim()
+  if (s === 'paid') return 'zaqa-badge-success'
+  if (s === 'void') return 'zaqa-badge-danger'
+  return 'zaqa-badge-warning'
+}
+
 function submitCorrectionsToZaqa(qualificationId: number) {
   finalizeAmendmentForm.post(`/applicant/applications/${props.application.id}/qualifications/${qualificationId}/finalize-amendment`, {
     preserveScroll: true,
@@ -948,30 +1005,6 @@ watch(
   },
 )
 
-const wizardCompletion = computed(() => {
-  const stepKeys = steps.value.map((s) => s.key as StepKey)
-  const total = stepKeys.length
-  const completed = stepKeys.filter((k) => stepCompletion.value[k]).length
-  const percent = total > 0 ? Math.min(100, Math.max(0, Math.round((completed / total) * 100))) : 0
-
-  return { total, completed, percent }
-})
-
-/** Where you are in the stepper (distinct from checklist completion — requirements can be 0% while you browse steps). */
-const wizardStepPosition = computed(() => {
-  const keys = steps.value.map((s) => s.key as StepKey)
-  const idx = Math.max(0, keys.indexOf(activeStep.value))
-  const total = keys.length
-  const percent = total > 0 ? Math.min(100, Math.round(((idx + 1) / total) * 100)) : 0
-  const stepMeta = steps.value[idx]
-  return {
-    current: idx + 1,
-    total,
-    percent,
-    label: (stepMeta?.label ?? '') as string,
-  }
-})
-
 const disabledStepKeys = computed<StepKey[]>(() => {
   const keys = steps.value.map((s) => s.key) as StepKey[]
   // find first incomplete step; allow up to that step (inclusive)
@@ -1137,43 +1170,14 @@ onBeforeUnmount(() => {
           </div>
         </div>
 
-        <div class="mt-4">
-          <WizardStepper :steps="steps" :active-key="activeStep" :on-step-click="requestStepChange" :disabled-keys="disabledStepKeys" />
-        </div>
+	        <div class="mt-4">
+	          <WizardStepper :steps="steps" :active-key="activeStep" :on-step-click="requestStepChange" :disabled-keys="disabledStepKeys" />
+	        </div>
+	      </div>
+	    </template>
 
-        <div class="mt-3 rounded-xl border border-border bg-surface px-4 py-3">
-          <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-            <div class="min-w-0">
-              <div class="text-[11px] font-semibold uppercase tracking-wider text-text-muted">Completion</div>
-              <div class="mt-0.5 truncate text-sm font-semibold text-text-primary">
-                Requirements {{ wizardCompletion.completed }} / {{ wizardCompletion.total }} • {{ wizardCompletion.percent }}%
-              </div>
-              <div class="mt-1 text-xs text-text-muted">
-                Step {{ wizardStepPosition.current }} / {{ wizardStepPosition.total }} — {{ wizardStepPosition.label }}
-              </div>
-            </div>
-            <span v-if="wizardCompletion.percent === 100" class="zaqa-badge zaqa-badge-success">Payment confirmed</span>
-          </div>
-
-          <div class="mt-3 h-2.5 w-full overflow-hidden rounded-full border border-border bg-surface-muted">
-            <div
-              class="h-full rounded-full bg-brand bg-gradient-to-r from-brand to-brand/60 shadow-sm transition-[width] duration-500 ease-out"
-              :style="{ width: `${wizardCompletion.percent}%` }"
-              role="progressbar"
-              :aria-valuenow="wizardCompletion.percent"
-              aria-valuemin="0"
-              aria-valuemax="100"
-              aria-label="Application completion"
-            />
-          </div>
-        </div>
-      </div>
-    </template>
-
-    <div
-      class="w-full max-w-none mx-auto -mx-4 px-4 sm:-mx-6 sm:px-6 lg:-mx-6 lg:px-8 2xl:-mx-10 2xl:px-10"
-    >
-    <WizardShell class="zaqa-wizard-shell" :show-sidebar="showSidebar">
+	    <div class="w-full max-w-none mx-auto -mx-4 px-4 sm:-mx-6 sm:px-6 lg:-mx-6 lg:px-8 2xl:-mx-10 2xl:px-10">
+	      <WizardShell class="zaqa-wizard-shell" :show-sidebar="showSidebar">
         <section v-if="activeStep === 'applicant'" class="rounded-xl border border-border bg-surface p-5">
           <h2 class="text-sm font-semibold text-text-primary">Applicant details</h2>
           <p class="mt-1 text-xs text-text-muted">Confirm your details for communication and verification.</p>
@@ -1813,52 +1817,49 @@ onBeforeUnmount(() => {
           </div>
         </section>
 
-        <section v-else-if="activeStep === 'payment'" class="rounded-xl border border-border bg-surface p-5">
-          <div class="flex items-start justify-between gap-4">
-            <div>
-              <h2 class="text-sm font-semibold text-text-primary">Payment</h2>
-              <p class="mt-1 text-xs text-text-muted">Choose a payment method and complete payment before submission.</p>
-            </div>
-            <span
-              class="zaqa-badge"
-              :class="(payment?.status ?? '') === 'confirmed' ? 'zaqa-badge-success' : 'zaqa-badge-warning'"
-            >
-              <component :is="(payment?.status ?? '') === 'confirmed' ? CheckCircle2 : AlertCircle" class="h-4 w-4" aria-hidden="true" />
-              {{ (payment?.status ?? '') === 'confirmed' ? 'Confirmed' : 'Not confirmed' }}
-            </span>
-          </div>
+	        <section v-else-if="activeStep === 'payment'" class="rounded-xl border border-border bg-surface p-4 sm:p-5">
+	          <div>
+	            <h2 class="text-sm font-semibold text-text-primary">Payment</h2>
+	            <p class="mt-1 text-xs text-text-muted">Choose a payment method below.</p>
+	          </div>
 
-          <!-- Invoice summary -->
-          <div class="mt-4 rounded-xl border border-border bg-surface-muted p-4">
-            <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-              <div class="min-w-0">
-                <div class="text-xs font-semibold text-text-muted uppercase tracking-wider">Invoice</div>
-                <div class="mt-1 truncate text-sm font-semibold text-text-primary">
-                  {{ invoice?.invoice_number ?? (paymentInvoiceReady ? 'Preparing invoice…' : '—') }}
-                </div>
-                <div class="mt-1 text-xs text-text-muted">
-                  Application: <span class="font-mono font-semibold text-text-primary">{{ application.application_number }}</span>
-                </div>
-                <div v-if="invoice?.fee_label_snapshot" class="mt-1 text-xs text-text-muted">{{ invoice.fee_label_snapshot }}</div>
-              </div>
+	          <!-- Invoice summary -->
+	          <div class="mt-4 rounded-2xl bg-surface p-4 shadow-sm ring-1 ring-black/[0.04] sm:p-5">
+	            <div class="grid gap-4 sm:grid-cols-2 sm:items-start">
+	              <div class="order-3 min-w-0 sm:order-1">
+	                <div class="text-[11px] font-semibold uppercase tracking-wider text-text-muted">Invoice</div>
+	                <div class="mt-1 truncate text-base font-semibold text-text-primary">
+	                  {{ invoice?.invoice_number ?? (paymentInvoiceReady ? 'Preparing invoice…' : '—') }}
+	                </div>
+	              </div>
+	              <div class="order-1 text-left sm:order-2 sm:text-right">
+	                <div class="text-[11px] font-semibold uppercase tracking-wider text-text-muted">Amount due</div>
+	                <div class="mt-1 text-2xl font-semibold tracking-tight text-text-primary sm:text-3xl">
+	                  {{ ((invoice?.amount_cents ?? (invoice ? 0 : invoiceTotalPreview.amountCents)) / 100).toFixed(2) }}
+	                  <span class="text-sm font-semibold text-text-muted">{{ invoice?.currency ?? invoiceTotalPreview.currency }}</span>
+	                </div>
+	              </div>
 
-              <div class="flex items-start gap-3">
-                <div class="text-right">
-                  <div class="text-xs font-semibold text-text-muted uppercase tracking-wider">Amount</div>
-                  <div class="mt-1 text-2xl font-semibold tracking-tight text-text-primary">
-                    {{ ((invoice?.amount_cents ?? (invoice ? 0 : invoiceTotalPreview.amountCents)) / 100).toFixed(2) }}
-                    <span class="text-sm font-semibold text-text-muted">{{ invoice?.currency ?? invoiceTotalPreview.currency }}</span>
-                  </div>
-                </div>
-                <span class="zaqa-badge" :class="invoice?.status === 'paid' ? 'zaqa-badge-success' : 'zaqa-badge-warning'">
-                  {{ invoice?.status ?? 'issued' }}
-                </span>
-              </div>
-            </div>
+	              <div class="order-4 min-w-0 sm:order-3">
+	                <div class="text-[11px] font-semibold uppercase tracking-wider text-text-muted">Application reference</div>
+	                <div class="mt-1 truncate font-mono text-sm font-semibold text-text-primary">
+	                  {{ application.application_number }}
+	                </div>
+	                <div v-if="invoice?.fee_label_snapshot" class="mt-1 text-xs text-text-muted">{{ invoice.fee_label_snapshot }}</div>
+	              </div>
 
-            <div
-              v-if="application?.supplementary_invoice"
-              class="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-950"
+	              <div class="order-2 flex items-end justify-between gap-3 sm:order-4 sm:flex-col sm:items-end sm:justify-end">
+	                <div class="text-[11px] font-semibold uppercase tracking-wider text-text-muted sm:text-right">Status</div>
+	                <span class="zaqa-badge" :class="paymentStatusBadgeClass(payment?.status)">
+	                  <component :is="(payment?.status ?? '') === 'confirmed' ? CheckCircle2 : AlertCircle" class="h-4 w-4" aria-hidden="true" />
+	                  {{ paymentStatusLabel(payment?.status) }}
+	                </span>
+	              </div>
+	            </div>
+
+	            <div
+	              v-if="application?.supplementary_invoice"
+	              class="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-950"
             >
               <div class="font-semibold text-text-primary">Supplementary invoice (top-up)</div>
               <div class="mt-1 font-mono text-xs">{{ application.supplementary_invoice.invoice_number }}</div>
@@ -1911,10 +1912,10 @@ onBeforeUnmount(() => {
             </div>
           </div>
 
-          <!-- Payment tabs -->
-          <div class="mt-5">
+	          <!-- Payment tabs -->
+	          <div class="mt-4">
             <!-- Confirmed state (read-only) -->
-            <div v-if="invoiceSettled" class="rounded-2xl border border-success/20 bg-success/10 p-5">
+	            <div v-if="invoiceSettled" class="rounded-2xl border border-success/20 bg-success/10 p-4 sm:p-5">
               <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                 <div>
                   <div class="text-sm font-semibold text-success">Payment confirmed</div>
@@ -1951,74 +1952,84 @@ onBeforeUnmount(() => {
               </div>
             </div>
 
-            <div v-else-if="invoice">
-            <div class="flex gap-2 overflow-x-auto rounded-xl border border-border bg-surface p-2">
-	              <button
-	                type="button"
-	                class="flex min-w-[10.5rem] flex-1 items-center gap-2 rounded-lg px-3 py-2 text-left text-sm font-semibold transition"
-	                :class="activePaymentTab === 'card' ? 'bg-brand/10 text-brand ring-1 ring-brand/20' : 'text-text-muted hover:bg-surface-muted'"
-	                @click="setPaymentTab('card')"
-	              >
-	                <CreditCard class="h-4 w-4" aria-hidden="true" />
-	                <span>Card payment</span>
-	              </button>
-	              <button
-	                type="button"
-	                class="flex min-w-[10.5rem] flex-1 items-center gap-2 rounded-lg px-3 py-2 text-left text-sm font-semibold transition"
-	                :class="activePaymentTab === 'bank_transfer' ? 'bg-brand/10 text-brand ring-1 ring-brand/20' : 'text-text-muted hover:bg-surface-muted'"
-	                @click="setPaymentTab('bank_transfer')"
-	              >
-	                <Landmark class="h-4 w-4" aria-hidden="true" />
-	                <span>Bank transfer</span>
-	              </button>
-	              <button
-	                type="button"
-	                class="flex min-w-[10.5rem] flex-1 items-center gap-2 rounded-lg px-3 py-2 text-left text-sm font-semibold transition"
-	                :class="activePaymentTab === 'mobile_money' ? 'bg-brand/10 text-brand ring-1 ring-brand/20' : 'text-text-muted hover:bg-surface-muted'"
-	                @click="setPaymentTab('mobile_money')"
-	              >
-	                <Smartphone class="h-4 w-4" aria-hidden="true" />
-	                <span>Mobile Money</span>
-	              </button>
-	            </div>
-
-            <div class="mt-4 rounded-xl border border-border bg-surface p-4">
+		            <div v-else-if="invoice">
+		              <div
+		                class="flex gap-2 overflow-x-auto rounded-2xl bg-surface p-2 shadow-sm ring-1 ring-black/[0.04] sm:grid sm:grid-cols-3 sm:overflow-visible"
+		                role="tablist"
+		                aria-label="Payment method"
+		              >
+		                <button
+		                  type="button"
+		                  role="tab"
+		                  :aria-selected="activePaymentTab === 'card'"
+		                  class="flex min-w-[9.5rem] shrink-0 items-center gap-2 rounded-xl px-3 py-2 text-left text-sm font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background sm:min-w-0 sm:w-full"
+		                  :class="activePaymentTab === 'card' ? 'bg-brand/10 text-brand ring-1 ring-brand/20 shadow-sm' : 'text-text-muted hover:bg-surface-muted'"
+		                  @click="setPaymentTab('card')"
+		                >
+		                  <CreditCard class="h-4 w-4" aria-hidden="true" />
+	                  <span>Card payment</span>
+	                </button>
+		                <button
+		                  type="button"
+		                  role="tab"
+		                  :aria-selected="activePaymentTab === 'bank_transfer'"
+		                  class="flex min-w-[9.5rem] shrink-0 items-center gap-2 rounded-xl px-3 py-2 text-left text-sm font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background sm:min-w-0 sm:w-full"
+		                  :class="activePaymentTab === 'bank_transfer' ? 'bg-brand/10 text-brand ring-1 ring-brand/20 shadow-sm' : 'text-text-muted hover:bg-surface-muted'"
+		                  @click="setPaymentTab('bank_transfer')"
+		                >
+		                  <Landmark class="h-4 w-4" aria-hidden="true" />
+	                  <span>Bank transfer</span>
+	                </button>
+		                <button
+		                  type="button"
+		                  role="tab"
+		                  :aria-selected="activePaymentTab === 'mobile_money'"
+		                  class="flex min-w-[9.5rem] shrink-0 items-center gap-2 rounded-xl px-3 py-2 text-left text-sm font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background sm:min-w-0 sm:w-full"
+		                  :class="activePaymentTab === 'mobile_money' ? 'bg-brand/10 text-brand ring-1 ring-brand/20 shadow-sm' : 'text-text-muted hover:bg-surface-muted'"
+		                  @click="setPaymentTab('mobile_money')"
+		                >
+		                  <Smartphone class="h-4 w-4" aria-hidden="true" />
+	                  <span>Mobile Money</span>
+	                </button>
+	              </div>
+	
+		              <div class="mt-3 rounded-2xl bg-surface p-4 shadow-sm ring-1 ring-black/[0.04] sm:mt-4 sm:p-5">
               <!-- Card -->
               <div v-if="activePaymentTab === 'card'">
                 <div class="text-sm font-semibold text-text-primary">Pay by card</div>
                 <div class="mt-1 text-xs text-text-muted">You’ll be redirected to the payment gateway and returned here after the attempt.</div>
 
-                <div class="mt-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                  <button
-                    type="button"
-                    class="zaqa-btn zaqa-btn-primary w-full sm:w-auto"
-                    :disabled="(payment?.status ?? '') === 'confirmed' || cardInitiateForm.processing"
-                    @click="initiateCardPayment"
-                  >
-                    Pay by card
-                  </button>
-	                  <div class="text-xs text-text-muted">
-	                    Status: <span class="font-semibold text-text-primary">{{ payment?.status ?? 'not started' }}</span>
-	                  </div>
-	                </div>
-	              </div>
+	                <div class="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+	                  <button
+	                    type="button"
+	                    class="zaqa-btn zaqa-btn-primary w-full sm:w-auto"
+	                    :disabled="(payment?.status ?? '') === 'confirmed' || cardInitiateForm.processing"
+	                    @click="initiateCardPayment"
+	                  >
+	                    Pay by card
+	                  </button>
+		                  <div class="text-xs text-text-muted">
+		                    Status: <span class="font-semibold text-text-primary">{{ paymentStatusLabel(payment?.status) }}</span>
+		                  </div>
+		                </div>
+		              </div>
 
               <!-- Bank transfer -->
-              <div v-else-if="activePaymentTab === 'bank_transfer'">
-                <div class="text-sm font-semibold text-text-primary">Upload proof of payment</div>
-                <div class="mt-1 text-xs text-text-muted">
-                  Upload your bank transfer proof. Finance will review and approve before you can submit.
-                </div>
-
-                <div class="mt-3 flex items-center justify-between gap-3">
-	                  <span class="zaqa-badge" :class="(payment?.status ?? '') === 'confirmed' ? 'zaqa-badge-success' : (payment?.status ?? '') === 'rejected' ? 'zaqa-badge-danger' : 'zaqa-badge-warning'">
-	                    {{ payment?.status ?? 'not started' }}
-	                  </span>
-	                  <div v-if="payment?.proof_document" class="flex flex-wrap gap-2 text-xs">
-	                    <a :href="payment.proof_document.preview_url" target="_blank" rel="noopener" class="zaqa-link">Preview proof</a>
-	                    <a :href="payment.proof_document.download_url" target="_blank" rel="noopener" class="zaqa-link">Download proof</a>
-	                  </div>
-                </div>
+	              <div v-else-if="activePaymentTab === 'bank_transfer'">
+	                <div class="text-sm font-semibold text-text-primary">Upload proof of payment</div>
+	                <div class="mt-1 text-xs text-text-muted">
+	                  Upload your bank transfer proof. Finance will review and confirm your payment.
+	                </div>
+	
+	                <div class="mt-3 flex items-center justify-between gap-3">
+		                  <span class="zaqa-badge" :class="paymentStatusBadgeClass(payment?.status)">
+		                    {{ paymentStatusLabel(payment?.status) }}
+		                  </span>
+		                  <div v-if="payment?.proof_document" class="flex flex-wrap gap-2 text-xs">
+		                    <a :href="payment.proof_document.preview_url" target="_blank" rel="noopener" class="zaqa-link">Preview proof</a>
+		                    <a :href="payment.proof_document.download_url" target="_blank" rel="noopener" class="zaqa-link">Download proof</a>
+		                  </div>
+	                </div>
 
                 <div v-if="payment?.rejection_reason" class="mt-3 rounded-lg border border-danger/20 bg-danger/10 px-3 py-2 text-xs text-danger">
                   Rejected: {{ payment.rejection_reason }}
@@ -2078,13 +2089,14 @@ onBeforeUnmount(() => {
                     >
                       Check status
                     </button>
-                  </div>
-                  <div class="text-xs text-text-muted">
-                    Status: <span class="font-semibold text-text-primary">{{ mobileMoneyPayment?.status ?? payment?.status ?? 'not started' }}</span>
-                  </div>
-                </div>
+	                  </div>
+	                  <div class="text-xs text-text-muted">
+	                    Status:
+	                    <span class="font-semibold text-text-primary">{{ paymentStatusLabel(mobileMoneyPayment?.status ?? payment?.status) }}</span>
+	                  </div>
+	                </div>
 
-                <div v-if="props.cgrate?.enabled && (mobileMoneyAttempt || mobileMoneyPayment?.provider_reference)" class="mt-4 rounded-xl border border-border bg-surface-muted p-4 text-sm">
+	                <div v-if="props.cgrate?.enabled && (mobileMoneyAttempt || mobileMoneyPayment?.provider_reference)" class="mt-4 rounded-xl bg-surface-muted p-4 text-sm ring-1 ring-black/[0.04]">
                   <div class="grid gap-3 sm:grid-cols-2">
                     <div>
                       <div class="text-[11px] font-semibold uppercase tracking-wider text-text-muted">Payment reference</div>
@@ -2117,9 +2129,14 @@ onBeforeUnmount(() => {
                     <span>Payment confirmed.</span>
                   </div>
                 </div>
-	              </div>
+              </div>
+
+              <div class="mt-4 inline-flex items-start gap-2 rounded-xl bg-surface-muted px-3 py-2 text-xs text-text-muted ring-1 ring-black/[0.04]">
+                <Lock class="mt-0.5 h-4 w-4 text-brand" aria-hidden="true" />
+                <span>Payments are securely processed and verified by ZAQA.</span>
+              </div>
             </div>
-            </div>
+          </div>
 
             <div v-else class="rounded-xl border border-border bg-surface-muted px-4 py-4 text-sm text-text-muted">
               <div v-if="paymentInvoiceMissingSteps.length > 0">
