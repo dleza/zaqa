@@ -111,7 +111,7 @@ const activeStep = ref<StepKey>('applicant')
 const steps = computed(() => [
   { key: 'applicant' as const, label: 'Applicant' },
   { key: 'qualification' as const, label: 'Qualification' },
-  { key: 'consent' as const, label: 'Declarations' },
+  { key: 'consent' as const, label: 'Confirm' },
   { key: 'payment' as const, label: 'Payment' },
 ])
 
@@ -411,8 +411,8 @@ watch(
             <li class="flex gap-3">
               <CheckCircle2 class="mt-0.5 h-5 w-5 shrink-0 text-text-muted" aria-hidden="true" />
               <div>
-                <div class="text-sm font-semibold text-text-primary">Declarations</div>
-                <p class="mt-1 text-sm leading-relaxed text-text-muted">Declarations and any required consent uploads.</p>
+                <div class="text-sm font-semibold text-text-primary">Confirm</div>
+                <p class="mt-1 text-sm leading-relaxed text-text-muted">Confirm your details before payment.</p>
               </div>
             </li>
             <li class="flex gap-3">

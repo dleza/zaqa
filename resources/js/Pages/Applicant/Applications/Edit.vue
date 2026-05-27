@@ -14,10 +14,14 @@ import {
   CreditCard,
   FileDown,
   GraduationCap,
+  Hash,
+  IdCard,
   Landmark,
+  Lock,
   PenLine,
   PlusCircle,
   Smartphone,
+  UserRound,
   Upload,
 } from 'lucide-vue-next'
 
@@ -60,7 +64,7 @@ type StepKey = 'applicant' | 'qualification' | 'consent' | 'payment'
 const steps = computed(() => [
   { key: 'applicant' as const, label: 'Applicant' },
   { key: 'qualification' as const, label: 'Qualification' },
-  { key: 'consent' as const, label: 'Declarations' },
+  { key: 'consent' as const, label: 'Confirm' },
   { key: 'payment' as const, label: 'Payment' },
 ])
 
@@ -514,11 +518,11 @@ function removeQualification(id: number) {
 }
 
 function saveDeclarations() {
-  setSaving('Saving declarations…')
+  setSaving('Saving confirmations…')
   declarationsForm.patch(`/applicant/applications/${props.application.id}/wizard-declarations`, {
     preserveScroll: true,
     onSuccess: () => {
-      setSaved('Declarations saved.')
+      setSaved('Confirmations saved.')
       router.reload({
         only: ['application'],
         onSuccess: () => {
@@ -534,11 +538,68 @@ function saveDeclarations() {
       })
     },
     onError: () => {
-      setError('Declarations could not be saved.')
+      setError('Confirmations could not be saved.')
       if (saveState.value.state === 'saving') saveState.value = { state: 'idle' }
     },
   })
 }
+
+function escapeHtml(unsafe: string): string {
+  return unsafe
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/\"/g, '&quot;')
+    .replace(/'/g, '&#039;')
+}
+
+function openTermsModal() {
+  const title = (props.declarationsCopy?.terms_title ?? 'Terms and conditions').toString()
+  const body = (props.declarationsCopy?.terms_body ?? '').toString()
+  void Swal.fire({
+    icon: 'info',
+    titleText: title,
+    html: `<div class="text-left whitespace-pre-wrap text-sm leading-relaxed text-text-primary max-h-[60vh] overflow-auto">${escapeHtml(body)}</div>`,
+    confirmButtonText: 'Close',
+    confirmButtonColor: '#0076BD',
+    width: 860,
+  })
+}
+
+function formatPersonName(firstName: string, otherNames: string, lastName: string): string {
+  const parts = [trimStr(firstName), trimStr(otherNames), trimStr(lastName)].filter(Boolean)
+  return parts.join(' ')
+}
+
+const consentSubjectSummary = computed(() => {
+  const submittingFor = (effectiveSubmittingFor.value ?? 'self').toString().trim()
+  const vs = (props.application?.metadata?.verification_subject ?? {}) as Record<string, any>
+
+  const profile = (props.applicant?.applicant_profile ?? {}) as Record<string, any>
+  const fullName =
+    formatPersonName(vs.first_name ?? '', vs.other_names ?? '', vs.last_name ?? '') ||
+    formatPersonName(profile.first_name ?? '', profile.middle_name ?? '', profile.surname ?? '') ||
+    trimStr(props.applicant?.name)
+
+  const identityTypeRaw =
+    trimStr(vs.identity_type) ||
+    (trimStr(vs.passport_number) ? 'passport' : trimStr(vs.nrc_number) ? 'nrc' : '') ||
+    trimStr(profile.identity_type) ||
+    (trimStr(profile.passport_number) ? 'passport' : trimStr(profile.nrc_number) ? 'nrc' : '')
+
+  const identityType = identityTypeRaw.toLowerCase() === 'passport' ? 'Passport' : identityTypeRaw ? 'NRC' : ''
+  const identityNumber =
+    identityTypeRaw.toLowerCase() === 'passport'
+      ? trimStr(vs.passport_number) || trimStr(profile.passport_number)
+      : trimStr(vs.nrc_number) || trimStr(profile.nrc_number)
+
+  return {
+    submittingFor,
+    fullName: fullName || '—',
+    identification: identityType && identityNumber ? `${identityType} ${identityNumber}` : '—',
+    applicationReference: trimStr(props.application?.application_number) || '—',
+  }
+})
 
 // Manual application submission has been removed; payment confirmation triggers automatic submission.
 // Keep no-op bindings to avoid template errors if legacy review markup remains.
@@ -834,6 +895,59 @@ const stepCompletion = computed(() => {
   } as Record<StepKey, boolean>
 })
 
+const paymentInvoiceReady = computed(() => {
+  return (
+    stepCompletion.value.applicant &&
+    stepCompletion.value.qualification &&
+    stepCompletion.value.consent &&
+    !applicationLocked.value
+  )
+})
+
+const paymentInvoiceMissingSteps = computed(() => {
+  const missing: StepKey[] = []
+  if (!stepCompletion.value.applicant) missing.push('applicant')
+  if (!stepCompletion.value.qualification) missing.push('qualification')
+  if (!stepCompletion.value.consent) missing.push('consent')
+  return missing
+})
+
+const invoicePreparation = ref<{ auto_attempted: boolean; auto_failed: boolean }>({ auto_attempted: false, auto_failed: false })
+
+function prepareInvoice(auto = false) {
+  if (prepareInvoiceForm.processing) return
+  if (applicationLocked.value) return
+  if (invoice.value) return
+
+  // Avoid auto-retrying in a loop on validation/config errors.
+  if (auto && invoicePreparation.value.auto_attempted) return
+
+  if (auto) {
+    invoicePreparation.value.auto_attempted = true
+    invoicePreparation.value.auto_failed = false
+  }
+
+  prepareInvoiceForm.post(`/applicant/applications/${props.application.id}/payment/prepare`, {
+    preserveScroll: true,
+    onSuccess: () => {
+      invoicePreparation.value.auto_failed = false
+      router.reload({ only: ['application'] })
+    },
+    onError: () => {
+      if (auto) invoicePreparation.value.auto_failed = true
+    },
+  })
+}
+
+watch(
+  () => activeStep.value,
+  (step) => {
+    if (step !== 'payment') return
+    if (paymentInvoiceMissingSteps.value.length > 0) return
+    prepareInvoice(true)
+  },
+)
+
 const wizardCompletion = computed(() => {
   const stepKeys = steps.value.map((s) => s.key as StepKey)
   const total = stepKeys.length
@@ -908,7 +1022,7 @@ function stepIncompleteHtml(step: StepKey): string | null {
     if (!declarationsForm.accept_terms || !declarationsForm.confirm_information_correct) {
       return '<p class="text-sm text-left">Tick both declaration checkboxes to continue.</p>'
     }
-    return '<p class="text-sm text-left">Click <strong>Save &amp; continue</strong> to record your confirmation and proceed to the next step.</p>'
+    return '<p class="text-sm text-left">Click <strong>Continue to payment</strong> to record your confirmation and proceed.</p>'
   }
   if (step === 'payment') {
     return '<p class="text-sm text-left">Confirm payment for this application before continuing.</p>'
@@ -996,7 +1110,7 @@ onBeforeUnmount(() => {
           <div>
             <h1 class="text-2xl font-semibold tracking-tight text-text-primary">Application</h1>
             <p class="mt-1 text-sm text-text-muted">
-              {{ application.application_number }} • {{ application.status_label }} — work through Applicant, Qualification, Declarations, then Payment.
+              {{ application.application_number }} • {{ application.status_label }} — work through Applicant, Qualification, Confirm, then Payment.
             </p>
           </div>
 
@@ -1512,79 +1626,163 @@ onBeforeUnmount(() => {
           </div>
         </section>
 
-        <section v-else-if="activeStep === 'consent'" class="rounded-xl border border-border bg-surface p-5">
+        <section v-else-if="activeStep === 'consent'" class="rounded-2xl border border-border bg-surface p-5 sm:p-6">
           <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-            <div>
-              <h2 class="text-sm font-semibold text-text-primary">Declarations</h2>
-              <p class="mt-1 text-xs text-text-muted">
-                {{
-                  declarationsCopy.page_intro ??
-                  'Confirm the declarations below. Qualification-specific institution consent is completed inside each qualification workspace (previous step), not here.'
-                }}
-              </p>
+            <div class="flex items-start gap-3">
+              <div class="mt-0.5 inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-border bg-surface-muted text-brand">
+                <CheckCircle2 class="h-5 w-5" aria-hidden="true" />
+              </div>
+              <div>
+                <h2 class="text-base font-semibold text-text-primary sm:text-lg">Confirm your application</h2>
+                <p class="mt-1 text-sm text-text-muted">Please review and confirm your application before payment.</p>
+              </div>
             </div>
+
+            <!-- Terms are available via "View full consent terms" in the confirmations card below. -->
           </div>
 
           <div v-if="applicationLocked" class="mt-4 rounded-xl border border-warning/20 bg-warning/10 px-4 py-3 text-sm text-warning">
             Payment is confirmed. This application is now read-only.
           </div>
 
-          <div class="mx-auto mt-6 w-full max-w-5xl space-y-6 lg:max-w-6xl">
-            <div class="rounded-xl border border-border bg-surface-muted p-6 sm:p-8">
-              <div class="text-center text-sm font-semibold text-text-primary">
-                {{ declarationsCopy.terms_title ?? 'Terms and use of the service' }}
+          <div class="mx-auto mt-6 w-full max-w-4xl space-y-6">
+            <div class="rounded-2xl border border-border bg-surface p-5 shadow-sm ring-1 ring-black/[0.03]">
+              <div class="flex items-start gap-3">
+                <div
+                  class="mt-0.5 inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-border bg-surface-muted text-brand"
+                >
+                  <UserRound class="h-5 w-5" aria-hidden="true" />
+                </div>
+                <div class="min-w-0 flex-1">
+                  <div class="text-sm font-semibold text-text-primary">
+                    {{ consentSubjectSummary.submittingFor === 'other' ? 'Qualification holder details' : 'Your details' }}
+                  </div>
+                  <p class="mt-1 text-sm text-text-muted">
+                    {{
+                      consentSubjectSummary.submittingFor === 'other'
+                        ? 'You are personally authorizing ZAQA to verify qualifications for the holder below.'
+                        : 'You are personally authorizing ZAQA to verify your qualifications.'
+                    }}
+                  </p>
+                </div>
               </div>
-              <div class="mt-4 max-h-72 overflow-auto whitespace-pre-wrap text-sm leading-relaxed text-text-primary">
-                {{ declarationsCopy.terms_body ?? '' }}
+
+              <dl class="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
+                <div class="rounded-xl border border-border bg-surface-muted/40 px-4 py-3">
+                  <dt class="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-text-muted">
+                    <UserRound class="h-4 w-4 text-brand" aria-hidden="true" />
+                    Full name
+                  </dt>
+                  <dd class="mt-1 truncate text-sm font-semibold text-text-primary">{{ consentSubjectSummary.fullName }}</dd>
+                </div>
+                <div class="rounded-xl border border-border bg-surface-muted/40 px-4 py-3">
+                  <dt class="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-text-muted">
+                    <IdCard class="h-4 w-4 text-brand" aria-hidden="true" />
+                    Identification
+                  </dt>
+                  <dd class="mt-1 truncate font-mono text-sm font-semibold text-text-primary">
+                    {{ consentSubjectSummary.identification }}
+                  </dd>
+                </div>
+                <div class="rounded-xl border border-border bg-surface-muted/40 px-4 py-3">
+                  <dt class="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-text-muted">
+                    <Hash class="h-4 w-4 text-brand" aria-hidden="true" />
+                    Application reference
+                  </dt>
+                  <dd class="mt-1 truncate font-mono text-sm font-semibold text-text-primary">
+                    {{ consentSubjectSummary.applicationReference }}
+                  </dd>
+                </div>
+              </dl>
+
+              <p class="mt-4 text-xs leading-relaxed text-text-muted">
+                This is a digital confirmation. Your account, date, and time will be recorded.
+              </p>
+            </div>
+
+              <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <div class="rounded-2xl border border-border bg-surface-muted/40 p-4">
+                  <div class="flex items-start gap-3">
+                    <CheckCircle2 class="mt-0.5 h-5 w-5 shrink-0 text-success" aria-hidden="true" />
+                    <div>
+                      <div class="text-sm font-semibold text-text-primary">Verification authorization</div>
+                      <div class="mt-1 text-sm text-text-muted">I authorize ZAQA to verify my qualification information.</div>
+                    </div>
+                  </div>
+                </div>
+                <div class="rounded-2xl border border-border bg-surface-muted/40 p-4">
+                  <div class="flex items-start gap-3">
+                    <CheckCircle2 class="mt-0.5 h-5 w-5 shrink-0 text-success" aria-hidden="true" />
+                    <div>
+                      <div class="text-sm font-semibold text-text-primary">Information accuracy</div>
+                      <div class="mt-1 text-sm text-text-muted">I confirm the information and documents submitted are accurate.</div>
+                    </div>
+                  </div>
+                </div>
+                <div class="rounded-2xl border border-border bg-surface-muted/40 p-4">
+                  <div class="flex items-start gap-3">
+                    <CheckCircle2 class="mt-0.5 h-5 w-5 shrink-0 text-success" aria-hidden="true" />
+                    <div>
+                      <div class="text-sm font-semibold text-text-primary">Information use</div>
+                      <div class="mt-1 text-sm text-text-muted">I understand information is used for verification purposes only.</div>
+                    </div>
+                  </div>
+                </div>
+                <div class="rounded-2xl border border-border bg-surface-muted/40 p-4">
+                  <div class="flex items-start gap-3">
+                    <CheckCircle2 class="mt-0.5 h-5 w-5 shrink-0 text-success" aria-hidden="true" />
+                    <div>
+                      <div class="text-sm font-semibold text-text-primary">Application review</div>
+                      <div class="mt-1 text-sm text-text-muted">Incomplete or misleading applications may be rejected.</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+            <div class="rounded-2xl border border-border bg-surface p-5 shadow-sm ring-1 ring-black/[0.03]">
+              <div class="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                <div>
+                  <div class="text-sm font-semibold text-text-primary">Your confirmations</div>
+                  <p class="mt-1 text-sm text-text-muted">Confirm both items to continue.</p>
+                </div>
+                <button type="button" class="text-sm font-semibold text-brand hover:underline" @click="openTermsModal">
+                  View full consent terms
+                </button>
+              </div>
+
+              <div class="mt-5 space-y-3">
+                <label class="flex cursor-pointer items-start gap-3 rounded-xl border border-border bg-surface-muted/40 px-4 py-3">
+                  <input
+                    v-model="declarationsForm.accept_terms"
+                    type="checkbox"
+                    class="mt-1 h-4 w-4 rounded border-border text-brand focus:ring-brand/30"
+                    :disabled="applicationLocked"
+                  />
+                  <span class="text-sm text-text-primary">I agree to the consent and verification terms above.</span>
+                </label>
+                <InputError :message="declarationsForm.errors.accept_terms" />
+
+                <label class="flex cursor-pointer items-start gap-3 rounded-xl border border-border bg-surface-muted/40 px-4 py-3">
+                  <input
+                    v-model="declarationsForm.confirm_information_correct"
+                    type="checkbox"
+                    class="mt-1 h-4 w-4 rounded border-border text-brand focus:ring-brand/30"
+                    :disabled="applicationLocked"
+                  />
+                  <span class="text-sm text-text-primary">I confirm that the submitted information and documents are accurate and complete.</span>
+                </label>
+                <InputError :message="declarationsForm.errors.confirm_information_correct" />
               </div>
             </div>
 
-            <div class="space-y-4">
-              <label class="flex cursor-pointer items-start gap-3">
-                <input
-                  v-model="declarationsForm.accept_terms"
-                  type="checkbox"
-                  class="mt-1 h-4 w-4 rounded border-border text-brand focus:ring-brand/30"
-                  :disabled="applicationLocked"
-                />
-                <span class="text-sm text-text-primary">{{ declarationsCopy.accept_terms_label ?? 'I accept the terms.' }}</span>
-              </label>
-              <InputError :message="declarationsForm.errors.accept_terms" />
-
-              <label class="flex cursor-pointer items-start gap-3">
-                <input
-                  v-model="declarationsForm.confirm_information_correct"
-                  type="checkbox"
-                  class="mt-1 h-4 w-4 rounded border-border text-brand focus:ring-brand/30"
-                  :disabled="applicationLocked"
-                />
-                <span class="text-sm text-text-primary">{{
-                  declarationsCopy.confirm_accuracy_label ?? 'I confirm that the information I provided is correct.'
-                }}</span>
-              </label>
-              <InputError :message="declarationsForm.errors.confirm_information_correct" />
-            </div>
-
-            <div class="flex flex-wrap items-center gap-3">
-              <button
-                type="button"
-                class="zaqa-btn zaqa-btn-primary"
-                :disabled="
-                  applicationLocked ||
-                  declarationsForm.processing ||
-                  !declarationsForm.accept_terms ||
-                  !declarationsForm.confirm_information_correct
-                "
-                @click="saveDeclarations"
-              >
-                Save &amp; continue
-              </button>
-              <span
-                v-if="application?.wizard_declarations?.terms_accepted_at && application?.wizard_declarations?.information_confirmed_at"
-                class="text-xs font-medium text-emerald-700"
-              >
-                Declarations saved
-              </span>
+            <div class="rounded-2xl border border-border bg-surface-muted/40 px-4 py-3">
+              <div class="flex items-start gap-3">
+                <Lock class="mt-0.5 h-5 w-5 shrink-0 text-brand" aria-hidden="true" />
+                <div class="text-sm text-text-primary">
+                  <span class="font-semibold">Your information is securely processed by ZAQA.</span>
+                  <span class="text-text-muted"> You can review and edit your draft until payment is confirmed.</span>
+                </div>
+              </div>
             </div>
           </div>
 
@@ -1593,10 +1791,25 @@ onBeforeUnmount(() => {
               :show-prev="!!stepNav.prev"
               :show-next="!!stepNav.next"
               prev-label="Previous"
-              next-label="Next"
+              next-label="Continue to payment"
+              :prev-disabled="applicationLocked || declarationsForm.processing"
+              :next-disabled="
+                applicationLocked ||
+                declarationsForm.processing ||
+                !declarationsForm.accept_terms ||
+                !declarationsForm.confirm_information_correct
+              "
               :on-prev="() => stepNav.prev && requestStepChange(stepNav.prev)"
-              :on-next="() => goNext('consent')"
-            />
+              :on-next="saveDeclarations"
+            >
+              <span
+                v-if="application?.wizard_declarations?.terms_accepted_at && application?.wizard_declarations?.information_confirmed_at"
+                class="inline-flex items-center gap-2 rounded-full border border-success/20 bg-success/10 px-3 py-1 text-xs font-semibold text-success"
+              >
+                <CheckCircle2 class="h-4 w-4" aria-hidden="true" />
+                Confirmed
+              </span>
+            </WizardFooterBar>
           </div>
         </section>
 
@@ -1620,7 +1833,12 @@ onBeforeUnmount(() => {
             <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
               <div class="min-w-0">
                 <div class="text-xs font-semibold text-text-muted uppercase tracking-wider">Invoice</div>
-                <div class="mt-1 truncate text-sm font-semibold text-text-primary">{{ invoice?.invoice_number ?? 'Generating…' }}</div>
+                <div class="mt-1 truncate text-sm font-semibold text-text-primary">
+                  {{ invoice?.invoice_number ?? (paymentInvoiceReady ? 'Preparing invoice…' : '—') }}
+                </div>
+                <div class="mt-1 text-xs text-text-muted">
+                  Application: <span class="font-mono font-semibold text-text-primary">{{ application.application_number }}</span>
+                </div>
                 <div v-if="invoice?.fee_label_snapshot" class="mt-1 text-xs text-text-muted">{{ invoice.fee_label_snapshot }}</div>
               </div>
 
@@ -1653,29 +1871,43 @@ onBeforeUnmount(() => {
               </p>
             </div>
             <div v-else class="mt-3 rounded-lg border border-border bg-surface-muted px-3 py-2 text-xs text-text-muted">
-              You can add or edit qualifications until payment is confirmed. If you already paid and an amendment increases the fee, a separate supplementary invoice is
-              created for the difference — your original invoice is not changed.
+              You can edit your application until payment is confirmed.
             </div>
 
             <div v-if="!invoice && !applicationLocked" class="mt-4 flex flex-col gap-3 border-t border-border/60 pt-4 sm:flex-row sm:items-end sm:justify-between">
               <div class="text-sm text-text-muted">
-                Estimated total
-                <span class="font-semibold text-text-primary">{{ (invoiceTotalPreview.amountCents / 100).toFixed(2) }} {{ invoiceTotalPreview.currency }}</span>
-                — generate the invoice to enable payment.
+                <span v-if="paymentInvoiceMissingSteps.length > 0">
+                  Complete the previous steps to unlock payment.
+                </span>
+                <span v-else-if="prepareInvoiceForm.processing">
+                  Preparing your invoice…
+                </span>
+                <span v-else-if="invoicePreparation.auto_failed">
+                  We could not prepare your invoice. Please retry.
+                </span>
+                <span v-else>
+                  Preparing your invoice…
+                </span>
               </div>
-              <button
-                type="button"
-                class="zaqa-btn zaqa-btn-primary shrink-0"
-                :disabled="prepareInvoiceForm.processing || qualificationRows.length === 0"
-                @click="
-                  prepareInvoiceForm.post(`/applicant/applications/${application.id}/payment/prepare`, {
-                    preserveScroll: true,
-                    onSuccess: () => router.reload({ only: ['application'] }),
-                  })
-                "
-              >
-                Generate invoice
-              </button>
+              <div class="flex flex-col gap-2 sm:flex-row sm:items-center">
+                <button
+                  v-if="paymentInvoiceMissingSteps.length > 0"
+                  type="button"
+                  class="zaqa-btn zaqa-btn-secondary shrink-0"
+                  @click="requestStepChange(paymentInvoiceMissingSteps[0])"
+                >
+                  Go to {{ steps.find((s) => s.key === paymentInvoiceMissingSteps[0])?.label ?? 'previous step' }}
+                </button>
+                <button
+                  v-else-if="invoicePreparation.auto_failed"
+                  type="button"
+                  class="zaqa-btn zaqa-btn-secondary shrink-0"
+                  :disabled="prepareInvoiceForm.processing"
+                  @click="prepareInvoice(false)"
+                >
+                  Retry invoice preparation
+                </button>
+              </div>
             </div>
           </div>
 
@@ -1687,7 +1919,7 @@ onBeforeUnmount(() => {
                 <div>
                   <div class="text-sm font-semibold text-success">Payment confirmed</div>
                   <div class="mt-1 text-xs text-text-muted">
-                    This invoice is settled. Payment method options are no longer available.
+                    This invoice is settled. Your application has been automatically submitted for verification.
                   </div>
                 </div>
                 <span class="zaqa-badge zaqa-badge-success">Paid</span>
@@ -1890,7 +2122,15 @@ onBeforeUnmount(() => {
             </div>
 
             <div v-else class="rounded-xl border border-border bg-surface-muted px-4 py-4 text-sm text-text-muted">
-              Generate an invoice using the button in the summary card above. Payment methods unlock once an invoice exists.
+              <div v-if="paymentInvoiceMissingSteps.length > 0">
+                Complete the previous steps to prepare your invoice and unlock payment.
+              </div>
+              <div v-else-if="invoicePreparation.auto_failed">
+                Invoice preparation failed. Use <span class="font-semibold text-text-primary">Retry invoice preparation</span> in the invoice card above.
+              </div>
+              <div v-else>
+                Preparing your invoice…
+              </div>
             </div>
           </div>
 
@@ -2109,7 +2349,7 @@ onBeforeUnmount(() => {
               <!-- Application declarations (terms / accuracy) -->
               <div class="flex items-start justify-between gap-3">
                 <div>
-                  <div class="text-sm font-semibold text-text-primary">5. Declarations</div>
+                  <div class="text-sm font-semibold text-text-primary">5. Confirm</div>
                   <div class="mt-1 text-xs text-text-muted">Portal terms and confirmation that your application information is correct.</div>
                 </div>
                 <button v-if="application.can_edit" type="button" class="zaqa-btn zaqa-btn-secondary px-3 py-2 text-xs" @click="goToStep('consent')">Edit</button>

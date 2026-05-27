@@ -5,6 +5,8 @@ namespace App\Http\Controllers\Applicant;
 use App\Domain\Applications\ApplicationDraftService;
 use App\Domain\Documents\ApplicantDocumentService;
 use App\Domain\Payments\ApplicationPaymentSatisfaction;
+use App\Domain\Applications\ApplicationSubmissionReadinessService;
+use App\Domain\Payments\InvoiceService;
 use App\Enums\ApplicantType;
 use App\Enums\DocumentType;
 use App\Enums\InvoiceStatus;
@@ -32,6 +34,7 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\URL;
+use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -468,6 +471,19 @@ class ApplicantApplicationController extends Controller
 
     private function buildEditInertiaResponse(Request $request, Application $application, ?int $amendmentQualificationId): Response
     {
+        // Payment step UX: prepare invoice automatically when the applicant reaches the Payment step
+        // (only if the application is ready for payment; do not throw on GET).
+        $requestedStep = (string) $request->query('step', '');
+        if ($requestedStep === 'payment' && $request->user()) {
+            try {
+                app(ApplicationSubmissionReadinessService::class)->assertReadyForPayment($application, $request->user());
+                app(InvoiceService::class)->ensureInvoice($application, $request->user());
+                $application->refresh();
+            } catch (ValidationException $e) {
+                // Not ready for payment yet — UI will show missing requirements.
+            }
+        }
+
         $application->load([
             'qualifications.subjectResults',
             'qualifications.certificates',
