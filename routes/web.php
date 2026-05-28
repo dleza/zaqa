@@ -338,6 +338,12 @@ Route::middleware('auth')->group(function () {
         Route::post('/users', [AdminUsersController::class, 'store'])
             ->middleware('can:admin.users.create')
             ->name('users.store');
+        Route::get('/users/{user}/edit', [AdminUsersController::class, 'edit'])
+            ->middleware('can:admin.users.edit')
+            ->name('users.edit');
+        Route::put('/users/{user}', [AdminUsersController::class, 'update'])
+            ->middleware('can:admin.users.edit')
+            ->name('users.update');
         Route::get('/users/{user}', [AdminUsersController::class, 'show'])
             ->middleware('can:admin.users.view')
             ->name('users.show');

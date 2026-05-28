@@ -20,6 +20,7 @@ const props = defineProps<{
 const page = usePage()
 const permissions = computed<string[]>(() => ((page.props as any).auth?.permissions ?? []) as string[])
 const canCreate = computed(() => permissions.value.includes('admin.users.create'))
+const canEdit = computed(() => permissions.value.includes('admin.users.edit'))
 
 const q = ref(props.filters.q ?? '')
 const sort = ref(props.filters.sort ?? 'id')
@@ -59,6 +60,16 @@ function sortIcon(field: string): Component {
 function ariaSort(field: string) {
   if (sort.value !== field) return 'none'
   return dir.value === 'asc' ? 'ascending' : 'descending'
+}
+
+function formatDateTime(iso: string | null | undefined) {
+  if (!iso) return '—'
+
+  try {
+    return new Date(iso).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })
+  } catch {
+    return iso
+  }
 }
 </script>
 
@@ -154,9 +165,14 @@ function ariaSort(field: string) {
             <tr v-for="u in users.data" :key="u.id" class="hover:bg-surface-muted/60">
               <td class="px-5 py-3">
                 <div class="font-semibold text-text-primary">{{ u.name }}</div>
-                <div class="mt-0.5 text-xs text-text-muted">Created {{ u.created_at ?? '—' }}</div>
+                <div class="mt-0.5 text-xs text-text-muted">Created {{ formatDateTime(u.created_at) }}</div>
               </td>
-              <td class="px-5 py-3 text-text-primary">{{ u.email }}</td>
+              <td class="px-5 py-3">
+                <div class="text-text-primary">{{ u.email }}</div>
+                <div class="mt-0.5 text-xs text-text-muted">
+                  Last login {{ u.last_login_at ? formatDateTime(u.last_login_at) : 'Never' }}
+                </div>
+              </td>
               <td class="px-5 py-3 text-text-primary">{{ u.phone_primary ?? '—' }}</td>
               <td class="px-5 py-3">
                 <div class="flex flex-wrap gap-2">
@@ -170,9 +186,14 @@ function ariaSort(field: string) {
                 </span>
               </td>
               <td class="px-5 py-3 text-right">
-                <Link :href="`/admin/users/${u.id}`" class="zaqa-btn zaqa-btn-secondary h-9 px-3 py-2 text-xs">
-                  View
-                </Link>
+                <div class="flex items-center justify-end gap-2">
+                  <Link :href="`/admin/users/${u.id}`" class="zaqa-btn zaqa-btn-secondary h-9 px-3 py-2 text-xs">
+                    View
+                  </Link>
+                  <Link v-if="canEdit" :href="`/admin/users/${u.id}/edit`" class="zaqa-btn zaqa-btn-primary h-9 px-3 py-2 text-xs">
+                    Edit
+                  </Link>
+                </div>
               </td>
             </tr>
           </tbody>

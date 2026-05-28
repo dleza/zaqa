@@ -84,6 +84,13 @@ const permissions = computed<string[]>(() => ((page.props as any).auth?.permissi
           <FlashMessages />
           <slot />
         </main>
+
+        <footer class="border-t border-border bg-surface-muted/60 px-4 py-2.5 text-xs text-text-muted sm:px-6 lg:px-8">
+          <div class="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+            <span>© {{ new Date().getFullYear() }} Zambia Qualifications Authority</span>
+            <span class="hidden sm:inline">Admin portal</span>
+          </div>
+        </footer>
       </div>
     </div>
   </div>
