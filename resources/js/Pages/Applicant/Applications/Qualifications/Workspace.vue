@@ -420,7 +420,7 @@ async function promptAfterQualificationAdded(): Promise<'add_another' | 'back_to
     text: 'What would you like to do next?',
     showDenyButton: true,
     confirmButtonText: 'Review qualifications',
-    denyButtonText: 'Add another',
+    denyButtonText: 'Add another qualification',
     denyButtonColor: '#16a34a',
     reverseButtons: true,
     allowOutsideClick: false,

@@ -5,8 +5,11 @@ namespace App\Http\Controllers\Admin\Verification;
 use App\Domain\Applications\QualificationCaptureService;
 use App\Domain\Certificates\QualificationCertificateService;
 use App\Domain\Payments\ApplicationPaymentSatisfaction;
+use App\Domain\Verification\AutoAssignmentResult;
 use App\Domain\Verification\AssignmentService;
 use App\Domain\Verification\AutoVerifiedQualificationReviewService;
+use App\Domain\Verification\QualificationAutoAssignmentService;
+use App\Domain\Verification\QualificationAutoVerificationRecheckService;
 use App\Domain\Verification\QualificationDecisionService;
 use App\Domain\Verification\QualificationLevel1ReviewService;
 use App\Domain\Verification\QualificationLevel2ReviewLockService;
@@ -38,7 +41,11 @@ use Symfony\Component\HttpFoundation\Response as SymfonyResponse;
 
 class AdminVerificationQualificationController extends Controller
 {
-    public function show(Request $request, Qualification $qualification): Response
+    public function show(
+        Request $request,
+        Qualification $qualification,
+        QualificationCertificateService $certificateService,
+    ): Response
     {
         VerificationQualificationAccess::ensureQualificationAccessible($request->user(), $qualification);
 
@@ -59,6 +66,7 @@ class AdminVerificationQualificationController extends Controller
             'learnerRecord.awardingInstitution',
             'learnerRecordMatchAttempts.learnerRecord',
             'level2ReviewLockedBy',
+            'subjectResults',
         ]);
 
         $applicationModel = $qualification->application;
@@ -104,6 +112,21 @@ class AdminVerificationQualificationController extends Controller
         $lockExpiresAt = $qualification->level2_review_locked_at
             ? $qualification->level2_review_locked_at->copy()->addMinutes($locks->ttlMinutes())
             : null;
+        $canUseRetryActions = (bool) $request->user()?->can('verification.level2.review') || (bool) $request->user()?->hasRole('Super Admin');
+        $recheckDisabledReason = $canUseRetryActions
+            ? $this->recheckAutoVerificationDisabledReason($qualification, $paymentSatisfied)
+            : 'You are not authorized to recheck auto-verification.';
+        $autoAssignDisabledReason = $canUseRetryActions
+            ? $this->autoAssignLevel1DisabledReason($qualification, $paymentSatisfied)
+            : 'You are not authorized to auto-assign this qualification.';
+        $canViewLearnerRecords = (bool) $request->user()?->can('learner_records.view');
+        $learnerRecordsUrl = $canViewLearnerRecords && $qualification->awarding_institution_id
+            ? route('admin.learner_records.index', ['awarding_institution_id' => $qualification->awarding_institution_id])
+            : null;
+        $learnerRecordsDisabledReason = $canViewLearnerRecords && ! $qualification->awarding_institution_id
+            ? 'No linked awarding institution for this qualification.'
+            : null;
+        $certificateTemplate = $certificateService->describeTemplate($qualification);
 
         return Inertia::render('Admin/Verification/Qualifications/Show', [
             'qualification' => [
@@ -143,6 +166,7 @@ class AdminVerificationQualificationController extends Controller
                 'issue_certificate_url' => route('admin.verification.qualifications.issue_certificate', ['qualification' => $qualification]),
                 'can_issue_cveq_certificate' => $canIssueCveq,
                 'can_reissue_cveq_certificate' => $canReissueCveq,
+                'certificate_template' => $certificateTemplate,
                 'qualification_type' => $qualification->qualificationTypeMaster?->name,
                 'title' => $qualification->title_of_qualification,
                 'applicant_entered_qualification_title' => $qualification->applicant_entered_qualification_title,
@@ -155,6 +179,16 @@ class AdminVerificationQualificationController extends Controller
                 'student_number' => $qualification->student_number,
                 'certificate_number' => $qualification->certificate_number,
                 'award_date' => optional($qualification->award_date)?->format('Y-m-d'),
+                'subject_results' => $qualification->subjectResults
+                    ->sortBy(fn ($row) => [$row->display_order ?? PHP_INT_MAX, $row->id])
+                    ->values()
+                    ->map(fn ($row, int $index) => [
+                        'id' => $row->id,
+                        'display_order' => $row->display_order,
+                        'index' => $index + 1,
+                        'subject_name' => $row->subject_name,
+                        'grade' => $row->grade,
+                    ]),
                 'auto_verification' => [
                     'attempted_at' => optional($qualification->auto_verification_attempted_at)?->toIso8601String(),
                     'status' => $qualification->auto_verification_status?->value ?? (string) ($qualification->auto_verification_status ?? ''),
@@ -174,6 +208,14 @@ class AdminVerificationQualificationController extends Controller
                 'level2_lock_url' => route('admin.verification.qualifications.level2_lock', ['qualification' => $qualification]),
                 'level2_unlock_url' => route('admin.verification.qualifications.level2_unlock', ['qualification' => $qualification]),
                 'send_to_manual_review_url' => route('admin.verification.qualifications.send_to_manual_review', ['qualification' => $qualification]),
+                'recheck_auto_verification_url' => route('admin.verification.qualifications.recheck_auto_verification', ['qualification' => $qualification]),
+                'auto_assign_level1_url' => route('admin.verification.qualifications.auto_assign_level1', ['qualification' => $qualification]),
+                'recheck_auto_verification_enabled' => $recheckDisabledReason === null,
+                'recheck_auto_verification_disabled_reason' => $recheckDisabledReason,
+                'auto_assign_level1_enabled' => $autoAssignDisabledReason === null,
+                'auto_assign_level1_disabled_reason' => $autoAssignDisabledReason,
+                'learner_records_url' => $learnerRecordsUrl,
+                'learner_records_disabled_reason' => $learnerRecordsDisabledReason,
                 'learner_record' => $qualification->learnerRecord
                     ? [
                         'id' => $qualification->learnerRecord->id,
@@ -257,6 +299,7 @@ class AdminVerificationQualificationController extends Controller
                 'edit_qualification' => (bool) ($request->user()?->can('verification.level1.process') || $request->user()?->can('verification.level2.review')),
                 'issue_certificate' => (bool) $request->user()?->can('verification.certificate.issue'),
                 'is_super_admin' => (bool) $request->user()?->hasRole('Super Admin'),
+                'view_learner_records' => $canViewLearnerRecords,
             ],
         ]);
     }
@@ -558,6 +601,109 @@ class AdminVerificationQualificationController extends Controller
             ->with('success', 'Qualification sent to manual review queue.');
     }
 
+    public function recheckAutoVerification(
+        Request $request,
+        Qualification $qualification,
+        QualificationAutoVerificationRecheckService $rechecks,
+    ): RedirectResponse {
+        VerificationQualificationAccess::ensureQualificationAccessible($request->user(), $qualification);
+        abort_unless((bool) $request->user()?->can('verification.level2.review'), 403);
+
+        $paymentSatisfied = $qualification->application
+            ? app(ApplicationPaymentSatisfaction::class)->isSatisfied($qualification->application)
+            : false;
+        $blockedReason = $this->recheckAutoVerificationDisabledReason($qualification, $paymentSatisfied);
+        if ($blockedReason !== null) {
+            return back()->with('error', $blockedReason);
+        }
+
+        $result = $rechecks->queue($qualification, $request->user());
+
+        return back()->with($result->queued ? 'success' : 'error', $result->message);
+    }
+
+    public function autoAssignLevel1(
+        Request $request,
+        Qualification $qualification,
+        QualificationAutoAssignmentService $autoAssignments,
+    ): RedirectResponse {
+        VerificationQualificationAccess::ensureQualificationAccessible($request->user(), $qualification);
+        abort_unless((bool) $request->user()?->can('verification.level2.review'), 403);
+
+        $qualification->loadMissing(['application', 'assignedVerifier']);
+
+        $paymentSatisfied = $qualification->application
+            ? app(ApplicationPaymentSatisfaction::class)->isSatisfied($qualification->application)
+            : false;
+        $blockedReason = $this->autoAssignLevel1DisabledReason($qualification, $paymentSatisfied);
+        if ($blockedReason !== null) {
+            return back()->with('error', $blockedReason);
+        }
+
+        $beforeState = $qualification->only([
+            'verification_state',
+            'assigned_verifier_id',
+            'verification_assignment_category_id',
+            'assignment_source',
+            'assignment_failure_reason',
+            'auto_assigned_at',
+        ]);
+
+        $result = $autoAssignments->autoAssign(
+            $qualification,
+            actor: $request->user(),
+            reason: 'manual_retry_from_admin',
+        );
+
+        $qualification->refresh()->loadMissing(['application', 'assignedVerifier']);
+
+        $message = $this->autoAssignFeedbackMessage($qualification, $request->user(), $result);
+
+        if ($qualification->application) {
+            ApplicationComment::query()->create([
+                'application_id' => (int) $qualification->application_id,
+                'qualification_id' => (int) $qualification->id,
+                'author_user_id' => (int) $request->user()->id,
+                'type' => 'assignment_note',
+                'visibility' => 'internal',
+                'body' => $message,
+            ]);
+        }
+
+        app(\App\Domain\Audit\AuditLogService::class)->record(
+            eventType: 'verification.auto_assignment_retry',
+            module: 'Verification',
+            actionName: 'auto_assignment_retry',
+            message: $message,
+            entityType: Qualification::class,
+            entityId: (int) $qualification->id,
+            beforeState: $beforeState,
+            afterState: $qualification->only([
+                'verification_state',
+                'assigned_verifier_id',
+                'verification_assignment_category_id',
+                'assignment_source',
+                'assignment_failure_reason',
+                'auto_assigned_at',
+            ]),
+            metadata: [
+                'application_id' => (int) $qualification->application_id,
+                'qualification_id' => (int) $qualification->id,
+                'previous_verification_state' => $beforeState['verification_state'] ?? null,
+                'previous_assigned_verifier_id' => $beforeState['assigned_verifier_id'] ?? null,
+                'previous_assignment_failure_reason' => $beforeState['assignment_failure_reason'] ?? null,
+                'assigned' => $result->assigned,
+                'already_assigned' => $result->alreadyAssigned,
+                'assignee_user_id' => $result->assigneeUserId,
+                'category_id' => $result->categoryId,
+                'failure_reason' => $result->failureReason,
+            ],
+            actor: $request->user(),
+        );
+
+        return back()->with($result->assigned ? 'success' : 'error', $message);
+    }
+
     /**
      * Officer send-back comments persist after the applicant resubmits (qualification row fields are cleared).
      * Amendment submissions are recorded as lifecycle events.
@@ -614,5 +760,87 @@ class AdminVerificationQualificationController extends Controller
             ->sortBy('at')
             ->values()
             ->all();
+    }
+
+    private function recheckAutoVerificationDisabledReason(Qualification $qualification, bool $paymentSatisfied): ?string
+    {
+        $qualification->loadMissing('application');
+
+        if (! $paymentSatisfied) {
+            return 'Payment must be confirmed before auto-verification can be rechecked.';
+        }
+
+        if (! $qualification->application?->submitted_at) {
+            return 'This application has not been submitted for verification.';
+        }
+
+        if ($qualification->verification_state === VerificationState::CertificateIssued) {
+            return 'This qualification already has a certificate.';
+        }
+
+        if (in_array($qualification->verification_state, [VerificationState::Rejected, VerificationState::Closed, VerificationState::ReturnedToApplicant], true)) {
+            return 'This qualification is not eligible for auto-verification recheck in its current state.';
+        }
+
+        if (! $this->qualificationHasAutoVerificationInput($qualification)) {
+            return 'This qualification does not have enough matching data to recheck auto-verification.';
+        }
+
+        return null;
+    }
+
+    private function autoAssignLevel1DisabledReason(Qualification $qualification, bool $paymentSatisfied): ?string
+    {
+        $qualification->loadMissing(['application', 'assignedVerifier']);
+
+        if (! $paymentSatisfied) {
+            return 'Payment must be confirmed before Level 1 auto-assignment can run.';
+        }
+
+        if (! $qualification->application?->submitted_at) {
+            return 'This application has not been submitted for verification.';
+        }
+
+        if (in_array($qualification->verification_state, [VerificationState::CertificateIssued, VerificationState::Rejected, VerificationState::Closed], true)) {
+            return 'This qualification is not eligible for Level 1 auto-assignment in its current state.';
+        }
+
+        if ($qualification->verification_state === VerificationState::AutoVerifiedPendingLevel2) {
+            return 'This qualification is awaiting a Level 2 decision.';
+        }
+
+        if ($qualification->assigned_verifier_id) {
+            return 'This qualification is already assigned to '.($qualification->assignedVerifier?->name ?? 'a Level 1 officer').'. Use reassignment if you need to change the officer.';
+        }
+
+        if ($qualification->verification_state !== VerificationState::AwaitingAssignment && blank($qualification->assignment_failure_reason)) {
+            return 'This qualification is not in the Level 1 assignment queue.';
+        }
+
+        return null;
+    }
+
+    private function qualificationHasAutoVerificationInput(Qualification $qualification): bool
+    {
+        $hasStrongIdentifier = filled($qualification->student_number)
+            || filled($qualification->certificate_number)
+            || filled($qualification->nrc_passport_number);
+
+        return $hasStrongIdentifier
+            && filled($qualification->title_of_qualification)
+            && filled($qualification->qualification_holder_name);
+    }
+
+    private function autoAssignFeedbackMessage(Qualification $qualification, User $actor, AutoAssignmentResult $result): string
+    {
+        if ($result->assigned) {
+            if ($result->alreadyAssigned) {
+                return 'Auto-assignment retried by '.$actor->name.'; qualification was already assigned to '.($qualification->assignedVerifier?->name ?? 'a Level 1 officer').'.';
+            }
+
+            return 'Auto-assignment retried by '.$actor->name.'; assigned to '.($qualification->assignedVerifier?->name ?? 'Level 1 officer').'.';
+        }
+
+        return 'Auto-assignment retried by '.$actor->name.'; failed: '.($result->failureReason ?? 'Unknown assignment error.');
     }
 }

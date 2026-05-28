@@ -26,6 +26,8 @@ class AwardingInstitutionsSeeder extends Seeder
                 ['country_id' => $zambia->id, 'name' => 'Copperbelt University', 'sort_order' => 2],
                 ['country_id' => $zambia->id, 'name' => 'Mulungushi University', 'sort_order' => 3],
                 ['country_id' => $zambia->id, 'name' => 'Zambia Open University', 'sort_order' => 4],
+                ['country_id' => $zambia->id, 'name' => 'Examinations Council of Zambia (ECZ)', 'sort_order' => 10],
+                ['country_id' => $zambia->id, 'name' => 'Technical Education, Vocational and Entrepreneurship Training Authority (TEVTA)', 'sort_order' => 11],
                 ['country_id' => $zambia->id, 'name' => 'Zambia Institute of Chartered Accountants', 'sort_order' => 20],
                 ['country_id' => $zambia->id, 'name' => 'Evelyn Hone College', 'sort_order' => 30],
                 ['country_id' => $zambia->id, 'name' => 'National Institute of Public Administration', 'sort_order' => 31],

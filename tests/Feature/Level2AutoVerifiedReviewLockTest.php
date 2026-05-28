@@ -215,7 +215,7 @@ class Level2AutoVerifiedReviewLockTest extends TestCase
             'sort_order' => 1,
         ]);
 
-        $type = QualificationType::query()->where('is_active', true)->orderBy('id')->firstOrFail();
+        $type = QualificationType::query()->where('zqf_level_code', 'L6')->firstOrFail();
 
         $qualification = $this->makeQualificationInAutoVerifiedState($applicant, $inst->id, $type->id);
         $application = $qualification->application()->firstOrFail();

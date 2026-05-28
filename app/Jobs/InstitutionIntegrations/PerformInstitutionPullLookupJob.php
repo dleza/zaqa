@@ -18,9 +18,12 @@ class PerformInstitutionPullLookupJob implements ShouldQueue
 {
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
-    public function __construct(public readonly int $qualificationId)
-    {
-    }
+    public function __construct(
+        public readonly int $qualificationId,
+        public readonly bool $manualRecheck = false,
+        public readonly ?string $resumeState = null,
+        public readonly ?int $resumeAssigneeId = null,
+    ) {}
 
     public function handle(InstitutionPullLookupService $lookup, AuditLogService $audit): void
     {
@@ -32,7 +35,7 @@ class PerformInstitutionPullLookupJob implements ShouldQueue
             return;
         }
 
-        if ($qualification->verification_state !== VerificationState::AwaitingAutoVerification) {
+        if (! $this->manualRecheck && $qualification->verification_state !== VerificationState::AwaitingAutoVerification) {
             return;
         }
 
@@ -40,7 +43,7 @@ class PerformInstitutionPullLookupJob implements ShouldQueue
 
         DB::transaction(function () use ($qualification, $result) {
             $locked = Qualification::query()->lockForUpdate()->findOrFail($qualification->id);
-            if ($locked->verification_state !== VerificationState::AwaitingAutoVerification) {
+            if (! $this->manualRecheck && $locked->verification_state !== VerificationState::AwaitingAutoVerification) {
                 return;
             }
 
@@ -68,7 +71,11 @@ class PerformInstitutionPullLookupJob implements ShouldQueue
 
         // Always re-run auto-verification after pull attempt; it will either match using newly ingested records
         // or fall back to Level 1 when pull didn't help (and will update application state accordingly).
-        \App\Jobs\Verification\ProcessQualificationAutoVerificationJob::dispatch((int) $qualification->id);
+        \App\Jobs\Verification\ProcessQualificationAutoVerificationJob::dispatch(
+            (int) $qualification->id,
+            $this->manualRecheck,
+            $this->resumeState,
+            $this->resumeAssigneeId,
+        );
     }
 }
-

@@ -38,6 +38,9 @@ class ProcessQualificationAutoVerificationJob implements ShouldQueue
 
     public function __construct(
         public readonly int $qualificationId,
+        public readonly bool $manualRecheck = false,
+        public readonly ?string $resumeState = null,
+        public readonly ?int $resumeAssigneeId = null,
     ) {
     }
 
@@ -57,7 +60,7 @@ class ProcessQualificationAutoVerificationJob implements ShouldQueue
             return;
         }
 
-        if ($qualification->verification_state !== VerificationState::AwaitingAutoVerification) {
+        if (! $this->manualRecheck && $qualification->verification_state !== VerificationState::AwaitingAutoVerification) {
             return;
         }
 
@@ -76,7 +79,7 @@ class ProcessQualificationAutoVerificationJob implements ShouldQueue
             $locked = Qualification::query()->lockForUpdate()->findOrFail($qualification->id);
             $locked->loadMissing('application', 'awardingInstitution.integration');
 
-            if ($locked->verification_state !== VerificationState::AwaitingAutoVerification) {
+            if (! $this->manualRecheck && $locked->verification_state !== VerificationState::AwaitingAutoVerification) {
                 return [
                     'changed' => false,
                     'application_id' => (int) $locked->application_id,
@@ -86,7 +89,7 @@ class ProcessQualificationAutoVerificationJob implements ShouldQueue
             }
 
             $locked->forceFill([
-                'auto_verification_attempted_at' => $locked->auto_verification_attempted_at ?? now(),
+                'auto_verification_attempted_at' => $this->manualRecheck ? now() : ($locked->auto_verification_attempted_at ?? now()),
             ])->save();
 
             if (! $enabled || $match === null) {
@@ -100,17 +103,12 @@ class ProcessQualificationAutoVerificationJob implements ShouldQueue
                     'auto_verified_at' => null,
                 ])->save();
 
-                $locked->forceFill([
-                    'verification_state' => VerificationState::AwaitingAssignment,
-                    'assigned_verifier_id' => null,
-                    'assigned_at' => null,
-                    'level2_review_owner_id' => null,
-                ])->save();
+                $this->applyFallbackState($locked);
 
                 return [
                     'changed' => true,
                     'application_id' => (int) $locked->application_id,
-                    'action' => 'fallback_level1',
+                    'action' => $this->fallbackAction(),
                     'qualification_id' => (int) $locked->id,
                 ];
             }
@@ -204,20 +202,15 @@ class ProcessQualificationAutoVerificationJob implements ShouldQueue
                     ])->save();
                     $action = 'pending_level2';
                 } else {
-                    $locked->forceFill([
-                        'verification_state' => VerificationState::AwaitingAssignment,
-                        'assigned_verifier_id' => null,
-                        'assigned_at' => null,
-                        'level2_review_owner_id' => null,
-                    ])->save();
-                    $action = 'fallback_level1';
+                    $this->applyFallbackState($locked);
+                    $action = $this->fallbackAction();
                 }
             }
 
             // When all qualifications leave the auto-verification stage, the application re-enters
             // the standard verification intake state.
             $application = $locked->application;
-            if ($application && $application->verification_state === VerificationState::AwaitingAutoVerification) {
+            if (! $this->manualRecheck && $application && $application->verification_state === VerificationState::AwaitingAutoVerification) {
                 $remaining = Qualification::query()
                     ->where('application_id', $application->id)
                     ->where('verification_state', VerificationState::AwaitingAutoVerification->value)
@@ -252,11 +245,17 @@ class ProcessQualificationAutoVerificationJob implements ShouldQueue
             'awaiting_institution_pull' => 'Awaiting institution pull lookup result.',
             'issue_certificate' => 'Qualification auto-verified and queued for certificate issuance.',
             'pending_level2' => 'Qualification auto-verified (or possible match) and routed to Level 2 review.',
+            'fallback_preserved' => 'Auto-verification recheck completed; existing manual review state was preserved.',
             default => 'Auto-verification completed; qualification routed to Level 1 assignment pool.',
         };
 
         if ($action === 'dispatch_institution_pull') {
-            PerformInstitutionPullLookupJob::dispatch((int) ($result['qualification_id'] ?? $qualification->id));
+            PerformInstitutionPullLookupJob::dispatch(
+                (int) ($result['qualification_id'] ?? $qualification->id),
+                $this->manualRecheck,
+                $this->resumeState,
+                $this->resumeAssigneeId,
+            );
         }
 
         if ($action === 'issue_certificate') {
@@ -301,7 +300,7 @@ class ProcessQualificationAutoVerificationJob implements ShouldQueue
             return;
         }
 
-        if ($application) {
+        if ($application && ! $this->manualRecheck) {
             $lifecycle->event(
                 application: $application,
                 eventType: 'auto_verification',
@@ -374,5 +373,32 @@ class ProcessQualificationAutoVerificationJob implements ShouldQueue
             ->role('Super Admin')
             ->orderBy('id')
             ->first();
+    }
+
+    private function fallbackAction(): string
+    {
+        return $this->manualRecheck && $this->resumeState !== null
+            ? 'fallback_preserved'
+            : 'fallback_level1';
+    }
+
+    private function applyFallbackState(Qualification $qualification): void
+    {
+        if ($this->manualRecheck && $this->resumeState !== null) {
+            $qualification->forceFill([
+                'verification_state' => $this->resumeState,
+                'assigned_verifier_id' => $this->resumeAssigneeId,
+                'level2_review_owner_id' => null,
+            ])->save();
+
+            return;
+        }
+
+        $qualification->forceFill([
+            'verification_state' => VerificationState::AwaitingAssignment,
+            'assigned_verifier_id' => null,
+            'assigned_at' => null,
+            'level2_review_owner_id' => null,
+        ])->save();
     }
 }

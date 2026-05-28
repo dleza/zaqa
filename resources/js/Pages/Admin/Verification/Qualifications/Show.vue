@@ -42,10 +42,13 @@ const props = defineProps<{
     assign: boolean
     send_back: boolean
     level1_process: boolean
+    level2_review?: boolean
     approve?: boolean
     reject?: boolean
     edit_qualification?: boolean
     issue_certificate?: boolean
+    is_super_admin?: boolean
+    view_learner_records?: boolean
   }
 }>()
 
@@ -67,6 +70,8 @@ const level1AttachmentInput = ref<HTMLInputElement | null>(null)
 const issueCveqForm = useForm<{ reissue: boolean }>({ reissue: false })
 const approveForm = useForm<{ comment: string; issue_certificate: boolean }>({ comment: '', issue_certificate: false })
 const rejectForm = useForm<{ reason: string }>({ reason: '' })
+const recheckAutoVerificationForm = useForm({})
+const autoAssignLevel1Form = useForm({})
 
 function clearLevel1Attachment() {
   level1CompleteForm.attachment = null
@@ -196,6 +201,16 @@ function sendToManualReview() {
   router.post(props.qualification.send_to_manual_review_url, {}, { preserveScroll: true })
 }
 
+function queueAutoVerificationRecheck() {
+  if (!props.qualification.recheck_auto_verification_url) return
+  recheckAutoVerificationForm.post(props.qualification.recheck_auto_verification_url, { preserveScroll: true })
+}
+
+function retryAutoAssignLevel1() {
+  if (!props.qualification.auto_assign_level1_url) return
+  autoAssignLevel1Form.post(props.qualification.auto_assign_level1_url, { preserveScroll: true })
+}
+
 const autoStatus = computed(() => (props.qualification.auto_verification?.status ?? '').toString())
 const autoConfidence = computed(() => {
   const v = props.qualification.auto_verification?.confidence
@@ -218,6 +233,9 @@ const autoRecommendation = computed(() => {
   if (['ambiguous', 'possible_match'].includes(status) && conf >= 70) return 'Recommended: Level 2 review (do not auto-issue)'
   return 'Recommended: Manual review'
 })
+
+const canManageRetryActions = computed(() => props.can.level2_review === true || props.can.is_super_admin === true)
+const canViewLearnerRecords = computed(() => props.can.view_learner_records === true)
 
 const canShowRevokeAssignment = computed(() => {
   if (!props.can.assign) return false
@@ -656,6 +674,29 @@ function formatTimelineAt(iso: string | null | undefined) {
             </p>
           </div>
         </div>
+        <div
+          v-if="qualification.certificate_template"
+          class="mt-4 rounded-xl border border-border/70 bg-surface-muted/40 px-4 py-3 text-xs text-text-muted"
+        >
+          <div class="flex flex-wrap items-center gap-2">
+            <span class="font-semibold text-text-primary">Template:</span>
+            <span class="zaqa-badge" :class="qualification.certificate_template.key === 'school_subjects' ? 'zaqa-badge-info' : 'zaqa-badge-secondary'">
+              {{ qualification.certificate_template.label }}
+            </span>
+            <span
+              v-if="qualification.certificate_template.requires_subjects"
+              class="text-text-muted"
+            >
+              · {{ qualification.certificate_template.subject_count ?? 0 }} subject{{ (qualification.certificate_template.subject_count ?? 0) === 1 ? '' : 's' }}
+            </span>
+          </div>
+          <p
+            v-if="qualification.certificate_template.warning"
+            class="mt-2 text-xs font-medium text-amber-900"
+          >
+            {{ qualification.certificate_template.warning }}
+          </p>
+        </div>
         <div v-if="qualification.cveq_certificate?.certificate_number" class="mt-4 rounded-xl border border-border/70 bg-surface-muted/40 px-4 py-3 text-xs text-text-muted">
           <span class="font-semibold text-text-primary">Active certificate:</span>
           {{ qualification.cveq_certificate.certificate_number }}
@@ -743,6 +784,54 @@ function formatTimelineAt(iso: string | null | undefined) {
                 <dd class="mt-1.5 text-sm font-semibold text-text-primary">{{ qualification.country ?? '—' }}</dd>
               </div>
             </dl>
+
+            <div
+              v-if="qualification.certificate_template?.requires_subjects"
+              class="mt-6 rounded-xl border border-border/70 bg-surface-muted/40 p-4"
+            >
+              <div class="flex flex-wrap items-center justify-between gap-2">
+                <div>
+                  <h3 class="text-sm font-semibold text-text-primary">Subject results</h3>
+                  <p class="mt-1 text-xs text-text-muted">Subjects captured for this school-level qualification.</p>
+                </div>
+                <span class="zaqa-badge zaqa-badge-secondary">
+                  {{ qualification.subject_results?.length ?? 0 }} subject{{ (qualification.subject_results?.length ?? 0) === 1 ? '' : 's' }}
+                </span>
+              </div>
+
+              <div
+                v-if="qualification.subject_results?.length"
+                class="mt-4 overflow-hidden rounded-xl border border-border/70"
+              >
+                <table class="min-w-full divide-y divide-border/70 text-sm">
+                  <thead class="bg-surface">
+                    <tr class="text-left text-[11px] font-bold uppercase tracking-wider text-text-muted">
+                      <th class="px-4 py-3">#</th>
+                      <th class="px-4 py-3">Subject</th>
+                      <th class="px-4 py-3">Grade</th>
+                    </tr>
+                  </thead>
+                  <tbody class="divide-y divide-border/60 bg-white/70">
+                    <tr
+                      v-for="subject in qualification.subject_results"
+                      :key="subject.id"
+                      class="align-top"
+                    >
+                      <td class="px-4 py-3 font-medium text-text-muted">{{ subject.index }}</td>
+                      <td class="px-4 py-3 font-semibold text-text-primary">{{ subject.subject_name || '—' }}</td>
+                      <td class="px-4 py-3 text-text-primary">{{ subject.grade || '—' }}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+
+              <div
+                v-else
+                class="mt-4 rounded-xl border border-amber-300/40 bg-amber-500/10 px-4 py-3 text-xs font-medium text-amber-900"
+              >
+                No subject results have been captured for this qualification yet.
+              </div>
+            </div>
           </section>
 
           <!-- Auto-verification -->
@@ -794,6 +883,97 @@ function formatTimelineAt(iso: string | null | undefined) {
               </div>
               <div v-else-if="lockMissingForActions" class="mt-3 rounded-xl border border-border/70 bg-surface px-4 py-3 text-xs text-text-muted">
                 Start review to lock this qualification before approving, rejecting, sending back, or routing to manual review.
+              </div>
+            </div>
+
+            <div v-if="canManageRetryActions || canViewLearnerRecords" class="mt-5 rounded-2xl border border-border/70 bg-surface-muted/30 p-5">
+              <div class="flex flex-col gap-4">
+                <div>
+                  <div class="text-[11px] font-bold uppercase tracking-wider text-text-muted">Admin actions</div>
+                  <p class="mt-1 text-sm text-text-muted">Retry matching, retry Level 1 category assignment, or jump to learner records.</p>
+                </div>
+                <div class="grid gap-3 lg:grid-cols-3">
+                  <div class="rounded-xl border border-border/70 bg-surface px-4 py-4">
+                    <div class="flex items-start justify-between gap-3">
+                      <div>
+                        <div class="text-sm font-semibold text-text-primary">Recheck auto-verification</div>
+                        <p class="mt-1 text-xs text-text-muted">Try learner record and institution lookup again.</p>
+                      </div>
+                      <Sparkles class="mt-0.5 h-4 w-4 shrink-0 text-brand" aria-hidden="true" />
+                    </div>
+                    <button
+                      v-if="canManageRetryActions"
+                      type="button"
+                      class="zaqa-btn zaqa-btn-secondary mt-4 h-10 w-full justify-center px-4 py-2 text-sm"
+                      :disabled="
+                        recheckAutoVerificationForm.processing ||
+                        !qualification.recheck_auto_verification_enabled
+                      "
+                      :title="qualification.recheck_auto_verification_disabled_reason || ''"
+                      @click="queueAutoVerificationRecheck"
+                    >
+                      {{ recheckAutoVerificationForm.processing ? 'Queueing…' : 'Recheck auto-verification' }}
+                    </button>
+                    <p v-if="qualification.recheck_auto_verification_disabled_reason" class="mt-2 text-xs text-text-muted">
+                      {{ qualification.recheck_auto_verification_disabled_reason }}
+                    </p>
+                  </div>
+
+                  <div class="rounded-xl border border-border/70 bg-surface px-4 py-4">
+                    <div class="flex items-start justify-between gap-3">
+                      <div>
+                        <div class="text-sm font-semibold text-text-primary">Auto-assign to Level 1</div>
+                        <p class="mt-1 text-xs text-text-muted">Retry category-based assignment without manual officer selection.</p>
+                      </div>
+                      <ArrowRight class="mt-0.5 h-4 w-4 shrink-0 text-brand" aria-hidden="true" />
+                    </div>
+                    <button
+                      v-if="canManageRetryActions"
+                      type="button"
+                      class="zaqa-btn zaqa-btn-secondary mt-4 h-10 w-full justify-center px-4 py-2 text-sm"
+                      :disabled="
+                        autoAssignLevel1Form.processing ||
+                        !qualification.auto_assign_level1_enabled
+                      "
+                      :title="qualification.auto_assign_level1_disabled_reason || ''"
+                      @click="retryAutoAssignLevel1"
+                    >
+                      {{ autoAssignLevel1Form.processing ? 'Retrying…' : 'Auto-assign to Level 1' }}
+                    </button>
+                    <p v-if="qualification.auto_assign_level1_disabled_reason" class="mt-2 text-xs text-text-muted">
+                      {{ qualification.auto_assign_level1_disabled_reason }}
+                    </p>
+                  </div>
+
+                  <div class="rounded-xl border border-border/70 bg-surface px-4 py-4">
+                    <div class="flex items-start justify-between gap-3">
+                      <div>
+                        <div class="text-sm font-semibold text-text-primary">View learner records</div>
+                        <p class="mt-1 text-xs text-text-muted">Open learner records filtered by the linked awarding institution.</p>
+                      </div>
+                      <FileStack class="mt-0.5 h-4 w-4 shrink-0 text-brand" aria-hidden="true" />
+                    </div>
+                    <Link
+                      v-if="canViewLearnerRecords && qualification.learner_records_url"
+                      :href="qualification.learner_records_url"
+                      class="zaqa-btn zaqa-btn-secondary mt-4 inline-flex h-10 w-full items-center justify-center px-4 py-2 text-sm"
+                    >
+                      View learner records
+                    </Link>
+                    <button
+                      v-else-if="canViewLearnerRecords"
+                      type="button"
+                      disabled
+                      class="zaqa-btn zaqa-btn-secondary mt-4 inline-flex h-10 w-full cursor-not-allowed items-center justify-center px-4 py-2 text-sm opacity-60"
+                      :title="qualification.learner_records_disabled_reason || ''"
+                    >
+                      View learner records
+                    </button>
+                    <p v-if="canViewLearnerRecords && qualification.learner_records_disabled_reason" class="mt-2 text-xs text-text-muted">
+                      {{ qualification.learner_records_disabled_reason }}
+                    </p>
+                  </div>
+                </div>
               </div>
             </div>
 

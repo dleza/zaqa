@@ -45,12 +45,52 @@
             margin: 10px 0 16px;
         }
         .fields-table { width: 100%; border-collapse: collapse; margin-top: 8px; }
-        .fields-table td { padding: 5px 0; vertical-align: top; }
+        .fields-table td { padding: 4px 0; vertical-align: top; }
         .label { font-weight: bold; width: 38%; color: #111827; }
         .value { width: 62%; }
         .fw-bold-level { font-weight: bold; margin-top: 8px; }
+        .subjects-wrap {
+            margin-top: 16px;
+            border: 1px solid #d1d5db;
+            border-radius: 10px;
+            padding: 10px 12px 8px;
+            background: rgba(248, 250, 252, 0.8);
+        }
+        .subjects-title {
+            font-size: 11px;
+            font-weight: bold;
+            color: #0f172a;
+            margin-bottom: 8px;
+        }
+        .subjects-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 10px;
+        }
+        .subjects-table th,
+        .subjects-table td {
+            border: 1px solid #cbd5e1;
+            padding: 6px 7px;
+            vertical-align: top;
+        }
+        .subjects-table th {
+            background: #eff6ff;
+            color: #0f172a;
+            font-weight: bold;
+            text-align: left;
+        }
+        .subjects-table td:first-child,
+        .subjects-table th:first-child {
+            width: 34px;
+            text-align: center;
+        }
+        .subjects-table td:last-child,
+        .subjects-table th:last-child {
+            width: 70px;
+            text-align: center;
+        }
         .issued-by {
-            margin-top: 22px;
+            margin-top: 20px;
             text-align: center;
             color: #EA580C;
             font-weight: bold;
@@ -146,33 +186,48 @@
             <td class="value">{{ $recognised_zambian_qualification }}</td>
         </tr>
         <tr>
-            <td class="label">This qualification bearing title of</td>
+            <td class="label">Qualification title</td>
             <td class="value">{{ $qualification_title }}</td>
         </tr>
         <tr>
-            <td class="label">has been validated as genuinely awarded to</td>
-            <td class="value">{{ $holder_name }}</td>
-        </tr>
-        <tr>
-            <td class="label">on</td>
-            <td class="value">{{ $award_date }}</td>
-        </tr>
-        <tr>
-            <td class="label">by</td>
+            <td class="label">Awarding institution</td>
             <td class="value">{{ $awarding_institution }}</td>
         </tr>
         <tr>
-            <td class="label">A registered and recognised institution</td>
-            <td class="value">{{ $recognition_statement }}</td>
-        </tr>
-        <tr>
-            <td class="label">This qualification is recognised in Zambia as</td>
-            <td class="value">{{ $recognised_zambian_qualification }}</td>
+            <td class="label">Award date / year</td>
+            <td class="value">
+                {{ $award_date }}
+                @if(!empty($award_year))
+                    ({{ $award_year }})
+                @endif
+            </td>
         </tr>
         <tr>
             <td colspan="2" class="fw-bold-level">Framework Level: {{ $framework_line }}</td>
         </tr>
     </table>
+
+    <div class="subjects-wrap">
+        <div class="subjects-title">Validated subject results</div>
+        <table class="subjects-table">
+            <thead>
+            <tr>
+                <th>#</th>
+                <th>Subject</th>
+                <th>Grade</th>
+            </tr>
+            </thead>
+            <tbody>
+            @foreach($subject_results as $row)
+                <tr>
+                    <td>{{ $row['index'] }}</td>
+                    <td>{{ $row['subject_name'] }}</td>
+                    <td>{{ $row['grade'] }}</td>
+                </tr>
+            @endforeach
+            </tbody>
+        </table>
+    </div>
 
     <div class="issued-by">Issued by The Zambia Qualifications Authority</div>
     <div class="sig-name">{{ $director_name }}</div>

@@ -537,6 +537,12 @@ Route::middleware('auth')->group(function () {
             Route::post('/qualifications/{qualification}/send-to-manual-review', [AdminVerificationQualificationController::class, 'sendToManualReview'])
                 ->middleware('can:verification.level2.review')
                 ->name('qualifications.send_to_manual_review');
+            Route::post('/qualifications/{qualification}/recheck-auto-verification', [AdminVerificationQualificationController::class, 'recheckAutoVerification'])
+                ->middleware('can:verification.level2.review')
+                ->name('qualifications.recheck_auto_verification');
+            Route::post('/qualifications/{qualification}/auto-assign-level1', [AdminVerificationQualificationController::class, 'autoAssignLevel1'])
+                ->middleware('can:verification.level2.review')
+                ->name('qualifications.auto_assign_level1');
             Route::get('/qualifications/{qualification}/certificate.pdf', [AdminVerificationQualificationController::class, 'downloadCertificate'])
                 ->middleware('can:verification.pool.view')
                 ->name('qualifications.certificate.download');

@@ -9,12 +9,16 @@ use App\Mail\QualificationCertificateIssuedMail;
 use App\Models\Application;
 use App\Models\Qualification;
 use App\Models\QualificationCertificate;
+use App\Models\QualificationSubjectResult;
+use App\Models\QualificationType;
 use App\Models\User;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Endroid\QrCode\Builder\Builder;
 use Endroid\QrCode\Writer\PngWriter;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
@@ -22,6 +26,16 @@ use Illuminate\Validation\ValidationException;
 
 class QualificationCertificateService
 {
+    private const TEMPLATE_VERSION = 1;
+
+    /**
+     * @var array<string, string>
+     */
+    private const TEMPLATE_VIEWS = [
+        QualificationType::CERTIFICATE_TEMPLATE_DEFAULT => 'pdf.qualification-certificate',
+        QualificationType::CERTIFICATE_TEMPLATE_SCHOOL_SUBJECTS => 'pdf.qualification-certificate-subjects',
+    ];
+
     public function __construct(
         private readonly ApplicationPaymentSatisfaction $payments,
         private readonly AuditLogService $audit,
@@ -47,6 +61,7 @@ class QualificationCertificateService
             'awardingInstitution',
             'country',
             'learnerRecord',
+            'subjectResults',
         ]);
 
         $application = $qualification->application;
@@ -81,15 +96,17 @@ class QualificationCertificateService
             $certificateNumber = $this->allocateCertificateNumber();
             $token = $this->allocateVerificationToken();
             $verifyUrl = config('certificates.verify_url_base').'/'.$token;
+            $issuedAt = now();
 
-            $year = now()->year;
+            $year = $issuedAt->year;
             $relativePath = "qualification-certificates/{$year}/{$qualification->id}/{$token}.pdf";
 
-            $pdfBinary = $this->renderPdf($qualification, $application, [
+            $renderContext = $this->buildRenderContext($qualification, $application, [
                 'certificate_number' => $certificateNumber,
                 'verification_url' => $verifyUrl,
-                'issued_at' => now(),
+                'issued_at' => $issuedAt,
             ]);
+            $pdfBinary = $this->renderPdf($renderContext['view'], $renderContext['data']);
 
             Storage::disk('local')->put($relativePath, $pdfBinary);
 
@@ -104,13 +121,13 @@ class QualificationCertificateService
                 'verification_token' => $token,
                 'file_path' => $relativePath,
                 'issued_by_user_id' => $issuer->id,
-                'issued_at' => now(),
+                'issued_at' => $issuedAt,
                 'recipient_email' => $recipientEmail,
                 'status' => QualificationCertificate::STATUS_ISSUED,
-                'metadata' => [
+                'metadata' => array_merge([
                     'reissue' => $reissue,
                     'previous_certificate_id' => $existingActive?->id,
-                ],
+                ], $renderContext['metadata']),
             ]);
 
             $qualification->forceFill([
@@ -162,6 +179,10 @@ class QualificationCertificateService
             throw ValidationException::withMessages([
                 'application' => 'Certificates cannot be issued for rejected or closed applications.',
             ]);
+        }
+
+        if ($this->resolveTemplateKey($qualification) === QualificationType::CERTIFICATE_TEMPLATE_SCHOOL_SUBJECTS) {
+            $this->assertSubjectResultsReady($qualification);
         }
 
         $vs = $qualification->verification_state;
@@ -226,9 +247,45 @@ class QualificationCertificateService
     /**
      * @param  array{certificate_number: string, verification_url: string, issued_at: Carbon}  $issue
      */
-    private function renderPdf(Qualification $qualification, Application $application, array $issue): string
+    public function describeTemplate(Qualification $qualification): array
+    {
+        $qualification->loadMissing(['qualificationTypeMaster', 'subjectResults']);
+
+        $templateKey = $this->resolveTemplateKey($qualification);
+        $subjectRows = $this->orderedSubjectResults($qualification);
+        $requiresSubjects = $templateKey === QualificationType::CERTIFICATE_TEMPLATE_SCHOOL_SUBJECTS;
+        $hasIncompleteSubjectRows = $requiresSubjects && $subjectRows->contains(fn (QualificationSubjectResult $row) => ! $this->subjectRowIsComplete($row));
+        $subjectCount = $subjectRows->count();
+
+        return [
+            'key' => $templateKey,
+            'label' => QualificationType::certificateTemplateLabel($templateKey),
+            'requires_subjects' => $requiresSubjects,
+            'subject_count' => $subjectCount,
+            'missing_subjects' => $requiresSubjects && $subjectCount === 0,
+            'has_incomplete_subjects' => $hasIncompleteSubjectRows,
+            'warning' => match (true) {
+                ! $requiresSubjects => null,
+                $subjectCount === 0 => 'This certificate type requires subject results before issuing.',
+                $hasIncompleteSubjectRows => 'This certificate type requires complete subject names and grades before issuing.',
+                default => null,
+            },
+        ];
+    }
+
+    /**
+     * @param  array{certificate_number: string, verification_url: string, issued_at: Carbon}  $issue
+     * @return array{
+     *   view: string,
+     *   data: array<string, mixed>,
+     *   metadata: array<string, mixed>
+     * }
+     */
+    private function buildRenderContext(Qualification $qualification, Application $application, array $issue): array
     {
         $type = $qualification->qualificationTypeMaster;
+        $templateKey = $this->resolveTemplateKey($qualification);
+        $subjectRows = $this->orderedSubjectResults($qualification);
         $frameworkLine = $type
             ? 'At '.trim((string) $type->level_label).' of the Zambia Qualifications Framework.'
             : 'As recognised under the Zambia Qualifications Framework.';
@@ -265,17 +322,17 @@ class QualificationCertificateService
             $qualificationTitle = $manualTitle !== '' ? $manualTitle : $applicantTitle;
         }
 
-        $logoPath = resource_path('images/zaqa_logo_clean.png');
-        $logoDataUri = null;
-        if (is_file($logoPath)) {
-            $logoDataUri = 'data:image/png;base64,'.base64_encode((string) file_get_contents($logoPath));
-        }
+        $logoDataUri = $this->imageDataUriFromPath(resource_path('images/zaqa_logo_clean.png'));
+        $watermarkEnabled = (bool) config('certificates.watermark_enabled', true);
+        $coatOfArmsWatermarkDataUri = $watermarkEnabled ? $this->buildCoatOfArmsWatermarkDataUri($qualification) : null;
+        $watermarkAssetPresent = $coatOfArmsWatermarkDataUri !== null;
 
         $qrDataUri = $this->buildQrDataUri($issue['verification_url']);
 
-        $issuedForFooter = $issue['issued_at']->timezone(config('app.timezone'))->format('h:i A').' ('.$issue['issued_at']->timezone(config('app.timezone'))->getTimezone()->getName().') on '.$issue['issued_at']->format('d M Y');
+        $issuedAt = $issue['issued_at']->timezone(config('app.timezone'));
+        $issuedForFooter = $issuedAt->format('h:i A').' ('.$issuedAt->getTimezone()->getName().') on '.$issuedAt->format('d M Y');
 
-        $pdf = Pdf::loadView('pdf.qualification-certificate', [
+        $viewData = [
             'qualification' => $qualification,
             'application' => $application,
             'certificate_number' => $issue['certificate_number'],
@@ -293,11 +350,40 @@ class QualificationCertificateService
             'director_name' => config('certificates.director_general_name'),
             'director_title' => config('certificates.director_general_title'),
             'logo_data_uri' => $logoDataUri,
+            'coat_of_arms_watermark_data_uri' => $coatOfArmsWatermarkDataUri,
             'qr_data_uri' => $qrDataUri,
             'issued_for_footer' => $issuedForFooter,
+            'award_year' => optional($qualification->award_date)?->format('Y'),
+            'subject_results' => $subjectRows
+                ->map(fn (QualificationSubjectResult $row, int $index) => [
+                    'index' => $index + 1,
+                    'subject_name' => trim((string) $row->subject_name),
+                    'grade' => trim((string) $row->grade),
+                ])
+                ->values()
+                ->all(),
             'app_url' => config('app.url'),
-        ]);
+        ];
 
+        return [
+            'view' => self::TEMPLATE_VIEWS[$templateKey] ?? self::TEMPLATE_VIEWS[QualificationType::CERTIFICATE_TEMPLATE_DEFAULT],
+            'data' => $viewData,
+            'metadata' => [
+                'template_key' => $templateKey,
+                'template_version' => self::TEMPLATE_VERSION,
+                'watermark_enabled' => $watermarkEnabled,
+                'watermark_asset_present' => $watermarkAssetPresent,
+                'verification_base_url' => config('certificates.verify_url_base'),
+            ],
+        ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $data
+     */
+    private function renderPdf(string $view, array $data): string
+    {
+        $pdf = Pdf::loadView($view, $data);
         $pdf->setPaper('A4', 'portrait');
 
         return $pdf->output();
@@ -313,5 +399,98 @@ class QualificationCertificateService
             ->build();
 
         return $result->getDataUri();
+    }
+
+    private function resolveTemplateKey(Qualification $qualification): string
+    {
+        return QualificationType::resolveCertificateTemplateKey(
+            $qualification->qualificationTypeMaster,
+            $qualification->qualification_type,
+        );
+    }
+
+    /**
+     * @return Collection<int, QualificationSubjectResult>
+     */
+    private function orderedSubjectResults(Qualification $qualification): Collection
+    {
+        if ($qualification->relationLoaded('subjectResults')) {
+            /** @var Collection<int, QualificationSubjectResult> $rows */
+            $rows = $qualification->subjectResults;
+
+            return $rows
+                ->sortBy(fn (QualificationSubjectResult $row) => [$row->display_order ?? PHP_INT_MAX, $row->id])
+                ->values();
+        }
+
+        /** @var Collection<int, QualificationSubjectResult> $rows */
+        $rows = $qualification->subjectResults()
+            ->orderBy('display_order')
+            ->orderBy('id')
+            ->get();
+
+        return $rows;
+    }
+
+    private function assertSubjectResultsReady(Qualification $qualification): void
+    {
+        $subjectRows = $this->orderedSubjectResults($qualification);
+        if ($subjectRows->isEmpty()) {
+            throw ValidationException::withMessages([
+                'qualification' => 'This certificate type requires subject results before issuing.',
+            ]);
+        }
+
+        if ($subjectRows->contains(fn (QualificationSubjectResult $row) => ! $this->subjectRowIsComplete($row))) {
+            throw ValidationException::withMessages([
+                'qualification' => 'This certificate type requires subject results before issuing.',
+            ]);
+        }
+    }
+
+    private function subjectRowIsComplete(QualificationSubjectResult $row): bool
+    {
+        return trim((string) $row->subject_name) !== '' && trim((string) $row->grade) !== '';
+    }
+
+    private function buildCoatOfArmsWatermarkDataUri(Qualification $qualification): ?string
+    {
+        $configuredPath = trim((string) config('certificates.coat_of_arms_path', ''));
+        if ($configuredPath === '') {
+            Log::warning('Certificate watermark asset path is empty; continuing without watermark.', [
+                'qualification_id' => $qualification->id,
+            ]);
+
+            return null;
+        }
+
+        $resolvedPath = $this->resolveConfiguredAssetPath($configuredPath);
+        $dataUri = $this->imageDataUriFromPath($resolvedPath);
+
+        if ($dataUri === null) {
+            Log::warning('Certificate watermark asset missing; continuing without watermark.', [
+                'qualification_id' => $qualification->id,
+                'configured_path' => $configuredPath,
+                'resolved_path' => $resolvedPath,
+            ]);
+        }
+
+        return $dataUri;
+    }
+
+    private function resolveConfiguredAssetPath(string $configuredPath): string
+    {
+        return Str::startsWith($configuredPath, ['/', '\\']) ? $configuredPath : base_path($configuredPath);
+    }
+
+    private function imageDataUriFromPath(string $path): ?string
+    {
+        if (! is_file($path)) {
+            return null;
+        }
+
+        $mime = mime_content_type($path) ?: 'image/png';
+
+        return 'data:'.$mime.';base64,'.base64_encode((string) file_get_contents($path));
     }
 }
