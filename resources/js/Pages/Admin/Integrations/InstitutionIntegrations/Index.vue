@@ -35,35 +35,45 @@ function applyFilters() {
       </div>
     </div>
 
-    <div class="mt-6 grid gap-4 lg:grid-cols-3">
-      <div class="rounded-2xl border border-border bg-surface p-5 lg:col-span-1">
-        <div class="text-sm font-semibold text-text-primary">Filters</div>
-        <div class="mt-4 space-y-3">
+    <div class="mt-6 space-y-4">
+      <div class="rounded-2xl border border-border bg-surface p-5 shadow-sm">
+        <div class="flex flex-col gap-4">
           <div>
-            <label class="text-xs font-semibold uppercase tracking-wider text-text-muted">Search</label>
-            <input v-model="q" class="zaqa-input mt-2 h-10" placeholder="Institution name…" @keydown.enter.prevent="applyFilters" />
+            <div class="text-sm font-semibold text-text-primary">Filters</div>
+            <div class="mt-1 text-xs text-text-muted">Search institutions and narrow by pull-lookup availability.</div>
           </div>
-          <div>
-            <label class="text-xs font-semibold uppercase tracking-wider text-text-muted">Supports pull</label>
-            <select v-model="supportsPull" class="zaqa-input mt-2 h-10">
-              <option value="">All</option>
-              <option value="1">Yes</option>
-              <option value="0">No</option>
-            </select>
+
+          <div class="grid gap-3 lg:grid-cols-[minmax(0,1.6fr)_minmax(180px,0.8fr)_auto] lg:items-end">
+            <div>
+              <label class="text-xs font-semibold uppercase tracking-wider text-text-muted">Search</label>
+              <input v-model="q" class="zaqa-input mt-2 h-10" placeholder="Institution name…" @keydown.enter.prevent="applyFilters" />
+            </div>
+            <div>
+              <label class="text-xs font-semibold uppercase tracking-wider text-text-muted">Supports pull</label>
+              <select v-model="supportsPull" class="zaqa-input mt-2 h-10">
+                <option value="">All</option>
+                <option value="1">Yes</option>
+                <option value="0">No</option>
+              </select>
+            </div>
+            <button type="button" class="zaqa-btn zaqa-btn-secondary h-10 w-full px-4 py-2 text-sm lg:w-auto" @click="applyFilters">Apply</button>
           </div>
-          <button type="button" class="zaqa-btn zaqa-btn-secondary w-full px-4 py-2 text-sm" @click="applyFilters">Apply</button>
         </div>
       </div>
 
-      <div class="overflow-hidden rounded-2xl border border-border bg-surface shadow-sm lg:col-span-2">
+      <div class="overflow-hidden rounded-2xl border border-border bg-surface shadow-sm">
         <div class="border-b border-border bg-surface-muted px-5 py-4">
           <div class="text-sm font-semibold text-text-primary">Institutions</div>
           <div class="mt-1 text-xs text-text-muted">Each institution can optionally be configured for pull lookup during auto-verification.</div>
         </div>
 
         <div v-if="institutions.data.length === 0" class="px-5 py-6">
-          <div class="rounded-2xl border border-border bg-surface-muted p-6 text-center">
-            <div class="text-sm font-semibold text-text-primary">No institutions</div>
+          <div class="rounded-2xl border border-dashed border-border bg-surface-muted p-8 text-center">
+            <div class="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-brand/10 text-brand">
+              <Globe class="h-6 w-6" aria-hidden="true" />
+            </div>
+            <div class="mt-4 text-sm font-semibold text-text-primary">No institutions found</div>
+            <div class="mt-1 text-xs text-text-muted">Configured awarding institutions will appear here for pull integration setup.</div>
           </div>
         </div>
 
@@ -104,4 +114,3 @@ function applyFilters() {
     </div>
   </AdminLayout>
 </template>
-

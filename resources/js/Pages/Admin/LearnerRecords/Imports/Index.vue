@@ -1,8 +1,10 @@
 <script setup lang="ts">
+import AdminActionModal from '@/Components/AdminActionModal.vue'
 import AdminLayout from '@/Layouts/AdminLayout.vue'
+import SingleSelectCombobox from '@/Components/SingleSelectCombobox.vue'
 import { Link, useForm } from '@inertiajs/vue3'
 import { FileSpreadsheet, UploadCloud } from 'lucide-vue-next'
-import SingleSelectCombobox from '@/Components/SingleSelectCombobox.vue'
+import { ref, watch } from 'vue'
 
 const props = defineProps<{
   imports: any
@@ -10,9 +12,20 @@ const props = defineProps<{
   can: { import: boolean }
 }>()
 
+const importModalOpen = ref(false)
+const fileInput = ref<HTMLInputElement | null>(null)
+
 const form = useForm<{ awarding_institution_id: number | '' | null; file: File | null }>({
   awarding_institution_id: '',
   file: null,
+})
+
+watch(importModalOpen, (open) => {
+  if (!open) {
+    form.reset()
+    form.clearErrors()
+    if (fileInput.value) fileInput.value.value = ''
+  }
 })
 
 function pickFile(e: Event) {
@@ -23,10 +36,31 @@ function pickFile(e: Event) {
 
 function submit() {
   if (!props.can.import || !form.file) return
+
   form.post('/admin/learner-records/imports', {
     forceFormData: true,
     preserveScroll: true,
+    onSuccess: () => {
+      importModalOpen.value = false
+    },
   })
+}
+
+function formatDate(iso: string | null | undefined) {
+  if (!iso) return '—'
+
+  try {
+    return new Date(iso).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })
+  } catch {
+    return iso
+  }
+}
+
+function statusBadgeClass(status: string | null | undefined) {
+  if (status === 'completed') return 'zaqa-badge-success'
+  if (status === 'failed') return 'zaqa-badge-danger'
+  if (status === 'completed_with_errors') return 'zaqa-badge-warning'
+  return 'zaqa-badge-secondary'
 }
 </script>
 
@@ -39,105 +73,132 @@ function submit() {
           Learner Records
         </div>
         <h1 class="mt-2 text-2xl font-semibold tracking-tight text-text-primary">Imports</h1>
-        <p class="mt-1 text-sm text-text-muted">Upload the HE Learner Records template and process it asynchronously.</p>
+        <p class="mt-1 text-sm text-text-muted">Queue learner-record spreadsheets and track each import run from one place.</p>
       </div>
       <div class="flex flex-wrap items-center gap-2">
+        <button
+          v-if="can.import"
+          type="button"
+          class="zaqa-btn zaqa-btn-primary inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold"
+          @click="importModalOpen = true"
+        >
+          <UploadCloud class="h-4 w-4" aria-hidden="true" />
+          Upload import file
+        </button>
         <Link href="/admin/learner-records" class="zaqa-btn zaqa-btn-secondary px-4 py-2 text-sm">Records</Link>
       </div>
     </div>
 
-    <div class="mt-6 grid gap-4 lg:grid-cols-3">
-      <div class="rounded-2xl border border-border bg-surface p-5 lg:col-span-1">
-        <div class="text-sm font-semibold text-text-primary">Upload import</div>
-        <p class="mt-1 text-xs text-text-muted">Processing happens in the queue. You can leave this page after upload.</p>
+    <AdminActionModal
+      v-model="importModalOpen"
+      title="Upload learner records import"
+      description="Processing runs asynchronously in the queue. You can leave this page after submitting the file."
+      max-width-class="max-w-3xl"
+    >
+      <div class="space-y-4">
+        <div class="rounded-2xl border border-border bg-surface-muted/60 p-4 text-sm text-text-muted">
+          Upload the HE Learner Records template in `.xlsx`, `.xls`, or `.csv` format. Leave the institution empty to let
+          the import process auto-detect it from the spreadsheet.
+        </div>
 
-        <div class="mt-4 space-y-3">
-          <div>
-            <SingleSelectCombobox
-              v-model="form.awarding_institution_id"
-              label="Awarding institution (optional)"
-              placeholder="Auto-detect from file"
-              :options="institutions.map((i) => ({ id: i.id, label: i.name }))"
-              :disabled="!can.import"
-              :error="form.errors.awarding_institution_id"
-              help-text="Use this to force a specific institution. Leave empty to auto-detect from the file."
-            />
-          </div>
+        <SingleSelectCombobox
+          v-model="form.awarding_institution_id"
+          label="Awarding institution (optional)"
+          placeholder="Auto-detect from file"
+          :options="institutions.map((i) => ({ id: i.id, label: i.name }))"
+          :disabled="!can.import || form.processing"
+          :error="form.errors.awarding_institution_id"
+          help-text="Use this only when you want to force the uploaded rows to a specific institution."
+        />
 
-          <div>
-            <label class="text-xs font-semibold uppercase tracking-wider text-text-muted">Spreadsheet file</label>
-            <input
-              type="file"
-              accept=".xlsx,.xls,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,text/csv"
-              class="mt-2 block w-full text-sm text-text-primary file:mr-3 file:rounded-lg file:border file:border-border file:bg-surface-muted file:px-3 file:py-2 file:text-sm file:font-semibold"
-              :disabled="!can.import"
-              @change="pickFile"
-            />
-            <p v-if="form.errors.file" class="mt-2 text-xs text-danger">{{ form.errors.file }}</p>
-          </div>
-
-          <button
-            type="button"
-            class="zaqa-btn zaqa-btn-primary inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold disabled:opacity-50"
-            :disabled="!can.import || !form.file || form.processing"
-            @click="submit"
-          >
-            <UploadCloud class="h-4 w-4" aria-hidden="true" />
-            {{ form.processing ? 'Uploading…' : 'Upload & queue import' }}
-          </button>
+        <div>
+          <label class="text-xs font-semibold uppercase tracking-wider text-text-muted">Spreadsheet file</label>
+          <input
+            ref="fileInput"
+            type="file"
+            accept=".xlsx,.xls,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,text/csv"
+            class="mt-2 block w-full text-sm text-text-primary file:mr-3 file:rounded-lg file:border file:border-border file:bg-surface-muted file:px-3 file:py-2 file:text-sm file:font-semibold"
+            :disabled="!can.import || form.processing"
+            @change="pickFile"
+          />
+          <p v-if="form.errors.file" class="mt-2 text-xs text-danger">{{ form.errors.file }}</p>
         </div>
       </div>
 
-      <div class="overflow-hidden rounded-2xl border border-border bg-surface shadow-sm lg:col-span-2">
-        <div class="border-b border-border bg-surface-muted px-5 py-4">
-          <div class="text-sm font-semibold text-text-primary">Import history</div>
-          <div class="mt-1 text-xs text-text-muted">Newest first.</div>
-        </div>
+      <template #footer>
+        <button type="button" class="zaqa-btn zaqa-btn-secondary px-4 py-2 text-sm" @click="importModalOpen = false">Cancel</button>
+        <button
+          type="button"
+          class="zaqa-btn zaqa-btn-primary inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold disabled:opacity-50"
+          :disabled="!can.import || !form.file || form.processing"
+          @click="submit"
+        >
+          <UploadCloud class="h-4 w-4" aria-hidden="true" />
+          {{ form.processing ? 'Uploading…' : 'Upload & queue import' }}
+        </button>
+      </template>
+    </AdminActionModal>
 
-        <div v-if="imports.data.length === 0" class="px-5 py-6">
-          <div class="rounded-2xl border border-border bg-surface-muted p-6 text-center">
-            <div class="text-sm font-semibold text-text-primary">No imports yet</div>
-            <div class="mt-1 text-xs text-text-muted">Upload a spreadsheet to begin.</div>
+    <div class="mt-6 overflow-hidden rounded-2xl border border-border bg-surface shadow-sm">
+      <div class="border-b border-border bg-surface-muted px-5 py-4">
+        <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <div class="text-sm font-semibold text-text-primary">Import history</div>
+            <div class="mt-1 text-xs text-text-muted">Newest uploads first, including processing progress and row counts.</div>
+          </div>
+          <div class="text-xs text-text-muted">
+            {{ imports.total ?? imports.data.length }} import{{ (imports.total ?? imports.data.length) === 1 ? '' : 's' }}
           </div>
         </div>
+      </div>
 
-        <div v-else class="overflow-x-auto">
-          <table class="min-w-full text-sm">
-            <thead class="bg-surface-muted text-xs font-semibold text-text-muted">
-              <tr>
-                <th class="px-5 py-3 text-left">File</th>
-                <th class="px-5 py-3 text-left">Institution</th>
-                <th class="px-5 py-3 text-left">Status</th>
-                <th class="px-5 py-3 text-left">Progress</th>
-                <th class="px-5 py-3 text-right">Actions</th>
-              </tr>
-            </thead>
-            <tbody class="divide-y divide-border/60">
-              <tr v-for="i in imports.data" :key="i.id" class="hover:bg-surface-muted/60">
-                <td class="px-5 py-3">
-                  <div class="font-semibold text-text-primary">{{ i.original_filename }}</div>
-                  <div class="mt-0.5 text-xs text-text-muted">Uploaded: {{ i.created_at }}</div>
-                </td>
-                <td class="px-5 py-3 text-text-primary">{{ i.awarding_institution?.name || '—' }}</td>
-                <td class="px-5 py-3">
-                  <span class="zaqa-badge" :class="i.status === 'completed' ? 'zaqa-badge-success' : i.status === 'failed' ? 'zaqa-badge-danger' : 'zaqa-badge-warning'">
-                    {{ i.status }}
-                  </span>
-                </td>
-                <td class="px-5 py-3 text-text-primary">
-                  <div class="text-xs">
-                    {{ i.processed_rows ?? 0 }}/{{ i.total_rows ?? '—' }} · +{{ i.inserted_rows ?? 0 }} / ~{{ i.updated_rows ?? 0 }} · failed {{ i.failed_rows ?? 0 }}
-                  </div>
-                </td>
-                <td class="px-5 py-3 text-right">
-                  <Link :href="`/admin/learner-records/imports/${i.id}`" class="zaqa-btn zaqa-btn-secondary h-9 px-3 py-2 text-xs">
-                    View
-                  </Link>
-                </td>
-              </tr>
-            </tbody>
-          </table>
+      <div v-if="imports.data.length === 0" class="px-5 py-8">
+        <div class="rounded-2xl border border-border bg-surface-muted p-8 text-center">
+          <div class="text-sm font-semibold text-text-primary">No imports yet</div>
+          <div class="mt-1 text-xs text-text-muted">Use “Upload import file” to queue the first spreadsheet.</div>
         </div>
+      </div>
+
+      <div v-else class="overflow-x-auto">
+        <table class="min-w-full text-sm">
+          <thead class="bg-surface-muted text-xs font-semibold text-text-muted">
+            <tr>
+              <th class="px-5 py-3 text-left">File</th>
+              <th class="px-5 py-3 text-left">Institution</th>
+              <th class="px-5 py-3 text-left">Uploaded by</th>
+              <th class="px-5 py-3 text-left">Status</th>
+              <th class="px-5 py-3 text-left">Progress</th>
+              <th class="px-5 py-3 text-right">Actions</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-border/60">
+            <tr v-for="i in imports.data" :key="i.id" class="hover:bg-surface-muted/60">
+              <td class="px-5 py-3">
+                <div class="font-semibold text-text-primary">{{ i.original_filename }}</div>
+                <div class="mt-0.5 text-xs text-text-muted">Uploaded: {{ formatDate(i.created_at) }}</div>
+              </td>
+              <td class="px-5 py-3 text-text-primary">{{ i.awarding_institution?.name || '—' }}</td>
+              <td class="px-5 py-3">
+                <div class="text-text-primary">{{ i.uploaded_by?.name || '—' }}</div>
+              </td>
+              <td class="px-5 py-3">
+                <span class="zaqa-badge" :class="statusBadgeClass(i.status)">
+                  {{ i.status }}
+                </span>
+              </td>
+              <td class="px-5 py-3 text-text-primary">
+                <div class="text-xs">
+                  {{ i.processed_rows ?? 0 }}/{{ i.total_rows ?? '—' }} · +{{ i.inserted_rows ?? 0 }} / ~{{ i.updated_rows ?? 0 }} · failed {{ i.failed_rows ?? 0 }}
+                </div>
+              </td>
+              <td class="px-5 py-3 text-right">
+                <Link :href="`/admin/learner-records/imports/${i.id}`" class="zaqa-btn zaqa-btn-secondary h-9 px-3 py-2 text-xs">
+                  View
+                </Link>
+              </td>
+            </tr>
+          </tbody>
+        </table>
       </div>
     </div>
   </AdminLayout>

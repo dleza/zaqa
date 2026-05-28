@@ -51,37 +51,44 @@ function applyFilters() {
       </div>
     </div>
 
-    <div class="mt-6 grid gap-4 lg:grid-cols-3">
-      <div class="rounded-2xl border border-border bg-surface p-5 lg:col-span-1">
-        <div class="text-sm font-semibold text-text-primary">Filters</div>
-        <div class="mt-4 space-y-3">
+    <div class="mt-6 space-y-4">
+      <div class="rounded-2xl border border-border bg-surface p-5 shadow-sm">
+        <div class="flex flex-col gap-4">
           <div>
-            <label class="text-xs font-semibold uppercase tracking-wider text-text-muted">Search</label>
-            <input v-model="q" class="zaqa-input mt-2 h-10" placeholder="Correlation ID, endpoint, client…" @keydown.enter.prevent="applyFilters" />
+            <div class="text-sm font-semibold text-text-primary">Filters</div>
+            <div class="mt-1 text-xs text-text-muted">Filter institution API request logs by request details, institution, status, or date.</div>
           </div>
-          <div>
-            <label class="text-xs font-semibold uppercase tracking-wider text-text-muted">Institution</label>
-            <select v-model="awardingInstitutionId" class="zaqa-input mt-2 h-10">
-              <option value="">All</option>
-              <option v-for="i in institutions" :key="i.id" :value="String(i.id)">{{ i.name }}</option>
-            </select>
+
+          <div class="grid gap-3 lg:grid-cols-[minmax(0,1.6fr)_minmax(220px,1fr)_minmax(180px,0.8fr)]">
+            <div>
+              <label class="text-xs font-semibold uppercase tracking-wider text-text-muted">Search</label>
+              <input v-model="q" class="zaqa-input mt-2 h-10" placeholder="Correlation ID, endpoint, client…" @keydown.enter.prevent="applyFilters" />
+            </div>
+            <div>
+              <label class="text-xs font-semibold uppercase tracking-wider text-text-muted">Institution</label>
+              <select v-model="awardingInstitutionId" class="zaqa-input mt-2 h-10">
+                <option value="">All</option>
+                <option v-for="i in institutions" :key="i.id" :value="String(i.id)">{{ i.name }}</option>
+              </select>
+            </div>
+            <div>
+              <label class="text-xs font-semibold uppercase tracking-wider text-text-muted">Status</label>
+              <select v-model="status" class="zaqa-input mt-2 h-10">
+                <option value="">All</option>
+                <option value="success">success</option>
+                <option value="validation_failed">validation_failed</option>
+                <option value="unauthorized">unauthorized</option>
+                <option value="throttled">throttled</option>
+                <option value="failed">failed</option>
+              </select>
+            </div>
           </div>
-          <div>
-            <label class="text-xs font-semibold uppercase tracking-wider text-text-muted">Status</label>
-            <select v-model="status" class="zaqa-input mt-2 h-10">
-              <option value="">All</option>
-              <option value="success">success</option>
-              <option value="validation_failed">validation_failed</option>
-              <option value="unauthorized">unauthorized</option>
-              <option value="throttled">throttled</option>
-              <option value="failed">failed</option>
-            </select>
-          </div>
-          <div>
-            <label class="text-xs font-semibold uppercase tracking-wider text-text-muted">Endpoint contains</label>
-            <input v-model="endpoint" class="zaqa-input mt-2 h-10" placeholder="/api/institution/v1/…" @keydown.enter.prevent="applyFilters" />
-          </div>
-          <div class="grid gap-3 sm:grid-cols-2">
+
+          <div class="grid gap-3 lg:grid-cols-[minmax(0,1.6fr)_minmax(180px,0.8fr)_minmax(180px,0.8fr)_auto] lg:items-end">
+            <div>
+              <label class="text-xs font-semibold uppercase tracking-wider text-text-muted">Endpoint contains</label>
+              <input v-model="endpoint" class="zaqa-input mt-2 h-10" placeholder="/api/institution/v1/…" @keydown.enter.prevent="applyFilters" />
+            </div>
             <div>
               <label class="text-xs font-semibold uppercase tracking-wider text-text-muted">From</label>
               <input v-model="from" type="date" class="zaqa-input mt-2 h-10" />
@@ -90,20 +97,23 @@ function applyFilters() {
               <label class="text-xs font-semibold uppercase tracking-wider text-text-muted">To</label>
               <input v-model="to" type="date" class="zaqa-input mt-2 h-10" />
             </div>
+            <button type="button" class="zaqa-btn zaqa-btn-secondary h-10 w-full px-4 py-2 text-sm lg:w-auto" @click="applyFilters">Apply</button>
           </div>
-          <button type="button" class="zaqa-btn zaqa-btn-secondary w-full px-4 py-2 text-sm" @click="applyFilters">Apply</button>
         </div>
       </div>
 
-      <div class="overflow-hidden rounded-2xl border border-border bg-surface shadow-sm lg:col-span-2">
+      <div class="overflow-hidden rounded-2xl border border-border bg-surface shadow-sm">
         <div class="border-b border-border bg-surface-muted px-5 py-4">
           <div class="text-sm font-semibold text-text-primary">Requests</div>
           <div class="mt-1 text-xs text-text-muted">Newest first.</div>
         </div>
 
         <div v-if="logs.data.length === 0" class="px-5 py-6">
-          <div class="rounded-2xl border border-border bg-surface-muted p-6 text-center">
-            <div class="text-sm font-semibold text-text-primary">No logs</div>
+          <div class="rounded-2xl border border-dashed border-border bg-surface-muted p-8 text-center">
+            <div class="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-brand/10 text-brand">
+              <FileText class="h-6 w-6" aria-hidden="true" />
+            </div>
+            <div class="mt-4 text-sm font-semibold text-text-primary">No API logs yet</div>
             <div class="mt-1 text-xs text-text-muted">Requests will appear here once institutions start integrating.</div>
           </div>
         </div>
@@ -146,4 +156,3 @@ function applyFilters() {
     </div>
   </AdminLayout>
 </template>
-
