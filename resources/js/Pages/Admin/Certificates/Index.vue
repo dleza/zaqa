@@ -152,6 +152,16 @@ function formatIssued(iso: string | null | undefined) {
                     <FileDown class="h-3.5 w-3.5" aria-hidden="true" />
                     PDF
                   </a>
+                  <a
+                    v-if="row.verification_url"
+                    :href="row.verification_url"
+                    target="_blank"
+                    rel="noopener"
+                    class="zaqa-btn zaqa-btn-secondary inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold"
+                  >
+                    <BadgeCheck class="h-3.5 w-3.5" aria-hidden="true" />
+                    Verify page
+                  </a>
                   <Link
                     v-if="row.verification_task_url"
                     :href="row.verification_task_url"

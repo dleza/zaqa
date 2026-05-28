@@ -57,6 +57,7 @@ use App\Http\Controllers\Applicant\ApplicantQualificationController;
 use App\Http\Controllers\Applicant\ApplicantReferenceController;
 use App\Http\Controllers\Applicant\ApplicantServiceFeedbackController;
 use App\Http\Controllers\Applicant\DashboardController;
+use App\Http\Controllers\CertificateVerificationController;
 use App\Http\Controllers\Auth\AccountActivationController;
 use App\Http\Controllers\Auth\AuthenticatedSessionController;
 use App\Http\Controllers\Auth\NewPasswordController;
@@ -103,6 +104,7 @@ Route::middleware('guest')->group(function () {
 });
 
 Route::get('/activate/email', [AccountActivationController::class, 'verifyEmail'])->name('activation.email.verify');
+Route::get('/certificates/{token}', [CertificateVerificationController::class, 'show'])->name('certificates.verify');
 
 Route::middleware('auth')->group(function () {
     Route::post('/logout', [AuthenticatedSessionController::class, 'destroy'])->name('logout');

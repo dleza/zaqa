@@ -128,7 +128,8 @@ class AdminCertificatesRegistryTest extends TestCase
         $response->assertOk();
         $response->assertInertia(fn ($page) => $page
             ->has('certificates.data', 1)
-            ->where('certificates.data.0.certificate_number', $cert->certificate_number));
+            ->where('certificates.data.0.certificate_number', $cert->certificate_number)
+            ->where('certificates.data.0.verification_url', rtrim((string) config('certificates.verify_url_base'), '/').'/'.$cert->verification_token));
     }
 
     public function test_registry_download_streams_pdf(): void

@@ -60,6 +60,7 @@ class AdminCertificatesController extends Controller
             ->withQueryString()
             ->through(function (QualificationCertificate $cert) use ($canOpenVerificationTask) {
                 $qualificationId = (int) $cert->qualification_id;
+                $verificationUrl = rtrim((string) config('certificates.verify_url_base'), '/').'/'.$cert->verification_token;
 
                 return [
                     'id' => $cert->id,
@@ -74,6 +75,7 @@ class AdminCertificatesController extends Controller
                     'applicant_name' => $cert->application?->applicant?->name,
                     'issued_by_name' => $cert->issuedBy?->name,
                     'download_url' => route('admin.certificates.download', ['qualificationCertificate' => $cert]),
+                    'verification_url' => $verificationUrl,
                     'verification_task_url' => $canOpenVerificationTask && $qualificationId > 0
                         ? route('admin.verification.qualifications.show', ['qualification' => $qualificationId])
                         : null,
