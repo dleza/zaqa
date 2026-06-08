@@ -20,40 +20,49 @@ class DemoVerificationFlowSeeder extends Seeder
         // Demo password for all seeded staff accounts (change anytime).
         $password = 'ChangeMe@2026';
 
+        // Email pattern: demo.{role}.{variant}@zaqa.gov.zm — role is visible at a glance.
+        // | Email                         | Role        | Purpose                          |
+        // |-------------------------------|-------------|----------------------------------|
+        // | demo.l2.1@zaqa.gov.zm         | Level 2     | Assign & oversee verification    |
+        // | demo.l2.2@zaqa.gov.zm         | Level 2     | Second L2 for workload demos     |
+        // | demo.l1.1@zaqa.gov.zm         | Level 1     | Local institution verification   |
+        // | demo.l1.2@zaqa.gov.zm         | Level 1     | Second L1 for assignment demos   |
+        // | demo.l1.foreign@zaqa.gov.zm   | Level 1     | Foreign qualification verification |
+        // | demo.finance@zaqa.gov.zm      | Finance     | Payment proof review             |
         $users = [
             [
-                'email' => 'verifier.l2.one@zaqa.gov.zm',
-                'name' => 'Demo Verification Officer L2',
+                'email' => 'demo.l2.1@zaqa.gov.zm',
+                'name' => 'Demo L2 — Officer 1',
                 'phone_primary' => '260977000012',
                 'role' => 'Verification Officer Level 2',
             ],
             [
-                'email' => 'verifier.l2.two@zaqa.gov.zm',
-                'name' => 'Demo Verification Officer L2',
+                'email' => 'demo.l2.2@zaqa.gov.zm',
+                'name' => 'Demo L2 — Officer 2',
                 'phone_primary' => '260977000022',
                 'role' => 'Verification Officer Level 2',
             ],
             [
-                'email' => 'verifier.l1@zaqa.gov.zm',
-                'name' => 'Demo Verification Officer ONE L1',
+                'email' => 'demo.l1.1@zaqa.gov.zm',
+                'name' => 'Demo L1 — Officer 1',
                 'phone_primary' => '260977000001',
                 'role' => 'Verification Officer Level 1',
             ],
             [
-                'email' => 'verifier.l1.two@zaqa.gov.zm',
-                'name' => 'Demo Verification Officer TWO L1',
+                'email' => 'demo.l1.2@zaqa.gov.zm',
+                'name' => 'Demo L1 — Officer 2',
                 'phone_primary' => '260977000002',
                 'role' => 'Verification Officer Level 1',
             ],
             [
-                'email' => 'verifier.l1.foreign@zaqa.gov.zm',
-                'name' => 'Demo Verification Officer FOREIGN L1',
+                'email' => 'demo.l1.foreign@zaqa.gov.zm',
+                'name' => 'Demo L1 — Foreign',
                 'phone_primary' => '260977000003',
                 'role' => 'Verification Officer Level 1',
             ],
             [
-                'email' => 'finance@zaqa.gov.zm',
-                'name' => 'Demo Finance Officer',
+                'email' => 'demo.finance@zaqa.gov.zm',
+                'name' => 'Demo Finance',
                 'phone_primary' => '260977000033',
                 'role' => 'Finance Officer',
             ],
