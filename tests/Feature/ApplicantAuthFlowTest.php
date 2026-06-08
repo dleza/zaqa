@@ -72,6 +72,49 @@ class ApplicantAuthFlowTest extends TestCase
         ]);
     }
 
+    public function test_individual_registration_rejects_disabled_phone_method(): void
+    {
+        config([
+            'registration.with_email' => true,
+            'registration.with_sms' => false,
+        ]);
+
+        $payload = [
+            'first_name' => 'Jane',
+            'middle_name' => 'M',
+            'surname' => 'Doe',
+            'login_identifier_type' => 'phone',
+            'phone_primary' => '+260955000111',
+            'email' => '',
+            'password' => 'VeryStrongPassword123',
+            'password_confirmation' => 'VeryStrongPassword123',
+        ];
+
+        $response = $this->post('/register/individual', $payload);
+
+        $response->assertSessionHasErrors('login_identifier_type');
+        $this->assertDatabaseMissing('users', [
+            'phone_primary' => $payload['phone_primary'],
+        ]);
+    }
+
+    public function test_register_page_exposes_contact_method_flags(): void
+    {
+        config([
+            'registration.with_email' => true,
+            'registration.with_sms' => false,
+        ]);
+
+        $response = $this->get('/register');
+
+        $response->assertOk();
+        $response->assertInertia(fn ($page) => $page
+            ->component('Auth/Register')
+            ->where('registerWithEmail', true)
+            ->where('registerWithSms', false)
+            ->where('defaultContactMethod', 'email'));
+    }
+
     public function test_email_token_and_phone_otp_activate_account(): void
     {
         Mail::fake();

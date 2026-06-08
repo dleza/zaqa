@@ -13,6 +13,7 @@ const props = defineProps<{
 
 const page = usePage()
 const url = computed(() => (page.url ?? '').toString())
+const currentPath = computed(() => url.value.split('?')[0] || url.value)
 
 const openSections = ref<Record<string, boolean>>({})
 const openGroups = ref<Record<string, boolean>>({})
@@ -89,7 +90,10 @@ function hasAny(required?: string[]) {
 
 function itemIsActive(item: any) {
   const start = item.activeStartsWith ?? item.href
-  if (start && url.value.startsWith(start)) return true
+  if (start) {
+    if (item.activeExact) return currentPath.value === start
+    if (currentPath.value.startsWith(start)) return true
+  }
   const children = item.children ?? []
   if ((children?.length ?? 0) > 0) {
     return children.some((c: any) => itemIsActive(c))

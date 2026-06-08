@@ -377,6 +377,9 @@ Route::middleware('auth')->group(function () {
         Route::get('/applications', [AdminApplicationsController::class, 'index'])
             ->middleware('can:admin.applications.view')
             ->name('applications.index');
+        Route::get('/applications/qualifications', [AdminApplicationsController::class, 'qualifications'])
+            ->middleware('can:admin.applications.view')
+            ->name('applications.qualifications.index');
         Route::get('/applications/track', [AdminApplicationsTrackController::class, 'index'])
             ->middleware('can:admin.applications.view')
             ->name('applications.track.index');

@@ -11,13 +11,26 @@ const mode = ref<Mode>('individual')
 
 type ContactMethod = 'email' | 'phone'
 
+const props = withDefaults(
+  defineProps<{
+    registerWithEmail?: boolean
+    registerWithSms?: boolean
+    defaultContactMethod?: ContactMethod
+  }>(),
+  {
+    registerWithEmail: true,
+    registerWithSms: true,
+    defaultContactMethod: 'email',
+  },
+)
+
 const mounted = ref(false)
 
 const individualForm = useForm({
   first_name: '',
   middle_name: '',
   surname: '',
-  login_identifier_type: 'email' as ContactMethod,
+  login_identifier_type: props.defaultContactMethod,
   phone_primary: '',
   email: '',
   password: '',
@@ -28,7 +41,7 @@ const institutionForm = useForm({
   institution_name: '',
   tpin: '',
   contact_person_name: '',
-  login_identifier_type: 'email' as ContactMethod,
+  login_identifier_type: props.defaultContactMethod,
   phone_primary: '',
   email: '',
   password: '',
@@ -43,7 +56,15 @@ const contactMethod = computed<ContactMethod>({
   },
 })
 
+function isContactMethodEnabled(method: ContactMethod): boolean {
+  return method === 'email' ? props.registerWithEmail : props.registerWithSms
+}
+
 function setContactMethod(method: ContactMethod) {
+  if (!isContactMethodEnabled(method)) {
+    return
+  }
+
   contactMethod.value = method
 
   // Keep the UI clean by clearing the non-primary field (and its errors).
@@ -267,7 +288,15 @@ function submit() {
             <button
               type="button"
               class="relative z-10 inline-flex flex-1 items-center justify-center gap-2 rounded-full px-3 py-2.5 text-sm font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
-              :class="contactMethod === 'email' ? 'text-text-primary' : 'text-text-muted hover:text-text-primary'"
+              :class="
+                contactMethod === 'email'
+                  ? 'text-text-primary'
+                  : registerWithEmail
+                    ? 'text-text-muted hover:text-text-primary'
+                    : 'cursor-not-allowed text-text-muted opacity-50'
+              "
+              :disabled="!registerWithEmail"
+              :aria-disabled="!registerWithEmail"
               @click="setContactMethod('email')"
             >
               <Mail class="h-4 w-4" aria-hidden="true" />
@@ -276,7 +305,15 @@ function submit() {
             <button
               type="button"
               class="relative z-10 inline-flex flex-1 items-center justify-center gap-2 rounded-full px-3 py-2.5 text-sm font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
-              :class="contactMethod === 'phone' ? 'text-text-primary' : 'text-text-muted hover:text-text-primary'"
+              :class="
+                contactMethod === 'phone'
+                  ? 'text-text-primary'
+                  : registerWithSms
+                    ? 'text-text-muted hover:text-text-primary'
+                    : 'cursor-not-allowed text-text-muted opacity-50'
+              "
+              :disabled="!registerWithSms"
+              :aria-disabled="!registerWithSms"
               @click="setContactMethod('phone')"
             >
               <Phone class="h-4 w-4" aria-hidden="true" />

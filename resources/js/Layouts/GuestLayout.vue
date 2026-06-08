@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import { usePage } from '@inertiajs/vue3'
+import { Link, usePage } from '@inertiajs/vue3'
 import FlashMessages from '@/Components/FlashMessages.vue'
 import { zaqaLogoUrl } from '@/constants/zaqaLogo'
 
@@ -46,13 +46,24 @@ const isActivatePage = computed(() => currentPath.value === '/activate')
           </div>
         </a>
 
-        <nav class="hidden items-center gap-2 sm:flex" aria-label="Primary navigation">
-          <a v-if="!isLoginPage" href="/login" class="zaqa-btn zaqa-btn-ghost-on-brand h-10 px-4 py-2 text-sm">
-            Log in
-          </a>
-          <a v-if="!isRegisterPage" href="/register" class="zaqa-btn zaqa-btn-ghost-on-brand h-10 px-4 py-2 text-sm">
-            Register and Apply
-          </a>
+        <nav
+          class="items-center gap-2"
+          :class="isActivatePage ? 'flex' : 'hidden sm:flex'"
+          aria-label="Primary navigation"
+        >
+          <template v-if="isActivatePage">
+            <Link href="/logout" method="post" as="button" class="zaqa-btn zaqa-btn-ghost-on-brand h-10 px-4 py-2 text-sm">
+              Log out
+            </Link>
+          </template>
+          <template v-else>
+            <a v-if="!isLoginPage" href="/login" class="zaqa-btn zaqa-btn-ghost-on-brand h-10 px-4 py-2 text-sm">
+              Log in
+            </a>
+            <a v-if="!isRegisterPage" href="/register" class="zaqa-btn zaqa-btn-ghost-on-brand h-10 px-4 py-2 text-sm">
+              Register and Apply
+            </a>
+          </template>
         </nav>
       </div>
     </header>

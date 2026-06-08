@@ -22,6 +22,7 @@ export type AdminNavItem = {
   href?: string
   icon?: any
   activeStartsWith?: string
+  activeExact?: boolean
   requiredAnyPermissions?: string[]
   children?: AdminNavItem[]
 }
@@ -81,6 +82,14 @@ export const adminNavSections: AdminNavSection[] = [
         href: '/admin/applications',
         icon: ClipboardList,
         activeStartsWith: '/admin/applications',
+        activeExact: true,
+        requiredAnyPermissions: ['admin.applications.view'],
+      },
+      {
+        label: 'Qualifications',
+        href: '/admin/applications/qualifications',
+        icon: GraduationCap,
+        activeStartsWith: '/admin/applications/qualifications',
         requiredAnyPermissions: ['admin.applications.view'],
       },
       {

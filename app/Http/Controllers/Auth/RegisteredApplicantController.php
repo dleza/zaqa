@@ -8,6 +8,7 @@ use App\Domain\Identity\Data\InstitutionRegistrationData;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Auth\RegisterIndividualRequest;
 use App\Http\Requests\Auth\RegisterInstitutionRequest;
+use App\Support\RegistrationOptions;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Support\Facades\Auth;
 use Inertia\Inertia;
@@ -17,7 +18,7 @@ class RegisteredApplicantController extends Controller
 {
     public function create(): Response
     {
-        return Inertia::render('Auth/Register');
+        return Inertia::render('Auth/Register', RegistrationOptions::inertiaProps());
     }
 
     public function storeIndividual(RegisterIndividualRequest $request, ApplicantRegistrationService $service): RedirectResponse

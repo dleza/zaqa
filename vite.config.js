@@ -8,7 +8,13 @@ export default defineConfig({
     plugins: [
         laravel({
             input: ['resources/css/app.css', 'resources/js/app.ts', 'resources/js/docs/institution-api.ts'],
-            refresh: true,
+            refresh: [
+                'app/**',
+                'routes/**',
+                'resources/views/**',
+                'lang/**',
+                'config/**',
+            ],
         }),
         vue(),
         tailwindcss(),
@@ -20,7 +26,14 @@ export default defineConfig({
     },
     server: {
         watch: {
-            ignored: ['**/storage/framework/views/**'],
+            ignored: [
+                '**/vendor/**',
+                '**/node_modules/**',
+                '**/storage/**',
+                '**/bootstrap/cache/**',
+                '**/public/build/**',
+                '**/.git/**',
+            ],
         },
     },
 });
