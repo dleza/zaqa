@@ -2,51 +2,47 @@
 
 namespace App\Domain\Verification\Listeners;
 
+use App\Domain\Notifications\OutboundMailService;
 use App\Domain\Verification\Events\ApplicationLevel1Completed;
 use App\Mail\Verification\ApplicationLevel1CompletedMail;
-use App\Models\EmailLog;
+use App\Support\Notifications\NotificationQueue;
+use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Queue\InteractsWithQueue;
-use Illuminate\Support\Facades\Mail;
 
 class SendLevel1CompletedNotification implements ShouldQueue
 {
-    use InteractsWithQueue;
+    use InteractsWithQueue, Queueable;
+
+    public function __construct()
+    {
+        $this->onQueue(NotificationQueue::listeners());
+    }
 
     public function handle(ApplicationLevel1Completed $event): void
     {
+        $mail = app(OutboundMailService::class);
         $recipient = $event->assignedBy;
-
         $email = trim((string) ($recipient->email ?? ''));
         if ($email === '') {
             return;
         }
 
-        $emailLog = EmailLog::create([
-            'user_id' => $recipient->id,
-            'application_id' => $event->application->id,
-            'email' => $email,
-            'subject' => 'ZAQA: Level 1 review completed',
-            'template_key' => 'verification_level1_completed',
-            'status' => 'queued',
-            'sent_at' => null,
-        ]);
-
-        try {
-            Mail::to($email)->queue(new ApplicationLevel1CompletedMail(
+        $mail->queue(
+            mailable: new ApplicationLevel1CompletedMail(
                 application: $event->application,
                 level1Actor: $event->level1Actor,
                 assignedBy: $recipient,
                 findings: $event->findings,
-            ));
-
-            $emailLog->forceFill([
-                'status' => 'sent',
-                'sent_at' => now(),
-            ])->save();
-        } catch (\Throwable $e) {
-            $emailLog->forceFill(['status' => 'failed'])->save();
-            throw $e;
-        }
+            ),
+            to: $email,
+            logContext: [
+                'user_id' => $recipient->id,
+                'application_id' => $event->application->id,
+                'email' => $email,
+                'subject' => 'ZAQA: Level 1 review completed',
+                'template_key' => 'verification_level1_completed',
+            ],
+        );
     }
 }

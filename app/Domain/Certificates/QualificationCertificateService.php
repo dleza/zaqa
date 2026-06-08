@@ -3,6 +3,7 @@
 namespace App\Domain\Certificates;
 
 use App\Domain\Audit\AuditLogService;
+use App\Domain\Notifications\OutboundMailService;
 use App\Domain\Payments\ApplicationPaymentSatisfaction;
 use App\Enums\VerificationState;
 use App\Mail\QualificationCertificateIssuedMail;
@@ -19,7 +20,6 @@ use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
@@ -39,6 +39,7 @@ class QualificationCertificateService
     public function __construct(
         private readonly ApplicationPaymentSatisfaction $payments,
         private readonly AuditLogService $audit,
+        private readonly OutboundMailService $outboundMail,
     ) {}
 
     /**
@@ -135,11 +136,21 @@ class QualificationCertificateService
             ])->save();
 
             if ($recipientEmail) {
-                Mail::to($recipientEmail)->send(new QualificationCertificateIssuedMail(
-                    qualification: $qualification,
-                    application: $application,
-                    certificate: $record,
-                ));
+                $this->outboundMail->queue(
+                    mailable: new QualificationCertificateIssuedMail(
+                        qualification: $qualification,
+                        application: $application,
+                        certificate: $record,
+                    ),
+                    to: $recipientEmail,
+                    logContext: [
+                        'user_id' => $application->applicant_user_id,
+                        'application_id' => $application->id,
+                        'email' => $recipientEmail,
+                        'subject' => 'ZAQA qualification certificate issued',
+                        'template_key' => 'qualification_certificate_issued',
+                    ],
+                );
             }
 
             $this->audit->record(

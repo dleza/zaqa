@@ -68,7 +68,7 @@ class ApplicantAuthFlowTest extends TestCase
         $this->assertDatabaseHas('email_logs', [
             'user_id' => $user->id,
             'template_key' => 'activation_email',
-            'status' => 'sent',
+            'status' => 'queued',
         ]);
     }
 

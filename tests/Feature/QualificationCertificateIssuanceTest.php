@@ -176,7 +176,7 @@ class QualificationCertificateIssuanceTest extends TestCase
         $qualification->refresh();
         $this->assertSame(VerificationState::CertificateIssued, $qualification->verification_state);
 
-        Mail::assertSent(QualificationCertificateIssuedMail::class, function (QualificationCertificateIssuedMail $mail) use ($applicant) {
+        Mail::assertQueued(QualificationCertificateIssuedMail::class, function (QualificationCertificateIssuedMail $mail) use ($applicant) {
             return $mail->hasTo($applicant->email);
         });
 
@@ -351,7 +351,7 @@ class QualificationCertificateIssuanceTest extends TestCase
         $admin = $this->makeCertificateAdmin();
 
         $this->actingAs($admin)->post(route('admin.verification.qualifications.issue_certificate', $qualification))->assertRedirect();
-        Mail::assertSent(QualificationCertificateIssuedMail::class);
+        Mail::assertQueued(QualificationCertificateIssuedMail::class);
 
         Mail::fake();
         $this->actingAs($admin)

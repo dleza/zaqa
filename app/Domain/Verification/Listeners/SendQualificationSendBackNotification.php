@@ -2,19 +2,26 @@
 
 namespace App\Domain\Verification\Listeners;
 
+use App\Domain\Notifications\OutboundMailService;
 use App\Domain\Verification\Events\QualificationSentBackToApplicant;
 use App\Mail\Verification\QualificationSentBackToApplicantMail;
-use App\Models\EmailLog;
+use App\Support\Notifications\NotificationQueue;
+use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Queue\InteractsWithQueue;
-use Illuminate\Support\Facades\Mail;
 
 class SendQualificationSendBackNotification implements ShouldQueue
 {
-    use InteractsWithQueue;
+    use InteractsWithQueue, Queueable;
+
+    public function __construct()
+    {
+        $this->onQueue(NotificationQueue::listeners());
+    }
 
     public function handle(QualificationSentBackToApplicant $event): void
     {
+        $mail = app(OutboundMailService::class);
         $application = $event->application;
         $user = $application->applicant()->first();
         if (! $user) {
@@ -26,32 +33,22 @@ class SendQualificationSendBackNotification implements ShouldQueue
             return;
         }
 
-        $emailLog = EmailLog::create([
-            'user_id' => $user->id,
-            'application_id' => $application->id,
-            'email' => $email,
-            'subject' => 'ZAQA: Qualification amendment required',
-            'template_key' => 'verification_qualification_sent_back',
-            'status' => 'queued',
-            'sent_at' => null,
-        ]);
-
-        try {
-            Mail::to($email)->queue(new QualificationSentBackToApplicantMail(
+        $mail->queue(
+            mailable: new QualificationSentBackToApplicantMail(
                 qualification: $event->qualification,
                 application: $application,
                 applicant: $user,
                 actor: $event->actor,
                 comment: $event->comment,
-            ));
-
-            $emailLog->forceFill([
-                'status' => 'sent',
-                'sent_at' => now(),
-            ])->save();
-        } catch (\Throwable $e) {
-            $emailLog->forceFill(['status' => 'failed'])->save();
-            throw $e;
-        }
+            ),
+            to: $email,
+            logContext: [
+                'user_id' => $user->id,
+                'application_id' => $application->id,
+                'email' => $email,
+                'subject' => 'ZAQA: Qualification amendment required',
+                'template_key' => 'verification_qualification_sent_back',
+            ],
+        );
     }
 }

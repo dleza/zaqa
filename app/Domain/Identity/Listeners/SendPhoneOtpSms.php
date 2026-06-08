@@ -3,19 +3,25 @@
 namespace App\Domain\Identity\Listeners;
 
 use App\Domain\Identity\Events\PhoneOtpIssued;
-use App\Models\SmsLog;
+use App\Domain\Notifications\OutboundSmsService;
+use App\Support\Notifications\NotificationQueue;
+use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Queue\InteractsWithQueue;
-use Illuminate\Support\Facades\Log;
 
 class SendPhoneOtpSms implements ShouldQueue
 {
-    use InteractsWithQueue;
+    use InteractsWithQueue, Queueable;
+
+    public function __construct()
+    {
+        $this->onQueue(NotificationQueue::listeners());
+    }
 
     public function handle(PhoneOtpIssued $event): void
     {
+        $sms = app(OutboundSmsService::class);
         $user = $event->user;
-
         $phone = trim((string) ($user->phone_primary ?? ''));
         if ($phone === '') {
             return;
@@ -27,38 +33,11 @@ class SendPhoneOtpSms implements ShouldQueue
             $event->expiresAt->toDayDateTimeString()
         );
 
-        $provider = (string) config('services.sms.provider', 'log');
-
-        $log = SmsLog::create([
-            'user_id' => $user->id,
-            'application_id' => null,
-            'phone_number' => $phone,
-            'message_type' => 'activation_otp',
-            'message_body' => $message,
-            'provider' => $provider,
-            'status' => 'queued',
-            'provider_reference' => null,
-            'sent_at' => null,
-        ]);
-
-        try {
-            if ($provider === 'log') {
-                Log::info('SMS OTP', [
-                    'to' => $phone,
-                    'message' => $message,
-                ]);
-            }
-
-            $log->forceFill([
-                'status' => 'sent',
-                'sent_at' => now(),
-            ])->save();
-        } catch (\Throwable $e) {
-            $log->forceFill([
-                'status' => 'failed',
-            ])->save();
-
-            throw $e;
-        }
+        $sms->send(
+            phone: $phone,
+            message: $message,
+            messageType: 'activation_otp',
+            userId: $user->id,
+        );
     }
 }

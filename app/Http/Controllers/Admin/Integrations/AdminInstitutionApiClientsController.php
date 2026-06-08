@@ -16,7 +16,7 @@ use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
 use Laravel\Sanctum\PersonalAccessToken;
-use Illuminate\Support\Facades\Mail;
+use App\Domain\Notifications\OutboundMailService;
 
 class AdminInstitutionApiClientsController extends Controller
 {
@@ -286,11 +286,21 @@ class AdminInstitutionApiClientsController extends Controller
         $token = (string) $request->validated('token');
         $abilities = (array) $request->validated('abilities');
 
-        Mail::to($institutionApiClient->contact_email)->send(new InstitutionApiTokenIssuedMail(
-            client: $institutionApiClient->loadMissing('awardingInstitution'),
-            plainTextToken: $token,
-            abilities: $abilities,
-        ));
+        app(OutboundMailService::class)->queue(
+            mailable: new InstitutionApiTokenIssuedMail(
+                client: $institutionApiClient->loadMissing('awardingInstitution'),
+                plainTextToken: $token,
+                abilities: $abilities,
+            ),
+            to: (string) $institutionApiClient->contact_email,
+            logContext: [
+                'user_id' => null,
+                'application_id' => null,
+                'email' => (string) $institutionApiClient->contact_email,
+                'subject' => 'ZAQA institution API token',
+                'template_key' => 'institution_api_token_issued',
+            ],
+        );
 
         $institutionApiClient->forceFill(['token_last_sent_at' => now()])->save();
 

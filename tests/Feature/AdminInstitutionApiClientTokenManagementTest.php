@@ -74,7 +74,7 @@ class AdminInstitutionApiClientTokenManagementTest extends TestCase
             'abilities' => ['learner-records:write'],
         ])->assertRedirect();
 
-        Mail::assertSent(InstitutionApiTokenIssuedMail::class, function (InstitutionApiTokenIssuedMail $m) use ($client, $token) {
+        Mail::assertQueued(InstitutionApiTokenIssuedMail::class, function (InstitutionApiTokenIssuedMail $m) use ($client, $token) {
             return $m->hasTo('integration@test.edu')
                 && $m->client->is($client)
                 && $m->plainTextToken === $token;

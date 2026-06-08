@@ -153,3 +153,45 @@ Finance/admin payment views retain full gateway diagnostics:
 - callback logs in `payment_webhook_logs`
 
 These fields are intentionally hidden from applicant endpoints and the payment wizard UI.
+
+
+Redis Set Up
+
+sudo apt update
+sudo apt install redis-server
+
+sudo systemctl enable redis-server
+sudo systemctl start redis-server
+sudo systemctl status redis-server
+
+redis-cli ping
+
+sudo apt install php8.2-redis
+sudo systemctl restart php8.3-fpm
+
+QUEUE_CONNECTION=redis
+
+REDIS_CLIENT=phpredis
+REDIS_HOST=127.0.0.1
+REDIS_PASSWORD=null
+REDIS_PORT=6379
+
+PAYMENTS_QUEUE_HIGH=payments-high
+PAYMENTS_QUEUE=payments
+
+
+command=php /var/www/html/zaqa-portal/artisan queue:work redis --queue=payments-high,payments,default --sleep=1 --tries=3 --timeout=120 --max-time=3600
+
+
+sudo supervisorctl reread
+sudo supervisorctl update
+sudo supervisorctl restart zaqa-worker-payments-high:*
+sudo supervisorctl restart zaqa-worker-payments:*
+sudo supervisorctl restart zaqa-worker-default:*
+
+
+Redis as the queue backend
+Supervisor to keep workers alive
+payments-high for payment prompts
+payments for polling
+default for everything else
