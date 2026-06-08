@@ -7,6 +7,7 @@ use App\Domain\Documents\ApplicantDocumentService;
 use App\Domain\Payments\ApplicationPaymentSatisfaction;
 use App\Domain\Applications\ApplicationSubmissionReadinessService;
 use App\Domain\Payments\InvoiceService;
+use App\Domain\Payments\Presenters\ApplicantPaymentAttemptStatusPresenter;
 use App\Enums\ApplicantType;
 use App\Enums\DocumentType;
 use App\Enums\InvoiceStatus;
@@ -922,23 +923,10 @@ class ApplicantApplicationController extends Controller
                     'rejected_at' => optional($displayPayment->rejected_at)?->toIso8601String(),
                     'confirmed_at' => optional($displayPayment->confirmed_at)?->toIso8601String(),
                     'latest_attempt' => $displayPayment->latestAttempt
-                        ? [
-                            'id' => $displayPayment->latestAttempt->id,
-                            'gateway' => $displayPayment->latestAttempt->gateway,
-                            'status' => $displayPayment->latestAttempt->status?->value ?? (string) $displayPayment->latestAttempt->status,
-                            'payment_reference' => $displayPayment->latestAttempt->payment_reference,
-                            'provider_transaction_id' => $displayPayment->latestAttempt->provider_transaction_id,
-                            'response_code' => $displayPayment->latestAttempt->response_code,
-                            'response_message' => $displayPayment->latestAttempt->response_message,
-                            'query_attempts' => $displayPayment->latestAttempt->query_attempts,
-                            'initiated_at' => optional($displayPayment->latestAttempt->initiated_at)?->toIso8601String(),
-                            'confirmed_at' => optional($displayPayment->latestAttempt->confirmed_at)?->toIso8601String(),
-                            'failed_at' => optional($displayPayment->latestAttempt->failed_at)?->toIso8601String(),
-                            'rejected_at' => optional($displayPayment->latestAttempt->rejected_at)?->toIso8601String(),
-                            'expired_at' => optional($displayPayment->latestAttempt->expired_at)?->toIso8601String(),
-                            'last_queried_at' => optional($displayPayment->latestAttempt->last_queried_at)?->toIso8601String(),
-                            'next_query_at' => optional($displayPayment->latestAttempt->next_query_at)?->toIso8601String(),
-                        ]
+                        ? app(ApplicantPaymentAttemptStatusPresenter::class)->presentSummary(
+                            $displayPayment->latestAttempt,
+                            $displayPayment,
+                        )
                         : null,
                     'proof_document' => $paymentProof
                         ? [

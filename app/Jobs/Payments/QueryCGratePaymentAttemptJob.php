@@ -7,6 +7,7 @@ use App\Domain\Payments\Gateways\CGrate\CGrateClient;
 use App\Domain\Payments\Gateways\CGrate\CGrateException;
 use App\Enums\PaymentAttemptStatus;
 use App\Models\PaymentAttempt;
+use App\Support\Payments\PaymentQueue;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
@@ -18,9 +19,14 @@ class QueryCGratePaymentAttemptJob implements ShouldQueue
 {
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
+    public int $tries = 3;
+
+    public int $timeout = 120;
+
     public function __construct(
         public readonly int $paymentAttemptId,
     ) {
+        $this->onQueue(PaymentQueue::polling());
     }
 
     public function handle(CGrateClient $client, PaymentService $payments): void
@@ -254,6 +260,7 @@ class QueryCGratePaymentAttemptJob implements ShouldQueue
         }
 
         self::dispatch($attemptId)
+            ->onQueue(PaymentQueue::polling())
             ->delay(now()->addSeconds(max(1, $pollInterval)));
     }
 }

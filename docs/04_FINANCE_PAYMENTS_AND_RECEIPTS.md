@@ -117,6 +117,10 @@ Confirmation rules:
 - Bank deposit/transfer: finance manual approval confirms payment (rejection requires a reason)
 
 ## Mobile Money gateway: cGrate (Konik) (implemented)
+
+Production async architecture, queue workers, and applicant-safe status mapping:
+see `docs/05_MOBILE_MONEY_PAYMENTS_PRODUCTION.md`.
+
 The applicant Mobile Money flow is implemented using cGrate’s Konik SOAP webservice (push + poll):
 
 1. Initiate payment (`processCustomerPayment`) which triggers a USSD/STK prompt on the customer phone.

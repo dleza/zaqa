@@ -7,6 +7,7 @@ import WizardStepper from '@/Components/WizardStepper.vue'
 import WizardShell from '@/Components/WizardShell.vue'
 import WizardFooterBar from '@/Components/WizardFooterBar.vue'
 import DocumentManager from '@/Components/DocumentManager.vue'
+import ActionModal from '@/Components/ActionModal.vue'
 import Swal from 'sweetalert2'
 import {
   AlertCircle,
@@ -717,33 +718,88 @@ function submitCorrectionsToZaqa(qualificationId: number) {
 // Applicant wizard is now full-width on all steps (no right-side sidebar panels).
 const showSidebar = computed(() => false)
 
-const mobileMoneyForm = useForm<{ mobile_number: string }>({ mobile_number: '' })
-function initiateMobileMoney() {
-  setSaving('Initiating Mobile Money…')
-  mobileMoneyForm.post(`/applicant/applications/${props.application.id}/payment/initiate-mobile-money`, {
-    preserveScroll: true,
-    onSuccess: () => {
-      setSaved('Mobile Money initiated.')
-      router.reload({ only: ['application'] })
-    },
-    onError: () => setError('Could not initiate Mobile Money.'),
-    onFinish: () => {
-      if (saveState.value.state === 'saving') saveState.value = { state: 'idle' }
-    },
-  })
+type MobileMoneyApplicantStatus = {
+  attempt_id?: number | null
+  id?: number | null
+  status: 'pending' | 'successful' | 'failed'
+  message: string
+  paid?: boolean
+  redirect_url?: string | null
+  mobile_number?: string | null
+  amount_cents?: number
+  currency?: string
+  initiated_at?: string | null
+  can_retry?: boolean
+  already_pending?: boolean
 }
 
-const mobileMoneyLive = ref<{ payment: any; attempt: any } | null>(null)
+const mobileMoneyForm = useForm<{ mobile_number: string }>({ mobile_number: '' })
+const mobileMoneySubmitting = ref(false)
+const mobileMoneyModalOpen = ref(false)
+const mobileMoneyLive = ref<MobileMoneyApplicantStatus | null>(null)
 const mobileMoneyPollingId = ref<number | null>(null)
 
-const mobileMoneyAttempt = computed(() => mobileMoneyLive.value?.attempt ?? payment.value?.latest_attempt ?? null)
-const mobileMoneyPayment = computed(() => mobileMoneyLive.value?.payment ?? payment.value ?? null)
-const mobileMoneyIsPending = computed(() => (mobileMoneyPayment.value?.status ?? '') === 'pending_confirmation')
+const mobileMoneyAttempt = computed(() => mobileMoneyLive.value ?? payment.value?.latest_attempt ?? null)
+const mobileMoneyAttemptId = computed(() => {
+  const attempt = mobileMoneyAttempt.value
+  if (!attempt) return null
+  return Number(attempt.attempt_id ?? attempt.id ?? 0) || null
+})
+const mobileMoneyIsPending = computed(() => (mobileMoneyAttempt.value?.status ?? '') === 'pending')
+const mobileMoneyIsFailed = computed(() => (mobileMoneyAttempt.value?.status ?? '') === 'failed')
+const mobileMoneyIsSuccessful = computed(() => (mobileMoneyAttempt.value?.status ?? '') === 'successful' || (payment.value?.status ?? '') === 'confirmed')
+const mobileMoneyCanInitiate = computed(() => !mobileMoneyIsPending.value && !mobileMoneyIsSuccessful.value && (payment.value?.status ?? '') !== 'confirmed')
+
+function mobileMoneyStatusBadgeClass(status: unknown): string {
+  const s = (status ?? '').toString()
+  if (s === 'successful') return 'zaqa-badge-success'
+  if (s === 'failed') return 'zaqa-badge-danger'
+  return 'zaqa-badge-warning'
+}
+
+function mobileMoneyStatusLabel(status: unknown): string {
+  const s = (status ?? '').toString()
+  if (s === 'successful') return 'Successful'
+  if (s === 'failed') return 'Failed'
+  return 'Pending'
+}
+
+async function initiateMobileMoney() {
+  if (!mobileMoneyCanInitiate.value || mobileMoneySubmitting.value) return
+
+  mobileMoneySubmitting.value = true
+  setSaving('Sending payment prompt…')
+
+  try {
+    const res = await (window as any).axios.post(
+      `/applicant/applications/${props.application.id}/payment/initiate-mobile-money`,
+      { mobile_number: mobileMoneyForm.mobile_number },
+      { headers: { Accept: 'application/json' } },
+    )
+
+    mobileMoneyLive.value = res.data ?? null
+    mobileMoneyModalOpen.value = true
+    setSaved(res.data?.already_pending ? 'A payment request is already pending.' : 'Payment request sent.')
+    startMobileMoneyPolling()
+    router.reload({ only: ['application'] })
+  } catch (error: any) {
+    const message = error?.response?.data?.message ?? 'Could not send payment prompt.'
+    setError(message)
+    if (error?.response?.data?.errors?.mobile_number) {
+      mobileMoneyForm.setError('mobile_number', error.response.data.errors.mobile_number[0])
+    }
+  } finally {
+    mobileMoneySubmitting.value = false
+    if (saveState.value.state === 'saving') saveState.value = { state: 'idle' }
+  }
+}
 
 watch(
   () => payment.value?.id,
   () => {
-    mobileMoneyLive.value = null
+    if (!mobileMoneyModalOpen.value) {
+      mobileMoneyLive.value = null
+    }
   },
 )
 
@@ -754,44 +810,50 @@ function stopMobileMoneyPolling() {
   }
 }
 
-async function checkMobileMoneyStatus(force = false) {
-  const p = mobileMoneyPayment.value
-  if (!p?.id) return
+async function checkMobileMoneyStatus() {
+  const attemptId = mobileMoneyAttemptId.value
+  if (!attemptId) return
 
   try {
-    const res = await (window as any).axios.post(`/applicant/payments/${p.id}/mobile-money/status`, { force })
+    const res = await (window as any).axios.get(`/applicant/payments/attempts/${attemptId}/status`)
     mobileMoneyLive.value = res.data ?? null
 
-    const newStatus = (res.data?.payment?.status ?? '').toString()
-    if (newStatus === 'confirmed') {
+    if (res.data?.paid || res.data?.status === 'successful') {
       setSaved('Payment confirmed.')
       stopMobileMoneyPolling()
+      mobileMoneyModalOpen.value = false
       router.reload({ only: ['application'] })
+      return
+    }
+
+    if (res.data?.status === 'failed') {
+      stopMobileMoneyPolling()
     }
   } catch {
-    // Avoid noisy UI errors during auto-poll; allow manual retry via button.
+    // Avoid noisy UI errors during auto-poll.
   }
 }
 
 function startMobileMoneyPolling() {
-  if (mobileMoneyPollingId.value) return
-
-  const seconds = Number(props.cgrate?.poll_interval_seconds ?? 10)
-  const intervalMs = Math.max(5000, Math.min(10000, Math.floor(seconds * 1000)))
+  if (mobileMoneyPollingId.value || !mobileMoneyIsPending.value) return
 
   mobileMoneyPollingId.value = window.setInterval(() => {
     if (!mobileMoneyIsPending.value) {
       stopMobileMoneyPolling()
       return
     }
-    void checkMobileMoneyStatus(false)
-  }, intervalMs)
+    void checkMobileMoneyStatus()
+  }, 3000)
+}
+
+function closeMobileMoneyModal() {
+  mobileMoneyModalOpen.value = false
 }
 
 watch(
-  () => [mobileMoneyPayment.value?.status, mobileMoneyAttempt.value?.status],
+  () => [mobileMoneyAttempt.value?.status, mobileMoneyAttemptId.value],
   () => {
-    if (mobileMoneyIsPending.value) {
+    if (mobileMoneyIsPending.value && mobileMoneyAttemptId.value) {
       startMobileMoneyPolling()
     } else {
       stopMobileMoneyPolling()
@@ -2121,70 +2183,93 @@ onBeforeUnmount(() => {
                 <div v-if="!props.cgrate?.enabled" class="mt-2 rounded-xl border border-border bg-surface-muted p-4 text-sm text-text-muted">
                   Mobile Money is temporarily unavailable. Please try again later.
                 </div>
-                <div v-else class="mt-1 text-xs text-text-muted">Enter your number and approve the payment prompt on your phone.</div>
+                <div v-else class="mt-1 text-xs text-text-muted">
+                  Enter your mobile number and approve the payment prompt on your phone.
+                </div>
+
+                <div v-if="props.cgrate?.enabled" class="mt-4 rounded-xl border border-brand/15 bg-brand/5 p-4">
+                  <div class="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+                    <div class="text-[11px] font-semibold uppercase tracking-wider text-text-muted">Amount to pay</div>
+                    <div class="text-lg font-semibold text-text-primary">
+                      {{ formatMoneyCents(Number(invoice?.amount_cents ?? payment?.amount_cents ?? 0)) }}
+                      {{ invoice?.currency ?? payment?.currency ?? 'ZMW' }}
+                    </div>
+                  </div>
+                </div>
 
                 <div v-if="props.cgrate?.enabled" class="mt-4">
                   <label class="text-sm font-medium">Mobile number</label>
-                  <input v-model="mobileMoneyForm.mobile_number" class="zaqa-input" placeholder="e.g. 097XXXXXXX" />
+                  <input
+                    v-model="mobileMoneyForm.mobile_number"
+                    class="zaqa-input h-12 text-base"
+                    inputmode="tel"
+                    autocomplete="tel"
+                    placeholder="e.g. 0973936164 or 260973936164"
+                    :disabled="!mobileMoneyCanInitiate || mobileMoneySubmitting"
+                  />
                   <InputError :message="mobileMoneyForm.errors.mobile_number" />
                 </div>
 
-                <div v-if="props.cgrate?.enabled" class="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                  <div class="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
-                    <button
-                      type="button"
-                      class="zaqa-btn zaqa-btn-primary w-full sm:w-auto"
-                      :disabled="mobileMoneyForm.processing || (payment?.status ?? '') === 'confirmed' || mobileMoneyIsPending"
-                      @click="initiateMobileMoney"
-                    >
-                      Initiate Mobile Money
-                    </button>
-                    <button
-                      v-if="mobileMoneyIsPending"
-                      type="button"
-                      class="zaqa-btn zaqa-btn-secondary w-full sm:w-auto"
-                      @click="checkMobileMoneyStatus(true)"
-                    >
-                      Check status
-                    </button>
-	                  </div>
-	                  <div class="text-xs text-text-muted">
-	                    Status:
-	                    <span class="font-semibold text-text-primary">{{ paymentStatusLabel(mobileMoneyPayment?.status ?? payment?.status) }}</span>
-	                  </div>
-	                </div>
+                <div v-if="props.cgrate?.enabled" class="mt-4 flex flex-col gap-3">
+                  <button
+                    type="button"
+                    class="zaqa-btn zaqa-btn-primary h-12 w-full text-base sm:w-auto"
+                    :disabled="!mobileMoneyCanInitiate || mobileMoneySubmitting || !mobileMoneyForm.mobile_number.trim()"
+                    :aria-busy="mobileMoneySubmitting ? 'true' : 'false'"
+                    @click="initiateMobileMoney"
+                  >
+                    {{ mobileMoneySubmitting ? 'Sending prompt…' : 'Send payment prompt' }}
+                  </button>
 
-	                <div v-if="props.cgrate?.enabled && (mobileMoneyAttempt || mobileMoneyPayment?.provider_reference)" class="mt-4 rounded-xl bg-surface-muted p-4 text-sm ring-1 ring-black/[0.04]">
-                  <div class="grid gap-3 sm:grid-cols-2">
+                  <p v-if="mobileMoneyIsPending" class="text-xs text-text-muted">
+                    A payment request is already pending. You can continue waiting or check back later.
+                  </p>
+                </div>
+
+                <div
+                  v-if="props.cgrate?.enabled && mobileMoneyAttempt"
+                  class="mt-4 rounded-xl bg-surface-muted p-4 text-sm ring-1 ring-black/[0.04]"
+                >
+                  <div class="flex flex-wrap items-center justify-between gap-3">
                     <div>
-                      <div class="text-[11px] font-semibold uppercase tracking-wider text-text-muted">Payment reference</div>
-                      <div class="mt-1 font-semibold text-text-primary">{{ mobileMoneyAttempt?.payment_reference ?? mobileMoneyPayment?.provider_reference ?? '—' }}</div>
+                      <div class="text-[11px] font-semibold uppercase tracking-wider text-text-muted">Payment status</div>
+                      <div class="mt-2">
+                        <span class="zaqa-badge" :class="mobileMoneyStatusBadgeClass(mobileMoneyAttempt.status)">
+                          {{ mobileMoneyStatusLabel(mobileMoneyAttempt.status) }}
+                        </span>
+                      </div>
                     </div>
-                    <div>
-                      <div class="text-[11px] font-semibold uppercase tracking-wider text-text-muted">Attempt status</div>
-                      <div class="mt-1 font-semibold text-text-primary">{{ mobileMoneyAttempt?.status ?? '—' }}</div>
-                    </div>
-                    <div v-if="mobileMoneyAttempt?.response_code !== null && mobileMoneyAttempt?.response_code !== undefined">
-                      <div class="text-[11px] font-semibold uppercase tracking-wider text-text-muted">Response code</div>
-                      <div class="mt-1 font-semibold text-text-primary">{{ mobileMoneyAttempt.response_code }}</div>
-                    </div>
-                    <div v-if="mobileMoneyAttempt?.query_attempts !== null && mobileMoneyAttempt?.query_attempts !== undefined">
-                      <div class="text-[11px] font-semibold uppercase tracking-wider text-text-muted">Query attempts</div>
-                      <div class="mt-1 font-semibold text-text-primary">{{ mobileMoneyAttempt.query_attempts }}</div>
+                    <div v-if="mobileMoneyAttempt.mobile_number" class="text-right">
+                      <div class="text-[11px] font-semibold uppercase tracking-wider text-text-muted">Mobile number</div>
+                      <div class="mt-1 font-semibold text-text-primary">{{ mobileMoneyAttempt.mobile_number }}</div>
                     </div>
                   </div>
 
-                  <div v-if="mobileMoneyAttempt?.response_message" class="mt-3 text-xs text-text-muted">
-                    Message: <span class="font-semibold text-text-primary">{{ mobileMoneyAttempt.response_message }}</span>
+                  <p class="mt-3 text-xs leading-relaxed text-text-muted">{{ mobileMoneyAttempt.message }}</p>
+
+                  <div v-if="mobileMoneyAttempt.initiated_at" class="mt-3 text-xs text-text-muted">
+                    Requested: <span class="font-semibold text-text-primary">{{ formatDateTimeValue(mobileMoneyAttempt.initiated_at) }}</span>
                   </div>
 
                   <div v-if="mobileMoneyIsPending" class="mt-3 inline-flex items-center gap-2 rounded-lg border border-border bg-surface px-3 py-2 text-xs text-text-muted">
-                    <AlertCircle class="h-4 w-4" aria-hidden="true" />
-                    <span>Payment request sent. Approve the prompt on your phone.</span>
+                    <span class="inline-flex h-2 w-2 animate-pulse rounded-full bg-amber-400" aria-hidden="true" />
+                    <span>Waiting for payment approval on your phone.</span>
                   </div>
-                  <div v-else-if="(mobileMoneyPayment?.status ?? '') === 'confirmed'" class="mt-3 inline-flex items-center gap-2 rounded-lg border border-border bg-surface px-3 py-2 text-xs text-text-muted">
-                    <CheckCircle2 class="h-4 w-4 text-success" aria-hidden="true" />
+
+                  <div v-else-if="mobileMoneyIsSuccessful" class="mt-3 inline-flex items-center gap-2 rounded-lg border border-success/20 bg-success/10 px-3 py-2 text-xs text-success">
+                    <CheckCircle2 class="h-4 w-4" aria-hidden="true" />
                     <span>Payment confirmed.</span>
+                  </div>
+
+                  <div v-else-if="mobileMoneyIsFailed" class="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center">
+                    <p class="text-xs text-danger">{{ mobileMoneyAttempt.message }}</p>
+                    <button
+                      type="button"
+                      class="zaqa-btn zaqa-btn-secondary w-full sm:w-auto"
+                      @click="initiateMobileMoney"
+                    >
+                      Try again
+                    </button>
                   </div>
                 </div>
               </div>
@@ -2513,5 +2598,53 @@ onBeforeUnmount(() => {
     </WizardShell>
 
     </div>
+
+    <ActionModal
+      v-model="mobileMoneyModalOpen"
+      title="Payment request sent"
+      description="Please approve the payment prompt on your phone."
+      max-width-class="max-w-lg"
+    >
+      <div class="space-y-4">
+        <div class="rounded-xl border border-border bg-surface-muted/70 p-4">
+          <div class="grid gap-4 sm:grid-cols-2">
+            <div>
+              <div class="text-[11px] font-semibold uppercase tracking-wider text-text-muted">Mobile number</div>
+              <div class="mt-1 text-sm font-semibold text-text-primary">{{ mobileMoneyAttempt?.mobile_number ?? '—' }}</div>
+            </div>
+            <div>
+              <div class="text-[11px] font-semibold uppercase tracking-wider text-text-muted">Amount</div>
+              <div class="mt-1 text-sm font-semibold text-text-primary">
+                {{ formatMoneyCents(Number(mobileMoneyAttempt?.amount_cents ?? invoice?.amount_cents ?? payment?.amount_cents ?? 0)) }}
+                {{ mobileMoneyAttempt?.currency ?? invoice?.currency ?? payment?.currency ?? 'ZMW' }}
+              </div>
+            </div>
+          </div>
+
+          <div class="mt-4 flex items-center gap-2">
+            <span class="zaqa-badge" :class="mobileMoneyStatusBadgeClass(mobileMoneyAttempt?.status)">
+              {{ mobileMoneyStatusLabel(mobileMoneyAttempt?.status) }}
+            </span>
+            <span v-if="mobileMoneyIsPending" class="inline-flex items-center gap-2 text-xs text-text-muted">
+              <span class="inline-flex h-2 w-2 animate-pulse rounded-full bg-amber-400" aria-hidden="true" />
+              Checking status…
+            </span>
+          </div>
+
+          <p class="mt-3 text-sm leading-relaxed text-text-muted">
+            {{ mobileMoneyAttempt?.message ?? 'Waiting for payment approval.' }}
+          </p>
+        </div>
+      </div>
+
+      <template #footer>
+        <button type="button" class="zaqa-btn zaqa-btn-secondary w-full px-4 py-2 text-sm sm:w-auto" @click="closeMobileMoneyModal">
+          Close and check later
+        </button>
+        <button type="button" class="zaqa-btn zaqa-btn-primary w-full px-4 py-2 text-sm sm:w-auto" @click="closeMobileMoneyModal">
+          Continue waiting
+        </button>
+      </template>
+    </ActionModal>
   </ApplicantLayout>
 </template>

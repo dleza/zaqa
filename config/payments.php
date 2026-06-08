@@ -1,6 +1,20 @@
 <?php
 
 return [
+    'queues' => [
+        'high' => env('PAYMENTS_QUEUE_HIGH', 'payments-high'),
+        'polling' => env('PAYMENTS_QUEUE', 'payments'),
+    ],
+
+    'cgrate' => [
+        'callback_enabled' => (bool) env('CGRATE_CALLBACK_ENABLED', false),
+        'callback_token' => env('CGRATE_CALLBACK_TOKEN'),
+        'callback_allowed_ips' => array_values(array_filter(array_map(
+            static fn ($ip) => trim((string) $ip),
+            explode(',', (string) env('CGRATE_CALLBACK_ALLOWED_IPS', ''))
+        ))),
+    ],
+
     'bank_transfer' => [
         'pop_notification_emails' => array_values(array_filter(array_map(
             static fn ($email) => filter_var(trim((string) $email), FILTER_VALIDATE_EMAIL) ?: null,

@@ -20,7 +20,9 @@ use App\Models\PaymentWebhookLog;
 use App\Models\QualificationDocument;
 use App\Models\User;
 use App\Support\Phone\ZambiaMsisdnNormalizer;
+use App\Jobs\Payments\DispatchMobileMoneyPaymentPromptJob;
 use App\Jobs\Payments\QueryCGratePaymentAttemptJob;
+use App\Support\Payments\PaymentQueue;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
@@ -269,7 +271,7 @@ class PaymentService
     }
 
     /**
-     * @return array{payment: Payment, redirect_url: string|null}
+     * @return array{payment: Payment, redirect_url: string|null, attempt_id?: int|null, already_pending?: bool}
      */
     public function initiateOnline(Payment $payment, array $payload, User $actor): array
     {
@@ -489,70 +491,15 @@ class PaymentService
         $attemptId = (int) ($attemptMeta['attempt_id'] ?? 0);
         $reused = (bool) ($attemptMeta['reused'] ?? false);
 
-        $attempt = PaymentAttempt::query()->with('payment')->findOrFail($attemptId);
-        $gateway = $this->gateways->gateway('cgrate');
-
-        if (! $reused) {
-            try {
-                $result = $gateway->initiate($attempt->payment, PaymentMethod::MobileMoney, [
-                    'mobile_number' => $msisdn,
-                    'payment_reference' => $attempt->payment_reference,
-                ]);
-
-                $cgrate = (array) (($result['raw_payload'] ?? [])['cgrate'] ?? []);
-                $code = array_key_exists('response_code', $cgrate) ? (int) $cgrate['response_code'] : null;
-                $message = (string) ($cgrate['response_message'] ?? '');
-
-                DB::transaction(function () use ($attemptId, $result, $code, $message) {
-                    $attempt = PaymentAttempt::query()->lockForUpdate()->findOrFail($attemptId);
-                    if ($attempt->status?->isTerminal()) {
-                        return;
-                    }
-
-                    $attempt->forceFill([
-                        'provider_transaction_id' => $result['provider_transaction_id'] ?: $attempt->provider_transaction_id,
-                        'response_code' => $code,
-                        'response_message' => $message !== '' ? $message : $attempt->response_message,
-                        'response_payload' => $result['raw_payload'] ?? null,
-                        'status' => $code === 0 ? PaymentAttemptStatus::Pending : PaymentAttemptStatus::Failed,
-                        'failed_at' => $code === 0 ? null : now(),
-                    ])->save();
-
-                    $attempt->payment()->update([
-                        'provider_transaction_id' => $result['provider_transaction_id'] ?: $attempt->payment->provider_transaction_id,
-                        'raw_payload' => $result['raw_payload'] ?? $attempt->payment->raw_payload,
-                        'last_status_at' => now(),
-                        'status' => $code === 0 ? PaymentStatus::PendingConfirmation : PaymentStatus::Failed,
-                        'failed_at' => $code === 0 ? null : now(),
-                    ]);
-                });
-            } catch (\Throwable $e) {
-                // Network / SOAP / parsing errors: keep pending and allow polling to resolve.
-                DB::transaction(function () use ($attemptId, $e) {
-                    $attempt = PaymentAttempt::query()->lockForUpdate()->findOrFail($attemptId);
-                    if ($attempt->status?->isTerminal()) {
-                        return;
-                    }
-
-                    $attempt->forceFill([
-                        'status' => PaymentAttemptStatus::Pending,
-                        'response_message' => $attempt->response_message ?? 'Could not confirm initiation response (will retry).',
-                        'metadata' => array_merge((array) ($attempt->metadata ?? []), [
-                            'initiation_error' => $e->getMessage(),
-                        ]),
-                    ])->save();
-
-                    $attempt->payment()->update([
-                        'status' => PaymentStatus::PendingConfirmation,
-                        'last_status_at' => now(),
-                    ]);
-                });
+        if ($reused) {
+            if ((string) config('queue.default') !== 'sync') {
+                QueryCGratePaymentAttemptJob::dispatch($attemptId)
+                    ->onQueue(PaymentQueue::polling())
+                    ->delay(now()->addSeconds(max(1, $pollInterval)));
             }
+        } else {
+            DispatchMobileMoneyPaymentPromptJob::dispatch($attemptId);
         }
-
-        // Start polling after the initiation call (or failure fallback) has been recorded.
-        QueryCGratePaymentAttemptJob::dispatch($attemptId)
-            ->delay(now()->addSeconds(max(1, $pollInterval)));
 
         $payment->refresh();
 
@@ -592,7 +539,59 @@ class PaymentService
         return [
             'payment' => $payment,
             'redirect_url' => null,
+            'attempt_id' => $attemptId,
+            'already_pending' => $reused,
         ];
+    }
+
+    /**
+     * Process an inbound cGrate callback by reference. Idempotent and routes through polling confirmation.
+     *
+     * @param  array<string, mixed>  $payload
+     */
+    public function processCGrateCallback(string $paymentReference, array $payload): bool
+    {
+        if (! (bool) config('cgrate.enabled')) {
+            return false;
+        }
+
+        $attempt = PaymentAttempt::query()
+            ->with('payment.invoice')
+            ->where('gateway', 'cgrate')
+            ->where('payment_reference', $paymentReference)
+            ->latest('id')
+            ->first();
+
+        if (! $attempt || ! $attempt->payment) {
+            return false;
+        }
+
+        $this->logWebhookLikeEvent($attempt->payment, 'cgrate.callback', [
+            'ref' => $paymentReference,
+            'payload' => $this->sanitizeCallbackPayload($payload),
+        ]);
+
+        if ($attempt->status?->isTerminal() || $attempt->payment->status === PaymentStatus::Confirmed) {
+            return true;
+        }
+
+        if ((string) config('queue.default') !== 'sync') {
+            QueryCGratePaymentAttemptJob::dispatch((int) $attempt->id)
+                ->onQueue(PaymentQueue::high());
+        }
+
+        return true;
+    }
+
+    /**
+     * @param  array<string, mixed>  $payload
+     * @return array<string, mixed>
+     */
+    private function sanitizeCallbackPayload(array $payload): array
+    {
+        unset($payload['password'], $payload['username'], $payload['token']);
+
+        return $payload;
     }
 
     private function generateCGratePaymentReference(Payment $payment): string

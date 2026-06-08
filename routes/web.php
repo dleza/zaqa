@@ -49,6 +49,7 @@ use App\Http\Controllers\Applicant\ApplicantDetailsController;
 use App\Http\Controllers\Applicant\ApplicantDocumentController;
 use App\Http\Controllers\Applicant\ApplicantNotificationsController;
 use App\Http\Controllers\Applicant\ApplicantPaymentController;
+use App\Http\Controllers\Webhooks\CGrateCallbackController;
 use App\Http\Controllers\Applicant\ApplicantProfileController;
 use App\Http\Controllers\Applicant\ApplicantProfileEditController;
 use App\Http\Controllers\Applicant\ApplicantProfileIdentityDocumentController;
@@ -177,6 +178,7 @@ Route::middleware('auth')->group(function () {
         Route::post('/applications/{application}/payment/upload-proof', [ApplicantPaymentController::class, 'uploadProofForApplication'])->name('applications.payment.upload_proof');
         Route::post('/payments/{payment}/initiate-card', [ApplicantPaymentController::class, 'initiateCard'])->name('payments.initiate_card');
         Route::post('/payments/{payment}/initiate-mobile-money', [ApplicantPaymentController::class, 'initiateMobileMoney'])->name('payments.initiate_mobile_money');
+        Route::get('/payments/attempts/{attempt}/status', [ApplicantPaymentController::class, 'attemptStatus'])->name('payments.attempts.status');
         Route::post('/payments/{payment}/mobile-money/status', [ApplicantPaymentController::class, 'mobileMoneyStatus'])->name('payments.mobile_money.status');
         Route::post('/payments/{payment}/upload-proof', [ApplicantPaymentController::class, 'uploadProof'])->name('payments.upload_proof');
         Route::get('/payments/{payment}/return', [ApplicantPaymentController::class, 'returnFromProvider'])->name('payments.return');
@@ -703,3 +705,7 @@ Route::middleware('auth')->group(function () {
 
 Route::middleware('auth')->get('/payments/test/redirect/{payment}', [ApplicantPaymentController::class, 'testRedirect'])
     ->name('payments.test.redirect');
+
+Route::post('/webhooks/cgrate/payment', [CGrateCallbackController::class, 'handle'])
+    ->middleware('throttle:120,1')
+    ->name('webhooks.cgrate.payment');

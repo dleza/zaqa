@@ -5,6 +5,7 @@ namespace App\Domain\Payments;
 use App\Enums\PaymentAttemptStatus;
 use App\Jobs\Payments\QueryCGratePaymentAttemptJob;
 use App\Models\PaymentAttempt;
+use App\Support\Payments\PaymentQueue;
 use Illuminate\Support\Facades\DB;
 
 final class CGratePollingService
@@ -34,7 +35,9 @@ final class CGratePollingService
                 ->get(['id']);
 
             foreach ($attempts as $attempt) {
-                QueryCGratePaymentAttemptJob::dispatch((int) $attempt->id)->afterCommit();
+                QueryCGratePaymentAttemptJob::dispatch((int) $attempt->id)
+                    ->onQueue(PaymentQueue::polling())
+                    ->afterCommit();
             }
 
             return $attempts->count();
