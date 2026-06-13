@@ -3,6 +3,7 @@ import { computed, onMounted, ref } from 'vue'
 import { Link, useForm } from '@inertiajs/vue3'
 import GuestLayout from '@/Layouts/GuestLayout.vue'
 import InputError from '@/Components/InputError.vue'
+import ZambianPhoneInput from '@/Components/ZambianPhoneInput.vue'
 import { ArrowRight, Building2, Eye, EyeOff, Hash, Lock, Mail, Phone, ShieldCheck, User } from 'lucide-vue-next'
 import AuthTopBar from '@/Components/AuthTopBar.vue'
 
@@ -336,9 +337,8 @@ function submit() {
           <div v-else key="contact-phone" class="space-y-5">
             <div>
               <label class="text-xs font-semibold uppercase tracking-wider text-text-muted">Primary phone</label>
-              <div class="relative">
-                <Phone class="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-text-muted" aria-hidden="true" />
-                <input v-model="activeForm.phone_primary" class="zaqa-input h-12 rounded-lg pl-10" autocomplete="tel" />
+              <div class="mt-2">
+                <ZambianPhoneInput v-model="activeForm.phone_primary" input-class="" />
               </div>
               <p class="mt-2 text-xs text-text-muted">We will send a one-time code (OTP) to your phone.</p>
               <InputError :message="activeForm.errors.phone_primary" />

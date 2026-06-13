@@ -45,10 +45,6 @@ const identifierType = computed<'email' | 'phone' | 'legacy'>(() => {
 const showEmailStep = computed(() => identifierType.value === 'legacy' ? !!props.hasEmail : identifierType.value === 'email')
 const showPhoneStep = computed(() => identifierType.value === 'legacy' ? !!props.hasPhone : identifierType.value === 'phone')
 
-const completedCount = computed(() => (showEmailStep.value && props.emailVerified ? 1 : 0) + (showPhoneStep.value && props.phoneVerified ? 1 : 0))
-const totalCount = computed(() => (showEmailStep.value ? 1 : 0) + (showPhoneStep.value ? 1 : 0) || 1)
-const progressPercent = computed(() => Math.round((completedCount.value / totalCount.value) * 100))
-
 function verifyOtp() {
   otpForm.post('/activate/phone-otp')
 }
@@ -130,43 +126,11 @@ function updatePhone() {
     :header-compact="true"
   >
     <div class="space-y-8">
-      <header class="space-y-5">
-        <div class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-          <div class="min-w-0">
-            <h2 class="text-2xl font-semibold tracking-tight text-text-primary">Activate account</h2>
-            <p class="mt-2 text-sm text-text-muted">
-              Verify your {{ identifierType === 'phone' ? 'phone number' : identifierType === 'email' ? 'email address' : 'contact method' }} to activate your account.
-            </p>
-          </div>
-
-          <div class="flex shrink-0 items-center">
-            <div class="inline-flex items-center gap-3 rounded-full border border-border bg-surface-muted px-3 py-2 text-xs font-semibold text-text-primary" aria-label="Activation progress">
-              <span class="inline-flex h-9 w-9 items-center justify-center rounded-full bg-brand/10 text-brand">
-                {{ completedCount }}/{{ totalCount }}
-              </span>
-              <span class="whitespace-nowrap">{{ completedCount }}/{{ totalCount }} completed</span>
-            </div>
-          </div>
-        </div>
-
-        <div class="space-y-2">
-          <div
-            class="h-2 rounded-full bg-surface-muted"
-            role="progressbar"
-            :aria-valuenow="completedCount"
-            aria-valuemin="0"
-            :aria-valuemax="totalCount"
-            aria-label="Activation progress bar"
-          >
-            <div
-              class="h-2 rounded-full bg-gradient-to-r from-brand to-accent transition-[width] duration-500 ease-out"
-              :style="{ width: `${progressPercent}%` }"
-            />
-          </div>
-          <p class="text-xs text-text-muted">
-            Complete the step below to unlock your dashboard.
-          </p>
-        </div>
+      <header class="space-y-2">
+        <h2 class="text-2xl font-semibold tracking-tight text-text-primary">Activate account</h2>
+        <p class="text-sm text-text-muted">
+          Verify your {{ identifierType === 'phone' ? 'phone number' : identifierType === 'email' ? 'email address' : 'contact method' }} to activate your account.
+        </p>
       </header>
 
       <div class="space-y-6">
@@ -192,22 +156,21 @@ function updatePhone() {
               </div>
             </div>
 
-            <div class="flex flex-col gap-2 lg:items-end">
+            <div class="flex flex-wrap items-center gap-2 lg:justify-end">
               <button
                 v-if="!emailVerified"
                 type="button"
-                class="zaqa-btn zaqa-btn-secondary h-11 w-full px-5 lg:w-auto"
+                class="zaqa-btn zaqa-btn-secondary inline-flex h-11 w-11 shrink-0 items-center justify-center p-0"
+                aria-label="Update email address"
+                title="Update email address"
                 @click="openEditEmail"
               >
-                <span class="inline-flex items-center justify-center gap-2">
-                  <Pencil class="h-4 w-4" aria-hidden="true" />
-                  Update email
-                </span>
+                <Pencil class="h-4 w-4" aria-hidden="true" />
               </button>
               <button
                 v-if="!emailVerified"
                 type="button"
-                class="zaqa-btn zaqa-btn-secondary h-11 w-full px-5 lg:w-auto"
+                class="zaqa-btn zaqa-btn-secondary h-11 min-w-[8.5rem] flex-1 px-5 sm:flex-none"
                 :disabled="resendEmailForm.processing"
                 :aria-busy="resendEmailForm.processing ? 'true' : 'false'"
                 @click="resendEmail"
@@ -253,22 +216,21 @@ function updatePhone() {
               </div>
             </div>
 
-            <div class="flex flex-col gap-2 lg:items-end">
+            <div class="flex flex-wrap items-center gap-2 lg:justify-end">
               <button
                 v-if="!phoneVerified"
                 type="button"
-                class="zaqa-btn zaqa-btn-secondary h-11 w-full px-5 lg:w-auto"
+                class="zaqa-btn zaqa-btn-secondary inline-flex h-11 w-11 shrink-0 items-center justify-center p-0"
+                aria-label="Update phone number"
+                title="Update phone number"
                 @click="openEditPhone"
               >
-                <span class="inline-flex items-center justify-center gap-2">
-                  <Pencil class="h-4 w-4" aria-hidden="true" />
-                  Update phone
-                </span>
+                <Pencil class="h-4 w-4" aria-hidden="true" />
               </button>
               <button
                 v-if="!phoneVerified"
                 type="button"
-                class="zaqa-btn zaqa-btn-secondary h-11 w-full px-5 lg:w-auto"
+                class="zaqa-btn zaqa-btn-secondary h-11 min-w-[8.5rem] flex-1 px-5 sm:flex-none"
                 :disabled="resendOtpForm.processing"
                 :aria-busy="resendOtpForm.processing ? 'true' : 'false'"
                 @click="resendOtp"

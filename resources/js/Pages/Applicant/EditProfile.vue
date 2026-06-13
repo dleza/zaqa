@@ -3,6 +3,8 @@ import { computed } from 'vue'
 import { Link, router, useForm } from '@inertiajs/vue3'
 import ApplicantLayout from '@/Layouts/ApplicantLayout.vue'
 import InputError from '@/Components/InputError.vue'
+import ZambianPhoneInput from '@/Components/ZambianPhoneInput.vue'
+import { zambianPhoneLocalPart } from '@/lib/zambianPhone'
 
 const props = defineProps<{
   profile: any
@@ -74,7 +76,7 @@ function formatWhen(iso: string | null | undefined): string {
 
 const form = useForm<any>({
   email: props.profile?.email ?? '',
-  phone_primary: props.profile?.phone_primary ?? '',
+  phone_primary: zambianPhoneLocalPart(props.profile?.phone_primary),
   phone_secondary: props.profile?.phone_secondary ?? '',
 
   address_line_1: props.profile?.applicant_profile?.address_line_1 ?? props.profile?.institution_profile?.address_line_1 ?? '',
@@ -170,11 +172,11 @@ function removeIdentityDocument() {
               <span v-if="phoneLocked" class="text-xs font-semibold text-emerald-700">Verified • Locked</span>
               <span v-else class="text-xs text-text-muted">Required if no email</span>
             </div>
-            <input
+            <ZambianPhoneInput
               v-model="form.phone_primary"
-              class="zaqa-input"
               :readonly="phoneLocked"
-              :class="phoneLocked ? 'cursor-not-allowed bg-surface-muted/60 text-text-muted' : ''"
+              :disabled="phoneLocked"
+              :helper-text="phoneLocked ? 'Verified contact details are locked for security.' : 'Enter your mobile number without the country code.'"
             />
             <InputError :message="form.errors.phone_primary" />
           </div>

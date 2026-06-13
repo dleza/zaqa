@@ -3,12 +3,16 @@
 namespace App\Http\Requests\Applicant;
 
 use App\Enums\ApplicantType;
+use App\Http\Requests\Concerns\NormalizesZambianPrimaryPhone;
+use App\Support\Phone\ZambianPrimaryPhone;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\Validator;
 
 class UpdateApplicantProfileRequest extends FormRequest
 {
+    use NormalizesZambianPrimaryPhone;
+
     public function authorize(): bool
     {
         return (bool) $this->user();
@@ -30,13 +34,10 @@ class UpdateApplicantProfileRequest extends FormRequest
                 'max:255',
                 Rule::unique('users', 'email')->ignore($user?->id),
             ],
-            'phone_primary' => [
-                'nullable',
-                'required_without:email',
-                'string',
-                'max:30',
-                Rule::unique('users', 'phone_primary')->ignore($user?->id),
-            ],
+            'phone_primary' => array_merge(
+                ['nullable', 'required_without:email'],
+                $this->zambianPrimaryPhoneFormatRules($user?->id),
+            ),
             'phone_secondary' => ['nullable', 'string', 'max:30'],
 
             'address_line_1' => ['nullable', 'string', 'max:255'],
@@ -73,7 +74,6 @@ class UpdateApplicantProfileRequest extends FormRequest
             }
 
             $incomingEmail = $this->nullIfBlank($this->input('email'));
-            $incomingPhonePrimary = $this->nullIfBlank($this->input('phone_primary'));
 
             if ($user->email_verified_at) {
                 $currentEmail = $this->nullIfBlank($user->email);
@@ -83,7 +83,9 @@ class UpdateApplicantProfileRequest extends FormRequest
             }
 
             if ($user->phone_verified_at) {
-                $currentPhonePrimary = $this->nullIfBlank($user->phone_primary);
+                $currentPhonePrimary = ZambianPrimaryPhone::canonicalOrStored($user->phone_primary);
+                $incomingPhonePrimary = ZambianPrimaryPhone::canonicalOrStored($this->input('phone_primary'));
+
                 if ($incomingPhonePrimary !== $currentPhonePrimary) {
                     $validator->errors()->add('phone_primary', 'Primary phone cannot be changed after it has been verified.');
                 }
@@ -101,6 +103,17 @@ class UpdateApplicantProfileRequest extends FormRequest
                 $validator->errors()->add('passport_number', 'Provide NRC or passport number.');
             }
         });
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    public function messages(): array
+    {
+        return [
+            'phone_primary.digits' => 'Enter a valid Zambian mobile number.',
+            'phone_primary.starts_with' => 'Enter a valid Zambian mobile number.',
+        ];
     }
 
     private function nullIfBlank(mixed $value): ?string

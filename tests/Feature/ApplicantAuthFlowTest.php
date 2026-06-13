@@ -50,7 +50,7 @@ class ApplicantAuthFlowTest extends TestCase
             'first_name' => 'Jane',
             'surname' => 'Doe',
             'email' => $payload['email'],
-            'phone_primary' => $payload['phone_primary'],
+            'phone_primary' => '260955000111',
         ]);
 
         $this->assertDatabaseHas('audit_logs', [
