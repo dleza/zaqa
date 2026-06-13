@@ -69,7 +69,7 @@ final class ZamtelBulkSmsProvider implements SmsProviderInterface
         $parsed = $this->parseBody($response->body());
         $sanitized = $this->sanitizeResponse($parsed, $apiKey);
         $providerSuccess = (bool) data_get($parsed, 'success', false);
-        $accepted = $httpStatus === 202 && $providerSuccess;
+        $accepted = in_array($httpStatus, [200, 202], true) && $providerSuccess;
 
         $transient = ! $accepted && ($httpStatus === 0 || $httpStatus >= 500 || $response->serverError());
 

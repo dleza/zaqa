@@ -108,7 +108,7 @@ If you still see `log` / `Disabled`, check `SMS_ENABLED`, `SMS_PROVIDER`, run `c
 5. **Add SMS balance** (Admin → Settings → SMS Balance) — balance must be **> 0** or sends are skipped as `insufficient_balance`.
 6. Start **queue workers** (Supervisor example below). Without a worker, jobs stay `queued` in `sms_logs`.
 7. Trigger a test notification (e.g. account OTP or payment approved) and review **Reports → SMS logs**.
-8. Confirm success: HTTP **202** and response body **`success: true`** — only then is balance debited.
+8. Confirm success: HTTP **200 or 202** and response body **`success: true`** — only then is balance debited.
 
 All outbound SMS (including account activation OTP) use `queueTemplate()` and respect `SMS_ENABLED`, `SMS_PROVIDER`, balance, and queue settings.
 
@@ -116,7 +116,7 @@ All outbound SMS (including account activation OTP) use `queueTemplate()` and re
 
 An SMS is successful only when:
 
-1. HTTP status is **202**
+1. HTTP status is **200** or **202**
 2. Parsed response body has **`success: true`**
 
 Only successful sends decrement internal balance by 1.
@@ -259,8 +259,8 @@ Neither command exposes API secrets. A passing check does not send an SMS.
 | `skipped / insufficient_balance` | Add credits in admin SMS balance page |
 | `skipped / too_long` | Template or placeholder exceeds 159 characters |
 | `skipped / invalid_phone` | Recipient not a valid Zambian MSISDN |
-| `failed` with HTTP 202 | Provider returned `success=false` |
-| Balance not decreasing | Confirm HTTP 202 + `success=true` in provider response |
+| `failed` with HTTP 200/202 | Provider returned `success=false` |
+| Balance not decreasing | Confirm HTTP 200/202 + `success=true` in provider response |
 | OTP not received | Same pipeline as other SMS — check `SMS_ENABLED`, balance, worker, and **Reports → SMS logs** for `activation_otp` |
 
 Monitor failed jobs:
@@ -270,3 +270,7 @@ php artisan queue:failed
 ```
 
 Review entries in **Reports → SMS logs** (route: `/admin/settings/sms/logs`).
+
+## Admin log privacy
+
+SMS log detail pages mask recipient numbers and redact sensitive template values before display (for example OTP codes on `activation_otp`). Full message content remains stored in the database for delivery and auditing; configure additional redaction in `config/sms.php` under `admin_redaction`.

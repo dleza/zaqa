@@ -35,7 +35,15 @@ defineProps<{
       </dl>
 
       <div class="mt-6">
-        <div class="text-xs font-semibold uppercase tracking-wide text-text-muted">Message</div>
+        <div class="flex items-center justify-between gap-3">
+          <div class="text-xs font-semibold uppercase tracking-wide text-text-muted">Message</div>
+          <span
+            v-if="log.message_body_redacted"
+            class="rounded-full bg-amber-50 px-2.5 py-1 text-xs font-medium text-amber-800"
+          >
+            Sensitive content redacted
+          </span>
+        </div>
         <pre class="mt-2 whitespace-pre-wrap rounded-xl border border-border bg-surface-muted p-4 text-sm">{{ log.message_body }}</pre>
       </div>
 

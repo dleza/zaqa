@@ -32,6 +32,19 @@ class ZamtelBulkSmsProviderTest extends TestCase
         $this->assertTrue($result->providerSuccess);
     }
 
+    public function test_http_200_with_success_true_is_accepted(): void
+    {
+        Http::fake([
+            '*' => Http::response(['success' => true, 'message' => 'OK'], 200),
+        ]);
+
+        $result = app(ZamtelBulkSmsProvider::class)->send('[260977000001]', 'Hello');
+
+        $this->assertTrue($result->accepted);
+        $this->assertSame(200, $result->httpStatus);
+        $this->assertTrue($result->providerSuccess);
+    }
+
     public function test_http_202_with_success_false_is_rejected(): void
     {
         Http::fake([
@@ -45,7 +58,7 @@ class ZamtelBulkSmsProviderTest extends TestCase
         $this->assertFalse($result->providerSuccess);
     }
 
-    public function test_non_202_response_is_rejected(): void
+    public function test_non_accepted_http_status_is_rejected_even_when_success_true(): void
     {
         Http::fake([
             '*' => Http::response(['success' => true], 500),

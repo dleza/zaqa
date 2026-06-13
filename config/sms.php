@@ -16,6 +16,14 @@ return [
         explode(',', (string) env('SMS_ALERT_EMAILS', '')),
     ), static fn (string $email): bool => $email !== '')),
 
+    /*
+    | Template keys whose placeholder values must not appear in admin SMS log views.
+    | Placeholder names match sms_templates.php (:code, :expires_at, etc.).
+    */
+    'admin_redaction' => [
+        'activation_otp' => ['code'],
+    ],
+
     'zamtel' => [
         'base_url' => env('ZAMTEL_SMS_BASE_URL', 'https://bulksms.zamtel.co.zm'),
         'api_key' => env('ZAMTEL_SMS_API_KEY', ''),
