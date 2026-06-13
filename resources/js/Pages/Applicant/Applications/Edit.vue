@@ -2204,7 +2204,7 @@ onBeforeUnmount(() => {
                     class="zaqa-input h-12 text-base"
                     inputmode="tel"
                     autocomplete="tel"
-                    placeholder="e.g. 0973936164 or 260973936164"
+                    placeholder="e.g. 0971000000 or 260971000000"
                     :disabled="!mobileMoneyCanInitiate || mobileMoneySubmitting"
                   />
                   <InputError :message="mobileMoneyForm.errors.mobile_number" />

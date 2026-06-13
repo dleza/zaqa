@@ -4,7 +4,6 @@ namespace App\Domain\LearnerRecords;
 
 use App\Enums\LearnerRecordImportStatus;
 use App\Enums\LearnerRecordSourceType;
-use App\Models\AwardingInstitution;
 use App\Models\LearnerRecord;
 use App\Models\LearnerRecordImport;
 use App\Support\Imports\ChunkReadFilter;
@@ -59,6 +58,13 @@ class LearnerRecordExcelImportProcessor
             return;
         }
 
+        if (! $import->awarding_institution_id) {
+            $this->fail($import, 'Awarding institution is required for learner record imports.');
+            return;
+        }
+
+        $institutionId = (int) $import->awarding_institution_id;
+
         DB::transaction(function () use ($import, $totalRows) {
             $locked = LearnerRecordImport::query()->lockForUpdate()->findOrFail($import->id);
             if ($locked->status?->isTerminal()) {
@@ -75,7 +81,7 @@ class LearnerRecordExcelImportProcessor
             $chunkSize = max(0, ($endRow - $startRow) + 1);
             $chunkRows = $this->readChunkRows($reader, $absolutePath, $lastColumnLetter, $startRow, $chunkSize);
 
-            $this->processChunk($import, $chunkRows, $headerMap, $startRow, $endRow);
+            $this->processChunk($import, $chunkRows, $headerMap, $startRow, $endRow, $institutionId);
 
             $startRow += self::CHUNK_SIZE;
         }
@@ -161,14 +167,12 @@ class LearnerRecordExcelImportProcessor
      * @param  array<int, array<string, mixed>>  $chunkRows
      * @param  array<string, string>  $headerMap
      */
-    private function processChunk(LearnerRecordImport $import, array $chunkRows, array $headerMap, int $startRow, int $endRow): void
+    private function processChunk(LearnerRecordImport $import, array $chunkRows, array $headerMap, int $startRow, int $endRow, int $institutionId): void
     {
         $inserted = 0;
         $updated = 0;
         $failed = 0;
         $rowErrors = [];
-
-        $importInstitutionId = $import->awarding_institution_id ? (int) $import->awarding_institution_id : null;
 
         $prepared = [];
         $hashes = [];
@@ -195,25 +199,6 @@ class LearnerRecordExcelImportProcessor
             $nameNorm = LearnerRecordNormalizer::normalizeNameParts($firstName, $otherNames, $lastName);
             $titleNorm = LearnerRecordNormalizer::normalizeProgramTitle($program);
 
-            $institutionId = $importInstitutionId;
-            $institutionNameRaw = null;
-
-            if (! $institutionId) {
-                $institutionCell = $this->stringOrNull($mapped['institution'] ?? null);
-                if ($institutionCell) {
-                    $institutionId = AwardingInstitution::query()
-                        ->where('name', $institutionCell)
-                        ->value('id');
-                    if (! $institutionId) {
-                        $institutionNameRaw = $institutionCell;
-                    }
-                }
-            }
-
-            if (! $institutionId && ! $institutionNameRaw) {
-                $institutionNameRaw = $this->stringOrNull($mapped['institution_name_raw'] ?? null);
-            }
-
             if (! $studentIdNorm && ! $certNorm && ! $nrcNorm && ! $passportNorm) {
                 $failed++;
                 $rowErrors[] = ['row' => $rowNumber, 'message' => 'Missing identifiers: provide StudentID, CertificateNo, NRCNumber, or PassportNo.'];
@@ -235,7 +220,7 @@ class LearnerRecordExcelImportProcessor
                 'row_number' => $rowNumber,
                 'awarding_institution_id' => $institutionId,
                 'import_id' => (int) $import->id,
-                'institution_name_raw' => $institutionNameRaw,
+                'institution_name_raw' => null,
                 'student_id' => $studentId,
                 'certificate_no' => $certificateNo,
                 'nrc_number' => $nrc,
@@ -405,7 +390,6 @@ class LearnerRecordExcelImportProcessor
             'nrcnumber', 'nrc' => 'nrc_number',
             'passportno', 'passportnumber', 'passport' => 'passport_no',
             'programofstudy', 'programmeofstudy', 'program', 'programme' => 'program_of_study',
-            'institution', 'awardinginstitution' => 'institution',
             'yearawarded', 'awardyear', 'year' => 'year_awarded',
             'awarddate', 'dateawarded' => 'award_date',
             default => null,

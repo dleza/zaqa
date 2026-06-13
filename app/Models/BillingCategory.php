@@ -7,6 +7,8 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class BillingCategory extends Model
 {
+    public const CODE_FOREIGN_QUALIFICATIONS = 'FOREIGN_QUALIFICATIONS';
+
     protected $fillable = [
         'name',
         'code',
@@ -34,6 +36,30 @@ class BillingCategory extends Model
     public function feeStructures(): HasMany
     {
         return $this->hasMany(FeeStructure::class);
+    }
+
+    public function isSystemCategory(): bool
+    {
+        return (string) $this->code === self::CODE_FOREIGN_QUALIFICATIONS;
+    }
+
+    /**
+     * @return \Illuminate\Support\Collection<int, array{id: int, name: string}>
+     */
+    public static function optionsForSelect(?int $includeId = null): \Illuminate\Support\Collection
+    {
+        return static::query()
+            ->where(function ($q) use ($includeId) {
+                $q->where('is_active', true);
+                if ($includeId !== null && $includeId > 0) {
+                    $q->orWhere('id', $includeId);
+                }
+            })
+            ->orderBy('sort_order')
+            ->orderBy('name')
+            ->get(['id', 'name'])
+            ->map(fn (self $c) => ['id' => $c->id, 'name' => $c->name])
+            ->values();
     }
 }
 

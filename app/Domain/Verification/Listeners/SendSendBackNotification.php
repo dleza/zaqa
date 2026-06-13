@@ -52,13 +52,12 @@ class SendSendBackNotification implements ShouldQueue
 
         $phone = trim((string) ($user->phone_primary ?? ''));
         if ($phone !== '') {
-            $sms->send(
+            $sms->queueTemplate(
+                templateKey: 'application_sent_back',
+                placeholders: [
+                    'application_number' => (string) $application->application_number,
+                ],
                 phone: $phone,
-                message: sprintf(
-                    'ZAQA: Application %s was sent back for amendments. Please login to view the comment and resubmit.',
-                    $application->application_number
-                ),
-                messageType: 'verification_sent_back',
                 userId: $user->id,
                 applicationId: $application->id,
             );

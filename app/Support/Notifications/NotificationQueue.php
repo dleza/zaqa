@@ -11,7 +11,16 @@ final class NotificationQueue
 
     public static function sms(): string
     {
-        return (string) config('notifications.queues.sms', 'notifications');
+        $configured = config('notifications.queues.sms');
+
+        if ($configured !== null && $configured !== '') {
+            return (string) $configured;
+        }
+
+        $connection = (string) config('queue.default', 'database');
+        $queue = config("queue.connections.{$connection}.queue");
+
+        return is_string($queue) && $queue !== '' ? $queue : 'default';
     }
 
     public static function listeners(): string

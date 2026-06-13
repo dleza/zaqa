@@ -153,3 +153,26 @@ Artisan::command('cgrate:test-payment {mobile} {amount} {--query : Query status 
 
     return 0;
 })->purpose('Initiate a cGrate test Customer Payment (UAT tooling).');
+
+Artisan::command('sms:test', function () {
+    if (! (bool) config('sms.enabled') && (string) config('sms.provider') === 'zamtel') {
+        $this->warn('SMS_ENABLED is false. Provider health check will still run.');
+    }
+
+    $manager = app(\App\Domain\Notifications\Sms\SmsProviderManager::class);
+    $result = $manager->resolve()->healthCheck();
+
+    foreach ($result['details'] as $key => $value) {
+        $this->line($key.': '.(is_scalar($value) ? (string) $value : json_encode($value)));
+    }
+
+    if ($result['ok']) {
+        $this->info($result['message']);
+
+        return 0;
+    }
+
+    $this->error($result['message']);
+
+    return 1;
+})->purpose('Verify SMS provider configuration and connectivity.');

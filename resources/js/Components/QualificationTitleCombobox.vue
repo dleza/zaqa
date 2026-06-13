@@ -51,7 +51,7 @@ async function load() {
         .map((r: any) => String(r.title ?? '').trim())
         .filter((t: string) => t.length > 0)
         .map((t: string) => ({ id: t, title: t })),
-      { id: 'other', title: 'Other (not listed)' },
+      { id: 'other', title: 'Not Listed - Enter New' },
     ]
     activeIndex.value = 0
   } finally {

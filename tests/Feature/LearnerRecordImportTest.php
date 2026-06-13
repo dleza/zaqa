@@ -65,6 +65,21 @@ class LearnerRecordImportTest extends TestCase
 
         $user = User::factory()->activated()->create();
 
+        $country = Country::query()->create([
+            'iso_code' => 'ZMB',
+            'name' => 'Zambia',
+            'is_active' => true,
+            'sort_order' => 1,
+        ]);
+
+        $institution = AwardingInstitution::query()->create([
+            'country_id' => $country->id,
+            'name' => 'Test University',
+            'consent_form_path' => null,
+            'is_active' => true,
+            'sort_order' => 1,
+        ]);
+
         $file = $this->makeXlsx(
             headers: ['StudentID', 'CertificateNo', 'FirstName', 'LastName', 'ProgramOfStudy', 'YearAwarded'],
             rows: [
@@ -72,11 +87,12 @@ class LearnerRecordImportTest extends TestCase
             ],
         );
 
-        $import = app(LearnerRecordImportService::class)->createAndDispatch($file, $user, null);
+        $import = app(LearnerRecordImportService::class)->createAndDispatch($file, $user, $institution->id);
 
         $this->assertDatabaseHas('learner_record_imports', [
             'id' => $import->id,
             'original_filename' => 'learner_records.xlsx',
+            'awarding_institution_id' => $institution->id,
             'status' => LearnerRecordImportStatus::Pending->value,
         ]);
 
@@ -155,5 +171,65 @@ class LearnerRecordImportTest extends TestCase
         $this->assertSame('Program A (Updated)', $record->program_of_study);
         $this->assertSame(2024, (int) $record->year_awarded);
         $this->assertSame(LearnerRecordSourceType::Import, $record->source_type);
+    }
+
+    public function test_processor_uses_selected_institution_not_spreadsheet_institution_column(): void
+    {
+        Storage::fake('local');
+
+        $country = Country::query()->create([
+            'iso_code' => 'ZMB',
+            'name' => 'Zambia',
+            'is_active' => true,
+            'sort_order' => 1,
+        ]);
+
+        $selectedInstitution = AwardingInstitution::query()->create([
+            'country_id' => $country->id,
+            'name' => 'Selected University',
+            'consent_form_path' => null,
+            'is_active' => true,
+            'sort_order' => 1,
+        ]);
+
+        AwardingInstitution::query()->create([
+            'country_id' => $country->id,
+            'name' => 'Wrong University',
+            'consent_form_path' => null,
+            'is_active' => true,
+            'sort_order' => 2,
+        ]);
+
+        $file = $this->makeXlsx(
+            headers: ['StudentID', 'CertificateNo', 'FirstName', 'LastName', 'Institution', 'ProgramOfStudy', 'YearAwarded'],
+            rows: [
+                ['S-002', 'C-002', 'Jane', 'Doe', 'Wrong University', 'Program C', 2023],
+            ],
+        );
+
+        $storedPath = 'private/learner-record-imports/wrong-inst.xlsx';
+        Storage::disk('local')->put($storedPath, file_get_contents($file->getRealPath()));
+
+        $import = LearnerRecordImport::query()->create([
+            'uploaded_by_user_id' => null,
+            'awarding_institution_id' => $selectedInstitution->id,
+            'file_path' => $storedPath,
+            'original_filename' => 'wrong-inst.xlsx',
+            'status' => LearnerRecordImportStatus::Pending,
+            'total_rows' => null,
+            'processed_rows' => 0,
+            'inserted_rows' => 0,
+            'updated_rows' => 0,
+            'failed_rows' => 0,
+            'errors' => null,
+            'started_at' => null,
+            'completed_at' => null,
+        ]);
+
+        app(LearnerRecordExcelImportProcessor::class)->process($import);
+
+        $record = LearnerRecord::query()->firstOrFail();
+        $this->assertSame($selectedInstitution->id, (int) $record->awarding_institution_id);
+        $this->assertNull($record->institution_name_raw);
     }
 }

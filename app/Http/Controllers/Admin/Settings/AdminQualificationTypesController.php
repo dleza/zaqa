@@ -59,10 +59,7 @@ class AdminQualificationTypesController extends Controller
 
     public function create(Request $request): Response
     {
-        $categories = BillingCategory::query()->orderBy('name')->get(['id', 'name'])->map(fn (BillingCategory $c) => [
-            'id' => $c->id,
-            'name' => $c->name,
-        ])->values();
+        $categories = BillingCategory::optionsForSelect();
 
         return Inertia::render('Admin/Settings/QualificationTypes/Create', [
             'billing_categories' => $categories,
@@ -101,10 +98,9 @@ class AdminQualificationTypesController extends Controller
 
     public function edit(Request $request, QualificationType $qualificationType): Response
     {
-        $categories = BillingCategory::query()->orderBy('name')->get(['id', 'name'])->map(fn (BillingCategory $c) => [
-            'id' => $c->id,
-            'name' => $c->name,
-        ])->values();
+        $categories = BillingCategory::optionsForSelect(
+            (int) $qualificationType->billing_category_id ?: null,
+        );
 
         return Inertia::render('Admin/Settings/QualificationTypes/Edit', [
             'type' => [

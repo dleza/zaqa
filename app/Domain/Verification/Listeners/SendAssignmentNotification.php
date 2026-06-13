@@ -65,13 +65,12 @@ class SendAssignmentNotification implements ShouldQueue
 
         $phone = trim((string) ($assignee->phone_primary ?? ''));
         if ($phone !== '') {
-            $sms->send(
+            $sms->queueTemplate(
+                templateKey: 'verification_assigned',
+                placeholders: [
+                    'application_number' => (string) $application->application_number,
+                ],
                 phone: $phone,
-                message: sprintf(
-                    'ZAQA: Qualification task for application %s has been assigned to you for review.',
-                    $application->application_number,
-                ),
-                messageType: 'verification_assigned',
                 userId: $assignee->id,
                 applicationId: $application->id,
             );

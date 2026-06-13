@@ -10,6 +10,7 @@ const props = defineProps<{
   imports: any
   institutions: Array<{ id: number; name: string }>
   can: { import: boolean }
+  template_url: string
 }>()
 
 const importModalOpen = ref(false)
@@ -35,7 +36,7 @@ function pickFile(e: Event) {
 }
 
 function submit() {
-  if (!props.can.import || !form.file) return
+  if (!props.can.import || !form.file || !form.awarding_institution_id) return
 
   form.post('/admin/learner-records/imports', {
     forceFormData: true,
@@ -97,18 +98,29 @@ function statusBadgeClass(status: string | null | undefined) {
     >
       <div class="space-y-4">
         <div class="rounded-2xl border border-border bg-surface-muted/60 p-4 text-sm text-text-muted">
-          Upload the HE Learner Records template in `.xlsx`, `.xls`, or `.csv` format. Leave the institution empty to let
-          the import process auto-detect it from the spreadsheet.
+          Select one awarding institution per upload. Download the template, fill one row per learner record, then upload
+          the completed spreadsheet in `.xlsx`, `.xls`, or `.csv` format.
+        </div>
+
+        <div class="flex flex-wrap gap-2">
+          <a
+            :href="template_url"
+            class="zaqa-btn zaqa-btn-secondary inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold"
+            download
+          >
+            <FileSpreadsheet class="h-4 w-4 shrink-0" aria-hidden="true" />
+            Download template
+          </a>
         </div>
 
         <SingleSelectCombobox
           v-model="form.awarding_institution_id"
-          label="Awarding institution (optional)"
-          placeholder="Auto-detect from file"
+          label="Awarding institution"
+          placeholder="Select institution for this upload"
           :options="institutions.map((i) => ({ id: i.id, label: i.name }))"
           :disabled="!can.import || form.processing"
           :error="form.errors.awarding_institution_id"
-          help-text="Use this only when you want to force the uploaded rows to a specific institution."
+          help-text="All rows in the uploaded file will be linked to this institution."
         />
 
         <div>
@@ -130,7 +142,7 @@ function statusBadgeClass(status: string | null | undefined) {
         <button
           type="button"
           class="zaqa-btn zaqa-btn-primary inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold disabled:opacity-50"
-          :disabled="!can.import || !form.file || form.processing"
+          :disabled="!can.import || !form.file || !form.awarding_institution_id || form.processing"
           @click="submit"
         >
           <UploadCloud class="h-4 w-4" aria-hidden="true" />

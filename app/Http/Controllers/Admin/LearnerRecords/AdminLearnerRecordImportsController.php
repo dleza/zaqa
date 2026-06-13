@@ -7,10 +7,12 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\Admin\LearnerRecords\UploadLearnerRecordImportRequest;
 use App\Models\AwardingInstitution;
 use App\Models\LearnerRecordImport;
+use App\Support\Imports\ExcelTemplateDownload;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class AdminLearnerRecordImportsController extends Controller
 {
@@ -52,7 +54,45 @@ class AdminLearnerRecordImportsController extends Controller
             'can' => [
                 'import' => (bool) $request->user()?->can('learner_records.import'),
             ],
+            'template_url' => route('admin.learner_records.imports.template'),
         ]);
+    }
+
+    public function template(Request $request): StreamedResponse
+    {
+        abort_unless($request->user()?->can('learner_records.view'), 403);
+
+        return ExcelTemplateDownload::stream(
+            'learner-records-import-template.xlsx',
+            [
+                'StudentID',
+                'CertificateNo',
+                'FirstName',
+                'LastName',
+                'OtherNames',
+                'Gender',
+                'NRCNumber',
+                'PassportNo',
+                'ProgramOfStudy',
+                'YearAwarded',
+                'AwardDate',
+            ],
+            [
+                [
+                    'STU-001',
+                    'CERT-001',
+                    'Jane',
+                    'Banda',
+                    'Mary',
+                    'Female',
+                    '123456/78/1',
+                    '',
+                    'Bachelor of Science in Nursing',
+                    2024,
+                    '2024-11-15',
+                ],
+            ],
+        );
     }
 
     public function store(
@@ -63,7 +103,7 @@ class AdminLearnerRecordImportsController extends Controller
         $import = $imports->createAndDispatch(
             file: $request->file('file'),
             actor: $actor,
-            awardingInstitutionId: $request->input('awarding_institution_id') ? (int) $request->input('awarding_institution_id') : null,
+            awardingInstitutionId: (int) $request->input('awarding_institution_id'),
         );
 
         return redirect()->route('admin.learner_records.imports.show', ['import' => $import->id])

@@ -13,8 +13,10 @@ import {
   Building2,
   GraduationCap,
   Coins,
+  Tags,
   BarChart3,
   KeyRound,
+  MessageSquare,
 } from 'lucide-vue-next'
 
 export type AdminNavItem = {
@@ -151,7 +153,7 @@ export const adminNavSections: AdminNavSection[] = [
   },
   {
     label: 'Reports',
-    requiredAnyPermissions: ['reports.view'],
+    requiredAnyPermissions: ['reports.view', 'sms.logs.view'],
     items: [
       {
         label: 'Applications overview',
@@ -201,6 +203,13 @@ export const adminNavSections: AdminNavSection[] = [
         icon: BarChart3,
         activeStartsWith: '/admin/reports/certificates',
         requiredAnyPermissions: ['reports.view'],
+      },
+      {
+        label: 'SMS logs',
+        href: '/admin/settings/sms/logs',
+        icon: MessageSquare,
+        activeStartsWith: '/admin/settings/sms/logs',
+        requiredAnyPermissions: ['sms.logs.view'],
       },
     ],
   },
@@ -271,9 +280,11 @@ export const adminNavSections: AdminNavSection[] = [
       'settings.certificate_subjects.view',
       'settings.awarding_institutions.view',
       'settings.qualification_types.view',
+      'settings.billing_categories.view',
       'settings.fees.view',
       'settings.departments.view',
       'verification.assign',
+      'sms.balance.view',
     ],
     items: [
       {
@@ -305,6 +316,13 @@ export const adminNavSections: AdminNavSection[] = [
         requiredAnyPermissions: ['settings.qualification_types.view'],
       },
       {
+        label: 'Billing Categories',
+        href: '/admin/settings/billing-categories',
+        icon: Tags,
+        activeStartsWith: '/admin/settings/billing-categories',
+        requiredAnyPermissions: ['settings.billing_categories.view'],
+      },
+      {
         label: 'Fees',
         href: '/admin/settings/fees',
         icon: Coins,
@@ -317,6 +335,13 @@ export const adminNavSections: AdminNavSection[] = [
         icon: Users,
         activeStartsWith: '/admin/settings/departments',
         requiredAnyPermissions: ['settings.departments.view'],
+      },
+      {
+        label: 'SMS Balance',
+        href: '/admin/settings/sms/balance',
+        icon: MessageSquare,
+        activeStartsWith: '/admin/settings/sms/balance',
+        requiredAnyPermissions: ['sms.balance.view', 'sms.balance.manage'],
       },
       {
         label: 'Assignment Categories',

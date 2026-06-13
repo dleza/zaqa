@@ -13,7 +13,7 @@ use Illuminate\Support\Str;
 
 class LearnerRecordImportService
 {
-    public function createAndDispatch(UploadedFile $file, User $actor, ?int $awardingInstitutionId = null): LearnerRecordImport
+    public function createAndDispatch(UploadedFile $file, User $actor, int $awardingInstitutionId): LearnerRecordImport
     {
         $disk = config('filesystems.default', 'local');
         $ext = strtolower($file->getClientOriginalExtension() ?: $file->extension() ?: 'xlsx');

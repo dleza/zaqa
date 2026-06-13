@@ -89,6 +89,11 @@ class RolesAndPermissionsSeeder extends Seeder
         'settings.qualification_types.edit',
         'settings.qualification_types.delete',
 
+        'settings.billing_categories.view',
+        'settings.billing_categories.create',
+        'settings.billing_categories.edit',
+        'settings.billing_categories.delete',
+
         'settings.fees.view',
         'settings.fees.create',
         'settings.fees.edit',
@@ -98,6 +103,10 @@ class RolesAndPermissionsSeeder extends Seeder
         'settings.departments.create',
         'settings.departments.edit',
         'settings.departments.delete',
+
+        'sms.balance.view',
+        'sms.balance.manage',
+        'sms.logs.view',
     ];
 
     public function run(): void

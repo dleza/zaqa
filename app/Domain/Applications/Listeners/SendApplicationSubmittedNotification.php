@@ -66,22 +66,12 @@ class SendApplicationSubmittedNotification implements ShouldQueue
 
         $phone = trim((string) ($user->phone_primary ?? ''));
         if ($phone !== '') {
-            $message = $event->isResubmission
-                ? sprintf(
-                    'ZAQA: Your application %s has been resubmitted successfully.%s',
-                    $application->application_number,
-                    $emailSent ? ' Qualification reference numbers are in your email.' : ''
-                )
-                : sprintf(
-                    'ZAQA: Your application %s has been submitted successfully.%s',
-                    $application->application_number,
-                    $emailSent ? ' Qualification reference numbers are in your email.' : ''
-                );
-
-            $sms->send(
+            $sms->queueTemplate(
+                templateKey: $event->isResubmission ? 'application_resubmitted' : 'application_submitted',
+                placeholders: [
+                    'application_number' => (string) $application->application_number,
+                ],
                 phone: $phone,
-                message: $message,
-                messageType: $event->isResubmission ? 'application_resubmitted' : 'application_submitted',
                 userId: $user->id,
                 applicationId: $application->id,
             );

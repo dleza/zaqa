@@ -4,6 +4,7 @@ namespace App\Domain\Certificates;
 
 use App\Domain\Audit\AuditLogService;
 use App\Domain\Notifications\OutboundMailService;
+use App\Domain\Notifications\OutboundSmsService;
 use App\Domain\Payments\ApplicationPaymentSatisfaction;
 use App\Enums\VerificationState;
 use App\Mail\QualificationCertificateIssuedMail;
@@ -40,6 +41,7 @@ class QualificationCertificateService
         private readonly ApplicationPaymentSatisfaction $payments,
         private readonly AuditLogService $audit,
         private readonly OutboundMailService $outboundMail,
+        private readonly OutboundSmsService $outboundSms,
     ) {}
 
     /**
@@ -150,6 +152,20 @@ class QualificationCertificateService
                         'subject' => 'ZAQA qualification certificate issued',
                         'template_key' => 'qualification_certificate_issued',
                     ],
+                );
+            }
+
+            $applicant = $application->applicant;
+            $phone = trim((string) ($applicant?->phone_primary ?? ''));
+            if ($phone !== '') {
+                $this->outboundSms->queueTemplate(
+                    templateKey: 'certificate_issued',
+                    placeholders: [
+                        'application_number' => (string) $application->application_number,
+                    ],
+                    phone: $phone,
+                    userId: $application->applicant_user_id,
+                    applicationId: $application->id,
                 );
             }
 

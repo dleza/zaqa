@@ -36,7 +36,7 @@ class QualificationFeeResolver
         }
         if ($isForeign) {
             $foreignCategory = BillingCategory::query()
-                ->where('code', 'FOREIGN_QUALIFICATIONS')
+                ->where('code', BillingCategory::CODE_FOREIGN_QUALIFICATIONS)
                 ->where('is_active', true)
                 ->first();
             if ($foreignCategory) {

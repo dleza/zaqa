@@ -97,7 +97,7 @@ Returns JSON when `Accept: application/json`:
   "status": "pending",
   "message": "Waiting for payment approval.",
   "paid": false,
-  "mobile_number": "0973936164",
+  "mobile_number": "0971000000",
   "amount_cents": 15000,
   "currency": "ZMW",
   "already_pending": false

@@ -54,13 +54,12 @@ class SendPaymentProofApprovedNotification implements ShouldQueue
 
         $phone = trim((string) ($user->phone_primary ?? ''));
         if ($phone !== '') {
-            $sms->send(
+            $sms->queueTemplate(
+                templateKey: 'payment_approved',
+                placeholders: [
+                    'application_number' => (string) $application->application_number,
+                ],
                 phone: $phone,
-                message: sprintf(
-                    'ZAQA: Payment confirmed for application %s. You may continue with your application in the portal.',
-                    $application->application_number
-                ),
-                messageType: 'finance_payment_approved',
                 userId: $user->id,
                 applicationId: $application->id,
             );

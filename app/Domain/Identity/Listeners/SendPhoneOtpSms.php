@@ -27,16 +27,15 @@ class SendPhoneOtpSms implements ShouldQueue
             return;
         }
 
-        $message = sprintf(
-            'Your ZAQA OTP code is %s. It expires at %s.',
-            $event->code,
-            $event->expiresAt->toDayDateTimeString()
-        );
-
-        $sms->send(
+        $sms->queueTemplate(
+            templateKey: 'activation_otp',
+            placeholders: [
+                'code' => $event->code,
+                'expires_at' => $event->expiresAt
+                    ->timezone(config('app.timezone'))
+                    ->format('d M Y H:i'),
+            ],
             phone: $phone,
-            message: $message,
-            messageType: 'activation_otp',
             userId: $user->id,
         );
     }

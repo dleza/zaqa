@@ -16,8 +16,18 @@ class UploadLearnerRecordImportRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'awarding_institution_id' => ['nullable', 'integer', 'exists:awarding_institutions,id'],
+            'awarding_institution_id' => ['required', 'integer', 'exists:awarding_institutions,id'],
             'file' => ['required', 'file', 'max:12288', 'mimes:xlsx,xls,csv'],
+        ];
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    public function messages(): array
+    {
+        return [
+            'awarding_institution_id.required' => 'Select the awarding institution for this upload.',
         ];
     }
 }

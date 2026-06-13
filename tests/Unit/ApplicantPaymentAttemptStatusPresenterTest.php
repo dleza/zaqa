@@ -26,7 +26,7 @@ class ApplicantPaymentAttemptStatusPresenterTest extends TestCase
 
         $attempt = new PaymentAttempt([
             'status' => PaymentAttemptStatus::Unknown,
-            'mobile_number' => '0973936164',
+            'mobile_number' => '0971000000',
             'amount_cents' => 10000,
             'currency' => 'ZMW',
         ]);
@@ -53,7 +53,7 @@ class ApplicantPaymentAttemptStatusPresenterTest extends TestCase
 
         $attempt = new PaymentAttempt([
             'status' => PaymentAttemptStatus::Confirmed,
-            'mobile_number' => '0973936164',
+            'mobile_number' => '0971000000',
             'amount_cents' => 10000,
             'currency' => 'ZMW',
         ]);
@@ -80,7 +80,7 @@ class ApplicantPaymentAttemptStatusPresenterTest extends TestCase
 
         $attempt = new PaymentAttempt([
             'status' => PaymentAttemptStatus::Failed,
-            'mobile_number' => '0973936164',
+            'mobile_number' => '0971000000',
             'amount_cents' => 10000,
             'currency' => 'ZMW',
         ]);

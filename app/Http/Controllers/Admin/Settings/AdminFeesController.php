@@ -41,10 +41,14 @@ class AdminFeesController extends Controller
                 'change_reason' => $f->change_reason,
             ]);
 
-        $categories = BillingCategory::query()->orderBy('name')->get(['id', 'name'])->map(fn (BillingCategory $c) => [
-            'id' => $c->id,
-            'name' => $c->name,
-        ])->values();
+        $categories = BillingCategory::query()
+            ->orderBy('sort_order')
+            ->orderBy('name')
+            ->get(['id', 'name'])
+            ->map(fn (BillingCategory $c) => [
+                'id' => $c->id,
+                'name' => $c->name,
+            ])->values();
 
         return Inertia::render('Admin/Settings/Fees/Index', [
             'fees' => $fees,
@@ -63,13 +67,8 @@ class AdminFeesController extends Controller
 
     public function create(Request $request): Response
     {
-        $categories = BillingCategory::query()->orderBy('name')->get(['id', 'name'])->map(fn (BillingCategory $c) => [
-            'id' => $c->id,
-            'name' => $c->name,
-        ])->values();
-
         return Inertia::render('Admin/Settings/Fees/Create', [
-            'billing_categories' => $categories,
+            'billing_categories' => BillingCategory::optionsForSelect(),
         ]);
     }
 

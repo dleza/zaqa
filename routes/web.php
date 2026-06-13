@@ -26,11 +26,14 @@ use App\Http\Controllers\Admin\Reports\PaymentsReportController;
 use App\Http\Controllers\Admin\Reports\QualificationsReportController;
 use App\Http\Controllers\Admin\Reports\VerifiersReportController;
 use App\Http\Controllers\Admin\Settings\AdminAwardingInstitutionsController;
+use App\Http\Controllers\Admin\Settings\AdminBillingCategoriesController;
 use App\Http\Controllers\Admin\Settings\AdminCertificateSubjectsController;
 use App\Http\Controllers\Admin\Settings\AdminCountriesController;
 use App\Http\Controllers\Admin\Settings\AdminDepartmentsController;
 use App\Http\Controllers\Admin\Settings\AdminFeesController;
 use App\Http\Controllers\Admin\Settings\AdminQualificationTypesController;
+use App\Http\Controllers\Admin\Settings\AdminSmsBalanceController;
+use App\Http\Controllers\Admin\Settings\AdminSmsLogsController;
 use App\Http\Controllers\Admin\Verification\AdminVerificationApplicationController;
 use App\Http\Controllers\Admin\Verification\AdminVerificationAssignedToMeController;
 use App\Http\Controllers\Admin\Verification\AdminVerificationAwaitingApplicantResubmissionController;
@@ -271,6 +274,9 @@ Route::middleware('auth')->group(function () {
             Route::get('/imports', [AdminLearnerRecordImportsController::class, 'index'])
                 ->middleware('can:learner_records.view')
                 ->name('imports.index');
+            Route::get('/imports/template', [AdminLearnerRecordImportsController::class, 'template'])
+                ->middleware('can:learner_records.view')
+                ->name('imports.template');
             Route::post('/imports', [AdminLearnerRecordImportsController::class, 'store'])
                 ->middleware('can:learner_records.import')
                 ->name('imports.store');
@@ -662,6 +668,25 @@ Route::middleware('auth')->group(function () {
                 ->middleware('can:settings.qualification_types.delete')
                 ->name('qualification_types.destroy');
 
+            Route::get('/billing-categories', [AdminBillingCategoriesController::class, 'index'])
+                ->middleware('can:settings.billing_categories.view')
+                ->name('billing_categories.index');
+            Route::get('/billing-categories/create', [AdminBillingCategoriesController::class, 'create'])
+                ->middleware('can:settings.billing_categories.create')
+                ->name('billing_categories.create');
+            Route::post('/billing-categories', [AdminBillingCategoriesController::class, 'store'])
+                ->middleware('can:settings.billing_categories.create')
+                ->name('billing_categories.store');
+            Route::get('/billing-categories/{billingCategory}/edit', [AdminBillingCategoriesController::class, 'edit'])
+                ->middleware('can:settings.billing_categories.edit')
+                ->name('billing_categories.edit');
+            Route::put('/billing-categories/{billingCategory}', [AdminBillingCategoriesController::class, 'update'])
+                ->middleware('can:settings.billing_categories.edit')
+                ->name('billing_categories.update');
+            Route::delete('/billing-categories/{billingCategory}', [AdminBillingCategoriesController::class, 'destroy'])
+                ->middleware('can:settings.billing_categories.delete')
+                ->name('billing_categories.destroy');
+
             Route::get('/fees', [AdminFeesController::class, 'index'])
                 ->middleware('can:settings.fees.view')
                 ->name('fees.index');
@@ -699,6 +724,23 @@ Route::middleware('auth')->group(function () {
             Route::delete('/departments/{department}', [AdminDepartmentsController::class, 'destroy'])
                 ->middleware('can:settings.departments.delete')
                 ->name('departments.destroy');
+
+            Route::get('/sms/balance', [AdminSmsBalanceController::class, 'index'])
+                ->middleware('can:sms.balance.view')
+                ->name('sms.balance.index');
+            Route::post('/sms/balance', [AdminSmsBalanceController::class, 'store'])
+                ->middleware('can:sms.balance.manage')
+                ->name('sms.balance.store');
+            Route::post('/sms/test-connection', [AdminSmsBalanceController::class, 'testConnection'])
+                ->middleware('can:sms.balance.manage')
+                ->name('sms.test_connection');
+
+            Route::get('/sms/logs', [AdminSmsLogsController::class, 'index'])
+                ->middleware('can:sms.logs.view')
+                ->name('sms.logs.index');
+            Route::get('/sms/logs/{smsLog}', [AdminSmsLogsController::class, 'show'])
+                ->middleware('can:sms.logs.view')
+                ->name('sms.logs.show');
         });
     });
 });

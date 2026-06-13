@@ -21,6 +21,7 @@ import {
   Inbox,
   Layers,
   LayoutDashboard,
+  MessageSquare,
   Receipt,
   RefreshCw,
   Scale,
@@ -71,6 +72,13 @@ const props = defineProps<{
     items: Array<{ title: string; subtitle: string; href: string | null }>
   }>
   quick_actions: Array<{ label: string; href: string; icon: string; permission: string }>
+  alerts: Array<{
+    key: string
+    severity: 'warning' | 'critical'
+    title: string
+    message: string
+    href?: string | null
+  }>
   empty: boolean
 }>()
 
@@ -102,6 +110,7 @@ const kpiIcons: Record<string, Component> = {
   book: Book,
   'building-2': Building2,
   activity: Activity,
+  'message-square': MessageSquare,
 }
 
 function kpiIcon(name: string | undefined) {
@@ -178,6 +187,31 @@ function quickIcon(name: string) {
             Finance queue
           </Link>
         </div>
+      </div>
+    </div>
+
+    <div v-if="alerts.length" class="mt-6 space-y-3">
+      <div
+        v-for="alert in alerts"
+        :key="alert.key"
+        class="rounded-xl border px-4 py-3 text-sm"
+        :class="
+          alert.severity === 'critical'
+            ? 'border-red-300 bg-red-50 text-red-900'
+            : 'border-warning/30 bg-warning/10 text-warning'
+        "
+      >
+        <div class="font-semibold">
+          {{ alert.severity === 'critical' ? '🚨' : '⚠' }} {{ alert.title }}
+        </div>
+        <p class="mt-1">{{ alert.message }}</p>
+        <Link
+          v-if="alert.href"
+          :href="alert.href"
+          class="mt-2 inline-flex text-xs font-semibold underline underline-offset-2"
+        >
+          Manage SMS balance
+        </Link>
       </div>
     </div>
 

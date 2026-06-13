@@ -15,6 +15,8 @@ use App\Models\Invoice;
 use App\Models\Payment;
 use App\Models\Qualification;
 use App\Models\QualificationDocument;
+use App\Models\SmsBalanceAccount;
+use App\Models\SmsLog;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Carbon;
@@ -94,8 +96,10 @@ class AdminDashboardService
         $charts = [];
         $queues = [];
         $quickActions = [];
+        $alerts = [];
 
         $this->appendQuickActions($user, $quickActions);
+        $this->appendSmsDashboardWidgets($user, $kpis, $alerts);
 
         // ——— System / applications (broad) ———
         if ($user->can('admin.applications.view') || $user->can('verification.pool.view')) {
@@ -619,7 +623,7 @@ class AdminDashboardService
             ];
         }
 
-        $hasContent = $kpis !== [] || $charts !== [] || $queues !== [];
+        $hasContent = $kpis !== [] || $charts !== [] || $queues !== [] || $alerts !== [];
 
         return [
             'meta' => [
@@ -633,6 +637,7 @@ class AdminDashboardService
             'charts' => array_values($charts),
             'queues' => array_values($queues),
             'quick_actions' => array_values($quickActions),
+            'alerts' => array_values($alerts),
             'empty' => ! $hasContent,
         ];
     }
@@ -682,6 +687,79 @@ class AdminDashboardService
         $push('Qualification types', '/admin/settings/qualification-types', 'book', 'settings.qualification_types.view');
         $push('Fees', '/admin/settings/fees', 'coins', 'settings.fees.view');
         $push('Departments', '/admin/settings/departments', 'building-2', 'settings.departments.view');
+        $push('SMS balance', '/admin/settings/sms/balance', 'message-square', 'sms.balance.view');
+        $push('SMS logs', '/admin/settings/sms/logs', 'message-square', 'sms.logs.view');
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $kpis
+     * @param  list<array<string, mixed>>  $alerts
+     */
+    private function appendSmsDashboardWidgets(User $user, array &$kpis, array &$alerts): void
+    {
+        if (! $user->can('sms.balance.view') && ! $user->can('sms.balance.manage')) {
+            return;
+        }
+
+        $account = SmsBalanceAccount::currentReadOnly();
+        $balance = (int) $account->balance;
+        $lowThreshold = (int) $account->low_balance_threshold;
+        $criticalThreshold = (int) $account->critical_balance_threshold;
+
+        $sentToday = SmsLog::query()
+            ->where('status', 'sent')
+            ->whereDate('sent_at', now()->toDateString())
+            ->count();
+
+        $failedToday = SmsLog::query()
+            ->where('status', 'failed')
+            ->whereDate('updated_at', now()->toDateString())
+            ->count();
+
+        $kpis[] = [
+            'key' => 'sms_balance',
+            'label' => 'Current SMS balance',
+            'value' => $balance,
+            'icon' => 'message-square',
+            'hint' => 'Internal SMS units',
+            'href' => '/admin/settings/sms/balance',
+        ];
+
+        $kpis[] = [
+            'key' => 'sms_sent_today',
+            'label' => 'SMS sent today',
+            'value' => $sentToday,
+            'icon' => 'check-circle',
+            'hint' => 'Successful sends',
+            'href' => '/admin/settings/sms/logs',
+        ];
+
+        $kpis[] = [
+            'key' => 'sms_failed_today',
+            'label' => 'SMS failed today',
+            'value' => $failedToday,
+            'icon' => 'alert',
+            'hint' => 'Failed provider sends',
+            'href' => '/admin/settings/sms/logs',
+        ];
+
+        if ($balance <= $criticalThreshold) {
+            $alerts[] = [
+                'key' => 'sms_balance_critical',
+                'severity' => 'critical',
+                'title' => 'SMS balance critically low',
+                'message' => "Only {$balance} SMS remaining (critical threshold {$criticalThreshold}). Add credits immediately.",
+                'href' => '/admin/settings/sms/balance',
+            ];
+        } elseif ($balance <= $lowThreshold) {
+            $alerts[] = [
+                'key' => 'sms_balance_low',
+                'severity' => 'warning',
+                'title' => 'SMS balance is low',
+                'message' => "Only {$balance} SMS remaining (warning threshold {$lowThreshold}). Add credits to avoid notification failures.",
+                'href' => '/admin/settings/sms/balance',
+            ];
+        }
     }
 
     /**

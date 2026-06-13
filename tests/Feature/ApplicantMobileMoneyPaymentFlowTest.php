@@ -49,7 +49,7 @@ class ApplicantMobileMoneyPaymentFlowTest extends TestCase
 
         /** @var PaymentService $payments */
         $payments = app(PaymentService::class);
-        $result = $payments->initiateOnline($payment, ['mobile_number' => '0973936164'], $user);
+        $result = $payments->initiateOnline($payment, ['mobile_number' => '0971000000'], $user);
 
         $this->assertNotNull($result['attempt_id'] ?? null);
         $this->assertFalse((bool) ($result['already_pending'] ?? true));
@@ -95,7 +95,7 @@ class ApplicantMobileMoneyPaymentFlowTest extends TestCase
 
         /** @var PaymentService $payments */
         $payments = app(PaymentService::class);
-        $result = $payments->initiateOnline($payment, ['mobile_number' => '0973936164'], $user);
+        $result = $payments->initiateOnline($payment, ['mobile_number' => '0971000000'], $user);
 
         $this->assertTrue((bool) ($result['already_pending'] ?? false));
         $this->assertSame(1, PaymentAttempt::query()->where('payment_id', $payment->id)->count());
@@ -116,7 +116,7 @@ class ApplicantMobileMoneyPaymentFlowTest extends TestCase
 
         /** @var PaymentService $payments */
         $payments = app(PaymentService::class);
-        $payments->initiateOnline($payment, ['mobile_number' => '0973936164'], $user);
+        $payments->initiateOnline($payment, ['mobile_number' => '0971000000'], $user);
 
         $this->assertSame(2, PaymentAttempt::query()->where('payment_id', $payment->id)->count());
         $latest = PaymentAttempt::query()->where('payment_id', $payment->id)->latest('id')->first();
@@ -235,7 +235,7 @@ class ApplicantMobileMoneyPaymentFlowTest extends TestCase
             'gateway' => 'cgrate',
             'method' => 'mobile_money',
             'payment_reference' => 'ZAQA-'.$payment->invoice_id.'-'.$payment->id.'-'.Str::upper(Str::random(6)),
-            'mobile_number' => '0973936164',
+            'mobile_number' => '0971000000',
             'currency' => 'ZMW',
             'amount_cents' => $payment->amount_cents,
             'status' => $status,

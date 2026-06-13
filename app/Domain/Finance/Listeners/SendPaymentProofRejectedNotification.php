@@ -54,14 +54,12 @@ class SendPaymentProofRejectedNotification implements ShouldQueue
 
         $phone = trim((string) ($user->phone_primary ?? ''));
         if ($phone !== '') {
-            $sms->send(
+            $sms->queueTemplate(
+                templateKey: 'payment_rejected',
+                placeholders: [
+                    'application_number' => (string) $application->application_number,
+                ],
                 phone: $phone,
-                message: sprintf(
-                    'ZAQA: Payment proof rejected for application %s. Reason: %s. Please login and upload a corrected proof.',
-                    $application->application_number,
-                    $event->reason
-                ),
-                messageType: 'finance_payment_rejected',
                 userId: $user->id,
                 applicationId: $application->id,
             );

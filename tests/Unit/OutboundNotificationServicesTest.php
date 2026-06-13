@@ -4,15 +4,24 @@ namespace Tests\Unit;
 
 use App\Domain\Notifications\OutboundMailService;
 use App\Domain\Notifications\OutboundSmsService;
+use App\Jobs\Notifications\SendSmsJob;
 use App\Mail\ActivationEmailMail;
 use Carbon\CarbonImmutable;
+use Database\Seeders\RolesAndPermissionsSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\Queue;
 use Tests\TestCase;
 
 class OutboundNotificationServicesTest extends TestCase
 {
     use RefreshDatabase;
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+        $this->seed(RolesAndPermissionsSeeder::class);
+    }
 
     public function test_outbound_mail_service_queues_without_throwing_on_failure(): void
     {
@@ -44,40 +53,52 @@ class OutboundNotificationServicesTest extends TestCase
         ]);
     }
 
-    public function test_outbound_sms_service_logs_without_throwing(): void
+    public function test_activation_otp_queues_through_configured_sms_pipeline(): void
     {
-        config(['services.sms.provider' => 'log']);
+        Queue::fake();
+
+        config(['sms.enabled' => true, 'sms.provider' => 'zamtel']);
+        app(\App\Domain\Notifications\Sms\SmsBalanceService::class)->credit(5, 'seed');
 
         $service = app(OutboundSmsService::class);
-        $result = $service->send(
-            phone: '0973936164',
-            message: 'Test SMS',
-            messageType: 'test_message',
+        $result = $service->queueTemplate(
+            templateKey: 'activation_otp',
+            placeholders: [
+                'code' => '123456',
+                'expires_at' => '13 Jun 2026 15:00',
+            ],
+            phone: '0971000000',
         );
 
         $this->assertTrue($result);
+        Queue::assertPushed(SendSmsJob::class);
         $this->assertDatabaseHas('sms_logs', [
-            'phone_number' => '0973936164',
-            'message_type' => 'test_message',
-            'status' => 'sent',
+            'phone_number' => '0971000000',
+            'message_type' => 'activation_otp',
+            'status' => 'queued',
+            'provider' => 'zamtel',
         ]);
     }
 
-    public function test_outbound_sms_service_marks_failed_for_unsupported_provider_without_throwing(): void
+    public function test_queue_template_dispatches_send_sms_job_when_enabled_with_balance(): void
     {
-        config(['services.sms.provider' => 'unsupported']);
+        Queue::fake();
+
+        config(['sms.enabled' => true, 'sms.provider' => 'log']);
+        app(\App\Domain\Notifications\Sms\SmsBalanceService::class)->credit(5, 'seed');
 
         $service = app(OutboundSmsService::class);
-        $result = $service->send(
-            phone: '0973936164',
-            message: 'Test SMS',
-            messageType: 'test_message',
+        $result = $service->queueTemplate(
+            templateKey: 'payment_approved',
+            placeholders: ['application_number' => 'ZAQA-TEST-001'],
+            phone: '0977000001',
         );
 
-        $this->assertFalse($result);
+        $this->assertTrue($result);
+        Queue::assertPushed(SendSmsJob::class);
         $this->assertDatabaseHas('sms_logs', [
-            'phone_number' => '0973936164',
-            'status' => 'failed',
+            'message_type' => 'payment_approved',
+            'status' => 'queued',
         ]);
     }
 }
