@@ -421,6 +421,15 @@ function formatDateTime(value: Date | null | undefined) {
   }
 }
 
+function formatDateOnly(value: string | null | undefined) {
+  if (!value) return '—'
+  try {
+    return new Date(value).toLocaleDateString(undefined, { dateStyle: 'medium' })
+  } catch {
+    return value
+  }
+}
+
 function displayValue(value: unknown) {
   if (value === null || value === undefined) return '—'
   const text = String(value).trim()
@@ -456,7 +465,7 @@ const qualificationFacts = computed(() => [
   },
   {
     label: 'Award date',
-    value: props.qualification.award_date ? formatTimelineAt(props.qualification.award_date) : '—',
+    value: props.qualification.award_date ? formatDateOnly(props.qualification.award_date) : '—',
   },
   {
     label: 'Identifier',
@@ -1047,7 +1056,6 @@ const subjectResultsCount = computed(() => props.qualification.subject_results?.
               <div class="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
                 <div>
                   <div class="text-[11px] font-bold uppercase tracking-wider text-text-muted">Admin action strip</div>
-                  <p class="mt-1 text-sm text-text-muted">Retry matching, retry Level 1 auto-assignment, or jump to learner records.</p>
                 </div>
                 <div class="flex flex-wrap gap-2">
                   <button
