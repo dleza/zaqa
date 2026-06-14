@@ -6,6 +6,7 @@ import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import {
   ArrowRight,
   Building2,
+  ChevronDown,
   ClipboardCheck,
   CornerDownLeft,
   Clock,
@@ -23,7 +24,6 @@ import {
   Timer,
   UserMinus,
   UserRound,
-  Users,
 } from 'lucide-vue-next'
 
 const props = defineProps<{
@@ -411,6 +411,123 @@ function formatTimelineAt(iso: string | null | undefined) {
     return iso
   }
 }
+
+function formatDateTime(value: Date | null | undefined) {
+  if (!value) return '—'
+  try {
+    return value.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })
+  } catch {
+    return '—'
+  }
+}
+
+function displayValue(value: unknown) {
+  if (value === null || value === undefined) return '—'
+  const text = String(value).trim()
+  return text === '' ? '—' : text
+}
+
+function matchedStateClass(matched: boolean | undefined) {
+  return matched
+    ? 'border-emerald-300/40 bg-emerald-500/15 text-emerald-900'
+    : 'border-border/70 bg-surface text-text-muted'
+}
+
+function matchedStateLabel(matched: boolean | undefined) {
+  return matched ? 'Matched' : 'Not matched'
+}
+
+const qualificationFacts = computed(() => [
+  {
+    label: 'Qualification type',
+    value: props.qualification.qualification_type ?? '—',
+  },
+  {
+    label: 'Scope / locality',
+    value: isForeign.value ? 'Foreign qualification' : 'Local qualification',
+  },
+  {
+    label: 'Awarding institution',
+    value: props.qualification.awarding_institution ?? '—',
+  },
+  {
+    label: 'Country of award',
+    value: props.qualification.country ?? '—',
+  },
+  {
+    label: 'Award date',
+    value: props.qualification.award_date ? formatTimelineAt(props.qualification.award_date) : '—',
+  },
+  {
+    label: 'Identifier',
+    value: props.qualification.student_number || props.qualification.certificate_number || '—',
+  },
+])
+
+const titleComparisonRows = computed(() => [
+  {
+    label: 'Applicant title',
+    value: props.qualification.title ?? '—',
+    meta: `Source: ${props.qualification.qualification_title_source || '—'}`,
+  },
+  {
+    label: 'Applicant typed (Other)',
+    value: props.qualification.applicant_entered_qualification_title || '—',
+    meta: null,
+  },
+  {
+    label: 'Verified title',
+    value: props.qualification.verified_qualification_title || '—',
+    meta: null,
+  },
+])
+
+const matchedFieldItems = computed(() => [
+  { key: 'awarding_institution_id', label: 'Awarding institution', matched: autoMatchedFields.value.awarding_institution_id },
+  { key: 'year_awarded', label: 'Award year', matched: autoMatchedFields.value.year_awarded },
+  { key: 'student_id', label: 'Student number', matched: autoMatchedFields.value.student_id },
+  { key: 'certificate_no', label: 'Certificate number', matched: autoMatchedFields.value.certificate_no },
+  { key: 'nrc_number', label: 'NRC', matched: autoMatchedFields.value.nrc_number },
+  { key: 'passport_no', label: 'Passport', matched: autoMatchedFields.value.passport_no },
+  { key: 'name', label: 'Name', matched: autoMatchedFields.value.name },
+  { key: 'program_of_study', label: 'Programme / title', matched: autoMatchedFields.value.program_of_study },
+])
+
+const evidenceRows = computed(() => [
+  {
+    key: 'student_id',
+    field: 'Student number',
+    applicant: props.qualification.student_number,
+    record: props.qualification.learner_record?.student_id,
+    matched: autoMatchedFields.value.student_id,
+  },
+  {
+    key: 'certificate_no',
+    field: 'Certificate number',
+    applicant: props.qualification.certificate_number,
+    record: props.qualification.learner_record?.certificate_no,
+    matched: autoMatchedFields.value.certificate_no,
+  },
+  {
+    key: 'awarding_institution_id',
+    field: 'Awarding institution',
+    applicant: props.qualification.awarding_institution,
+    record:
+      props.qualification.learner_record?.awarding_institution?.name ||
+      props.qualification.learner_record?.institution_name_raw,
+    matched: autoMatchedFields.value.awarding_institution_id,
+  },
+  {
+    key: 'year_awarded',
+    field: 'Award year',
+    applicant: props.qualification.award_date ? new Date(props.qualification.award_date).getFullYear() : null,
+    record: props.qualification.learner_record?.year_awarded,
+    matched: autoMatchedFields.value.year_awarded,
+  },
+])
+
+const documentsCount = computed(() => props.qualification.documents?.length ?? 0)
+const subjectResultsCount = computed(() => props.qualification.subject_results?.length ?? 0)
 </script>
 
 <template>
@@ -419,14 +536,14 @@ function formatTimelineAt(iso: string | null | undefined) {
       <div class="space-y-6 px-4 pb-10 sm:px-6 lg:px-8">
       <!-- Command header: identity + status at a glance -->
       <section
-        class="relative overflow-hidden rounded-2xl border border-brand-dark/25 bg-gradient-to-br from-brand-dark via-[#0c4a7c] to-brand shadow-[0_4px_24px_-4px_rgba(11,58,102,0.35)]"
+        class="relative overflow-hidden rounded-2xl border border-brand-dark/20 bg-gradient-to-br from-brand-dark via-[#0c4a7c] to-brand shadow-[0_4px_24px_-4px_rgba(11,58,102,0.35)]"
       >
         <div
           class="pointer-events-none absolute -right-16 -top-16 h-48 w-48 rounded-full bg-brand/30 blur-3xl"
           aria-hidden="true"
         />
-        <div class="relative px-5 py-6 sm:px-8 sm:py-8">
-          <div class="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
+        <div class="relative px-5 py-5 sm:px-7 sm:py-6">
+          <div class="flex flex-col gap-5 xl:flex-row xl:items-start xl:justify-between">
             <div class="min-w-0 flex-1">
               <div class="flex flex-wrap items-center gap-2">
                 <span
@@ -441,11 +558,13 @@ function formatTimelineAt(iso: string | null | undefined) {
                   {{ isForeign ? 'Foreign qualification' : 'Local qualification' }}
                 </span>
               </div>
+
               <h1 class="mt-3 text-2xl font-bold tracking-tight text-white sm:text-3xl">
                 {{ qualification.title ?? 'Qualification' }}
               </h1>
-              <div class="mt-4 flex flex-wrap items-end gap-x-6 gap-y-2">
-                <div>
+
+              <div class="mt-4 grid gap-x-4 gap-y-2 sm:grid-cols-2 xl:grid-cols-[minmax(0,1.45fr)_minmax(0,0.95fr)_minmax(0,1fr)_auto] xl:items-end">
+                <div class="min-w-0">
                   <div class="text-[10px] font-semibold uppercase tracking-wider text-white/60">Verification reference</div>
                   <div class="mt-1 flex flex-wrap items-center gap-2">
                     <span class="font-mono text-lg font-semibold tracking-wide text-white sm:text-xl">
@@ -462,30 +581,28 @@ function formatTimelineAt(iso: string | null | undefined) {
                     </button>
                   </div>
                 </div>
-                <div class="h-10 w-px bg-white/20 max-sm:hidden" aria-hidden="true" />
-                <div>
+                <div class="min-w-0">
                   <div class="text-[10px] font-semibold uppercase tracking-wider text-white/60">Application</div>
                   <div class="mt-1 font-mono text-base font-semibold text-white">{{ appNum }}</div>
                 </div>
-                <div class="h-10 w-px bg-white/20 max-sm:hidden" aria-hidden="true" />
-                <div>
+                <div class="min-w-0">
+                  <div class="text-[10px] font-semibold uppercase tracking-wider text-white/60">Holder</div>
+                  <div class="mt-1 truncate text-sm font-semibold text-white sm:text-base">{{ qualification.holder_name ?? '—' }}</div>
+                </div>
+                <div class="min-w-0">
                   <div class="text-[10px] font-semibold uppercase tracking-wider text-white/60">Internal ID</div>
                   <div class="mt-1 font-mono text-sm text-white/90">#{{ qualification.id }}</div>
                 </div>
               </div>
             </div>
 
-            <div class="flex shrink-0 flex-col gap-3 sm:flex-row sm:items-start lg:flex-col">
-              <div
-                class="rounded-xl border border-white/20 bg-black/25 px-4 py-3 backdrop-blur-sm sm:min-w-[200px]"
-              >
+            <div class="grid shrink-0 gap-3 sm:grid-cols-2 xl:w-[22rem] xl:grid-cols-2">
+              <div class="rounded-xl border border-white/20 bg-black/25 px-4 py-3 backdrop-blur-sm">
                 <div class="text-[10px] font-semibold uppercase tracking-wider text-white/65">Workflow status</div>
                 <div class="mt-1.5 text-sm font-semibold leading-snug text-white">{{ stateDisplay }}</div>
               </div>
-              <div
-                class="rounded-xl border border-white/20 bg-black/25 px-4 py-3 backdrop-blur-sm sm:min-w-[200px]"
-              >
-                <div class="text-[10px] font-semibold uppercase tracking-wider text-white/65">Payment</div>
+              <div class="rounded-xl border border-white/20 bg-black/25 px-4 py-3 backdrop-blur-sm">
+                <div class="text-[10px] font-semibold uppercase tracking-wider text-white/65">Payment status</div>
                 <div class="mt-1.5 text-sm font-semibold capitalize text-white">
                   {{ qualification.application?.payment_status ?? '—' }}
                 </div>
@@ -493,375 +610,376 @@ function formatTimelineAt(iso: string | null | undefined) {
             </div>
           </div>
 
-          <p v-if="viewerHint" class="mt-5 max-w-3xl border-t border-white/15 pt-4 text-sm leading-relaxed text-white/85">
+          <p v-if="viewerHint" class="mt-4 max-w-3xl border-t border-white/15 pt-3 text-sm leading-relaxed text-white/85">
             {{ viewerHint }}
           </p>
 
-	          <!-- Links + actions -->
-	          <div class="mt-6 border-t border-white/15 pt-5">
-	            <div class="flex items-center gap-2 overflow-x-auto pb-1">
-	              <Link
-	                :href="`/admin/verification/applications/${qualification.application?.id}`"
-	                class="inline-flex shrink-0 items-center gap-2 rounded-xl border border-white/25 bg-white/10 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-white/20"
-	              >
-	                <ExternalLink class="h-4 w-4 shrink-0 opacity-90" aria-hidden="true" />
-	                Parent application
-	              </Link>
-	              <Link
-	                href="/admin/verification/pool"
-	                class="inline-flex shrink-0 items-center gap-2 rounded-xl border border-white/25 bg-white/10 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-white/20"
-	              >
-	                <LayoutList class="h-4 w-4 shrink-0 opacity-90" aria-hidden="true" />
-	                Verification pool
-	              </Link>
-	              <button
-	                type="button"
-	                class="inline-flex shrink-0 items-center gap-2 rounded-xl border border-white/20 bg-black/25 px-4 py-2.5 text-sm font-medium text-white/95 transition hover:bg-black/35"
-	                @click="copyPageUrl"
-	              >
-	                <Link2 class="h-4 w-4 shrink-0 opacity-90" aria-hidden="true" />
-	                {{ copiedPageUrl ? 'Link copied' : 'Copy page link' }}
-	              </button>
+          <div class="mt-5 border-t border-white/15 pt-4">
+            <div class="flex flex-wrap gap-2">
+              <Link
+                :href="`/admin/verification/applications/${qualification.application?.id}`"
+                class="inline-flex items-center gap-2 rounded-xl border border-slate-200/30 bg-slate-950/25 px-3.5 py-2 text-sm font-semibold text-white transition hover:bg-slate-950/35"
+              >
+                <ExternalLink class="h-4 w-4 shrink-0 opacity-90" aria-hidden="true" />
+                Parent application
+              </Link>
+              <Link
+                href="/admin/verification/pool"
+                class="inline-flex items-center gap-2 rounded-xl border border-slate-200/30 bg-slate-800/30 px-3.5 py-2 text-sm font-semibold text-white transition hover:bg-slate-800/40"
+              >
+                <LayoutList class="h-4 w-4 shrink-0 opacity-90" aria-hidden="true" />
+                Verification pool
+              </Link>
+              <button
+                type="button"
+                class="inline-flex items-center gap-2 rounded-xl border border-white/20 bg-black/25 px-3.5 py-2 text-sm font-medium text-white/95 transition hover:bg-black/35"
+                @click="copyPageUrl"
+              >
+                <Link2 class="h-4 w-4 shrink-0 opacity-90" aria-hidden="true" />
+                {{ copiedPageUrl ? 'Link copied' : 'Copy page link' }}
+              </button>
 
-	              <button
-	                v-if="sendBackTimeline.length > 0"
-	                type="button"
-	                class="inline-flex shrink-0 items-center gap-2 rounded-xl border border-amber-300/40 bg-amber-500/15 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-amber-500/25"
-	                @click="sendBackHistoryOpen = true"
-	              >
-	                Returned to applicant ({{ sendBackTimeline.length }})
-	              </button>
+              <button
+                v-if="sendBackTimeline.length > 0"
+                type="button"
+                class="inline-flex items-center gap-2 rounded-xl border border-amber-300/40 bg-amber-500/15 px-3.5 py-2 text-sm font-semibold text-white transition hover:bg-amber-500/25"
+                @click="sendBackHistoryOpen = true"
+              >
+                Returned to applicant ({{ sendBackTimeline.length }})
+              </button>
 
-	              <Link
-	                v-if="canEditQualificationDetails"
-	                :href="`/admin/verification/qualifications/${qualification.id}/edit`"
-	                class="inline-flex shrink-0 items-center gap-2 rounded-xl border border-white/25 bg-white/10 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-white/20"
-	              >
-	                <Pencil class="h-4 w-4 shrink-0 opacity-90" aria-hidden="true" />
-	                Edit details
-	              </Link>
+              <Link
+                v-if="canEditQualificationDetails"
+                :href="`/admin/verification/qualifications/${qualification.id}/edit`"
+                class="inline-flex items-center gap-2 rounded-xl border border-sky-300/40 bg-sky-500/15 px-3.5 py-2 text-sm font-semibold text-white transition hover:bg-sky-500/25"
+              >
+                <Pencil class="h-4 w-4 shrink-0 opacity-90" aria-hidden="true" />
+                Edit details
+              </Link>
 
-	              <button
-	                v-if="canShowAssign"
-	                type="button"
-	                class="inline-flex shrink-0 items-center gap-2 rounded-xl border border-white/25 bg-white/10 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-white/20"
-	                @click="assignOpen = true"
-	              >
-	                <ArrowRight class="h-4 w-4 shrink-0 opacity-90" aria-hidden="true" />
-	                {{ qualification.assigned_verifier_id ? 'Reassign Level 1' : 'Assign Level 1' }}
-	              </button>
+              <button
+                v-if="canShowAssign"
+                type="button"
+                class="inline-flex items-center gap-2 rounded-xl border border-sky-300/40 bg-sky-500/20 px-3.5 py-2 text-sm font-semibold text-white transition hover:bg-sky-500/30"
+                @click="assignOpen = true"
+              >
+                <ArrowRight class="h-4 w-4 shrink-0 opacity-90" aria-hidden="true" />
+                {{ qualification.assigned_verifier_id ? 'Reassign Level 1' : 'Assign Level 1' }}
+              </button>
 
-	              <button
-	                v-if="canShowRevokeAssignment"
-	                type="button"
-	                class="inline-flex shrink-0 items-center gap-2 rounded-xl border border-rose-300/40 bg-rose-600/20 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-rose-600/30"
-	                @click="revokeOpen = true"
-	              >
-	                <UserMinus class="h-4 w-4 shrink-0 opacity-90" aria-hidden="true" />
-	                Remove assignment
-	              </button>
+              <button
+                v-if="canShowRevokeAssignment"
+                type="button"
+                class="inline-flex items-center gap-2 rounded-xl border border-rose-300/40 bg-rose-600/20 px-3.5 py-2 text-sm font-semibold text-white transition hover:bg-rose-600/30"
+                @click="revokeOpen = true"
+              >
+                <UserMinus class="h-4 w-4 shrink-0 opacity-90" aria-hidden="true" />
+                Remove assignment
+              </button>
 
-		              <button
-		                v-if="canShowSendBack"
-		                type="button"
-		                class="inline-flex shrink-0 items-center gap-2 rounded-xl border border-amber-300/40 bg-amber-500/15 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-amber-500/25"
-		                :disabled="isAutoVerifiedPendingL2 && lockMissingForActions"
-		                :title="isAutoVerifiedPendingL2 && lockMissingForActions ? 'Lock for review before taking Level 2 actions.' : ''"
-		                @click="sendBackOpen = true"
-		              >
-		                Send back
-		              </button>
+              <button
+                v-if="canShowSendBack"
+                type="button"
+                class="inline-flex items-center gap-2 rounded-xl border border-amber-300/40 bg-amber-500/15 px-3.5 py-2 text-sm font-semibold text-white transition hover:bg-amber-500/25"
+                :disabled="isAutoVerifiedPendingL2 && lockMissingForActions"
+                :title="isAutoVerifiedPendingL2 && lockMissingForActions ? 'Lock for review before taking Level 2 actions.' : ''"
+                @click="sendBackOpen = true"
+              >
+                Send back
+              </button>
 
-		              <button
-		                v-if="isAutoVerifiedPendingL2 && isLevel2Viewer && canAcquireLock"
-		                type="button"
-		                class="inline-flex shrink-0 items-center gap-2 rounded-xl border border-sky-300/40 bg-sky-500/15 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-sky-500/25"
-		                @click="lockForReview"
-		              >
-		                <Timer class="h-4 w-4 shrink-0 opacity-90" aria-hidden="true" />
-		                {{ lockIsActive ? 'Take over lock' : 'Start review' }}
-		              </button>
+              <button
+                v-if="isAutoVerifiedPendingL2 && isLevel2Viewer && canAcquireLock"
+                type="button"
+                class="inline-flex items-center gap-2 rounded-xl border border-sky-300/40 bg-sky-500/15 px-3.5 py-2 text-sm font-semibold text-white transition hover:bg-sky-500/25"
+                @click="lockForReview"
+              >
+                <Timer class="h-4 w-4 shrink-0 opacity-90" aria-hidden="true" />
+                {{ lockIsActive ? 'Take over lock' : 'Start review' }}
+              </button>
 
-		              <button
-		                v-if="isAutoVerifiedPendingL2 && isLevel2Viewer && canReleaseLock"
-		                type="button"
-		                class="inline-flex shrink-0 items-center gap-2 rounded-xl border border-white/25 bg-white/10 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-white/20"
-		                @click="unlockReview"
-		              >
-		                <RotateCcw class="h-4 w-4 shrink-0 opacity-90" aria-hidden="true" />
-		                Release lock
-		              </button>
+              <button
+                v-if="isAutoVerifiedPendingL2 && isLevel2Viewer && canReleaseLock"
+                type="button"
+                class="inline-flex items-center gap-2 rounded-xl border border-white/25 bg-white/10 px-3.5 py-2 text-sm font-semibold text-white transition hover:bg-white/20"
+                @click="unlockReview"
+              >
+                <RotateCcw class="h-4 w-4 shrink-0 opacity-90" aria-hidden="true" />
+                Release lock
+              </button>
 
-		              <button
-		                v-if="isAutoVerifiedPendingL2 && isLevel2Viewer"
-		                type="button"
-		                class="inline-flex shrink-0 items-center gap-2 rounded-xl border border-white/25 bg-white/10 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-white/20"
-		                :disabled="lockMissingForActions"
-		                :title="lockMissingForActions ? 'Lock for review before taking Level 2 actions.' : ''"
-		                @click="sendToManualReview"
-		              >
-		                <CornerDownLeft class="h-4 w-4 shrink-0 opacity-90" aria-hidden="true" />
-		                Manual review
-		              </button>
+              <button
+                v-if="isAutoVerifiedPendingL2 && isLevel2Viewer"
+                type="button"
+                class="inline-flex items-center gap-2 rounded-xl border border-slate-200/30 bg-slate-950/20 px-3.5 py-2 text-sm font-semibold text-white transition hover:bg-slate-950/30"
+                :disabled="lockMissingForActions"
+                :title="lockMissingForActions ? 'Lock for review before taking Level 2 actions.' : ''"
+                @click="sendToManualReview"
+              >
+                <CornerDownLeft class="h-4 w-4 shrink-0 opacity-90" aria-hidden="true" />
+                Manual review
+              </button>
 
-		              <button
-		                v-if="canShowLevel1Complete"
-		                type="button"
-		                class="inline-flex shrink-0 items-center gap-2 rounded-xl border border-sky-300/40 bg-sky-500/15 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-sky-500/25"
-		                @click="level1CompleteOpen = true"
-	              >
-	                Mark Level 1 complete
-	              </button>
+              <button
+                v-if="canShowLevel1Complete"
+                type="button"
+                class="inline-flex items-center gap-2 rounded-xl border border-sky-300/40 bg-sky-500/15 px-3.5 py-2 text-sm font-semibold text-white transition hover:bg-sky-500/25"
+                @click="level1CompleteOpen = true"
+              >
+                Mark Level 1 complete
+              </button>
 
-		              <button
-		                v-if="canShowApprove"
-		                type="button"
-		                class="inline-flex shrink-0 items-center gap-2 rounded-xl border border-emerald-300/40 bg-emerald-500/15 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-emerald-500/25"
-		                :disabled="isAutoVerifiedPendingL2 && lockMissingForActions"
-		                :title="isAutoVerifiedPendingL2 && lockMissingForActions ? 'Lock for review before approving.' : ''"
-		                @click="approveOpen = true"
-		              >
-		                Approve
-		              </button>
+              <button
+                v-if="canShowApprove"
+                type="button"
+                class="inline-flex items-center gap-2 rounded-xl border border-emerald-300/40 bg-emerald-500/15 px-3.5 py-2 text-sm font-semibold text-white transition hover:bg-emerald-500/25"
+                :disabled="isAutoVerifiedPendingL2 && lockMissingForActions"
+                :title="isAutoVerifiedPendingL2 && lockMissingForActions ? 'Lock for review before approving.' : ''"
+                @click="approveOpen = true"
+              >
+                Approve
+              </button>
 
-		              <button
-		                v-if="canShowReject"
-		                type="button"
-		                class="inline-flex shrink-0 items-center gap-2 rounded-xl border border-rose-300/40 bg-rose-600/20 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-rose-600/30"
-		                :disabled="isAutoVerifiedPendingL2 && lockMissingForActions"
-		                :title="isAutoVerifiedPendingL2 && lockMissingForActions ? 'Lock for review before rejecting.' : ''"
-		                @click="rejectOpen = true"
-		              >
-		                Reject
-		              </button>
+              <button
+                v-if="canShowReject"
+                type="button"
+                class="inline-flex items-center gap-2 rounded-xl border border-rose-300/40 bg-rose-600/20 px-3.5 py-2 text-sm font-semibold text-white transition hover:bg-rose-600/30"
+                :disabled="isAutoVerifiedPendingL2 && lockMissingForActions"
+                :title="isAutoVerifiedPendingL2 && lockMissingForActions ? 'Lock for review before rejecting.' : ''"
+                @click="rejectOpen = true"
+              >
+                Reject
+              </button>
 
-	              <button
-	                v-if="qualification.can_issue_cveq_certificate && can.issue_certificate"
-	                type="button"
-	                class="inline-flex shrink-0 items-center gap-2 rounded-xl border border-emerald-300/40 bg-emerald-500/15 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-emerald-500/25"
-	                :disabled="issueCveqForm.processing"
-	                @click="submitIssueCveq"
-	              >
-	                Issue certificate
-	              </button>
+              <button
+                v-if="qualification.can_issue_cveq_certificate && can.issue_certificate"
+                type="button"
+                class="inline-flex items-center gap-2 rounded-xl border border-emerald-300/40 bg-emerald-500/15 px-3.5 py-2 text-sm font-semibold text-white transition hover:bg-emerald-500/25"
+                :disabled="issueCveqForm.processing"
+                @click="submitIssueCveq"
+              >
+                Issue certificate
+              </button>
 
-	              <a
-	                v-if="qualification.cveq_certificate?.admin_download_url && can.issue_certificate"
-	                :href="qualification.cveq_certificate.admin_download_url"
-	                target="_blank"
-	                rel="noopener"
-	                class="inline-flex shrink-0 items-center gap-2 rounded-xl border border-white/25 bg-white/10 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-white/20"
-	              >
-	                <FileDown class="h-4 w-4 shrink-0 opacity-90" aria-hidden="true" />
-	                Download certificate
-	              </a>
+              <a
+                v-if="qualification.cveq_certificate?.admin_download_url && can.issue_certificate"
+                :href="qualification.cveq_certificate.admin_download_url"
+                target="_blank"
+                rel="noopener"
+                class="inline-flex items-center gap-2 rounded-xl border border-white/25 bg-white/10 px-3.5 py-2 text-sm font-semibold text-white transition hover:bg-white/20"
+              >
+                <FileDown class="h-4 w-4 shrink-0 opacity-90" aria-hidden="true" />
+                Download certificate
+              </a>
 
-	              <button
-	                v-if="qualification.can_reissue_cveq_certificate && can.issue_certificate"
-	                type="button"
-	                class="inline-flex shrink-0 items-center gap-2 rounded-xl border border-amber-300/40 bg-amber-500/15 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-amber-500/25"
-	                @click="submitReissueCveq"
-	              >
-	                Reissue certificate
-	              </button>
-	            </div>
-	          </div>
-	        </div>
-	      </section>
-
-	      <section
-	        v-if="
-	          can.issue_certificate &&
-          (qualification.can_issue_cveq_certificate ||
-            qualification.cveq_certificate ||
-            qualification.can_reissue_cveq_certificate)
-        "
-        class="rounded-2xl border border-border bg-surface p-4 shadow-sm sm:p-5"
-      >
-        <div class="flex flex-col gap-3">
-          <div>
-            <h2 class="text-sm font-bold tracking-tight text-text-primary">CVEQ certificate</h2>
-            <p class="mt-1 text-xs text-text-muted">
-              Issue the Certificate of Verification and Evaluation of Qualification for this line item (payment must be satisfied and the qualification approved for certificate).
-            </p>
-            <p v-if="qualification.application?.payment_satisfied === false" class="mt-2 text-xs font-medium text-amber-900">
-              Payment is not satisfied — certificate issuance is blocked until fees are covered.
-            </p>
+              <button
+                v-if="qualification.can_reissue_cveq_certificate && can.issue_certificate"
+                type="button"
+                class="inline-flex items-center gap-2 rounded-xl border border-amber-300/40 bg-amber-500/15 px-3.5 py-2 text-sm font-semibold text-white transition hover:bg-amber-500/25"
+                @click="submitReissueCveq"
+              >
+                Reissue certificate
+              </button>
+            </div>
           </div>
-        </div>
-        <div
-          v-if="qualification.certificate_template"
-          class="mt-4 rounded-xl border border-border/70 bg-surface-muted/40 px-4 py-3 text-xs text-text-muted"
-        >
-          <div class="flex flex-wrap items-center gap-2">
-            <span class="font-semibold text-text-primary">Template:</span>
-            <span class="zaqa-badge" :class="qualification.certificate_template.key === 'school_subjects' ? 'zaqa-badge-info' : 'zaqa-badge-secondary'">
-              {{ qualification.certificate_template.label }}
-            </span>
-            <span
-              v-if="qualification.certificate_template.requires_subjects"
-              class="text-text-muted"
-            >
-              · {{ qualification.certificate_template.subject_count ?? 0 }} subject{{ (qualification.certificate_template.subject_count ?? 0) === 1 ? '' : 's' }}
-            </span>
-          </div>
-          <p
-            v-if="qualification.certificate_template.warning"
-            class="mt-2 text-xs font-medium text-amber-900"
-          >
-            {{ qualification.certificate_template.warning }}
-          </p>
-        </div>
-        <div v-if="qualification.cveq_certificate?.certificate_number" class="mt-4 rounded-xl border border-border/70 bg-surface-muted/40 px-4 py-3 text-xs text-text-muted">
-          <span class="font-semibold text-text-primary">Active certificate:</span>
-          {{ qualification.cveq_certificate.certificate_number }}
-          <span v-if="qualification.cveq_certificate.issued_at" class="ml-2">
-            · Issued {{ formatTimelineAt(qualification.cveq_certificate.issued_at) }}
-          </span>
         </div>
       </section>
 
       <div class="grid gap-6 lg:grid-cols-12 lg:items-start">
-        <!-- Main column -->
-        <div class="space-y-6 lg:col-span-8">
-          <!-- Ownership: who submitted / subject -->
-          <section class="rounded-2xl border border-border bg-surface p-6 shadow-sm sm:p-7">
-            <div class="flex items-start gap-3 border-b border-border/80 pb-4">
-              <span class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-brand/10 text-brand">
-                <Users class="h-5 w-5" aria-hidden="true" />
-              </span>
-              <div>
-                <h2 class="text-base font-bold tracking-tight text-text-primary">Ownership & applicant</h2>
-                <p class="mt-1 text-sm text-text-muted">Who this verification request belongs to in the portal.</p>
-              </div>
-            </div>
-            <dl class="mt-6 grid gap-5 sm:grid-cols-2">
-              <div class="rounded-xl border border-border/60 bg-surface-muted/50 p-4">
-                <dt class="text-[11px] font-bold uppercase tracking-wider text-text-muted">Applicant name</dt>
-                <dd class="mt-1.5 text-sm font-semibold text-text-primary">
-                  {{ qualification.application?.applicant_name ?? '—' }}
-                </dd>
-              </div>
-              <div class="rounded-xl border border-border/60 bg-surface-muted/50 p-4">
-                <dt class="text-[11px] font-bold uppercase tracking-wider text-text-muted">Holder on qualification</dt>
-                <dd class="mt-1.5 text-sm font-semibold text-text-primary">
-                  {{ qualification.holder_name ?? '—' }}
-                </dd>
-                <dd v-if="qualification.holder_nrc_passport" class="mt-1 font-mono text-xs text-text-muted">
-                  {{ qualification.holder_nrc_passport }}
-                </dd>
-              </div>
-              <div class="rounded-xl border border-border/60 bg-surface-muted/50 p-4 sm:col-span-2">
-                <dt class="text-[11px] font-bold uppercase tracking-wider text-text-muted">Application record</dt>
-                <dd class="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1">
-                  <span class="font-mono text-sm font-semibold text-text-primary">{{
-                    qualification.application?.application_number ?? '—'
-                  }}</span>
-                  <span class="text-text-muted">·</span>
-                  <span class="text-sm text-text-muted">Submitted {{ qualification.application?.submitted_at ?? '—' }}</span>
-                </dd>
-              </div>
-            </dl>
-          </section>
-
-          <!-- Qualification detail -->
-          <section class="rounded-2xl border border-border bg-surface p-6 shadow-sm sm:p-7">
-            <div class="flex items-start gap-3 border-b border-border/80 pb-4">
-              <span class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-accent/15 text-accent-deep">
-                <ClipboardCheck class="h-5 w-5" aria-hidden="true" />
-              </span>
-              <div>
-                <h2 class="text-base font-bold tracking-tight text-text-primary">Qualification record</h2>
-                <p class="mt-1 text-sm text-text-muted">Award scope and programme details for this line item.</p>
-              </div>
-            </div>
-            <dl class="mt-6 grid gap-5 sm:grid-cols-2">
-              <div>
-                <dt class="text-[11px] font-bold uppercase tracking-wider text-text-muted">Qualification type</dt>
-                <dd class="mt-1.5 text-sm font-semibold text-text-primary">{{ qualification.qualification_type ?? '—' }}</dd>
-              </div>
-              <div>
-                <dt class="text-[11px] font-bold uppercase tracking-wider text-text-muted">Scope</dt>
-                <dd class="mt-1.5 flex items-center gap-2 text-sm font-semibold text-text-primary">
-                  <Globe2 class="h-4 w-4 text-text-muted" aria-hidden="true" />
-                  {{ isForeign ? 'Foreign' : 'Local (Zambia)' }}
-                </dd>
-              </div>
-              <div class="sm:col-span-2">
-                <dt class="text-[11px] font-bold uppercase tracking-wider text-text-muted">Awarding institution</dt>
-                <dd class="mt-1.5 flex items-start gap-2 text-sm font-semibold text-text-primary">
-                  <Building2 class="mt-0.5 h-4 w-4 shrink-0 text-text-muted" aria-hidden="true" />
-                  {{ qualification.awarding_institution ?? '—' }}
-                </dd>
-              </div>
-              <div>
-                <dt class="text-[11px] font-bold uppercase tracking-wider text-text-muted">Country of award</dt>
-                <dd class="mt-1.5 text-sm font-semibold text-text-primary">{{ qualification.country ?? '—' }}</dd>
-              </div>
-            </dl>
-
-            <div
-              v-if="qualification.certificate_template?.requires_subjects"
-              class="mt-6 rounded-xl border border-border/70 bg-surface-muted/40 p-4"
-            >
-              <div class="flex flex-wrap items-center justify-between gap-2">
+        <div class="space-y-5 lg:col-span-8">
+          <section class="rounded-2xl border border-border/70 bg-surface p-5 shadow-sm">
+              <div class="flex items-start justify-between gap-3">
                 <div>
-                  <h3 class="text-sm font-semibold text-text-primary">Subject results</h3>
-                  <p class="mt-1 text-xs text-text-muted">Subjects captured for this school-level qualification.</p>
+                  <h2 class="text-base font-bold tracking-tight text-text-primary">Qualification record</h2>
+                  <p class="mt-1 text-sm text-text-muted">Compact reference for the qualification being reviewed.</p>
                 </div>
-                <span class="zaqa-badge zaqa-badge-secondary">
-                  {{ qualification.subject_results?.length ?? 0 }} subject{{ (qualification.subject_results?.length ?? 0) === 1 ? '' : 's' }}
+                <span class="flex h-10 w-10 items-center justify-center rounded-xl bg-accent/15 text-accent-deep">
+                  <ClipboardCheck class="h-5 w-5" aria-hidden="true" />
                 </span>
               </div>
 
-              <div
-                v-if="qualification.subject_results?.length"
-                class="mt-4 overflow-hidden rounded-xl border border-border/70"
+              <dl class="mt-4 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+                <div
+                  v-for="fact in qualificationFacts"
+                  :key="fact.label"
+                  class="min-w-0 rounded-xl border border-border/60 bg-surface-muted/35 px-4 py-3"
+                >
+                  <dt class="text-[11px] font-bold uppercase tracking-wider text-text-muted">{{ fact.label }}</dt>
+                  <dd class="mt-1 break-words text-sm font-semibold text-text-primary">{{ fact.value }}</dd>
+                </div>
+              </dl>
+
+              <details
+                v-if="qualification.certificate_template?.requires_subjects"
+                class="group mt-4 rounded-xl border border-border/70 bg-surface-muted/25"
               >
-                <table class="min-w-full divide-y divide-border/70 text-sm">
-                  <thead class="bg-surface">
-                    <tr class="text-left text-[11px] font-bold uppercase tracking-wider text-text-muted">
-                      <th class="px-4 py-3">#</th>
-                      <th class="px-4 py-3">Subject</th>
-                      <th class="px-4 py-3">Grade</th>
-                    </tr>
-                  </thead>
-                  <tbody class="divide-y divide-border/60 bg-white/70">
-                    <tr
-                      v-for="subject in qualification.subject_results"
-                      :key="subject.id"
-                      class="align-top"
-                    >
-                      <td class="px-4 py-3 font-medium text-text-muted">{{ subject.index }}</td>
-                      <td class="px-4 py-3 font-semibold text-text-primary">{{ subject.subject_name || '—' }}</td>
-                      <td class="px-4 py-3 text-text-primary">{{ subject.grade || '—' }}</td>
-                    </tr>
-                  </tbody>
-                </table>
+                <summary class="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 [&::-webkit-details-marker]:hidden">
+                  <div>
+                    <div class="text-sm font-semibold text-text-primary">Subject results</div>
+                    <div class="mt-1 text-xs text-text-muted">Expand to review captured subjects for this school-level qualification.</div>
+                  </div>
+                  <div class="flex items-center gap-2">
+                    <span class="inline-flex items-center rounded-full border border-border/70 bg-surface px-2.5 py-0.5 text-[11px] font-semibold text-text-primary">
+                      {{ subjectResultsCount }} subject{{ subjectResultsCount === 1 ? '' : 's' }}
+                    </span>
+                    <ChevronDown class="h-4 w-4 text-text-muted transition group-open:rotate-180" aria-hidden="true" />
+                  </div>
+                </summary>
+                <div class="border-t border-border/60 px-4 py-4">
+                  <div
+                    v-if="qualification.subject_results?.length"
+                    class="overflow-hidden rounded-xl border border-border/70"
+                  >
+                    <table class="min-w-full divide-y divide-border/70 text-sm">
+                      <thead class="bg-surface">
+                        <tr class="text-left text-[11px] font-bold uppercase tracking-wider text-text-muted">
+                          <th class="px-4 py-3">#</th>
+                          <th class="px-4 py-3">Subject</th>
+                          <th class="px-4 py-3">Grade</th>
+                        </tr>
+                      </thead>
+                      <tbody class="divide-y divide-border/60 bg-white/70">
+                        <tr
+                          v-for="subject in qualification.subject_results"
+                          :key="subject.id"
+                          class="align-top"
+                        >
+                          <td class="px-4 py-3 font-medium text-text-muted">{{ subject.index }}</td>
+                          <td class="px-4 py-3 font-semibold text-text-primary">{{ subject.subject_name || '—' }}</td>
+                          <td class="px-4 py-3 text-text-primary">{{ subject.grade || '—' }}</td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+
+                  <div
+                    v-else
+                    class="rounded-xl border border-dashed border-border bg-surface px-4 py-5 text-sm text-text-muted"
+                  >
+                    No subject results have been captured for this qualification yet.
+                  </div>
+                </div>
+              </details>
+          </section>
+
+          <section class="rounded-2xl border border-border/70 bg-surface p-5 shadow-sm">
+            <div class="flex items-start justify-between gap-3">
+              <div>
+                <h2 class="text-base font-bold tracking-tight text-text-primary">Decision summary</h2>
+                <p class="mt-1 text-sm text-text-muted">Key reviewer inputs first, with supporting detail below when needed.</p>
+              </div>
+              <span class="flex h-10 w-10 items-center justify-center rounded-xl bg-sky-500/15 text-sky-700">
+                <CornerDownLeft class="h-5 w-5" aria-hidden="true" />
+              </span>
+            </div>
+
+            <div class="mt-4 grid gap-4 xl:grid-cols-[1.15fr_0.85fr]">
+              <div class="rounded-xl border border-border/70 bg-surface-muted/30 px-4 py-4">
+                <div class="flex flex-wrap items-center gap-2">
+                  <span
+                    class="inline-flex items-center rounded-full border px-2.5 py-0.5 text-[11px] font-semibold"
+                    :class="
+                      state === 'under_level2_review' || workflowActiveStep >= 2
+                        ? 'border-emerald-300/40 bg-emerald-500/15 text-emerald-900'
+                        : 'border-border/70 bg-surface text-text-muted'
+                    "
+                  >
+                    {{ state === 'under_level2_review' || workflowActiveStep >= 2 ? 'Ready for Level 2 decision' : 'Waiting for Level 1 recommendation' }}
+                  </span>
+                  <span v-if="level1ReviewedAt" class="text-[11px] text-text-muted">
+                    Submitted {{ formatDateTime(level1ReviewedAt) }}
+                  </span>
+                  <span v-if="qualification.assigned_verifier_name" class="text-[11px] text-text-muted">
+                    · Verifier <span class="font-semibold text-text-primary">{{ qualification.assigned_verifier_name }}</span>
+                  </span>
+                </div>
+
+                <div v-if="hasLevel1Findings" class="mt-3">
+                  <div class="text-[11px] font-bold uppercase tracking-wider text-text-muted">Level 1 recommendation</div>
+                  <div class="mt-2 whitespace-pre-wrap text-sm leading-relaxed text-text-primary">
+                    {{ qualification.reviewer_notes }}
+                  </div>
+                </div>
+                <div v-else class="mt-3 text-sm text-text-muted">
+                  No Level 1 recommendation submitted yet.
+                </div>
+
+                <div v-if="level1Attachment" class="mt-4 rounded-xl border border-border/70 bg-surface px-3 py-3">
+                  <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                    <div class="min-w-0">
+                      <div class="text-[11px] font-bold uppercase tracking-wider text-text-muted">Attachment</div>
+                      <div class="mt-1 truncate text-sm font-semibold text-text-primary">{{ level1Attachment.original_name }}</div>
+                    </div>
+                    <div class="flex flex-wrap gap-2">
+                      <a :href="level1Attachment.preview_url" class="zaqa-btn zaqa-btn-secondary h-9 px-3 py-2 text-xs">Preview</a>
+                      <a :href="level1Attachment.download_url" class="zaqa-btn zaqa-btn-secondary h-9 px-3 py-2 text-xs">Download</a>
+                    </div>
+                  </div>
+                </div>
               </div>
 
               <div
-                v-else
-                class="mt-4 rounded-xl border border-amber-300/40 bg-amber-500/10 px-4 py-3 text-xs font-medium text-amber-900"
+                v-if="
+                  can.issue_certificate &&
+                    (qualification.can_issue_cveq_certificate ||
+                      qualification.cveq_certificate ||
+                      qualification.can_reissue_cveq_certificate)
+                "
+                class="rounded-xl border border-border/70 bg-surface-muted/30 px-4 py-4"
               >
-                No subject results have been captured for this qualification yet.
+                <div class="text-[11px] font-bold uppercase tracking-wider text-text-muted">Certificate readiness</div>
+                <div class="mt-2 text-sm font-semibold text-text-primary">
+                  {{ qualification.can_issue_cveq_certificate ? 'Eligible to issue certificate' : 'Certificate not ready yet' }}
+                </div>
+                <p class="mt-2 text-xs leading-relaxed text-text-muted">
+                  Issue the Certificate of Verification and Evaluation of Qualification once approval and payment conditions are satisfied.
+                </p>
+                <p v-if="qualification.application?.payment_satisfied === false" class="mt-3 text-xs font-medium text-amber-900">
+                  Payment is not satisfied — certificate issuance is blocked until fees are covered.
+                </p>
+                <div
+                  v-if="qualification.certificate_template"
+                  class="mt-3 rounded-xl border border-border/70 bg-surface px-3 py-3 text-xs text-text-muted"
+                >
+                  <div class="flex flex-wrap items-center gap-2">
+                    <span class="font-semibold text-text-primary">Template:</span>
+                    <span class="zaqa-badge" :class="qualification.certificate_template.key === 'school_subjects' ? 'zaqa-badge-info' : 'zaqa-badge-secondary'">
+                      {{ qualification.certificate_template.label }}
+                    </span>
+                    <span v-if="qualification.certificate_template.requires_subjects">
+                      · {{ qualification.certificate_template.subject_count ?? 0 }} subject{{ (qualification.certificate_template.subject_count ?? 0) === 1 ? '' : 's' }}
+                    </span>
+                  </div>
+                  <p v-if="qualification.certificate_template.warning" class="mt-2 text-xs font-medium text-amber-900">
+                    {{ qualification.certificate_template.warning }}
+                  </p>
+                </div>
+                <div
+                  v-if="qualification.cveq_certificate?.certificate_number"
+                  class="mt-3 rounded-xl border border-border/70 bg-surface px-3 py-3 text-xs text-text-muted"
+                >
+                  <span class="font-semibold text-text-primary">Active certificate:</span>
+                  {{ qualification.cveq_certificate.certificate_number }}
+                  <span v-if="qualification.cveq_certificate.issued_at" class="ml-1">
+                    · Issued {{ formatTimelineAt(qualification.cveq_certificate.issued_at) }}
+                  </span>
+                </div>
               </div>
             </div>
           </section>
 
-          <!-- Auto-verification -->
-          <section class="rounded-2xl border border-border bg-surface p-6 shadow-sm sm:p-7">
-            <div class="flex items-start gap-3 border-b border-border/80 pb-4">
-              <span class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-brand/10 text-brand">
+          <section class="rounded-2xl border border-border/70 bg-surface p-5 shadow-sm">
+            <div class="flex items-start justify-between gap-3">
+              <div>
+                <h2 class="text-base font-bold tracking-tight text-text-primary">Auto-verification result</h2>
+                <p class="mt-1 text-sm text-text-muted">Review the match outcome first. Expand the lower sections only when deeper evidence is needed.</p>
+              </div>
+              <span class="flex h-10 w-10 items-center justify-center rounded-xl bg-brand/10 text-brand">
                 <Sparkles class="h-5 w-5" aria-hidden="true" />
               </span>
-              <div class="min-w-0">
-                <h2 class="text-base font-bold tracking-tight text-text-primary">Auto-verification result</h2>
-                <p class="mt-1 text-sm text-text-muted">Match details, confidence, and recommended next action for Level 2.</p>
-              </div>
             </div>
 
-            <div v-if="isAutoVerifiedPendingL2" class="mt-5 rounded-2xl border border-border/70 bg-surface-muted/30 p-5">
+            <div v-if="isAutoVerifiedPendingL2" class="mt-4 rounded-xl border border-border/70 bg-surface-muted/30 px-4 py-4">
               <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <div>
                   <div class="text-[11px] font-bold uppercase tracking-wider text-text-muted">Level 2 review lock</div>
@@ -869,9 +987,7 @@ function formatTimelineAt(iso: string | null | undefined) {
                     <span v-if="lockIsActive">Locked by {{ level2Lock.locked_by_name || '—' }}</span>
                     <span v-else>Unlocked</span>
                   </div>
-                  <div v-if="lockIsActive" class="mt-1 text-xs text-text-muted">
-                    Expires at {{ level2Lock.expires_at || '—' }}
-                  </div>
+                  <div v-if="lockIsActive" class="mt-1 text-xs text-text-muted">Expires at {{ formatTimelineAt(level2Lock.expires_at) }}</div>
                 </div>
                 <div class="flex flex-wrap items-center gap-2">
                   <button
@@ -901,408 +1017,308 @@ function formatTimelineAt(iso: string | null | undefined) {
               </div>
             </div>
 
-            <div v-if="canManageRetryActions || canViewLearnerRecords" class="mt-5 rounded-2xl border border-border/70 bg-surface-muted/30 p-5">
-              <div class="flex flex-col gap-4">
-                <div>
-                  <div class="text-[11px] font-bold uppercase tracking-wider text-text-muted">Admin actions</div>
-                  <p class="mt-1 text-sm text-text-muted">Retry matching, retry Level 1 category assignment, or jump to learner records.</p>
-                </div>
-                <div class="grid gap-3 lg:grid-cols-3">
-                  <div class="rounded-xl border border-border/70 bg-surface px-4 py-4">
-                    <div class="flex items-start justify-between gap-3">
-                      <div>
-                        <div class="text-sm font-semibold text-text-primary">Recheck auto-verification</div>
-                        <p class="mt-1 text-xs text-text-muted">Try learner record and institution lookup again.</p>
-                      </div>
-                      <Sparkles class="mt-0.5 h-4 w-4 shrink-0 text-brand" aria-hidden="true" />
-                    </div>
-                    <button
-                      v-if="canManageRetryActions"
-                      type="button"
-                      class="zaqa-btn zaqa-btn-secondary mt-4 h-10 w-full justify-center px-4 py-2 text-sm"
-                      :disabled="
-                        recheckAutoVerificationForm.processing ||
-                        !qualification.recheck_auto_verification_enabled
-                      "
-                      :title="qualification.recheck_auto_verification_disabled_reason || ''"
-                      @click="queueAutoVerificationRecheck"
-                    >
-                      {{ recheckAutoVerificationForm.processing ? 'Queueing…' : 'Recheck auto-verification' }}
-                    </button>
-                    <p v-if="qualification.recheck_auto_verification_disabled_reason" class="mt-2 text-xs text-text-muted">
-                      {{ qualification.recheck_auto_verification_disabled_reason }}
-                    </p>
-                  </div>
-
-                  <div class="rounded-xl border border-border/70 bg-surface px-4 py-4">
-                    <div class="flex items-start justify-between gap-3">
-                      <div>
-                        <div class="text-sm font-semibold text-text-primary">Auto-assign to Level 1</div>
-                        <p class="mt-1 text-xs text-text-muted">Retry category-based assignment without manual officer selection.</p>
-                      </div>
-                      <ArrowRight class="mt-0.5 h-4 w-4 shrink-0 text-brand" aria-hidden="true" />
-                    </div>
-                    <button
-                      v-if="canManageRetryActions"
-                      type="button"
-                      class="zaqa-btn zaqa-btn-secondary mt-4 h-10 w-full justify-center px-4 py-2 text-sm"
-                      :disabled="
-                        autoAssignLevel1Form.processing ||
-                        !qualification.auto_assign_level1_enabled
-                      "
-                      :title="qualification.auto_assign_level1_disabled_reason || ''"
-                      @click="retryAutoAssignLevel1"
-                    >
-                      {{ autoAssignLevel1Form.processing ? 'Retrying…' : 'Auto-assign to Level 1' }}
-                    </button>
-                    <p v-if="qualification.auto_assign_level1_disabled_reason" class="mt-2 text-xs text-text-muted">
-                      {{ qualification.auto_assign_level1_disabled_reason }}
-                    </p>
-                  </div>
-
-                  <div class="rounded-xl border border-border/70 bg-surface px-4 py-4">
-                    <div class="flex items-start justify-between gap-3">
-                      <div>
-                        <div class="text-sm font-semibold text-text-primary">View learner records</div>
-                        <p class="mt-1 text-xs text-text-muted">Open learner records filtered by the linked awarding institution.</p>
-                      </div>
-                      <FileStack class="mt-0.5 h-4 w-4 shrink-0 text-brand" aria-hidden="true" />
-                    </div>
-                    <Link
-                      v-if="canViewLearnerRecords && qualification.learner_records_url"
-                      :href="qualification.learner_records_url"
-                      class="zaqa-btn zaqa-btn-secondary mt-4 inline-flex h-10 w-full items-center justify-center px-4 py-2 text-sm"
-                    >
-                      View learner records
-                    </Link>
-                    <button
-                      v-else-if="canViewLearnerRecords"
-                      type="button"
-                      disabled
-                      class="zaqa-btn zaqa-btn-secondary mt-4 inline-flex h-10 w-full cursor-not-allowed items-center justify-center px-4 py-2 text-sm opacity-60"
-                      :title="qualification.learner_records_disabled_reason || ''"
-                    >
-                      View learner records
-                    </button>
-                    <p v-if="canViewLearnerRecords && qualification.learner_records_disabled_reason" class="mt-2 text-xs text-text-muted">
-                      {{ qualification.learner_records_disabled_reason }}
-                    </p>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <div class="mt-5 grid gap-3 sm:grid-cols-3">
-              <div class="rounded-2xl border border-border/70 bg-surface-muted/30 p-5">
+            <div class="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+              <div class="rounded-xl border border-border/70 bg-surface-muted/30 px-4 py-4">
                 <div class="text-[11px] font-bold uppercase tracking-wider text-text-muted">Confidence</div>
-                <div class="mt-2 text-2xl font-bold tracking-tight text-text-primary">
+                <div class="mt-2 text-xl font-bold tracking-tight text-text-primary">
                   <span v-if="autoConfidence != null">{{ autoConfidence }}%</span>
                   <span v-else class="text-text-muted">—</span>
                 </div>
               </div>
-              <div class="rounded-2xl border border-border/70 bg-surface-muted/30 p-5">
+              <div class="rounded-xl border border-border/70 bg-surface-muted/30 px-4 py-4">
                 <div class="text-[11px] font-bold uppercase tracking-wider text-text-muted">Match status</div>
                 <div class="mt-2 text-sm font-semibold text-text-primary">{{ autoStatus || '—' }}</div>
                 <div v-if="['ambiguous', 'possible_match'].includes(autoStatus)" class="mt-2 text-xs text-amber-900">
-                  Warning: match is not definitive. Do not auto-issue.
+                  Warning: match is not definitive.
                 </div>
               </div>
-              <div class="rounded-2xl border border-border/70 bg-surface-muted/30 p-5">
+              <div class="rounded-xl border border-border/70 bg-surface-muted/30 px-4 py-4">
+                <div class="text-[11px] font-bold uppercase tracking-wider text-text-muted">Source</div>
+                <div class="mt-2 text-sm font-semibold text-text-primary">{{ qualification.auto_verification?.source || '—' }}</div>
+                <div class="mt-1 text-[11px] text-text-muted">Attempted {{ formatTimelineAt(qualification.auto_verification?.attempted_at) }}</div>
+              </div>
+              <div class="rounded-xl border border-border/70 bg-surface-muted/30 px-4 py-4">
                 <div class="text-[11px] font-bold uppercase tracking-wider text-text-muted">Recommendation</div>
                 <div class="mt-2 text-sm font-semibold text-text-primary">{{ autoRecommendation || '—' }}</div>
-                <div class="mt-2 text-xs text-text-muted">Source: {{ qualification.auto_verification?.source || '—' }}</div>
               </div>
             </div>
 
-            <dl class="mt-6 grid gap-5 sm:grid-cols-2">
-              <div>
-                <dt class="text-[11px] font-bold uppercase tracking-wider text-text-muted">Status</dt>
-                <dd class="mt-1.5 text-sm font-semibold text-text-primary">{{ qualification.auto_verification?.status || '—' }}</dd>
-              </div>
-              <div>
-                <dt class="text-[11px] font-bold uppercase tracking-wider text-text-muted">Confidence</dt>
-                <dd class="mt-1.5 text-sm font-semibold text-text-primary">
-                  <span v-if="autoConfidence != null">{{ autoConfidence }}%</span>
-                  <span v-else class="text-text-muted">—</span>
-                </dd>
-              </div>
-              <div>
-                <dt class="text-[11px] font-bold uppercase tracking-wider text-text-muted">Attempted</dt>
-                <dd class="mt-1.5 text-sm font-semibold text-text-primary">{{ qualification.auto_verification?.attempted_at || '—' }}</dd>
-              </div>
-              <div>
-                <dt class="text-[11px] font-bold uppercase tracking-wider text-text-muted">Source</dt>
-                <dd class="mt-1.5 text-sm font-semibold text-text-primary">{{ qualification.auto_verification?.source || '—' }}</dd>
-              </div>
-              <div class="sm:col-span-2">
-                <dt class="text-[11px] font-bold uppercase tracking-wider text-text-muted">Titles</dt>
-                <dd class="mt-1.5 grid gap-2 sm:grid-cols-3">
-                  <div class="rounded-xl border border-border/70 bg-surface-muted/40 px-4 py-3">
-                    <div class="text-[11px] font-bold uppercase tracking-wider text-text-muted">Applicant title</div>
-                    <div class="mt-1 text-sm font-semibold text-text-primary">{{ qualification.title ?? '—' }}</div>
-                    <div class="mt-1 text-xs text-text-muted">Source: {{ qualification.qualification_title_source || '—' }}</div>
-                  </div>
-                  <div class="rounded-xl border border-border/70 bg-surface-muted/40 px-4 py-3">
-                    <div class="text-[11px] font-bold uppercase tracking-wider text-text-muted">Applicant typed (Other)</div>
-                    <div class="mt-1 text-sm font-semibold text-text-primary">{{ qualification.applicant_entered_qualification_title || '—' }}</div>
-                  </div>
-                  <div class="rounded-xl border border-border/70 bg-surface-muted/40 px-4 py-3">
-                    <div class="text-[11px] font-bold uppercase tracking-wider text-text-muted">Verified title</div>
-                    <div class="mt-1 text-sm font-semibold text-text-primary">{{ qualification.verified_qualification_title || '—' }}</div>
-                  </div>
-                </dd>
-              </div>
-            </dl>
-
-            <div class="mt-6 rounded-2xl border border-border/70 bg-surface-muted/30 p-5">
-              <div class="text-[11px] font-bold uppercase tracking-wider text-text-muted">Matched fields</div>
-              <div class="mt-3 grid gap-2 sm:grid-cols-2">
-                <div class="flex items-center gap-2 text-xs text-text-primary">
-                  <span class="zaqa-badge" :class="autoMatchedFields.awarding_institution_id ? 'zaqa-badge-success' : 'zaqa-badge-secondary'">
-                    {{ autoMatchedFields.awarding_institution_id ? '✓' : '—' }}
-                  </span>
-                  Awarding institution
-                </div>
-                <div class="flex items-center gap-2 text-xs text-text-primary">
-                  <span class="zaqa-badge" :class="autoMatchedFields.year_awarded ? 'zaqa-badge-success' : 'zaqa-badge-secondary'">
-                    {{ autoMatchedFields.year_awarded ? '✓' : '—' }}
-                  </span>
-                  Award year
-                </div>
-                <div class="flex items-center gap-2 text-xs text-text-primary">
-                  <span class="zaqa-badge" :class="autoMatchedFields.student_id ? 'zaqa-badge-success' : 'zaqa-badge-secondary'">
-                    {{ autoMatchedFields.student_id ? '✓' : '—' }}
-                  </span>
-                  Student number
-                </div>
-                <div class="flex items-center gap-2 text-xs text-text-primary">
-                  <span class="zaqa-badge" :class="autoMatchedFields.certificate_no ? 'zaqa-badge-success' : 'zaqa-badge-secondary'">
-                    {{ autoMatchedFields.certificate_no ? '✓' : '—' }}
-                  </span>
-                  Certificate number
-                </div>
-                <div class="flex items-center gap-2 text-xs text-text-primary">
-                  <span class="zaqa-badge" :class="autoMatchedFields.nrc_number ? 'zaqa-badge-success' : 'zaqa-badge-secondary'">
-                    {{ autoMatchedFields.nrc_number ? '✓' : '—' }}
-                  </span>
-                  NRC match
-                </div>
-                <div class="flex items-center gap-2 text-xs text-text-primary">
-                  <span class="zaqa-badge" :class="autoMatchedFields.passport_no ? 'zaqa-badge-success' : 'zaqa-badge-secondary'">
-                    {{ autoMatchedFields.passport_no ? '✓' : '—' }}
-                  </span>
-                  Passport match
-                </div>
-                <div class="flex items-center gap-2 text-xs text-text-primary">
-                  <span class="zaqa-badge" :class="autoMatchedFields.name ? 'zaqa-badge-success' : 'zaqa-badge-secondary'">
-                    {{ autoMatchedFields.name ? '✓' : '—' }}
-                  </span>
-                  Name match
-                </div>
-                <div class="flex items-center gap-2 text-xs text-text-primary">
-                  <span class="zaqa-badge" :class="autoMatchedFields.program_of_study ? 'zaqa-badge-success' : 'zaqa-badge-secondary'">
-                    {{ autoMatchedFields.program_of_study ? '✓' : '—' }}
-                  </span>
-                  Program / title match
-                </div>
-              </div>
-            </div>
-
-            <div class="mt-6 rounded-2xl border border-border/70 bg-surface-muted/30 p-5">
-              <div class="text-[11px] font-bold uppercase tracking-wider text-text-muted">Evidence comparison</div>
-              <div class="mt-3 grid gap-3 sm:grid-cols-2">
-                <div class="rounded-xl border border-border/70 bg-surface px-4 py-3">
-                  <div class="text-xs font-semibold text-text-primary">Student number</div>
-                  <div class="mt-1 font-mono text-xs text-text-muted">
-                    Applicant: <span class="text-text-primary">{{ qualification.student_number || '—' }}</span>
-                    · Record: <span class="text-text-primary">{{ qualification.learner_record?.student_id || '—' }}</span>
-                  </div>
-                </div>
-                <div class="rounded-xl border border-border/70 bg-surface px-4 py-3">
-                  <div class="text-xs font-semibold text-text-primary">Certificate number</div>
-                  <div class="mt-1 font-mono text-xs text-text-muted">
-                    Applicant: <span class="text-text-primary">{{ qualification.certificate_number || '—' }}</span>
-                    · Record: <span class="text-text-primary">{{ qualification.learner_record?.certificate_no || '—' }}</span>
-                  </div>
-                </div>
-                <div class="rounded-xl border border-border/70 bg-surface px-4 py-3">
-                  <div class="text-xs font-semibold text-text-primary">Awarding institution</div>
-                  <div class="mt-1 text-xs text-text-muted">
-                    Applicant: <span class="text-text-primary">{{ qualification.awarding_institution || '—' }}</span>
-                    · Record:
-                    <span class="text-text-primary">{{
-                      qualification.learner_record?.awarding_institution?.name || qualification.learner_record?.institution_name_raw || '—'
-                    }}</span>
-                  </div>
-                </div>
-                <div class="rounded-xl border border-border/70 bg-surface px-4 py-3">
-                  <div class="text-xs font-semibold text-text-primary">Award year</div>
-                  <div class="mt-1 text-xs text-text-muted">
-                    Applicant: <span class="text-text-primary">{{ qualification.award_date ? new Date(qualification.award_date).getFullYear() : '—' }}</span>
-                    · Record: <span class="text-text-primary">{{ qualification.learner_record?.year_awarded || '—' }}</span>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <div v-if="qualification.learner_record" class="mt-6 rounded-2xl border border-border/70 bg-surface-muted/30 p-5">
-              <div class="text-[11px] font-bold uppercase tracking-wider text-text-muted">Matched learner record</div>
-              <div class="mt-3 grid gap-3 sm:grid-cols-2">
+            <div v-if="canManageRetryActions || canViewLearnerRecords" class="mt-4 rounded-xl border border-border/70 bg-surface-muted/30 px-4 py-4">
+              <div class="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
                 <div>
-                  <div class="text-xs font-semibold text-text-primary">Program</div>
-                  <div class="mt-1 text-sm text-text-primary">{{ qualification.learner_record.program_of_study || '—' }}</div>
+                  <div class="text-[11px] font-bold uppercase tracking-wider text-text-muted">Admin action strip</div>
+                  <p class="mt-1 text-sm text-text-muted">Retry matching, retry Level 1 auto-assignment, or jump to learner records.</p>
                 </div>
-                <div>
-                  <div class="text-xs font-semibold text-text-primary">Institution</div>
-                  <div class="mt-1 text-sm text-text-primary">
-                    {{ qualification.learner_record.awarding_institution?.name || qualification.learner_record.institution_name_raw || '—' }}
-                  </div>
+                <div class="flex flex-wrap gap-2">
+                  <button
+                    v-if="canManageRetryActions"
+                    type="button"
+                    class="inline-flex items-center gap-2 rounded-xl border border-violet-300/40 bg-violet-500/10 px-3.5 py-2 text-sm font-semibold text-violet-900 transition hover:bg-violet-500/15 disabled:cursor-not-allowed disabled:opacity-60"
+                    :disabled="recheckAutoVerificationForm.processing || !qualification.recheck_auto_verification_enabled"
+                    :title="qualification.recheck_auto_verification_disabled_reason || ''"
+                    @click="queueAutoVerificationRecheck"
+                  >
+                    <Sparkles class="h-4 w-4" aria-hidden="true" />
+                    {{ recheckAutoVerificationForm.processing ? 'Queueing…' : 'Recheck auto-verification' }}
+                  </button>
+
+                  <button
+                    v-if="canManageRetryActions"
+                    type="button"
+                    class="inline-flex items-center gap-2 rounded-xl border border-sky-300/40 bg-sky-500/10 px-3.5 py-2 text-sm font-semibold text-sky-900 transition hover:bg-sky-500/15 disabled:cursor-not-allowed disabled:opacity-60"
+                    :disabled="autoAssignLevel1Form.processing || !qualification.auto_assign_level1_enabled"
+                    :title="qualification.auto_assign_level1_disabled_reason || ''"
+                    @click="retryAutoAssignLevel1"
+                  >
+                    <ArrowRight class="h-4 w-4" aria-hidden="true" />
+                    {{ autoAssignLevel1Form.processing ? 'Retrying…' : 'Auto-assign Level 1' }}
+                  </button>
+
+                  <Link
+                    v-if="canViewLearnerRecords && qualification.learner_records_url"
+                    :href="qualification.learner_records_url"
+                    class="inline-flex items-center gap-2 rounded-xl border border-teal-300/40 bg-teal-500/10 px-3.5 py-2 text-sm font-semibold text-teal-900 transition hover:bg-teal-500/15"
+                  >
+                    <FileStack class="h-4 w-4" aria-hidden="true" />
+                    View learner records
+                  </Link>
+                  <button
+                    v-else-if="canViewLearnerRecords"
+                    type="button"
+                    disabled
+                    class="inline-flex cursor-not-allowed items-center gap-2 rounded-xl border border-teal-300/30 bg-teal-500/10 px-3.5 py-2 text-sm font-semibold text-teal-900 opacity-60"
+                    :title="qualification.learner_records_disabled_reason || ''"
+                  >
+                    <FileStack class="h-4 w-4" aria-hidden="true" />
+                    View learner records
+                  </button>
                 </div>
-                <div class="font-mono text-xs text-text-muted">Student ID: <span class="text-text-primary">{{ qualification.learner_record.student_id || '—' }}</span></div>
-                <div class="font-mono text-xs text-text-muted">Certificate #: <span class="text-text-primary">{{ qualification.learner_record.certificate_no || '—' }}</span></div>
-                <div class="font-mono text-xs text-text-muted">NRC: <span class="text-text-primary">{{ qualification.learner_record.nrc_number || '—' }}</span></div>
-                <div class="font-mono text-xs text-text-muted">Passport: <span class="text-text-primary">{{ qualification.learner_record.passport_no || '—' }}</span></div>
+              </div>
+
+              <div v-if="qualification.recheck_auto_verification_disabled_reason || qualification.auto_assign_level1_disabled_reason || qualification.learner_records_disabled_reason" class="mt-3 space-y-1 text-xs text-text-muted">
+                <p v-if="qualification.recheck_auto_verification_disabled_reason">{{ qualification.recheck_auto_verification_disabled_reason }}</p>
+                <p v-if="qualification.auto_assign_level1_disabled_reason">{{ qualification.auto_assign_level1_disabled_reason }}</p>
+                <p v-if="canViewLearnerRecords && qualification.learner_records_disabled_reason">{{ qualification.learner_records_disabled_reason }}</p>
               </div>
             </div>
 
-            <div v-if="qualification.match_attempts?.length" class="mt-6 overflow-hidden rounded-xl border border-border/80">
-              <table class="min-w-full text-sm">
-                <thead class="bg-surface-muted/90 text-left text-[11px] font-bold uppercase tracking-wider text-text-muted">
-                  <tr>
-                    <th class="px-4 py-3">When</th>
-                    <th class="px-4 py-3">Status</th>
-                    <th class="px-4 py-3">Confidence</th>
-                    <th class="px-4 py-3">Source</th>
-                    <th class="px-4 py-3">Failure</th>
-                  </tr>
-                </thead>
-                <tbody class="divide-y divide-border/60 bg-surface">
-                  <tr v-for="a in qualification.match_attempts" :key="a.id" class="transition hover:bg-surface-muted/40">
-                    <td class="px-4 py-3 text-xs text-text-muted">{{ a.created_at ?? '—' }}</td>
-                    <td class="px-4 py-3 font-semibold text-text-primary">{{ a.status ?? '—' }}</td>
-                    <td class="px-4 py-3 text-text-primary">
-                      <span v-if="a.confidence != null">{{ a.confidence }}%</span>
-                      <span v-else class="text-text-muted">—</span>
-                    </td>
-                    <td class="px-4 py-3 text-text-primary">{{ a.source ?? '—' }}</td>
-                    <td class="px-4 py-3 text-xs text-text-muted">{{ a.failure_reason ?? '—' }}</td>
-                  </tr>
-                </tbody>
-              </table>
+            <div class="mt-4 space-y-3">
+              <details class="group rounded-xl border border-border/70 bg-surface-muted/25">
+                <summary class="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 [&::-webkit-details-marker]:hidden">
+                  <div>
+                    <div class="text-sm font-semibold text-text-primary">Titles comparison</div>
+                    <div class="mt-1 text-xs text-text-muted">Applicant, other title entry, and verified title.</div>
+                  </div>
+                  <ChevronDown class="h-4 w-4 text-text-muted transition group-open:rotate-180" aria-hidden="true" />
+                </summary>
+                <div class="border-t border-border/60 px-4 py-4">
+                  <div class="grid gap-3 sm:grid-cols-3">
+                    <div v-for="row in titleComparisonRows" :key="row.label" class="rounded-xl border border-border/70 bg-surface px-4 py-3">
+                      <div class="text-[11px] font-bold uppercase tracking-wider text-text-muted">{{ row.label }}</div>
+                      <div class="mt-1 text-sm font-semibold text-text-primary">{{ row.value }}</div>
+                      <div v-if="row.meta" class="mt-1 text-xs text-text-muted">{{ row.meta }}</div>
+                    </div>
+                  </div>
+                </div>
+              </details>
+
+              <details class="group rounded-xl border border-border/70 bg-surface-muted/25">
+                <summary class="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 [&::-webkit-details-marker]:hidden">
+                  <div>
+                    <div class="text-sm font-semibold text-text-primary">Matched fields</div>
+                    <div class="mt-1 text-xs text-text-muted">Quick view of what matched between the applicant data and learner records.</div>
+                  </div>
+                  <ChevronDown class="h-4 w-4 text-text-muted transition group-open:rotate-180" aria-hidden="true" />
+                </summary>
+                <div class="border-t border-border/60 px-4 py-4">
+                  <div class="flex flex-wrap gap-2">
+                    <span
+                      v-for="item in matchedFieldItems"
+                      :key="item.key"
+                      class="inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-semibold"
+                      :class="matchedStateClass(item.matched)"
+                    >
+                      <span>{{ item.label }}</span>
+                      <span class="opacity-75">{{ matchedStateLabel(item.matched) }}</span>
+                    </span>
+                  </div>
+                </div>
+              </details>
+
+              <details class="group rounded-xl border border-border/70 bg-surface-muted/25">
+                <summary class="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 [&::-webkit-details-marker]:hidden">
+                  <div>
+                    <div class="text-sm font-semibold text-text-primary">Evidence comparison</div>
+                    <div class="mt-1 text-xs text-text-muted">Compare applicant values with the matched learner record.</div>
+                  </div>
+                  <ChevronDown class="h-4 w-4 text-text-muted transition group-open:rotate-180" aria-hidden="true" />
+                </summary>
+                <div class="border-t border-border/60 px-4 py-4">
+                  <div class="overflow-hidden rounded-xl border border-border/70">
+                    <table class="min-w-full text-sm">
+                      <thead class="bg-surface-muted/80 text-left text-[11px] font-bold uppercase tracking-wider text-text-muted">
+                        <tr>
+                          <th class="px-4 py-3">Field</th>
+                          <th class="px-4 py-3">Applicant value</th>
+                          <th class="px-4 py-3">Learner record value</th>
+                          <th class="px-4 py-3">Result</th>
+                        </tr>
+                      </thead>
+                      <tbody class="divide-y divide-border/60 bg-surface">
+                        <tr v-for="row in evidenceRows" :key="row.key">
+                          <td class="px-4 py-3 font-semibold text-text-primary">{{ row.field }}</td>
+                          <td class="px-4 py-3 text-text-primary">{{ displayValue(row.applicant) }}</td>
+                          <td class="px-4 py-3 text-text-primary">{{ displayValue(row.record) }}</td>
+                          <td class="px-4 py-3">
+                            <span class="inline-flex items-center rounded-full border px-2.5 py-0.5 text-[11px] font-semibold" :class="matchedStateClass(row.matched)">
+                              {{ matchedStateLabel(row.matched) }}
+                            </span>
+                          </td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </details>
+
+              <details v-if="qualification.learner_record" class="group rounded-xl border border-border/70 bg-surface-muted/25">
+                <summary class="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 [&::-webkit-details-marker]:hidden">
+                  <div>
+                    <div class="text-sm font-semibold text-text-primary">Matched learner record</div>
+                    <div class="mt-1 text-xs text-text-muted">Expand to inspect the linked record metadata.</div>
+                  </div>
+                  <ChevronDown class="h-4 w-4 text-text-muted transition group-open:rotate-180" aria-hidden="true" />
+                </summary>
+                <div class="border-t border-border/60 px-4 py-4">
+                  <div class="grid gap-3 sm:grid-cols-2">
+                    <div class="rounded-xl border border-border/70 bg-surface px-4 py-3">
+                      <div class="text-[11px] font-bold uppercase tracking-wider text-text-muted">Program</div>
+                      <div class="mt-1 text-sm font-semibold text-text-primary">{{ qualification.learner_record.program_of_study || '—' }}</div>
+                    </div>
+                    <div class="rounded-xl border border-border/70 bg-surface px-4 py-3">
+                      <div class="text-[11px] font-bold uppercase tracking-wider text-text-muted">Institution</div>
+                      <div class="mt-1 text-sm font-semibold text-text-primary">
+                        {{ qualification.learner_record.awarding_institution?.name || qualification.learner_record.institution_name_raw || '—' }}
+                      </div>
+                    </div>
+                    <div class="rounded-xl border border-border/70 bg-surface px-4 py-3 text-sm text-text-primary">
+                      <span class="text-[11px] font-bold uppercase tracking-wider text-text-muted">Student ID</span>
+                      <div class="mt-1 font-mono">{{ qualification.learner_record.student_id || '—' }}</div>
+                    </div>
+                    <div class="rounded-xl border border-border/70 bg-surface px-4 py-3 text-sm text-text-primary">
+                      <span class="text-[11px] font-bold uppercase tracking-wider text-text-muted">Certificate #</span>
+                      <div class="mt-1 font-mono">{{ qualification.learner_record.certificate_no || '—' }}</div>
+                    </div>
+                    <div class="rounded-xl border border-border/70 bg-surface px-4 py-3 text-sm text-text-primary">
+                      <span class="text-[11px] font-bold uppercase tracking-wider text-text-muted">NRC</span>
+                      <div class="mt-1 font-mono">{{ qualification.learner_record.nrc_number || '—' }}</div>
+                    </div>
+                    <div class="rounded-xl border border-border/70 bg-surface px-4 py-3 text-sm text-text-primary">
+                      <span class="text-[11px] font-bold uppercase tracking-wider text-text-muted">Passport</span>
+                      <div class="mt-1 font-mono">{{ qualification.learner_record.passport_no || '—' }}</div>
+                    </div>
+                  </div>
+                </div>
+              </details>
+
+              <details v-if="qualification.match_attempts?.length" class="group rounded-xl border border-border/70 bg-surface-muted/25">
+                <summary class="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 [&::-webkit-details-marker]:hidden">
+                  <div>
+                    <div class="text-sm font-semibold text-text-primary">Match attempt history</div>
+                    <div class="mt-1 text-xs text-text-muted">Historical auto-match runs and their outcomes.</div>
+                  </div>
+                  <ChevronDown class="h-4 w-4 text-text-muted transition group-open:rotate-180" aria-hidden="true" />
+                </summary>
+                <div class="border-t border-border/60 px-4 py-4">
+                  <div class="overflow-hidden rounded-xl border border-border/70">
+                    <table class="min-w-full text-sm">
+                      <thead class="bg-surface-muted/80 text-left text-[11px] font-bold uppercase tracking-wider text-text-muted">
+                        <tr>
+                          <th class="px-4 py-3">When</th>
+                          <th class="px-4 py-3">Status</th>
+                          <th class="px-4 py-3">Confidence</th>
+                          <th class="px-4 py-3">Source</th>
+                          <th class="px-4 py-3">Failure</th>
+                        </tr>
+                      </thead>
+                      <tbody class="divide-y divide-border/60 bg-surface">
+                        <tr v-for="a in qualification.match_attempts" :key="a.id" class="transition hover:bg-surface-muted/40">
+                          <td class="px-4 py-3 text-xs text-text-muted">{{ formatTimelineAt(a.created_at) }}</td>
+                          <td class="px-4 py-3 font-semibold text-text-primary">{{ a.status ?? '—' }}</td>
+                          <td class="px-4 py-3 text-text-primary">
+                            <span v-if="a.confidence != null">{{ a.confidence }}%</span>
+                            <span v-else class="text-text-muted">—</span>
+                          </td>
+                          <td class="px-4 py-3 text-text-primary">{{ a.source ?? '—' }}</td>
+                          <td class="px-4 py-3 text-xs text-text-muted">{{ a.failure_reason ?? '—' }}</td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </details>
             </div>
           </section>
 
-          <!-- Documents -->
-          <section class="rounded-2xl border border-border bg-surface p-6 shadow-sm sm:p-7">
-            <div class="flex items-start gap-3 border-b border-border/80 pb-4">
-              <span class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-surface-muted text-text-primary">
-                <FileStack class="h-5 w-5" aria-hidden="true" />
-              </span>
+          <details class="group rounded-2xl border border-border/70 bg-surface shadow-sm">
+            <summary class="flex cursor-pointer list-none items-center justify-between gap-3 px-5 py-4 [&::-webkit-details-marker]:hidden">
               <div>
                 <h2 class="text-base font-bold tracking-tight text-text-primary">Documents</h2>
                 <p class="mt-1 text-sm text-text-muted">Evidence attached to this qualification item.</p>
               </div>
-            </div>
-            <div v-if="qualification.documents?.length" class="mt-5 overflow-hidden rounded-xl border border-border/80">
-              <table class="min-w-full text-sm">
-                <thead class="bg-surface-muted/90 text-left text-[11px] font-bold uppercase tracking-wider text-text-muted">
-                  <tr>
-                    <th class="px-4 py-3">Type</th>
-                    <th class="px-4 py-3">File</th>
-                    <th class="px-4 py-3">Version</th>
-                    <th class="px-4 py-3 text-right">Actions</th>
-                  </tr>
-                </thead>
-                <tbody class="divide-y divide-border/60 bg-surface">
-                  <tr v-for="d in qualification.documents" :key="d.id" class="transition hover:bg-surface-muted/40">
-                    <td class="px-4 py-3 font-medium text-text-primary">{{ documentTypeLabel(d.document_type) }}</td>
-                    <td class="px-4 py-3 text-text-primary">{{ d.original_name }}</td>
-                    <td class="px-4 py-3 tabular-nums text-text-muted">v{{ d.version_number }}</td>
-                    <td class="px-4 py-3 text-right">
-                      <a :href="d.preview_url" class="zaqa-btn zaqa-btn-secondary mr-1 inline-flex h-9 items-center px-3 py-2 text-xs">Preview</a>
-                      <a :href="d.download_url" class="zaqa-btn zaqa-btn-secondary inline-flex h-9 items-center px-3 py-2 text-xs">Download</a>
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-            <div v-else class="mt-5 rounded-xl border border-dashed border-border bg-surface-muted/40 px-4 py-8 text-center text-sm text-text-muted">
-              No documents uploaded for this qualification item yet.
-            </div>
-          </section>
-
-          <!-- Level 1 recommendation -->
-          <section class="rounded-2xl border border-border bg-surface p-6 shadow-sm sm:p-7">
-            <div class="flex items-start gap-3 border-b border-border/80 pb-4">
-              <span class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-sky-500/15 text-sky-700">
-                <CornerDownLeft class="h-5 w-5" aria-hidden="true" />
-              </span>
-              <div class="min-w-0">
-                <h2 class="text-base font-bold tracking-tight text-text-primary">Level 1 recommendation</h2>
-                <p class="mt-1 text-sm text-text-muted">
-                  Findings submitted by Level 1. Level 2 should use these notes to decide the final outcome.
-                </p>
-              </div>
-            </div>
-
-            <div v-if="hasLevel1Findings" class="mt-5 space-y-4">
-              <div class="flex flex-wrap items-center gap-2">
-                <span
-                  class="inline-flex items-center rounded-full border px-3 py-1 text-xs font-semibold"
-                  :class="
-                    state === 'under_level2_review' || workflowActiveStep >= 2
-                      ? 'border-emerald-300/40 bg-emerald-500/15 text-emerald-900'
-                      : 'border-border bg-surface-muted text-text-muted'
-                  "
-                >
-                  {{ state === 'under_level2_review' || workflowActiveStep >= 2 ? 'Submitted to Level 2 for further action' : 'Recorded' }}
+              <div class="flex items-center gap-2">
+                <span class="inline-flex items-center rounded-full border border-border/70 bg-surface-muted/45 px-2.5 py-0.5 text-[11px] font-semibold text-text-primary">
+                  {{ documentsCount }}
                 </span>
-                <span v-if="level1ReviewedAt" class="text-xs text-text-muted">Submitted {{ level1ReviewedAt.toLocaleString() }}</span>
-                <span v-if="qualification.assigned_verifier_name" class="text-xs text-text-muted">· Verifier: <span class="font-semibold text-text-primary">{{ qualification.assigned_verifier_name }}</span></span>
+                <ChevronDown class="h-4 w-4 text-text-muted transition group-open:rotate-180" aria-hidden="true" />
               </div>
-
-              <div class="rounded-xl border border-border/70 bg-surface-muted/40 px-4 py-3">
-                <div class="text-[11px] font-bold uppercase tracking-wider text-text-muted">Recommendation / findings</div>
-                <div class="mt-2 whitespace-pre-wrap text-sm leading-relaxed text-text-primary">{{ qualification.reviewer_notes }}</div>
+            </summary>
+            <div class="border-t border-border/60 px-5 py-4">
+              <div v-if="qualification.documents?.length" class="overflow-hidden rounded-xl border border-border/80">
+                <table class="min-w-full text-sm">
+                  <thead class="bg-surface-muted/90 text-left text-[11px] font-bold uppercase tracking-wider text-text-muted">
+                    <tr>
+                      <th class="px-4 py-3">Type</th>
+                      <th class="px-4 py-3">File</th>
+                      <th class="px-4 py-3">Version</th>
+                      <th class="px-4 py-3 text-right">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody class="divide-y divide-border/60 bg-surface">
+                    <tr v-for="d in qualification.documents" :key="d.id" class="transition hover:bg-surface-muted/40">
+                      <td class="px-4 py-3 font-medium text-text-primary">{{ documentTypeLabel(d.document_type) }}</td>
+                      <td class="px-4 py-3 text-text-primary">{{ d.original_name }}</td>
+                      <td class="px-4 py-3 tabular-nums text-text-muted">v{{ d.version_number }}</td>
+                      <td class="px-4 py-3 text-right">
+                        <a :href="d.preview_url" class="zaqa-btn zaqa-btn-secondary mr-1 inline-flex h-9 items-center px-3 py-2 text-xs">Preview</a>
+                        <a :href="d.download_url" class="zaqa-btn zaqa-btn-secondary inline-flex h-9 items-center px-3 py-2 text-xs">Download</a>
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
               </div>
-
-              <div v-if="level1Attachment" class="rounded-xl border border-border/70 bg-surface-muted/40 px-4 py-3">
-                <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                  <div class="min-w-0">
-                    <div class="text-[11px] font-bold uppercase tracking-wider text-text-muted">Attachment</div>
-                    <div class="mt-1 truncate text-sm font-semibold text-text-primary">{{ level1Attachment.original_name }}</div>
-                  </div>
-                  <div class="flex flex-wrap gap-2">
-                    <a :href="level1Attachment.preview_url" class="zaqa-btn zaqa-btn-secondary h-9 px-3 py-2 text-xs">Preview</a>
-                    <a :href="level1Attachment.download_url" class="zaqa-btn zaqa-btn-secondary h-9 px-3 py-2 text-xs">Download</a>
-                  </div>
-                </div>
+              <div v-else class="rounded-xl border border-dashed border-border bg-surface-muted/40 px-4 py-5 text-sm text-text-muted">
+                No documents uploaded for this qualification item yet.
               </div>
             </div>
-
-            <div v-else class="mt-5 rounded-xl border border-dashed border-border bg-surface-muted/40 px-4 py-8 text-center text-sm text-text-muted">
-              No Level 1 recommendation submitted yet. Once Level 1 completes review, their notes will appear here.
-            </div>
-          </section>
+          </details>
         </div>
 
-        <!-- Sidebar: workflow + assignment + actions -->
-        <aside class="space-y-6 lg:col-span-4">
-          <!-- Workflow ladder -->
-          <section class="rounded-2xl border border-border bg-surface p-6 shadow-sm">
+        <aside class="space-y-4 lg:col-span-4">
+          <section class="rounded-2xl border border-border/70 bg-surface p-5 shadow-sm">
             <h2 class="text-sm font-bold tracking-tight text-text-primary">Two-level workflow</h2>
             <p class="mt-1 text-xs leading-relaxed text-text-muted">
               Level 2 assigns and oversees; Level 1 performs desk review on this task.
             </p>
-            <ol class="mt-5 space-y-0">
+            <ol class="mt-4 space-y-0">
               <li
                 v-for="(step, idx) in workflowSteps"
                 :key="step.key"
-                class="relative flex gap-3 pb-5 last:pb-0"
+                class="relative flex gap-3 pb-4 last:pb-0"
               >
                 <div
                   v-if="idx < workflowSteps.length - 1"
-                  class="absolute left-[15px] top-8 h-[calc(100%-0.5rem)] w-px bg-border"
+                  class="absolute left-[15px] top-8 h-[calc(100%-0.25rem)] w-px bg-border"
                   aria-hidden="true"
                 />
                 <div
@@ -1331,13 +1347,69 @@ function formatTimelineAt(iso: string | null | undefined) {
             </div>
           </section>
 
-          <!-- Parent application SLA (same operational snapshot as application show) -->
-          <section class="rounded-2xl border border-border bg-surface p-6 shadow-sm">
+          <section class="rounded-2xl border border-border/70 bg-surface p-5 shadow-sm">
+            <div class="flex items-center gap-2 text-sm font-bold text-text-primary">
+              <UserRound class="h-4 w-4 text-brand" aria-hidden="true" />
+              Assignment
+            </div>
+            <p class="mt-1 text-xs text-text-muted">Current task owner, status, and assignment history.</p>
+
+            <div class="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-1">
+              <div class="rounded-xl border border-border/70 bg-surface-muted/35 px-4 py-3">
+                <div class="text-[11px] font-bold uppercase tracking-wider text-text-muted">Level 1 owner</div>
+                <div v-if="ownerLine.name" class="mt-1 text-sm font-semibold text-text-primary">{{ ownerLine.name }}</div>
+                <div v-else class="mt-1 text-sm font-medium italic text-text-muted">Not assigned</div>
+                <div v-if="qualification.assigned_at" class="mt-1 text-[11px] text-text-muted">
+                  Assigned {{ formatTimelineAt(qualification.assigned_at) }}
+                </div>
+              </div>
+
+              <div class="rounded-xl border border-border/70 bg-surface-muted/35 px-4 py-3">
+                <div class="text-[11px] font-bold uppercase tracking-wider text-text-muted">Task status</div>
+                <div class="mt-1 inline-flex items-center rounded-full border border-border/70 bg-surface px-2.5 py-1 text-[11px] font-semibold text-text-primary">
+                  {{ stateDisplay }}
+                </div>
+                <p v-if="qualification.returned_to_applicant_at" class="mt-2 text-[11px] leading-relaxed text-amber-900">
+                  With applicant since {{ formatTimelineAt(qualification.returned_to_applicant_at) }}
+                </p>
+              </div>
+            </div>
+
+            <details v-if="qualification.assignments?.length" class="group mt-4 rounded-xl border border-border/70 bg-surface-muted/25">
+              <summary class="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 [&::-webkit-details-marker]:hidden">
+                <div>
+                  <div class="text-sm font-semibold text-text-primary">Assignment history</div>
+                  <div class="mt-1 text-xs text-text-muted">Expand to review previous assignment moves.</div>
+                </div>
+                <div class="flex items-center gap-2">
+                  <span class="inline-flex items-center rounded-full border border-border/70 bg-surface px-2.5 py-0.5 text-[11px] font-semibold text-text-primary">
+                    {{ qualification.assignments.length }}
+                  </span>
+                  <ChevronDown class="h-4 w-4 text-text-muted transition group-open:rotate-180" aria-hidden="true" />
+                </div>
+              </summary>
+              <div class="border-t border-border/60 px-4 py-4">
+                <ul class="space-y-3">
+                  <li
+                    v-for="a in qualification.assignments"
+                    :key="a.id"
+                    class="rounded-xl border border-border/60 bg-surface px-3 py-2.5 text-sm"
+                  >
+                    <div class="text-[11px] font-medium text-text-muted">{{ formatTimelineAt(a.assigned_at) }}</div>
+                    <div class="mt-0.5 font-medium text-text-primary">{{ a.assigned_by }} → {{ a.assigned_to }}</div>
+                    <div v-if="a.comment" class="mt-1.5 border-t border-border/50 pt-1.5 text-xs text-text-muted">{{ a.comment }}</div>
+                  </li>
+                </ul>
+              </div>
+            </details>
+          </section>
+
+          <section class="rounded-2xl border border-border/70 bg-surface p-5 shadow-sm">
             <div class="flex items-start justify-between gap-4">
               <div>
                 <div class="text-sm font-semibold text-text-primary">Qualification SLA snapshot</div>
                 <div class="mt-1 text-xs text-text-muted">
-                  This countdown follows the qualification task itself; the parent application is shown for context only.
+                  Qualification-scoped timing for operational review.
                 </div>
               </div>
               <div class="text-right">
@@ -1361,7 +1433,7 @@ function formatTimelineAt(iso: string | null | undefined) {
               </div>
             </div>
 
-            <div class="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <div class="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-1">
               <div class="rounded-xl border border-border bg-surface-muted p-4">
                 <div class="flex items-center justify-between">
                   <div class="text-xs font-semibold uppercase tracking-wider text-text-muted">Qualification SLA age</div>
@@ -1369,7 +1441,7 @@ function formatTimelineAt(iso: string | null | undefined) {
                 </div>
                 <div class="mt-2 text-lg font-semibold text-text-primary">{{ formatDuration(ageMs) }}</div>
                 <div class="mt-1 text-xs text-text-muted">
-                  Since {{ slaStartedAt ? slaStartedAt.toLocaleString() : '—' }}
+                  Since {{ formatDateTime(slaStartedAt) }}
                 </div>
               </div>
 
@@ -1382,7 +1454,7 @@ function formatTimelineAt(iso: string | null | undefined) {
                   {{ latestAssignmentAt ? formatDuration(sinceAssignedMs) : '—' }}
                 </div>
                 <div class="mt-1 text-xs text-text-muted">
-                  {{ latestAssignmentAt ? `Assigned ${latestAssignmentAt.toLocaleString()}` : 'Not assigned yet' }}
+                  {{ latestAssignmentAt ? `Assigned ${formatDateTime(latestAssignmentAt)}` : 'Not assigned yet' }}
                 </div>
               </div>
             </div>
@@ -1403,49 +1475,6 @@ function formatTimelineAt(iso: string | null | undefined) {
             <p v-else-if="deadlineAt && !slaClockActive" class="mt-4 text-xs text-text-muted">
               Service target window is closed for this qualification; countdown and progress are not shown.
             </p>
-          </section>
-
-          <!-- Level 1 owner -->
-          <section class="rounded-2xl border border-border bg-surface p-6 shadow-sm">
-            <div class="flex items-center gap-2 text-sm font-bold text-text-primary">
-              <UserRound class="h-4 w-4 text-brand" aria-hidden="true" />
-              {{ ownerLine.title }}
-            </div>
-            <p class="mt-1 text-xs text-text-muted">{{ ownerLine.hint }}</p>
-            <div class="mt-4 rounded-xl border border-border/70 bg-surface-muted/60 px-4 py-3">
-              <div v-if="ownerLine.name" class="text-base font-semibold text-text-primary">{{ ownerLine.name }}</div>
-              <div v-else class="text-sm font-medium italic text-text-muted">Not assigned</div>
-              <div v-if="qualification.assigned_at" class="mt-2 text-xs text-text-muted">
-                Assigned {{ qualification.assigned_at }}
-              </div>
-            </div>
-          </section>
-
-          <!-- Status card (synced with computed state) -->
-          <section class="rounded-2xl border border-border bg-surface p-6 shadow-sm">
-            <h2 class="text-sm font-bold tracking-tight text-text-primary">Task status</h2>
-            <div class="mt-3 inline-flex items-center gap-2 rounded-full border border-border bg-surface-muted px-3 py-1.5 text-xs font-semibold text-text-primary">
-              {{ stateDisplay }}
-            </div>
-            <p v-if="qualification.returned_to_applicant_at" class="mt-3 text-xs leading-relaxed text-amber-900">
-              With applicant for amendment since {{ new Date(qualification.returned_to_applicant_at).toLocaleString() }}
-            </p>
-          </section>
-
-          <!-- Assignment history -->
-          <section v-if="qualification.assignments?.length" class="rounded-2xl border border-border bg-surface p-6 shadow-sm">
-            <h2 class="text-sm font-bold tracking-tight text-text-primary">Assignment history</h2>
-            <ul class="mt-4 space-y-3">
-              <li
-                v-for="a in qualification.assignments"
-                :key="a.id"
-                class="rounded-xl border border-border/60 bg-surface-muted/40 px-3 py-2.5 text-sm"
-              >
-                <div class="text-[11px] font-medium text-text-muted">{{ a.assigned_at }}</div>
-                <div class="mt-0.5 font-medium text-text-primary">{{ a.assigned_by }} → {{ a.assigned_to }}</div>
-                <div v-if="a.comment" class="mt-1.5 border-t border-border/50 pt-1.5 text-xs text-text-muted">{{ a.comment }}</div>
-              </li>
-            </ul>
           </section>
         </aside>
       </div>
