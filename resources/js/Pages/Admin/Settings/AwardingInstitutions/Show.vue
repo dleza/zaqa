@@ -1,7 +1,9 @@
 <script setup lang="ts">
+import AdminActionModal from '@/Components/AdminActionModal.vue'
 import AdminLayout from '@/Layouts/AdminLayout.vue'
 import { Link, router } from '@inertiajs/vue3'
-import { Activity, BadgeCheck, Ban, BookOpen, Building2, Cable, ChevronRight, FileText, GraduationCap, PlugZap, RefreshCcw } from 'lucide-vue-next'
+import { Activity, BadgeCheck, Ban, BookOpen, Building2, Cable, ChevronRight, FileText, GraduationCap, PlugZap, RefreshCcw, Search } from 'lucide-vue-next'
+import { reactive, ref } from 'vue'
 import Swal from 'sweetalert2'
 
 const props = defineProps<{
@@ -9,6 +11,13 @@ const props = defineProps<{
   stats: any
   qualification_counts_by_state: Record<string, number>
   recent_qualifications: Array<any>
+  pull_lookup: {
+    enabled: boolean
+    configured: boolean
+    lookup_url: string | null
+    request_method: string
+    preview_url: string
+  }
   links: Record<string, string>
   can: {
     edit: boolean
@@ -20,6 +29,109 @@ const props = defineProps<{
     view_auto_verified: boolean
   }
 }>()
+
+const lookupForm = reactive({
+  student_id: '',
+  examination_number: '',
+  certificate_no: '',
+  nrc_number: '',
+  passport_no: '',
+  first_name: '',
+  last_name: '',
+  other_names: '',
+  program_of_study: '',
+  year_awarded: '' as string | number | '',
+  award_date: '',
+})
+
+const lookupLoading = ref(false)
+const lookupError = ref<string | null>(null)
+const lookupResult = ref<any | null>(null)
+const lookupFieldErrors = ref<Record<string, string>>({})
+const lookupModalOpen = ref(false)
+
+function openLookupModal() {
+  lookupModalOpen.value = true
+}
+
+function closeLookupModal() {
+  lookupModalOpen.value = false
+}
+
+function resetLookupForm() {
+  lookupForm.student_id = ''
+  lookupForm.examination_number = ''
+  lookupForm.certificate_no = ''
+  lookupForm.nrc_number = ''
+  lookupForm.passport_no = ''
+  lookupForm.first_name = ''
+  lookupForm.last_name = ''
+  lookupForm.other_names = ''
+  lookupForm.program_of_study = ''
+  lookupForm.year_awarded = ''
+  lookupForm.award_date = ''
+  resetLookupPreview()
+}
+
+function resetLookupPreview() {
+  lookupError.value = null
+  lookupResult.value = null
+  lookupFieldErrors.value = {}
+}
+
+async function runPullLookupPreview() {
+  resetLookupPreview()
+  lookupLoading.value = true
+
+  try {
+    const payload: Record<string, string | number> = {}
+    for (const [key, value] of Object.entries(lookupForm)) {
+      const trimmed = String(value ?? '').trim()
+      if (trimmed === '') continue
+      if (key === 'year_awarded') {
+        payload[key] = Number(trimmed)
+      } else {
+        payload[key] = trimmed
+      }
+    }
+
+    const res = await (window as any).axios.post(props.pull_lookup.preview_url, payload)
+    lookupResult.value = res.data
+  } catch (err: any) {
+    const data = err?.response?.data
+    if (data?.errors) {
+      lookupFieldErrors.value = Object.fromEntries(
+        Object.entries(data.errors).map(([k, v]) => [k, Array.isArray(v) ? String(v[0]) : String(v)]),
+      )
+      lookupError.value = 'Please fix the highlighted fields and try again.'
+    } else if (data?.error) {
+      lookupError.value = String(data.error)
+    } else if (data?.message) {
+      lookupError.value = String(data.message)
+    } else {
+      lookupError.value = 'Pull lookup preview failed. Check integration settings and try again.'
+    }
+  } finally {
+    lookupLoading.value = false
+  }
+}
+
+function previewStatusLabel(status: string | null | undefined): string {
+  const map: Record<string, string> = {
+    found: 'Record found',
+    not_found: 'Not found',
+    failed: 'Failed',
+    timeout: 'Timeout',
+    invalid_response: 'Invalid response',
+  }
+  return map[String(status ?? '')] ?? String(status ?? 'Unknown')
+}
+
+function previewStatusClass(found: boolean | null | undefined, status: string | null | undefined): string {
+  if (found) return 'zaqa-badge-success'
+  if (status === 'not_found') return 'zaqa-badge-secondary'
+  return 'zaqa-badge-warning'
+}
 
 function fmtDate(iso: string | null | undefined): string {
   if (!iso) return '—'
@@ -131,6 +243,15 @@ const stateLabels: Record<string, string> = {
               <GraduationCap class="h-4 w-4" aria-hidden="true" />
               Qualifications
             </Link>
+            <button
+              v-if="pull_lookup.configured && can.manage_integrations"
+              type="button"
+              class="zaqa-btn zaqa-btn-primary inline-flex items-center gap-2 px-4 py-2 text-sm"
+              @click="openLookupModal"
+            >
+              <Search class="h-4 w-4" aria-hidden="true" />
+              Pull lookup preview
+            </button>
           </div>
         </div>
       </div>
@@ -245,6 +366,10 @@ const stateLabels: Record<string, string> = {
                 <Link v-if="can.view_integration_logs" :href="links.institution_api_logs" class="zaqa-btn zaqa-btn-secondary px-3 py-2 text-xs">Push logs</Link>
                 <Link v-if="can.view_integration_logs" :href="links.institution_pull_logs" class="zaqa-btn zaqa-btn-secondary px-3 py-2 text-xs">Pull logs</Link>
               </div>
+              <p v-if="pull_lookup.enabled && !pull_lookup.configured && can.manage_integrations" class="mt-3 text-xs text-text-muted">
+                Pull lookup preview requires a configured lookup URL and credentials.
+                <Link :href="links.institution_integrations" class="zaqa-link">Configure integration</Link>
+              </p>
             </div>
           </div>
         </div>
@@ -332,6 +457,128 @@ const stateLabels: Record<string, string> = {
         </div>
       </div>
     </div>
+
+    <AdminActionModal
+      v-model="lookupModalOpen"
+      title="Pull lookup preview"
+      :description="`Query ${institution.name}'s live lookup endpoint and preview the returned record without saving it to ZAQA.`"
+      max-width-class="max-w-4xl"
+    >
+      <div class="max-h-[65vh] space-y-5 overflow-y-auto pr-1">
+        <div class="rounded-xl border border-border bg-surface-muted px-4 py-3 text-xs text-text-muted">
+          Endpoint:
+          <span class="font-mono text-text-primary">{{ pull_lookup.request_method }} {{ pull_lookup.lookup_url }}</span>
+        </div>
+
+        <form id="pull-lookup-preview-form" class="grid gap-4 md:grid-cols-2" @submit.prevent="runPullLookupPreview">
+          <div>
+            <label class="text-xs font-semibold uppercase tracking-wider text-text-muted">Student ID</label>
+            <input v-model="lookupForm.student_id" class="zaqa-input mt-1" placeholder="e.g. 2021551041" />
+            <div v-if="lookupFieldErrors.student_id" class="mt-1 text-xs text-danger">{{ lookupFieldErrors.student_id }}</div>
+          </div>
+          <div>
+            <label class="text-xs font-semibold uppercase tracking-wider text-text-muted">Examination number</label>
+            <input v-model="lookupForm.examination_number" class="zaqa-input mt-1" />
+          </div>
+          <div>
+            <label class="text-xs font-semibold uppercase tracking-wider text-text-muted">Certificate number</label>
+            <input v-model="lookupForm.certificate_no" class="zaqa-input mt-1" placeholder="e.g. UNZA-2026-UG-000237" />
+          </div>
+          <div>
+            <label class="text-xs font-semibold uppercase tracking-wider text-text-muted">NRC</label>
+            <input v-model="lookupForm.nrc_number" class="zaqa-input mt-1" placeholder="e.g. 123456/78/9" />
+          </div>
+          <div>
+            <label class="text-xs font-semibold uppercase tracking-wider text-text-muted">Passport</label>
+            <input v-model="lookupForm.passport_no" class="zaqa-input mt-1" />
+          </div>
+          <div>
+            <label class="text-xs font-semibold uppercase tracking-wider text-text-muted">Programme of study</label>
+            <input v-model="lookupForm.program_of_study" class="zaqa-input mt-1" placeholder="Optional match hint" />
+          </div>
+          <div>
+            <label class="text-xs font-semibold uppercase tracking-wider text-text-muted">First name</label>
+            <input v-model="lookupForm.first_name" class="zaqa-input mt-1" />
+          </div>
+          <div>
+            <label class="text-xs font-semibold uppercase tracking-wider text-text-muted">Last name</label>
+            <input v-model="lookupForm.last_name" class="zaqa-input mt-1" />
+          </div>
+          <div>
+            <label class="text-xs font-semibold uppercase tracking-wider text-text-muted">Other names</label>
+            <input v-model="lookupForm.other_names" class="zaqa-input mt-1" />
+          </div>
+          <div>
+            <label class="text-xs font-semibold uppercase tracking-wider text-text-muted">Year awarded</label>
+            <input v-model="lookupForm.year_awarded" class="zaqa-input mt-1" type="number" min="1900" max="2100" />
+          </div>
+          <div>
+            <label class="text-xs font-semibold uppercase tracking-wider text-text-muted">Award date</label>
+            <input v-model="lookupForm.award_date" class="zaqa-input mt-1" type="date" />
+          </div>
+        </form>
+
+        <div v-if="lookupError" class="rounded-xl border border-danger/30 bg-danger/5 px-4 py-3 text-sm text-danger">
+          {{ lookupError }}
+        </div>
+
+        <div v-if="lookupResult?.ok" class="space-y-4">
+          <div class="flex flex-wrap items-center gap-2 text-sm">
+            <span class="zaqa-badge" :class="previewStatusClass(lookupResult.found, lookupResult.status)">
+              {{ previewStatusLabel(lookupResult.status) }}
+            </span>
+            <span v-if="lookupResult.http_status" class="text-xs text-text-muted">HTTP {{ lookupResult.http_status }}</span>
+            <span v-if="lookupResult.latency_ms !== null && lookupResult.latency_ms !== undefined" class="text-xs text-text-muted">{{ lookupResult.latency_ms }} ms</span>
+            <span v-if="lookupResult.confidence_hint !== null && lookupResult.confidence_hint !== undefined" class="text-xs text-text-muted">
+              Confidence hint: {{ lookupResult.confidence_hint }}%
+            </span>
+          </div>
+
+          <div v-if="lookupResult.error_message" class="rounded-xl border border-border bg-surface-muted px-4 py-3 text-sm text-text-muted">
+            {{ lookupResult.error_message }}
+          </div>
+
+          <div v-if="lookupResult.found && lookupResult.record" class="overflow-hidden rounded-xl border border-border">
+            <div class="border-b border-border bg-surface-muted px-4 py-3 text-xs font-semibold uppercase tracking-wider text-text-muted">
+              Returned record preview
+            </div>
+            <dl class="grid gap-0 sm:grid-cols-2">
+              <div v-for="(value, key) in lookupResult.record" :key="String(key)" class="border-b border-border/60 px-4 py-3 sm:odd:border-r">
+                <dt class="text-xs font-semibold uppercase tracking-wider text-text-muted">{{ String(key).replace(/_/g, ' ') }}</dt>
+                <dd class="mt-1 font-mono text-sm text-text-primary">{{ value ?? '—' }}</dd>
+              </div>
+            </dl>
+          </div>
+
+          <div v-else-if="!lookupResult.found" class="rounded-xl border border-border bg-surface-muted px-4 py-4 text-sm text-text-muted">
+            No matching learner record was returned by the institution system.
+          </div>
+
+          <details class="rounded-xl border border-border bg-surface-muted px-4 py-3 text-sm">
+            <summary class="cursor-pointer font-semibold text-text-primary">Request payload sent</summary>
+            <pre class="mt-3 overflow-x-auto rounded-lg bg-surface p-3 text-xs text-text-muted">{{ JSON.stringify(lookupResult.request_payload, null, 2) }}</pre>
+          </details>
+        </div>
+      </div>
+
+      <template #footer>
+        <button type="button" class="zaqa-btn zaqa-btn-secondary px-4 py-2 text-sm" :disabled="lookupLoading" @click="resetLookupForm">
+          Reset form
+        </button>
+        <button type="button" class="zaqa-btn zaqa-btn-secondary px-4 py-2 text-sm" :disabled="lookupLoading" @click="closeLookupModal">
+          Close
+        </button>
+        <button
+          type="submit"
+          form="pull-lookup-preview-form"
+          class="zaqa-btn zaqa-btn-primary inline-flex items-center gap-2 px-4 py-2 text-sm"
+          :disabled="lookupLoading"
+        >
+          <Search class="h-4 w-4" aria-hidden="true" />
+          {{ lookupLoading ? 'Searching…' : 'Run lookup preview' }}
+        </button>
+      </template>
+    </AdminActionModal>
   </AdminLayout>
 </template>
 

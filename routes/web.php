@@ -319,6 +319,18 @@ Route::middleware('auth')->group(function () {
             Route::post('/institution-api-clients/{institutionApiClient}/enable', [AdminInstitutionApiClientsController::class, 'enable'])
                 ->middleware('can:institution_api.manage')
                 ->name('institution_api_clients.enable');
+            Route::post('/institution-api-clients/{institutionApiClient}/pull-integration', [AdminInstitutionApiClientsController::class, 'updatePullIntegration'])
+                ->middleware('can:institution_api.manage')
+                ->name('institution_api_clients.pull_integration.update');
+            Route::post('/institution-api-clients/{institutionApiClient}/pull-integration/generate-token', [AdminInstitutionApiClientsController::class, 'generatePullLookupToken'])
+                ->middleware('can:institution_api.manage')
+                ->name('institution_api_clients.pull_integration.generate_token');
+            Route::post('/institution-api-clients/{institutionApiClient}/pull-integration/test', [AdminInstitutionApiClientsController::class, 'testPullIntegration'])
+                ->middleware('can:institution_api.manage')
+                ->name('institution_api_clients.pull_integration.test');
+            Route::post('/institution-api-clients/{institutionApiClient}/pull-integration/email-token', [AdminInstitutionApiClientsController::class, 'emailPullLookupToken'])
+                ->middleware('can:institution_api.manage')
+                ->name('institution_api_clients.pull_integration.email_token');
 
             Route::get('/institution-api-logs', [AdminInstitutionIntegrationLogsController::class, 'index'])
                 ->middleware('can:institution_api.logs.view')
@@ -639,6 +651,9 @@ Route::middleware('auth')->group(function () {
             Route::get('/awarding-institutions/{awardingInstitution}', [AdminAwardingInstitutionsController::class, 'show'])
                 ->middleware('can:settings.awarding_institutions.view')
                 ->name('awarding_institutions.show');
+            Route::post('/awarding-institutions/{awardingInstitution}/pull-lookup-preview', [AdminAwardingInstitutionsController::class, 'previewPullLookup'])
+                ->middleware('can:institution_api.manage')
+                ->name('awarding_institutions.pull_lookup_preview');
             Route::post('/awarding-institutions/{awardingInstitution}/deactivate', [AdminAwardingInstitutionsController::class, 'deactivate'])
                 ->middleware('can:settings.awarding_institutions.delete')
                 ->name('awarding_institutions.deactivate');

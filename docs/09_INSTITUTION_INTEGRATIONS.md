@@ -36,6 +36,54 @@ Pull lookups:
 - Are logged in a separate sanitized log stream.
 - Must never block the verification workflow indefinitely; failures fall back to normal Level 1 routing.
 
+## Configuration model
+
+ZAQA and each institution system configure opposite sides of the same integration.
+
+| System | Source of truth | What is stored |
+|--------|-----------------|----------------|
+| **Institution (e.g. UNZA SIS)** | Institution `.env` | Token and flags that protect the institution-hosted lookup endpoint (`ZAQA_LOOKUP_ENABLED`, `ZAQA_LOOKUP_TOKEN`, optional IP allowlist, rate limit) |
+| **ZAQA portal** | Admin UI + `institution_integrations` table | Per awarding institution: lookup URL, driver, auth type, encrypted bearer token, timeout, retries, active/pull toggles |
+
+Important:
+
+- ZAQA does **not** use `.env` variables for production institution lookup URLs or tokens.
+- ZAQA may eventually manage hundreds of institution integrations; each is a row in `institution_integrations`, configured by Super Admins.
+- The shared bearer token must match on both sides: institution `.env` (`ZAQA_LOOKUP_TOKEN`) and ZAQA admin UI (encrypted `credentials.bearer_token` for that institution).
+
+### Production setup (example: University of Zambia)
+
+1. **On UNZA SIS** — set `.env`:
+   ```env
+   ZAQA_LOOKUP_ENABLED=true
+   ZAQA_LOOKUP_TOKEN=<shared-secret>
+   ZAQA_ALLOWED_IPS=
+   ZAQA_LOOKUP_RATE_LIMIT=60
+   ```
+2. **On ZAQA** — Admin → Integrations → Institution Pull Integrations → University of Zambia:
+   - Enable **Active** and **Supports pull lookup**
+   - Lookup URL: institution endpoint (e.g. `https://sis.unza.ac.zm/api/zaqa/v1/learner-lookup`)
+   - Driver: `generic_rest`
+   - Request method: `POST`
+   - Auth type: `bearer_token`
+   - Bearer token: same value as SIS `ZAQA_LOOKUP_TOKEN`
+   - Timeout / retries as required
+   - Use **Test connection** to verify connectivity
+
+No ZAQA `.env` entries are required for this integration in production.
+
+### Local development convenience seeder
+
+`UnzaInstitutionIntegrationSeeder` can pre-create the University of Zambia integration when optional **local-only** env vars are set:
+
+```env
+# LOCAL DEVELOPMENT ONLY — not used in production
+UNZA_SIS_LOOKUP_URL=http://127.0.0.1:8001/api/zaqa/v1/learner-lookup
+UNZA_SIS_LOOKUP_TOKEN=<same-as-sis-ZAQA_LOOKUP_TOKEN>
+```
+
+If `UNZA_SIS_LOOKUP_URL` is absent, the seeder no-ops. Production deployments should leave these unset and configure integrations via the admin UI.
+
 ## Standard Pull Lookup Contract (Institution-hosted endpoint)
 
 This contract defines the **institution-hosted** HTTP endpoint ZAQA will call when pull lookup is enabled for an awarding institution.
@@ -160,7 +208,14 @@ Error guidance:
   - Rotate/revoke tokens
   - View institution API push logs
 - Admin → Integrations → Institution Pull Integrations:
-  - Enable/disable pull lookup per institution
-  - Configure lookup URL, auth, timeout, retries
-  - Test connection (non-sensitive)
+  - Select awarding institution (one integration row per institution)
+  - Enable/disable pull lookup per institution (**Active**, **Supports pull lookup**)
+  - Configure lookup URL, driver (`generic_rest`), request method (`POST`), auth type (`bearer_token`), encrypted bearer token, timeout, retries
+  - Test connection (POST probe for POST-configured integrations)
   - View pull lookup logs
+- Admin → Integrations → Institution API Clients → **client detail page**:
+  - Configure pull lookup integration via modal (same `institution_integrations` record)
+  - Generate pull lookup bearer token (shown once; share with institution for `ZAQA_LOOKUP_TOKEN`)
+  - Test connection and email token to client contact
+
+The admin UI is the **only** supported way to manage institution pull integrations in production. Credentials are encrypted at rest; plain tokens are never logged by ZAQA.

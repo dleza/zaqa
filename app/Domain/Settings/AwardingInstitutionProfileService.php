@@ -96,6 +96,14 @@ class AwardingInstitutionProfileService
 
         $lastIntegrationActivityAt = $this->maxDateTime([$lastPushAt, $lastPull?->created_at]);
 
+        $integration = $institution->integration;
+        $pullLookupEnabled = (bool) ($integration?->supports_pull && $integration?->is_active);
+        $pullLookupConfigured = $pullLookupEnabled
+            && is_string($integration?->lookup_url)
+            && trim((string) $integration->lookup_url) !== ''
+            && is_array($integration->credentials)
+            && $integration->credentials !== [];
+
         $recentQualifications = Qualification::query()
             ->with(['application:id,application_number,submitted_at', 'assignedVerifier:id,name'])
             ->where('awarding_institution_id', (int) $institution->id)
@@ -159,6 +167,13 @@ class AwardingInstitutionProfileService
             ],
             'qualification_counts_by_state' => $qualificationCountsByState,
             'recent_qualifications' => $recentQualifications,
+            'pull_lookup' => [
+                'enabled' => $pullLookupEnabled,
+                'configured' => $pullLookupConfigured,
+                'lookup_url' => $integration?->lookup_url,
+                'request_method' => strtoupper((string) ($integration?->request_method ?? 'POST')),
+                'preview_url' => route('admin.settings.awarding_institutions.pull_lookup_preview', ['awardingInstitution' => $institution->id]),
+            ],
             'links' => [
                 'edit' => route('admin.settings.awarding_institutions.edit', ['awardingInstitution' => $institution->id]),
                 'deactivate' => route('admin.settings.awarding_institutions.deactivate', ['awardingInstitution' => $institution->id]),

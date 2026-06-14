@@ -13,6 +13,14 @@ class GenericRestInstitutionLearnerRecordClient implements InstitutionLearnerRec
 {
     public function lookup(InstitutionIntegration $integration, Qualification $qualification): InstitutionLearnerLookupResult
     {
+        return $this->lookupWithPayload($integration, $this->buildQualificationPayload($qualification));
+    }
+
+    /**
+     * @param  array<string, mixed>  $payload
+     */
+    public function lookupWithPayload(InstitutionIntegration $integration, array $payload): InstitutionLearnerLookupResult
+    {
         $url = trim((string) ($integration->lookup_url ?? ''));
         if ($url === '') {
             return new InstitutionLearnerLookupResult(
@@ -25,7 +33,9 @@ class GenericRestInstitutionLearnerRecordClient implements InstitutionLearnerRec
         $timeout = (int) ($integration->timeout_seconds ?? 15);
         $method = strtoupper((string) ($integration->request_method ?? 'POST'));
 
-        $payload = $this->buildQualificationPayload($qualification);
+        if (! isset($payload['correlation_id']) || trim((string) $payload['correlation_id']) === '') {
+            $payload['correlation_id'] = $this->correlationId();
+        }
 
         try {
             $pending = Http::timeout($timeout)->connectTimeout(min(5, $timeout));
@@ -254,6 +264,7 @@ class GenericRestInstitutionLearnerRecordClient implements InstitutionLearnerRec
             'correlation_id' => $correlationId,
             'qualification_reference' => (string) ($qualification->verification_reference_number ?: ('qualification:'.(int) $qualification->id)),
             'student_id' => $qualification->student_number ?: null,
+            'examination_number' => $qualification->examination_number ?: null,
             'certificate_no' => $qualification->certificate_number ?: null,
             'nrc_number' => $nrcNumber,
             'passport_no' => $passportNo,

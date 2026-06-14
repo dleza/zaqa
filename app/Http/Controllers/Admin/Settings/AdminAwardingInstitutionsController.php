@@ -3,15 +3,18 @@
 namespace App\Http\Controllers\Admin\Settings;
 
 use App\Domain\Audit\AuditLogService;
+use App\Domain\InstitutionIntegrations\InstitutionPullLookupPreviewService;
 use App\Domain\Settings\AwardingInstitutionExcelImportService;
 use App\Domain\Settings\AwardingInstitutionProfileService;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Admin\Settings\ImportAwardingInstitutionsExcelRequest;
+use App\Http\Requests\Admin\Settings\PreviewInstitutionPullLookupRequest;
 use App\Http\Requests\Admin\Settings\StoreAwardingInstitutionRequest;
 use App\Http\Requests\Admin\Settings\UpdateAwardingInstitutionRequest;
 use App\Models\AwardingInstitution;
 use App\Models\Country;
 use App\Support\Imports\ExcelTemplateDownload;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -200,6 +203,37 @@ class AdminAwardingInstitutionsController extends Controller
                 'view_auto_verified' => (bool) $user?->can('verification.level2.review'),
             ],
         ]);
+    }
+
+    public function previewPullLookup(
+        PreviewInstitutionPullLookupRequest $request,
+        AwardingInstitution $awardingInstitution,
+        InstitutionPullLookupPreviewService $preview,
+        AuditLogService $audit,
+    ): JsonResponse {
+        $result = $preview->preview($awardingInstitution, $request->validated());
+
+        if (($result['ok'] ?? false) === true) {
+            $audit->record(
+                eventType: 'institution_integration.pull_lookup_preview',
+                module: 'Settings',
+                actionName: 'institution_pull_lookup_preview',
+                message: 'Institution pull lookup preview executed.',
+                entityType: AwardingInstitution::class,
+                entityId: (int) $awardingInstitution->id,
+                metadata: [
+                    'awarding_institution_id' => (int) $awardingInstitution->id,
+                    'found' => (bool) ($result['found'] ?? false),
+                    'status' => (string) ($result['status'] ?? ''),
+                    'http_status' => $result['http_status'] ?? null,
+                    'latency_ms' => $result['latency_ms'] ?? null,
+                    'source_reference' => $result['source_reference'] ?? null,
+                ],
+                actor: $request->user(),
+            );
+        }
+
+        return response()->json($result, ($result['ok'] ?? false) === true ? 200 : 422);
     }
 
     public function update(UpdateAwardingInstitutionRequest $request, AwardingInstitution $awardingInstitution, AuditLogService $audit): RedirectResponse

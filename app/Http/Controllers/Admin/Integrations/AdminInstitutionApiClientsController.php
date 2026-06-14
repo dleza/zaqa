@@ -17,6 +17,11 @@ use Inertia\Inertia;
 use Inertia\Response;
 use Laravel\Sanctum\PersonalAccessToken;
 use App\Domain\Notifications\OutboundMailService;
+use App\Domain\InstitutionIntegrations\InstitutionPullIntegrationService;
+use App\Http\Requests\Admin\Integrations\EmailInstitutionPullLookupTokenRequest;
+use App\Http\Requests\Admin\Integrations\UpdateClientPullIntegrationRequest;
+use App\Mail\InstitutionPullLookupTokenIssuedMail;
+use App\Models\InstitutionIntegration;
 
 class AdminInstitutionApiClientsController extends Controller
 {
@@ -132,7 +137,7 @@ class AdminInstitutionApiClientsController extends Controller
     {
         abort_unless($request->user()?->can('institution_api.manage'), 403);
 
-        $institutionApiClient->loadMissing(['awardingInstitution:id,name']);
+        $institutionApiClient->loadMissing(['awardingInstitution.integration']);
 
         $tokens = $institutionApiClient->tokens()
             ->orderByDesc('id')
@@ -146,6 +151,9 @@ class AdminInstitutionApiClientsController extends Controller
                 'created_at' => optional($t->created_at)->toIso8601String(),
             ])
             ->values();
+
+        $pullIntegrationService = app(InstitutionPullIntegrationService::class);
+        $awardingInstitution = $institutionApiClient->awardingInstitution;
 
         return Inertia::render('Admin/Integrations/InstitutionApiClients/Show', [
             'client' => [
@@ -171,7 +179,156 @@ class AdminInstitutionApiClientsController extends Controller
             'abilities' => $this->availableAbilities(),
             'flash_token' => $request->session()->get('institution_api_plaintext_token'),
             'flash_token_abilities' => $request->session()->get('institution_api_plaintext_token_abilities'),
+            'pull_integration' => $awardingInstitution
+                ? $pullIntegrationService->summary($awardingInstitution->integration)
+                : $pullIntegrationService->summary(null),
+            'pull_integration_urls' => [
+                'save' => route('admin.integrations.institution_api_clients.pull_integration.update', $institutionApiClient),
+                'generate_token' => route('admin.integrations.institution_api_clients.pull_integration.generate_token', $institutionApiClient),
+                'test' => route('admin.integrations.institution_api_clients.pull_integration.test', $institutionApiClient),
+                'email_token' => route('admin.integrations.institution_api_clients.pull_integration.email_token', $institutionApiClient),
+            ],
+            'flash_pull_lookup_token' => $request->session()->get('institution_pull_lookup_plaintext_token'),
         ]);
+    }
+
+    public function updatePullIntegration(
+        UpdateClientPullIntegrationRequest $request,
+        InstitutionApiClient $institutionApiClient,
+        InstitutionPullIntegrationService $pullIntegration,
+        AuditLogService $audit,
+    ): RedirectResponse {
+        $institutionApiClient->loadMissing('awardingInstitution');
+        $institution = $institutionApiClient->awardingInstitution;
+        if (! $institution instanceof AwardingInstitution) {
+            return back()->with('error', 'Awarding institution is not configured for this client.');
+        }
+
+        $integration = $pullIntegration->savePullSettings($institution, $request->validated());
+
+        $audit->record(
+            eventType: 'institution_integration.updated',
+            module: 'Integrations',
+            actionName: 'institution_pull_integration_updated',
+            message: 'Institution pull integration settings updated from API client page.',
+            entityType: InstitutionIntegration::class,
+            entityId: (int) $integration->id,
+            metadata: [
+                'awarding_institution_id' => (int) $institution->id,
+                'institution_api_client_id' => (int) $institutionApiClient->id,
+                'supports_pull' => (bool) $integration->supports_pull,
+                'lookup_url_set' => (bool) ($integration->lookup_url),
+            ],
+        );
+
+        return redirect()
+            ->route('admin.integrations.institution_api_clients.show', $institutionApiClient)
+            ->with('success', 'Pull lookup integration saved.');
+    }
+
+    public function generatePullLookupToken(
+        Request $request,
+        InstitutionApiClient $institutionApiClient,
+        InstitutionPullIntegrationService $pullIntegration,
+        AuditLogService $audit,
+    ): RedirectResponse {
+        abort_unless($request->user()?->can('institution_api.manage'), 403);
+
+        $institutionApiClient->loadMissing('awardingInstitution');
+        $institution = $institutionApiClient->awardingInstitution;
+        if (! $institution instanceof AwardingInstitution) {
+            return back()->with('error', 'Awarding institution is not configured for this client.');
+        }
+
+        $integration = $pullIntegration->resolveIntegration($institution);
+        if (! $integration->exists) {
+            $integration->save();
+        }
+
+        $plainTextToken = $pullIntegration->generateBearerToken($integration);
+
+        $audit->record(
+            eventType: 'institution_integration.token_generated',
+            module: 'Integrations',
+            actionName: 'institution_pull_lookup_token_generated',
+            message: 'Institution pull lookup token generated.',
+            entityType: InstitutionIntegration::class,
+            entityId: (int) $integration->id,
+            metadata: [
+                'awarding_institution_id' => (int) $institution->id,
+                'institution_api_client_id' => (int) $institutionApiClient->id,
+            ],
+        );
+
+        $request->session()->flash('institution_pull_lookup_plaintext_token', $plainTextToken);
+
+        return redirect()
+            ->route('admin.integrations.institution_api_clients.show', $institutionApiClient)
+            ->with('success', 'Pull lookup token generated. Copy it now; it will not be shown again.');
+    }
+
+    public function testPullIntegration(
+        InstitutionApiClient $institutionApiClient,
+        InstitutionPullIntegrationService $pullIntegration,
+    ): RedirectResponse {
+        abort_unless(request()->user()?->can('institution_api.manage'), 403);
+
+        $institutionApiClient->loadMissing('awardingInstitution.integration');
+        $integration = $institutionApiClient->awardingInstitution?->integration;
+        if (! $integration || ! $integration->lookup_url) {
+            return back()->with('error', 'Lookup URL is not configured.');
+        }
+
+        $result = $pullIntegration->testConnection($integration);
+
+        return $result['success']
+            ? back()->with('success', $result['message'])
+            : back()->with('error', $result['message']);
+    }
+
+    public function emailPullLookupToken(
+        EmailInstitutionPullLookupTokenRequest $request,
+        InstitutionApiClient $institutionApiClient,
+        AuditLogService $audit,
+    ): RedirectResponse {
+        if (! $institutionApiClient->contact_email) {
+            return back()->with('error', 'Client contact email is not set.');
+        }
+
+        $token = (string) $request->validated('token');
+        $institutionApiClient->loadMissing('awardingInstitution.integration');
+        $lookupUrl = $institutionApiClient->awardingInstitution?->integration?->lookup_url;
+
+        app(OutboundMailService::class)->queue(
+            mailable: new InstitutionPullLookupTokenIssuedMail(
+                client: $institutionApiClient->loadMissing('awardingInstitution'),
+                plainTextToken: $token,
+                lookupUrl: is_string($lookupUrl) ? $lookupUrl : null,
+            ),
+            to: (string) $institutionApiClient->contact_email,
+            logContext: [
+                'user_id' => null,
+                'application_id' => null,
+                'email' => (string) $institutionApiClient->contact_email,
+                'subject' => 'ZAQA pull lookup token',
+                'template_key' => 'institution_pull_lookup_token_issued',
+            ],
+        );
+
+        $audit->record(
+            eventType: 'institution_integration.token_emailed',
+            module: 'Integrations',
+            actionName: 'institution_pull_lookup_token_emailed',
+            message: 'Institution pull lookup token email sent.',
+            entityType: InstitutionApiClient::class,
+            entityId: (int) $institutionApiClient->id,
+            metadata: [
+                'awarding_institution_id' => (int) $institutionApiClient->awarding_institution_id,
+                'to' => $institutionApiClient->contact_email,
+            ],
+        );
+
+        return back()->with('success', 'Pull lookup token email sent to institution contact.');
     }
 
     public function issueToken(IssueInstitutionApiTokenRequest $request, InstitutionApiClient $institutionApiClient): RedirectResponse

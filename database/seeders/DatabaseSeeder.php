@@ -21,6 +21,8 @@ class DatabaseSeeder extends Seeder
             DepartmentsSeeder::class,
             CountriesSeeder::class,
             AwardingInstitutionsSeeder::class,
+            // Optional local-dev convenience; no-ops unless UNZA_SIS_LOOKUP_URL is set.
+            UnzaInstitutionIntegrationSeeder::class,
             BillingCategoriesSeeder::class,
             QualificationTypesSeeder::class,
             CertificateSubjectsSeeder::class,

@@ -3,13 +3,13 @@
 namespace App\Http\Controllers\Admin\Integrations;
 
 use App\Domain\Audit\AuditLogService;
+use App\Domain\InstitutionIntegrations\InstitutionPullIntegrationService;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Admin\Integrations\UpdateInstitutionIntegrationRequest;
 use App\Models\AwardingInstitution;
 use App\Models\InstitutionIntegration;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Http;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -157,7 +157,7 @@ class AdminInstitutionIntegrationsController extends Controller
             ->with('success', 'Integration settings saved.');
     }
 
-    public function test(Request $request, AwardingInstitution $awardingInstitution): RedirectResponse
+    public function test(Request $request, AwardingInstitution $awardingInstitution, InstitutionPullIntegrationService $pullIntegration): RedirectResponse
     {
         abort_unless($request->user()?->can('institution_api.manage'), 403);
 
@@ -167,34 +167,11 @@ class AdminInstitutionIntegrationsController extends Controller
             return back()->with('error', 'Lookup URL is not configured.');
         }
 
-        try {
-            $pending = Http::timeout((int) $integration->timeout_seconds)->connectTimeout(5);
-            if ($integration->auth_type === 'bearer_token') {
-                $token = is_array($integration->credentials) ? ($integration->credentials['bearer_token'] ?? null) : null;
-                if (is_string($token) && $token !== '') {
-                    $pending = $pending->withToken($token);
-                }
-            }
-            if ($integration->auth_type === 'basic') {
-                $u = is_array($integration->credentials) ? ($integration->credentials['basic_username'] ?? null) : null;
-                $p = is_array($integration->credentials) ? ($integration->credentials['basic_password'] ?? null) : null;
-                if (is_string($u) && is_string($p) && $u !== '' && $p !== '') {
-                    $pending = $pending->withBasicAuth($u, $p);
-                }
-            }
+        $result = $pullIntegration->testConnection($integration);
 
-            // Non-sensitive check: HEAD then GET fallback.
-            $resp = $pending->head($integration->lookup_url);
-            if ($resp->status() >= 400) {
-                $resp = $pending->get($integration->lookup_url);
-            }
-
-            return $resp->successful()
-                ? back()->with('success', 'Connection test succeeded (HTTP '.$resp->status().').')
-                : back()->with('error', 'Connection test failed (HTTP '.$resp->status().').');
-        } catch (\Throwable $e) {
-            return back()->with('error', 'Connection test failed: '.$e->getMessage());
-        }
+        return $result['success']
+            ? back()->with('success', $result['message'])
+            : back()->with('error', $result['message']);
     }
 }
 
