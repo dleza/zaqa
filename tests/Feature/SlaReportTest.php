@@ -6,6 +6,7 @@ use App\Enums\ApplicationStatus;
 use App\Enums\VerificationState;
 use App\Models\Application;
 use App\Models\ApplicationStatusHistory;
+use App\Models\Qualification;
 use App\Models\User;
 use Database\Seeders\RolesAndPermissionsSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -108,5 +109,76 @@ class SlaReportTest extends TestCase
             ->where('level2.0.rejected', 1)
         );
     }
-}
 
+    public function test_sla_report_counts_overdue_qualifications_by_qualification_deadline(): void
+    {
+        $viewer = User::factory()->activated()->create(['applicant_type' => null]);
+        $viewer->assignRole('Verification Officer Level 2');
+        $this->actingAs($viewer);
+
+        $assignedVerifier = User::factory()->activated()->create(['applicant_type' => null]);
+        $applicant = User::factory()->activated()->create(['applicant_type' => 'individual']);
+
+        $now = now();
+
+        $application = Application::query()->create([
+            'uuid' => (string) Str::uuid(),
+            'application_number' => 'ZAQA-VER-MIXED-SLA',
+            'applicant_user_id' => $applicant->id,
+            'applicant_type' => 'individual',
+            'service_type' => 'verification',
+            'qualification_category' => 'diploma',
+            'current_status' => ApplicationStatus::InProgress,
+            'verification_state' => VerificationState::UnderLevel1Review,
+            'is_foreign' => true,
+            'metadata' => [],
+            'submitted_at' => $now->copy()->subDays(10),
+            'service_deadline_at' => $now->copy()->addDays(40),
+        ]);
+
+        Qualification::query()->create([
+            'application_id' => $application->id,
+            'awarding_institution_name' => 'Local Institute',
+            'qualification_holder_name' => 'Jane Doe',
+            'country_name_other' => 'Zambia',
+            'nrc_passport_number' => '111111/11/1',
+            'title_of_qualification' => 'Local overdue diploma',
+            'award_date' => $now->copy()->subYear()->toDateString(),
+            'qualification_type' => 'L6',
+            'qualification_type_id' => null,
+            'is_foreign_qualification' => false,
+            'transcript_required' => false,
+            'verification_state' => VerificationState::UnderLevel1Review,
+            'assigned_verifier_id' => $assignedVerifier->id,
+            'service_started_at' => $now->copy()->subDays(10),
+            'service_deadline_at' => $now->copy()->subDay(),
+        ]);
+
+        Qualification::query()->create([
+            'application_id' => $application->id,
+            'awarding_institution_name' => 'Foreign Institute',
+            'qualification_holder_name' => 'Jane Doe',
+            'country_name_other' => 'Kenya',
+            'nrc_passport_number' => '111111/11/1',
+            'title_of_qualification' => 'Foreign active diploma',
+            'award_date' => $now->copy()->subYear()->toDateString(),
+            'qualification_type' => 'L6',
+            'qualification_type_id' => null,
+            'is_foreign_qualification' => true,
+            'transcript_required' => true,
+            'verification_state' => VerificationState::UnderLevel1Review,
+            'service_started_at' => $now->copy()->subDays(10),
+            'service_deadline_at' => $now->copy()->addDays(40),
+        ]);
+
+        $res = $this->get('/admin/reports/sla?range=last30');
+        $res->assertOk();
+        $res->assertInertia(fn ($page) => $page
+            ->component('Admin/Reports/Sla', shouldExist: false)
+            ->where('qualification_metrics.overdue_qualifications', 1)
+            ->where('qualification_metrics.active_qualifications_past_deadline', 1)
+            ->where('qualification_metrics.overdue_by_verifier.0.name', $assignedVerifier->name)
+            ->where('qualification_metrics.overdue_by_verifier.0.count', 1)
+        );
+    }
+}

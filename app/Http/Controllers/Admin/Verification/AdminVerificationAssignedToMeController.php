@@ -29,6 +29,7 @@ class AdminVerificationAssignedToMeController extends Controller
                 'verification_state' => $q->verification_state?->value ?? (string) $q->verification_state,
                 'qualification_title' => $q->title_of_qualification,
                 'qualification_type' => $q->qualificationTypeMaster?->name,
+                'service_deadline_at' => optional($q->service_deadline_at ?? $q->application?->service_deadline_at)?->toIso8601String(),
                 'updated_at' => optional($q->updated_at)?->toIso8601String(),
                 'application' => [
                     'id' => $q->application?->id,

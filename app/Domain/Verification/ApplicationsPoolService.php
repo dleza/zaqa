@@ -5,6 +5,7 @@ namespace App\Domain\Verification;
 use App\Enums\ApplicationStatus;
 use App\Models\Application;
 use App\Models\User;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -180,7 +181,7 @@ class ApplicationsPoolService
             ->when($submittedFrom !== '', fn ($q) => $q->whereDate('applications.submitted_at', '>=', $submittedFrom))
             ->when($submittedTo !== '', fn ($q) => $q->whereDate('applications.submitted_at', '<=', $submittedTo))
             ->when($qualificationQ !== '', fn ($q) => $q->where('qualifications.title_of_qualification', 'like', '%'.$qualificationQ.'%'))
-            ->when(in_array($overdueDays, [30, 60, 90], true), fn ($q) => $q->whereNotNull('applications.service_deadline_at')->where('applications.service_deadline_at', '<', now()->subDays($overdueDays)))
+            ->when(in_array($overdueDays, [30, 60, 90], true), fn ($q) => $this->applyJoinedQualificationOverdueCutoff($q, now()->subDays($overdueDays)))
             ->groupBy('qualifications.country_id', 'countries.name')
             ->orderByDesc(DB::raw('count(*)'))
             ->get([
@@ -231,7 +232,7 @@ class ApplicationsPoolService
             ->when($submittedFrom !== '', fn ($q) => $q->whereDate('applications.submitted_at', '>=', $submittedFrom))
             ->when($submittedTo !== '', fn ($q) => $q->whereDate('applications.submitted_at', '<=', $submittedTo))
             ->when($qualificationQ !== '', fn ($q) => $q->where('qualifications.title_of_qualification', 'like', '%'.$qualificationQ.'%'))
-            ->when(in_array($overdueDays, [30, 60, 90], true), fn ($q) => $q->whereNotNull('applications.service_deadline_at')->where('applications.service_deadline_at', '<', now()->subDays($overdueDays)))
+            ->when(in_array($overdueDays, [30, 60, 90], true), fn ($q) => $this->applyJoinedQualificationOverdueCutoff($q, now()->subDays($overdueDays)))
             ->groupBy('qualifications.awarding_institution_id', 'awarding_institutions.name', 'qualifications.awarding_institution_name_other')
             ->orderByDesc(DB::raw('count(*)'))
             ->get([
@@ -263,5 +264,27 @@ class ApplicationsPoolService
             ->sortByDesc('count')
             ->values()
             ->all();
+    }
+
+    private function applyJoinedQualificationOverdueCutoff(Builder $query, \Illuminate\Support\Carbon $cutoff): void
+    {
+        $query
+            ->where(function (Builder $states) {
+                $states->whereNull('qualifications.verification_state')
+                    ->orWhereNotIn('qualifications.verification_state', QualificationSlaService::CLOSED_QUALIFICATION_STATES);
+            })
+            ->whereNotIn('applications.current_status', QualificationSlaService::CLOSED_APPLICATION_STATUSES)
+            ->where(function (Builder $deadline) use ($cutoff) {
+                $deadline
+                    ->where(function (Builder $direct) use ($cutoff) {
+                        $direct->whereNotNull('qualifications.service_deadline_at')
+                            ->where('qualifications.service_deadline_at', '<', $cutoff);
+                    })
+                    ->orWhere(function (Builder $fallback) use ($cutoff) {
+                        $fallback->whereNull('qualifications.service_deadline_at')
+                            ->whereNotNull('applications.service_deadline_at')
+                            ->where('applications.service_deadline_at', '<', $cutoff);
+                    });
+            });
     }
 }

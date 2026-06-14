@@ -345,29 +345,44 @@ onBeforeUnmount(() => {
   if (slaTick) window.clearInterval(slaTick)
 })
 
-/** Parent application payload for SLA (same fields as application admin show). */
+/** Parent application payload remains for context; SLA timing is qualification-scoped. */
 const slaApplication = computed(() => props.qualification?.application ?? {})
 
-const submittedAt = computed(
-  () => parseIso(slaApplication.value.submitted_at) ?? parseIso(slaApplication.value.created_at),
+const slaStartedAt = computed(
+  () =>
+    parseIso(props.qualification?.service_started_at) ??
+    parseIso(slaApplication.value.submitted_at) ??
+    parseIso(slaApplication.value.created_at),
 )
-const deadlineAt = computed(() => parseIso(slaApplication.value.service_deadline_at))
+const deadlineAt = computed(
+  () =>
+    parseIso(props.qualification?.service_deadline_at) ??
+    parseIso(slaApplication.value.service_deadline_at),
+)
 /** Latest Level 1 assignment event on this qualification task (sorted newest first). */
 const latestAssignmentAt = computed(() => parseIso(props.qualification.assignments?.[0]?.assigned_at))
 
-/** Matches backend SlaService: no live countdown after terminal outcomes. */
-function isTerminalForServiceSla(app: Record<string, unknown>): boolean {
+function isClosedForServiceSla(qualification: Record<string, unknown>, app: Record<string, unknown>): boolean {
+  const qState = (qualification.verification_state ?? '').toString()
+  if (
+    ['returned_to_applicant', 'approved_for_certificate', 'rejected', 'certificate_issued', 'closed'].includes(
+      qState,
+    )
+  ) {
+    return true
+  }
+
   if (app.completed_at) return true
-  const vs = (app.verification_state ?? '').toString()
-  if (['certificate_issued', 'closed', 'rejected'].includes(vs)) return true
   const cs = (app.current_status ?? '').toString()
   if (['rejected', 'certificate_ready', 'completed'].includes(cs)) return true
   return false
 }
 
-const slaClockActive = computed(() => !isTerminalForServiceSla(slaApplication.value as Record<string, unknown>))
+const slaClockActive = computed(
+  () => !isClosedForServiceSla(props.qualification ?? {}, slaApplication.value as Record<string, unknown>),
+)
 
-const ageMs = computed(() => (submittedAt.value ? nowMs.value - submittedAt.value.getTime() : null))
+const ageMs = computed(() => (slaStartedAt.value ? nowMs.value - slaStartedAt.value.getTime() : null))
 const sinceAssignedMs = computed(() =>
   latestAssignmentAt.value ? nowMs.value - latestAssignmentAt.value.getTime() : null,
 )
@@ -379,10 +394,10 @@ const displayOverdueByMs = computed(() => (displayIsOverdue.value ? Math.abs(dis
 
 const slaProgressPct = computed(() => {
   if (!slaClockActive.value) return null
-  if (!submittedAt.value || !deadlineAt.value) return null
-  const total = deadlineAt.value.getTime() - submittedAt.value.getTime()
+  if (!slaStartedAt.value || !deadlineAt.value) return null
+  const total = deadlineAt.value.getTime() - slaStartedAt.value.getTime()
   if (total <= 0) return 100
-  const elapsed = nowMs.value - submittedAt.value.getTime()
+  const elapsed = nowMs.value - slaStartedAt.value.getTime()
   return Math.max(0, Math.min(100, Math.round((elapsed / total) * 100)))
 })
 
@@ -1320,9 +1335,9 @@ function formatTimelineAt(iso: string | null | undefined) {
           <section class="rounded-2xl border border-border bg-surface p-6 shadow-sm">
             <div class="flex items-start justify-between gap-4">
               <div>
-                <div class="text-sm font-semibold text-text-primary">Operational snapshot</div>
+                <div class="text-sm font-semibold text-text-primary">Qualification SLA snapshot</div>
                 <div class="mt-1 text-xs text-text-muted">
-                  Parent application SLA window; assignment timing is for this qualification task.
+                  This countdown follows the qualification task itself; the parent application is shown for context only.
                 </div>
               </div>
               <div class="text-right">
@@ -1349,12 +1364,12 @@ function formatTimelineAt(iso: string | null | undefined) {
             <div class="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
               <div class="rounded-xl border border-border bg-surface-muted p-4">
                 <div class="flex items-center justify-between">
-                  <div class="text-xs font-semibold uppercase tracking-wider text-text-muted">Application age</div>
+                  <div class="text-xs font-semibold uppercase tracking-wider text-text-muted">Qualification SLA age</div>
                   <Clock class="h-4 w-4 text-text-muted" aria-hidden="true" />
                 </div>
                 <div class="mt-2 text-lg font-semibold text-text-primary">{{ formatDuration(ageMs) }}</div>
                 <div class="mt-1 text-xs text-text-muted">
-                  Since {{ submittedAt ? submittedAt.toLocaleString() : '—' }}
+                  Since {{ slaStartedAt ? slaStartedAt.toLocaleString() : '—' }}
                 </div>
               </div>
 
@@ -1386,7 +1401,7 @@ function formatTimelineAt(iso: string | null | undefined) {
               </div>
             </div>
             <p v-else-if="deadlineAt && !slaClockActive" class="mt-4 text-xs text-text-muted">
-              Service target window is closed for this application; countdown and progress are not shown.
+              Service target window is closed for this qualification; countdown and progress are not shown.
             </p>
           </section>
 

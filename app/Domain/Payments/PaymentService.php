@@ -7,6 +7,7 @@ use App\Domain\Applications\ApplicationSubmissionReadinessService;
 use App\Domain\Audit\AuditLogService;
 use App\Domain\Finance\Events\PaymentProofSubmitted;
 use App\Domain\Tracking\ApplicationLifecycleService;
+use App\Enums\ApplicationStatus;
 use App\Enums\InvoiceStatus;
 use App\Enums\LifecycleStage;
 use App\Enums\LifecycleVisibility;
@@ -701,6 +702,13 @@ class PaymentService
         $this->submissionReadiness->assertReadyForPayment($application, $actor);
 
         return DB::transaction(function () use ($payment, $actor, $comment) {
+            $payment = Payment::query()
+                ->with(['application', 'invoice'])
+                ->lockForUpdate()
+                ->findOrFail($payment->id);
+
+            $before = $this->paymentAuditSnapshot($payment);
+
             $payment->forceFill([
                 'status' => PaymentStatus::Confirmed,
                 'confirmed_at' => now(),
@@ -711,6 +719,8 @@ class PaymentService
             ])->save();
 
             $this->markApplicationPaid($payment, $actor);
+            $payment->refresh()->loadMissing(['application', 'invoice']);
+            $after = $this->paymentAuditSnapshot($payment);
 
             $this->audit->record(
                 eventType: 'finance.payment_approved',
@@ -719,8 +729,12 @@ class PaymentService
                 message: 'Manual payment approved by finance.',
                 entityType: Payment::class,
                 entityId: $payment->id,
+                beforeState: $before,
+                afterState: $after,
                 metadata: [
                     'application_id' => $payment->application_id,
+                    'invoice_id' => $payment->invoice_id,
+                    'comment' => $comment,
                 ],
                 actor: $actor,
             );
@@ -754,6 +768,13 @@ class PaymentService
         }
 
         return DB::transaction(function () use ($payment, $actor, $reason) {
+            $payment = Payment::query()
+                ->with(['application', 'invoice'])
+                ->lockForUpdate()
+                ->findOrFail($payment->id);
+
+            $before = $this->paymentAuditSnapshot($payment);
+
             $payment->forceFill([
                 'status' => PaymentStatus::Rejected,
                 'rejected_at' => now(),
@@ -762,6 +783,8 @@ class PaymentService
                 'rejection_reason' => $reason,
                 'last_status_at' => now(),
             ])->save();
+            $payment->refresh()->loadMissing(['application', 'invoice']);
+            $after = $this->paymentAuditSnapshot($payment);
 
             $this->audit->record(
                 eventType: 'finance.payment_rejected',
@@ -770,8 +793,12 @@ class PaymentService
                 message: 'Manual payment rejected by finance.',
                 entityType: Payment::class,
                 entityId: $payment->id,
+                beforeState: $before,
+                afterState: $after,
                 metadata: [
                     'application_id' => $payment->application_id,
+                    'invoice_id' => $payment->invoice_id,
+                    'reason' => $reason,
                 ],
                 actor: $actor,
             );
@@ -789,6 +816,145 @@ class PaymentService
                 metadata: [
                     'payment_id' => $payment->id,
                     'reason' => $reason,
+                ],
+                occurredAt: now(),
+            );
+
+            return $payment;
+        });
+    }
+
+    public function financeCorrect(
+        Payment $payment,
+        PaymentStatus $targetStatus,
+        User $actor,
+        string $note,
+        ?string $providerTransactionId = null,
+    ): Payment {
+        $note = trim($note);
+        if ($note === '') {
+            throw ValidationException::withMessages([
+                'note' => 'A correction note is required.',
+            ]);
+        }
+
+        return DB::transaction(function () use ($payment, $targetStatus, $actor, $note, $providerTransactionId) {
+            $payment = Payment::query()
+                ->with(['application', 'invoice'])
+                ->lockForUpdate()
+                ->findOrFail($payment->id);
+
+            $application = $payment->application()->firstOrFail();
+            if ($targetStatus === PaymentStatus::Confirmed) {
+                $this->submissionReadiness->assertReadyForPayment($application, $actor);
+            }
+
+            $this->assertFinanceCorrectionAllowed($payment, $targetStatus);
+
+            $normalizedProviderTransactionId = $providerTransactionId !== null
+                ? trim($providerTransactionId)
+                : null;
+            if ($targetStatus === PaymentStatus::Confirmed && $normalizedProviderTransactionId === null) {
+                throw ValidationException::withMessages([
+                    'provider_transaction_id' => 'Provider transaction ID is required when confirming a payment.',
+                ]);
+            }
+
+            $statusChanged = $payment->status !== $targetStatus;
+            $providerTransactionChanged = $normalizedProviderTransactionId !== null
+                && $normalizedProviderTransactionId !== (string) ($payment->provider_transaction_id ?? '');
+            $requiresConfirmedStateSync = $targetStatus === PaymentStatus::Confirmed
+                && $this->confirmedPaymentNeedsStateSync($payment);
+
+            if (! $statusChanged && ! $providerTransactionChanged && ! $requiresConfirmedStateSync) {
+                throw ValidationException::withMessages([
+                    'payment' => 'Change the status or transaction ID before saving a correction.',
+                ]);
+            }
+
+            $before = $this->paymentAuditSnapshot($payment);
+
+            $updates = [
+                'status' => $targetStatus,
+                'last_status_at' => now(),
+            ];
+
+            if ($normalizedProviderTransactionId !== null) {
+                $updates['provider_transaction_id'] = $normalizedProviderTransactionId;
+            }
+
+            if ($targetStatus === PaymentStatus::Confirmed) {
+                $updates['confirmed_at'] = $payment->confirmed_at ?? now();
+                $updates['rejection_reason'] = null;
+            } elseif ($targetStatus === PaymentStatus::Rejected) {
+                $updates['rejected_at'] = $payment->rejected_at ?? now();
+            } elseif ($targetStatus === PaymentStatus::Failed) {
+                $updates['failed_at'] = $payment->failed_at ?? now();
+                $updates['rejection_reason'] = null;
+            } elseif ($targetStatus === PaymentStatus::Expired) {
+                $updates['expires_at'] = $payment->expires_at ?? now();
+                $updates['rejection_reason'] = null;
+            } elseif ($targetStatus === PaymentStatus::PendingConfirmation) {
+                $updates['rejection_reason'] = null;
+            }
+
+            $payment->forceFill($updates)->save();
+
+            if ($targetStatus === PaymentStatus::Confirmed) {
+                $this->markApplicationPaid($payment, $actor);
+            }
+
+            $payment->refresh()->loadMissing(['application', 'invoice']);
+            $after = $this->paymentAuditSnapshot($payment);
+
+            $this->audit->record(
+                eventType: 'finance.payment_corrected',
+                module: 'Finance',
+                actionName: 'payment_corrected',
+                message: $statusChanged
+                    ? 'Finance manually corrected a payment status.'
+                    : ($providerTransactionChanged
+                        ? 'Finance manually corrected a payment reference.'
+                        : 'Finance manually synchronized a confirmed payment.'),
+                entityType: Payment::class,
+                entityId: $payment->id,
+                beforeState: $before,
+                afterState: $after,
+                metadata: [
+                    'application_id' => $payment->application_id,
+                    'invoice_id' => $payment->invoice_id,
+                    'note' => $note,
+                    'from_status' => $before['status'] ?? null,
+                    'to_status' => $after['status'] ?? null,
+                    'status_changed' => $statusChanged,
+                    'provider_transaction_id_changed' => $providerTransactionChanged,
+                    'application_sync_performed' => $requiresConfirmedStateSync,
+                ],
+                actor: $actor,
+            );
+
+            $this->lifecycle->event(
+                application: $payment->application()->firstOrFail(),
+                eventType: 'finance',
+                eventCodeBase: 'payment.finance_corrected.p'.$payment->id,
+                stage: LifecycleStage::Payment,
+                title: $statusChanged ? 'Payment manually corrected' : 'Payment reference corrected',
+                description: $statusChanged
+                    ? 'Finance manually corrected the recorded payment status.'
+                    : ($providerTransactionChanged
+                        ? 'Finance manually corrected the recorded transaction reference.'
+                        : 'Finance manually synchronized the application after confirmed payment.'),
+                visibility: LifecycleVisibility::Internal,
+                actor: $actor,
+                comment: $note,
+                metadata: [
+                    'payment_id' => $payment->id,
+                    'from_status' => $before['status'] ?? null,
+                    'to_status' => $after['status'] ?? null,
+                    'provider_transaction_id' => $payment->provider_transaction_id,
+                    'status_changed' => $statusChanged,
+                    'provider_transaction_id_changed' => $providerTransactionChanged,
+                    'application_sync_performed' => $requiresConfirmedStateSync,
                 ],
                 occurredAt: now(),
             );
@@ -1004,6 +1170,91 @@ class PaymentService
 
         // Payment satisfaction is the submission trigger (idempotent).
         $this->autoSubmission->submitAfterPaymentSatisfied($application, $payment, $actor);
+    }
+
+    private function assertFinanceCorrectionAllowed(Payment $payment, PaymentStatus $targetStatus): void
+    {
+        if ($payment->status === PaymentStatus::AwaitingFinanceReview) {
+            throw ValidationException::withMessages([
+                'status' => 'Use the payment proof review workflow while this payment is awaiting finance review.',
+            ]);
+        }
+
+        if ($payment->status === PaymentStatus::Confirmed && $targetStatus !== PaymentStatus::Confirmed) {
+            throw ValidationException::withMessages([
+                'status' => 'Confirmed payments cannot be manually changed back to another status.',
+            ]);
+        }
+
+        if (! in_array($targetStatus, $this->manualCorrectionAllowedTargetStatuses($payment), true)) {
+            throw ValidationException::withMessages([
+                'status' => 'This payment cannot be corrected to the selected status.',
+            ]);
+        }
+    }
+
+    /**
+     * @return array<int, PaymentStatus>
+     */
+    private function manualCorrectionAllowedTargetStatuses(Payment $payment): array
+    {
+        if ($payment->status === PaymentStatus::AwaitingFinanceReview) {
+            return [];
+        }
+
+        if ($payment->status === PaymentStatus::Confirmed) {
+            return [PaymentStatus::Confirmed];
+        }
+
+        return [
+            PaymentStatus::PendingConfirmation,
+            PaymentStatus::Confirmed,
+            PaymentStatus::Rejected,
+            PaymentStatus::Failed,
+            PaymentStatus::Expired,
+        ];
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function paymentAuditSnapshot(Payment $payment): array
+    {
+        $payment->loadMissing(['application', 'invoice']);
+
+        return [
+            'status' => $payment->status?->value ?? (string) $payment->status,
+            'provider_reference' => $payment->provider_reference,
+            'provider_transaction_id' => $payment->provider_transaction_id,
+            'reviewed_by_user_id' => $payment->reviewed_by_user_id,
+            'reviewed_at' => optional($payment->reviewed_at)?->toIso8601String(),
+            'review_comment' => $payment->review_comment,
+            'rejection_reason' => $payment->rejection_reason,
+            'initiated_at' => optional($payment->initiated_at)?->toIso8601String(),
+            'confirmed_at' => optional($payment->confirmed_at)?->toIso8601String(),
+            'failed_at' => optional($payment->failed_at)?->toIso8601String(),
+            'rejected_at' => optional($payment->rejected_at)?->toIso8601String(),
+            'expires_at' => optional($payment->expires_at)?->toIso8601String(),
+            'last_status_at' => optional($payment->last_status_at)?->toIso8601String(),
+            'invoice_status' => $payment->invoice?->status?->value ?? (string) ($payment->invoice?->status ?? ''),
+            'invoice_paid_at' => optional($payment->invoice?->paid_at)?->toIso8601String(),
+            'application_paid_at' => optional($payment->application?->paid_at)?->toIso8601String(),
+            'application_status' => $payment->application?->current_status?->value ?? (string) ($payment->application?->current_status ?? ''),
+        ];
+    }
+
+    private function confirmedPaymentNeedsStateSync(Payment $payment): bool
+    {
+        $payment->loadMissing(['application', 'invoice']);
+
+        $application = $payment->application;
+        $invoice = $payment->invoice;
+        $applicationStatus = $application?->current_status;
+
+        return ! $application?->submitted_at
+            || $applicationStatus !== ApplicationStatus::Submitted
+            || ! $application?->paid_at
+            || ($invoice !== null && $invoice->status !== InvoiceStatus::Paid);
     }
 
     private function assertApplicationNotLockedByPendingProofReview(Application $application, ?Payment $ignoringPayment = null): void

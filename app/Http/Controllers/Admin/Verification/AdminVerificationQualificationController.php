@@ -127,6 +127,11 @@ class AdminVerificationQualificationController extends Controller
             ? 'No linked awarding institution for this qualification.'
             : null;
         $certificateTemplate = $certificateService->describeTemplate($qualification);
+        $qualificationServiceStartedAt = $qualification->service_started_at
+            ?? $qualification->application?->submitted_at
+            ?? $qualification->application?->created_at;
+        $qualificationServiceDeadlineAt = $qualification->service_deadline_at
+            ?? $qualification->application?->service_deadline_at;
 
         return Inertia::render('Admin/Verification/Qualifications/Show', [
             'qualification' => [
@@ -140,6 +145,8 @@ class AdminVerificationQualificationController extends Controller
                 'assigned_at' => optional($qualification->assigned_at)?->toIso8601String(),
                 'returned_to_applicant_at' => optional($qualification->returned_to_applicant_at)?->toIso8601String(),
                 'reviewed_at' => optional($qualification->reviewed_at)?->toIso8601String(),
+                'service_started_at' => optional($qualificationServiceStartedAt)?->toIso8601String(),
+                'service_deadline_at' => optional($qualificationServiceDeadlineAt)?->toIso8601String(),
                 'reviewer_notes' => $qualification->reviewer_notes,
                 'fee_currency' => $qualification->fee_currency,
                 'fee_amount_cents' => $qualification->fee_amount_cents,

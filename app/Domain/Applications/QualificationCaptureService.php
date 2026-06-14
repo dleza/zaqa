@@ -4,6 +4,7 @@ namespace App\Domain\Applications;
 
 use App\Domain\Audit\AuditLogService;
 use App\Domain\Tracking\ApplicationLifecycleService;
+use App\Domain\Verification\QualificationSlaService;
 use App\Enums\LifecycleStage;
 use App\Enums\LifecycleVisibility;
 use App\Enums\VerificationState;
@@ -23,6 +24,7 @@ class QualificationCaptureService
     public function __construct(
         private readonly AuditLogService $audit,
         private readonly ApplicationLifecycleService $lifecycle,
+        private readonly QualificationSlaService $qualificationSla,
     ) {}
 
     /**
@@ -222,6 +224,11 @@ class QualificationCaptureService
                 'is_foreign' => (bool) $application->qualifications->contains(fn (Qualification $q) => (bool) $q->is_foreign_qualification),
             ])->save();
 
+            if ($qualification->service_started_at) {
+                $this->qualificationSla->applyQualificationSla($qualification, $qualification->service_started_at);
+                $this->qualificationSla->syncApplicationAggregateDeadline($application);
+            }
+
             if ($feeImpactingAmendmentNote !== null) {
                 $this->mergeApplicationPendingInvoiceAmendmentReason($application, $feeImpactingAmendmentNote);
             }
@@ -285,6 +292,10 @@ class QualificationCaptureService
                 'level2_review_owner_id' => null,
             ])->save();
         }
+
+        $startedAt = now();
+        $this->qualificationSla->applyQualificationSla($qualification, $startedAt);
+        $this->qualificationSla->syncApplicationAggregateDeadline($application);
 
         $this->lifecycle->event(
             application: $application,

@@ -6,6 +6,7 @@ use App\Domain\Applications\Events\ApplicationSubmitted;
 use App\Domain\Audit\AuditLogService;
 use App\Domain\Payments\ApplicationPaymentSatisfaction;
 use App\Domain\Tracking\ApplicationLifecycleService;
+use App\Domain\Verification\QualificationSlaService;
 use App\Enums\ApplicationStatus;
 use App\Enums\LifecycleStage;
 use App\Enums\LifecycleVisibility;
@@ -32,6 +33,7 @@ class ApplicationAutoSubmissionService
         private readonly AuditLogService $audit,
         private readonly ApplicationLifecycleService $lifecycle,
         private readonly ApplicationPaymentSatisfaction $paymentSatisfaction,
+        private readonly QualificationSlaService $qualificationSla,
     ) {}
 
     public function submitAfterPaymentSatisfied(Application $application, ?Payment $payment = null, ?User $actor = null): Application
@@ -72,7 +74,6 @@ class ApplicationAutoSubmissionService
                 'current_status' => $toStatus,
                 'verification_state' => VerificationState::AwaitingAutoVerification,
                 'submitted_at' => $now,
-                'service_deadline_at' => $application->service_deadline_at ?? $now->copy()->addDays($application->is_foreign ? 60 : 14),
                 'assigned_level1_user_id' => null,
                 'assigned_by_level2_user_id' => null,
             ])->save();
@@ -90,6 +91,25 @@ class ApplicationAutoSubmissionService
                     'invoice_id' => $payment?->invoice_id ?? $application->invoice?->id,
                 ],
             ]);
+
+            $this->assignVerificationReferenceNumbers($application);
+
+            $application->loadMissing('qualifications');
+            foreach ($application->qualifications as $qualification) {
+                /** @var Qualification $qualification */
+                if ($qualification->verification_state === null || $qualification->verification_state === VerificationState::AwaitingAssignment) {
+                    $qualification->forceFill([
+                        'verification_state' => VerificationState::AwaitingAutoVerification,
+                        'returned_to_applicant_at' => null,
+                    ])->save();
+                }
+            }
+
+            $this->qualificationSla->applyApplicationSla(
+                application: $application,
+                startedAt: $now,
+            );
+            $application->refresh();
 
             $after = [
                 'current_status' => $application->current_status?->value ?? (string) $application->current_status,
@@ -133,19 +153,6 @@ class ApplicationAutoSubmissionService
                 ],
                 occurredAt: $now,
             );
-
-            $this->assignVerificationReferenceNumbers($application);
-
-            $application->loadMissing('qualifications');
-            foreach ($application->qualifications as $qualification) {
-                /** @var Qualification $qualification */
-                if ($qualification->verification_state === null || $qualification->verification_state === VerificationState::AwaitingAssignment) {
-                    $qualification->forceFill([
-                        'verification_state' => VerificationState::AwaitingAutoVerification,
-                        'returned_to_applicant_at' => null,
-                    ])->save();
-                }
-            }
 
             $application->loadMissing('applicant');
             $notifyApplicant = $application->applicant;

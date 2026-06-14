@@ -254,4 +254,54 @@ class AutoVerifiedQualificationReviewPagePayloadTest extends TestCase
             ->where('qualification.subject_results.1.grade', '2')
         );
     }
+
+    public function test_review_page_exposes_qualification_sla_with_application_fallback(): void
+    {
+        $this->seed(BillingCategoriesSeeder::class);
+        $this->seed(QualificationTypesSeeder::class);
+        $this->seed(FeeStructuresSeeder::class);
+        $this->seed(RolesAndPermissionsSeeder::class);
+
+        $level2 = User::factory()->activated()->create(['applicant_type' => null]);
+        $level2->assignRole('Verification Officer Level 2');
+        $this->actingAs($level2);
+
+        $type = QualificationType::query()->where('zqf_level_code', 'L6')->firstOrFail();
+
+        $application = Application::query()->create([
+            'uuid' => (string) Str::uuid(),
+            'application_number' => 'ZAQA-VER-'.rand(1000, 9999),
+            'applicant_user_id' => $level2->id,
+            'applicant_type' => 'individual',
+            'service_type' => 'verification',
+            'qualification_category' => 'diploma',
+            'current_status' => 'submitted',
+            'verification_state' => VerificationState::UnderLevel1Review,
+            'is_foreign' => false,
+            'metadata' => ['verification_subject' => ['full_name' => 'Jane Doe']],
+            'submitted_at' => now()->subDays(2),
+            'service_deadline_at' => now()->addDays(12),
+        ]);
+
+        $qualification = Qualification::query()->create([
+            'application_id' => $application->id,
+            'awarding_institution_name' => 'Fallback Test Institute',
+            'qualification_holder_name' => 'Jane Doe',
+            'nrc_passport_number' => '111111/11/1',
+            'title_of_qualification' => 'Diploma in Testing',
+            'award_date' => '2024-01-10',
+            'qualification_type' => $type->zqf_level_code,
+            'qualification_type_id' => $type->id,
+            'is_foreign_qualification' => false,
+            'verification_state' => VerificationState::UnderLevel1Review,
+        ]);
+
+        $res = $this->get("/admin/verification/qualifications/{$qualification->id}");
+        $res->assertOk();
+        $res->assertInertia(fn ($page) => $page
+            ->component('Admin/Verification/Qualifications/Show')
+            ->where('qualification.service_started_at', $application->submitted_at?->toIso8601String())
+            ->where('qualification.service_deadline_at', $application->service_deadline_at?->toIso8601String())
+        );
+    }
 }

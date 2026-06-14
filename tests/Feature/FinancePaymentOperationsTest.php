@@ -20,6 +20,7 @@ use App\Mail\Finance\PaymentProofApprovedMail;
 use App\Mail\Finance\PaymentProofRejectedMail;
 use App\Models\ApplicantProfile;
 use App\Models\Application;
+use App\Models\AuditLog;
 use App\Models\Invoice;
 use App\Models\Payment;
 use App\Models\Qualification;
@@ -38,6 +39,7 @@ use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
+use Inertia\Testing\AssertableInertia as Assert;
 use Tests\TestCase;
 
 class FinancePaymentOperationsTest extends TestCase
@@ -166,6 +168,22 @@ class FinancePaymentOperationsTest extends TestCase
         return [$applicant, $application, $invoice, $payment];
     }
 
+    private function createPaymentForInvoice(Application $application, Invoice $invoice, PaymentStatus $status, array $overrides = []): Payment
+    {
+        return Payment::query()->create(array_merge([
+            'application_id' => $application->id,
+            'invoice_id' => $invoice->id,
+            'method' => PaymentMethod::Card,
+            'status' => $status,
+            'currency' => 'ZMW',
+            'amount_cents' => (int) $invoice->amount_cents,
+            'provider' => 'test',
+            'provider_reference' => 'REF-'.Str::upper(Str::random(8)),
+            'initiated_at' => now()->subMinutes(5),
+            'last_status_at' => now()->subMinutes(5),
+        ], $overrides));
+    }
+
     public function test_finance_user_can_view_payment_proof_queue(): void
     {
         [, , , $payment] = $this->makeManualProofPayment();
@@ -208,6 +226,275 @@ class FinancePaymentOperationsTest extends TestCase
         $reviews->approve($payment, $finance, 'Second click');
         $payment->refresh();
         $this->assertSame(PaymentStatus::Confirmed, $payment->status);
+    }
+
+    public function test_finance_payment_detail_includes_navigation_links_to_applicant_and_qualification(): void
+    {
+        [$applicant, $application, $invoice, $qualification] = $this->makePaymentReadyApplication();
+        $payment = $this->createPaymentForInvoice($application, $invoice, PaymentStatus::Failed, [
+            'failed_at' => now()->subMinute(),
+        ]);
+
+        $finance = User::factory()->activated()->create(['applicant_type' => null]);
+        $finance->assignRole('Finance Officer');
+
+        $this->actingAs($finance)
+            ->get("/admin/finance/payments/{$payment->id}")
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->component('Admin/Finance/Payments/Show')
+                ->where('can.view_applicant', true)
+                ->where('can.view_qualifications', true)
+                ->where('navigation.applicant.href', route('admin.applicants.show', ['user' => $applicant->id]))
+                ->has('navigation.qualifications', 1)
+                ->where('navigation.qualifications.0.id', $qualification->id)
+                ->where('navigation.qualifications.0.href', route('admin.verification.qualifications.show', ['qualification' => $qualification->id]))
+            );
+
+        $this->actingAs($finance)->get("/admin/applicants/{$applicant->id}")->assertOk();
+        $this->actingAs($finance)->get("/admin/verification/qualifications/{$qualification->id}")->assertOk();
+    }
+
+    public function test_finance_can_correct_failed_payment_to_confirmed_and_update_transaction_id(): void
+    {
+        Queue::fake();
+
+        [, $application, $invoice] = $this->makePaymentReadyApplication();
+        $payment = $this->createPaymentForInvoice($application, $invoice, PaymentStatus::Failed, [
+            'failed_at' => now()->subMinutes(2),
+            'provider_transaction_id' => 'TX-OLD-001',
+        ]);
+
+        $finance = User::factory()->activated()->create(['applicant_type' => null]);
+        $finance->assignRole('Finance Officer');
+
+        $this->actingAs($finance)
+            ->from("/admin/finance/payments/{$payment->id}")
+            ->post("/admin/finance/payments/{$payment->id}/correct", [
+                'status' => PaymentStatus::Confirmed->value,
+                'note' => 'Gateway callback was delayed; confirming after reconciliation.',
+                'provider_transaction_id' => 'TX-NEW-999',
+            ])
+            ->assertRedirect("/admin/finance/payments/{$payment->id}")
+            ->assertSessionHas('success');
+
+        $payment->refresh();
+        $invoice->refresh();
+        $application->refresh();
+
+        $this->assertSame(PaymentStatus::Confirmed, $payment->status);
+        $this->assertSame('TX-NEW-999', $payment->provider_transaction_id);
+        $this->assertNotNull($payment->confirmed_at);
+        $this->assertSame(InvoiceStatus::Paid, $invoice->status);
+        $this->assertSame(ApplicationStatus::Submitted, $application->current_status);
+        $this->assertNotNull($application->submitted_at);
+
+        Queue::assertPushed(ProcessQualificationAutoVerificationJob::class);
+
+        $log = AuditLog::query()
+            ->where('event_type', 'finance.payment_corrected')
+            ->where('entity_type', Payment::class)
+            ->where('entity_id', $payment->id)
+            ->latest('id')
+            ->first();
+
+        $this->assertNotNull($log);
+        $this->assertSame('failed', data_get($log?->before_state, 'status'));
+        $this->assertSame('confirmed', data_get($log?->after_state, 'status'));
+        $this->assertSame('Gateway callback was delayed; confirming after reconciliation.', data_get($log?->metadata, 'note'));
+    }
+
+    public function test_finance_can_correct_confirmed_payment_transaction_id_without_changing_status(): void
+    {
+        [, $application, $invoice] = $this->makePaymentReadyApplication();
+
+        $application->forceFill([
+            'current_status' => ApplicationStatus::Submitted,
+            'submitted_at' => now()->subMinute(),
+            'paid_at' => now()->subMinute(),
+        ])->save();
+
+        $invoice->forceFill([
+            'status' => InvoiceStatus::Paid,
+            'paid_at' => now()->subMinute(),
+        ])->save();
+
+        $payment = $this->createPaymentForInvoice($application, $invoice, PaymentStatus::Confirmed, [
+            'confirmed_at' => now()->subMinute(),
+            'provider_transaction_id' => 'TX-ORIGINAL',
+        ]);
+
+        $finance = User::factory()->activated()->create(['applicant_type' => null]);
+        $finance->assignRole('Finance Officer');
+
+        $this->actingAs($finance)
+            ->from("/admin/finance/payments/{$payment->id}")
+            ->post("/admin/finance/payments/{$payment->id}/correct", [
+                'status' => PaymentStatus::Confirmed->value,
+                'note' => 'Replacing transaction reference from bank settlement report.',
+                'provider_transaction_id' => 'TX-UPDATED',
+            ])
+            ->assertRedirect("/admin/finance/payments/{$payment->id}")
+            ->assertSessionHas('success');
+
+        $payment->refresh();
+
+        $this->assertSame(PaymentStatus::Confirmed, $payment->status);
+        $this->assertSame('TX-UPDATED', $payment->provider_transaction_id);
+
+        $log = AuditLog::query()
+            ->where('event_type', 'finance.payment_corrected')
+            ->where('entity_type', Payment::class)
+            ->where('entity_id', $payment->id)
+            ->latest('id')
+            ->first();
+
+        $this->assertNotNull($log);
+        $this->assertFalse((bool) data_get($log?->metadata, 'status_changed'));
+        $this->assertTrue((bool) data_get($log?->metadata, 'provider_transaction_id_changed'));
+        $this->assertSame('TX-ORIGINAL', data_get($log?->before_state, 'provider_transaction_id'));
+        $this->assertSame('TX-UPDATED', data_get($log?->after_state, 'provider_transaction_id'));
+    }
+
+    public function test_finance_can_resync_confirmed_payment_to_submit_application_without_changing_transaction_id(): void
+    {
+        Queue::fake();
+
+        [, $application, $invoice] = $this->makePaymentReadyApplication();
+
+        $payment = $this->createPaymentForInvoice($application, $invoice, PaymentStatus::Confirmed, [
+            'confirmed_at' => now()->subMinute(),
+            'provider_transaction_id' => 'TX-SYNC-001',
+        ]);
+
+        $finance = User::factory()->activated()->create(['applicant_type' => null]);
+        $finance->assignRole('Finance Officer');
+
+        $this->actingAs($finance)
+            ->from("/admin/finance/payments/{$payment->id}")
+            ->post("/admin/finance/payments/{$payment->id}/correct", [
+                'status' => PaymentStatus::Confirmed->value,
+                'note' => 'Synchronizing application after confirmed payment.',
+                'provider_transaction_id' => 'TX-SYNC-001',
+            ])
+            ->assertRedirect("/admin/finance/payments/{$payment->id}")
+            ->assertSessionHas('success');
+
+        $payment->refresh();
+        $invoice->refresh();
+        $application->refresh();
+
+        $this->assertSame(PaymentStatus::Confirmed, $payment->status);
+        $this->assertSame('TX-SYNC-001', $payment->provider_transaction_id);
+        $this->assertSame(InvoiceStatus::Paid, $invoice->status);
+        $this->assertSame(ApplicationStatus::Submitted, $application->current_status);
+        $this->assertNotNull($application->submitted_at);
+
+        Queue::assertPushed(ProcessQualificationAutoVerificationJob::class);
+
+        $log = AuditLog::query()
+            ->where('event_type', 'finance.payment_corrected')
+            ->where('entity_type', Payment::class)
+            ->where('entity_id', $payment->id)
+            ->latest('id')
+            ->first();
+
+        $this->assertNotNull($log);
+        $this->assertFalse((bool) data_get($log?->metadata, 'status_changed'));
+        $this->assertFalse((bool) data_get($log?->metadata, 'provider_transaction_id_changed'));
+        $this->assertTrue((bool) data_get($log?->metadata, 'application_sync_performed'));
+    }
+
+    public function test_finance_payment_correction_requires_permission(): void
+    {
+        [, $application, $invoice] = $this->makePaymentReadyApplication();
+        $payment = $this->createPaymentForInvoice($application, $invoice, PaymentStatus::Failed, [
+            'failed_at' => now()->subMinute(),
+        ]);
+
+        $user = User::factory()->activated()->create(['applicant_type' => null]);
+
+        $this->actingAs($user)
+            ->post("/admin/finance/payments/{$payment->id}/correct", [
+                'status' => PaymentStatus::Confirmed->value,
+                'note' => 'Attempted correction without permission.',
+            ])
+            ->assertForbidden();
+    }
+
+    public function test_finance_payment_correction_requires_provider_transaction_id_when_confirming(): void
+    {
+        [, $application, $invoice] = $this->makePaymentReadyApplication();
+        $payment = $this->createPaymentForInvoice($application, $invoice, PaymentStatus::Failed, [
+            'failed_at' => now()->subMinute(),
+        ]);
+
+        $finance = User::factory()->activated()->create(['applicant_type' => null]);
+        $finance->assignRole('Finance Officer');
+
+        $this->actingAs($finance)
+            ->from("/admin/finance/payments/{$payment->id}")
+            ->post("/admin/finance/payments/{$payment->id}/correct", [
+                'status' => PaymentStatus::Confirmed->value,
+                'note' => 'Trying to confirm without a transaction ID.',
+            ])
+            ->assertRedirect("/admin/finance/payments/{$payment->id}")
+            ->assertSessionHasErrors(['provider_transaction_id']);
+
+        $this->assertSame(PaymentStatus::Failed, $payment->fresh()->status);
+    }
+
+    public function test_finance_payment_correction_is_blocked_for_awaiting_finance_review_payments(): void
+    {
+        [, , , $payment] = $this->makeManualProofPayment();
+
+        $finance = User::factory()->activated()->create(['applicant_type' => null]);
+        $finance->assignRole('Finance Officer');
+
+        $this->actingAs($finance)
+            ->from("/admin/finance/payments/{$payment->id}")
+            ->post("/admin/finance/payments/{$payment->id}/correct", [
+                'status' => PaymentStatus::Confirmed->value,
+                'note' => 'Trying to bypass proof review.',
+                'provider_transaction_id' => 'TX-REVIEW-001',
+            ])
+            ->assertRedirect("/admin/finance/payments/{$payment->id}")
+            ->assertSessionHasErrors(['status']);
+    }
+
+    public function test_finance_payment_correction_cannot_reverse_confirmed_payment_to_failed(): void
+    {
+        [, $application, $invoice] = $this->makePaymentReadyApplication();
+
+        $application->forceFill([
+            'current_status' => ApplicationStatus::Submitted,
+            'submitted_at' => now()->subMinute(),
+            'paid_at' => now()->subMinute(),
+        ])->save();
+
+        $invoice->forceFill([
+            'status' => InvoiceStatus::Paid,
+            'paid_at' => now()->subMinute(),
+        ])->save();
+
+        $payment = $this->createPaymentForInvoice($application, $invoice, PaymentStatus::Confirmed, [
+            'confirmed_at' => now()->subMinute(),
+            'provider_transaction_id' => 'TX-CONF-001',
+        ]);
+
+        $finance = User::factory()->activated()->create(['applicant_type' => null]);
+        $finance->assignRole('Finance Officer');
+
+        $this->actingAs($finance)
+            ->from("/admin/finance/payments/{$payment->id}")
+            ->post("/admin/finance/payments/{$payment->id}/correct", [
+                'status' => PaymentStatus::Failed->value,
+                'note' => 'Attempting an invalid reversal.',
+            ])
+            ->assertRedirect("/admin/finance/payments/{$payment->id}")
+            ->assertSessionHasErrors(['status']);
+
+        $this->assertSame(PaymentStatus::Confirmed, $payment->fresh()->status);
     }
 
     public function test_uploading_proof_can_send_bank_transfer_notification_email_to_single_recipient(): void

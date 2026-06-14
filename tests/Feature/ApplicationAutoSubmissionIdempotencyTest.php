@@ -3,11 +3,16 @@
 namespace Tests\Feature;
 
 use App\Domain\Applications\ApplicationAutoSubmissionService;
+use App\Domain\Fees\QualificationFeeResolver;
 use App\Enums\ApplicantType;
 use App\Enums\ApplicationStatus;
+use App\Enums\PaymentMethod;
+use App\Enums\PaymentStatus;
+use App\Enums\VerificationState;
 use App\Models\ApplicantProfile;
 use App\Models\Application;
 use App\Models\Payment;
+use App\Models\Qualification;
 use App\Models\QualificationType;
 use App\Models\User;
 use Database\Seeders\BillingCategoriesSeeder;
@@ -16,8 +21,10 @@ use Database\Seeders\QualificationTypesSeeder;
 use Database\Seeders\RolesAndPermissionsSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 use Tests\TestCase;
 
 class ApplicationAutoSubmissionIdempotencyTest extends TestCase
@@ -128,5 +135,91 @@ class ApplicationAutoSubmissionIdempotencyTest extends TestCase
             ->where('to_status', ApplicationStatus::Submitted->value)
             ->count();
         $this->assertSame(1, $submittedHistoryCount);
+    }
+
+    public function test_auto_submission_sets_per_qualification_sla_and_application_aggregate_deadline_for_mixed_localities(): void
+    {
+        $submittedAt = Carbon::parse('2026-06-14 09:00:00');
+        Carbon::setTestNow($submittedAt);
+
+        try {
+            $applicant = User::factory()->activated()->create([
+                'applicant_type' => ApplicantType::Individual,
+            ]);
+
+            $application = Application::query()->create([
+                'uuid' => (string) Str::uuid(),
+                'application_number' => 'ZAQA-MIXED-SLA-001',
+                'applicant_user_id' => $applicant->id,
+                'applicant_type' => ApplicantType::Individual,
+                'service_type' => 'verification',
+                'qualification_category' => 'diploma',
+                'current_status' => ApplicationStatus::Draft,
+                'verification_state' => null,
+                'is_foreign' => true,
+                'metadata' => [],
+            ]);
+
+            $type = QualificationType::query()->where('zqf_level_code', 'L6')->firstOrFail();
+
+            $localQualification = Qualification::query()->create([
+                'application_id' => $application->id,
+                'awarding_institution_name' => 'Local Institute',
+                'qualification_holder_name' => 'John Doe',
+                'country_name_other' => 'Zambia',
+                'nrc_passport_number' => '111111/11/1',
+                'title_of_qualification' => 'Local Diploma',
+                'award_date' => now()->subYear()->toDateString(),
+                'qualification_type' => $type->zqf_level_code,
+                'qualification_type_id' => $type->id,
+                'is_foreign_qualification' => false,
+                'transcript_required' => false,
+            ]);
+
+            $foreignQualification = Qualification::query()->create([
+                'application_id' => $application->id,
+                'awarding_institution_name' => 'Foreign Institute',
+                'qualification_holder_name' => 'John Doe',
+                'country_name_other' => 'Kenya',
+                'nrc_passport_number' => '111111/11/1',
+                'title_of_qualification' => 'Foreign Diploma',
+                'award_date' => now()->subYear()->toDateString(),
+                'qualification_type' => $type->zqf_level_code,
+                'qualification_type_id' => $type->id,
+                'is_foreign_qualification' => true,
+                'transcript_required' => true,
+            ]);
+
+            $required = app(QualificationFeeResolver::class)->totalVerificationFeesCents($application->fresh('qualifications'));
+            $payment = Payment::query()->create([
+                'application_id' => $application->id,
+                'method' => PaymentMethod::Card,
+                'status' => PaymentStatus::Confirmed,
+                'currency' => 'ZMW',
+                'amount_cents' => $required,
+                'provider' => 'test',
+                'confirmed_at' => $submittedAt,
+            ]);
+
+            app(ApplicationAutoSubmissionService::class)->submitAfterPaymentSatisfied($application, $payment, null);
+
+            $application->refresh();
+            $localQualification->refresh();
+            $foreignQualification->refresh();
+
+            $this->assertSame(ApplicationStatus::Submitted, $application->current_status);
+            $this->assertSame($submittedAt->toIso8601String(), $localQualification->service_started_at?->toIso8601String());
+            $this->assertSame($submittedAt->toIso8601String(), $foreignQualification->service_started_at?->toIso8601String());
+            $this->assertSame($submittedAt->copy()->addDays(14)->toIso8601String(), $localQualification->service_deadline_at?->toIso8601String());
+            $this->assertSame($submittedAt->copy()->addDays(60)->toIso8601String(), $foreignQualification->service_deadline_at?->toIso8601String());
+            $this->assertSame(
+                $foreignQualification->service_deadline_at?->toIso8601String(),
+                $application->service_deadline_at?->toIso8601String(),
+            );
+            $this->assertSame(VerificationState::AwaitingAssignment, $localQualification->verification_state);
+            $this->assertSame(VerificationState::AwaitingAssignment, $foreignQualification->verification_state);
+        } finally {
+            Carbon::setTestNow();
+        }
     }
 }

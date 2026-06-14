@@ -254,6 +254,9 @@ Route::middleware('auth')->group(function () {
             Route::get('/payments/{payment}', [AdminFinancePaymentsController::class, 'show'])
                 ->middleware('can:finance.payments.detail')
                 ->name('payments.show');
+            Route::post('/payments/{payment}/correct', [AdminFinancePaymentsController::class, 'correct'])
+                ->middleware('can:finance.payments.correct')
+                ->name('payments.correct');
 
             Route::get('/documents/{document}/preview', [AdminFinancePaymentProofController::class, 'preview'])
                 ->middleware('can:finance.payment_proofs.view')

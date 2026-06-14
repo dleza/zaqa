@@ -191,5 +191,59 @@ class QualificationsPoolTerminalStatesTest extends TestCase
         $this->assertNotContains($closed->id, $ids);
         $this->assertNotContains($returned->id, $ids);
     }
-}
 
+    public function test_overdue_filter_uses_qualification_deadline_not_parent_application_deadline(): void
+    {
+        $viewer = User::factory()->activated()->create(['applicant_type' => null]);
+
+        $application = $this->makeInProgressApplication();
+        $application->forceFill([
+            'service_deadline_at' => now()->addDays(60),
+        ])->save();
+
+        $overdueQualification = Qualification::query()->create([
+            'application_id' => $application->id,
+            'verification_state' => VerificationState::UnderLevel1Review,
+            'awarding_institution_name' => 'Test',
+            'qualification_holder_name' => 'Local overdue',
+            'country_name_other' => 'Zambia',
+            'nrc_passport_number' => '999999/99/1',
+            'title_of_qualification' => 'Local overdue',
+            'award_date' => now()->subYear()->toDateString(),
+            'qualification_type' => 'L6',
+            'qualification_type_id' => null,
+            'is_foreign_qualification' => false,
+            'transcript_required' => false,
+            'service_started_at' => now()->subDays(20),
+            'service_deadline_at' => now()->subDay(),
+        ]);
+
+        $notOverdueQualification = Qualification::query()->create([
+            'application_id' => $application->id,
+            'verification_state' => VerificationState::UnderLevel1Review,
+            'awarding_institution_name' => 'Test',
+            'qualification_holder_name' => 'Foreign active',
+            'country_name_other' => 'Kenya',
+            'nrc_passport_number' => '999999/99/2',
+            'title_of_qualification' => 'Foreign active',
+            'award_date' => now()->subYear()->toDateString(),
+            'qualification_type' => 'L6',
+            'qualification_type_id' => null,
+            'is_foreign_qualification' => true,
+            'transcript_required' => true,
+            'service_started_at' => now()->subDays(20),
+            'service_deadline_at' => now()->addDays(40),
+        ]);
+
+        $request = Request::create('/admin/verification/pool', 'GET', ['overdue' => '1']);
+        $request->setUserResolver(fn () => $viewer);
+
+        /** @var QualificationsPoolService $pool */
+        $pool = $this->app->make(QualificationsPoolService::class);
+        $rows = $pool->pool($request, $viewer->id)->getCollection();
+        $ids = $rows->pluck('id')->map(fn ($id) => (int) $id)->all();
+
+        $this->assertContains($overdueQualification->id, $ids);
+        $this->assertNotContains($notOverdueQualification->id, $ids);
+    }
+}

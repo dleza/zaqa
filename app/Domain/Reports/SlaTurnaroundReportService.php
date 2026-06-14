@@ -2,7 +2,7 @@
 
 namespace App\Domain\Reports;
 
-use App\Enums\VerificationState;
+use App\Domain\Verification\QualificationSlaService;
 use Illuminate\Database\Query\Builder;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -30,12 +30,15 @@ final class SlaTurnaroundReportService
         $avgSubmitAssign = $this->scalarAvgSeconds(
             DB::table('qualifications as q')
                 ->join('applications as a', 'a.id', '=', 'q.application_id')
-                ->whereNotNull('a.submitted_at')
+                ->where(function ($q) {
+                    $q->whereNotNull('q.service_started_at')
+                        ->orWhereNotNull('a.submitted_at');
+                })
                 ->whereNotNull('q.assigned_at')
                 ->whereBetween('q.assigned_at', [$from, $to]),
             $driver === 'sqlite'
-                ? 'avg(strftime("%s", q.assigned_at) - strftime("%s", a.submitted_at))'
-                : 'avg(timestampdiff(SECOND, a.submitted_at, q.assigned_at))'
+                ? 'avg(strftime("%s", q.assigned_at) - strftime("%s", coalesce(q.service_started_at, a.submitted_at)))'
+                : 'avg(timestampdiff(SECOND, coalesce(q.service_started_at, a.submitted_at), q.assigned_at))'
         );
 
         $avgAssignReview = $this->scalarAvgSeconds(
@@ -58,24 +61,16 @@ final class SlaTurnaroundReportService
                 : 'avg(timestampdiff(SECOND, q.reviewed_at, c.issued_at))'
         );
 
-        $terminalStates = [
-            VerificationState::CertificateIssued->value,
-            VerificationState::Rejected->value,
-            VerificationState::Closed->value,
-        ];
+        $overdueBase = $this->openQualificationDeadlineBase();
 
-        $overdue = (int) DB::table('qualifications as q')
-            ->join('applications as a', 'a.id', '=', 'q.application_id')
-            ->whereNotIn('q.verification_state', $terminalStates)
-            ->whereNotNull('a.service_deadline_at')
-            ->where('a.service_deadline_at', '<', now())
+        $overdue = (int) (clone $overdueBase)
+            ->whereRaw('coalesce(q.service_deadline_at, a.service_deadline_at) is not null')
+            ->whereRaw('coalesce(q.service_deadline_at, a.service_deadline_at) < ?', [now()])
             ->count();
 
-        $pastDeadline = (int) DB::table('qualifications as q')
-            ->join('applications as a', 'a.id', '=', 'q.application_id')
-            ->whereNotNull('a.service_deadline_at')
-            ->where('a.service_deadline_at', '<', now())
-            ->whereNotIn('q.verification_state', $terminalStates)
+        $pastDeadline = (int) (clone $overdueBase)
+            ->whereRaw('coalesce(q.service_deadline_at, a.service_deadline_at) is not null')
+            ->whereRaw('coalesce(q.service_deadline_at, a.service_deadline_at) < ?', [now()])
             ->count();
 
         $within = (int) DB::table('applications')
@@ -111,9 +106,13 @@ final class SlaTurnaroundReportService
         $overdueByVerifier = DB::table('qualifications as q')
             ->join('applications as a', 'a.id', '=', 'q.application_id')
             ->join('users as u', 'u.id', '=', 'q.assigned_verifier_id')
-            ->whereNotIn('q.verification_state', $terminalStates)
-            ->whereNotNull('a.service_deadline_at')
-            ->where('a.service_deadline_at', '<', now())
+            ->where(function ($q) {
+                $q->whereNull('q.verification_state')
+                    ->orWhereNotIn('q.verification_state', QualificationSlaService::CLOSED_QUALIFICATION_STATES);
+            })
+            ->whereNotIn('a.current_status', QualificationSlaService::CLOSED_APPLICATION_STATUSES)
+            ->whereRaw('coalesce(q.service_deadline_at, a.service_deadline_at) is not null')
+            ->whereRaw('coalesce(q.service_deadline_at, a.service_deadline_at) < ?', [now()])
             ->whereNotNull('q.assigned_verifier_id')
             ->selectRaw('u.name as name, count(*) as c')
             ->groupBy('u.name')
@@ -186,5 +185,16 @@ final class SlaTurnaroundReportService
         }
 
         return ['labels' => $labels, 'values' => $values];
+    }
+
+    private function openQualificationDeadlineBase(): Builder
+    {
+        return DB::table('qualifications as q')
+            ->join('applications as a', 'a.id', '=', 'q.application_id')
+            ->where(function ($q) {
+                $q->whereNull('q.verification_state')
+                    ->orWhereNotIn('q.verification_state', QualificationSlaService::CLOSED_QUALIFICATION_STATES);
+            })
+            ->whereNotIn('a.current_status', QualificationSlaService::CLOSED_APPLICATION_STATUSES);
     }
 }

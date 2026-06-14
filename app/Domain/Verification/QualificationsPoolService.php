@@ -6,8 +6,10 @@ use App\Enums\ApplicationStatus;
 use App\Enums\VerificationState;
 use App\Models\Qualification;
 use App\Models\User;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
 
 class QualificationsPoolService
 {
@@ -59,7 +61,7 @@ class QualificationsPoolService
                 'country',
                 'assignedVerifier',
             ])
-            ->whereHas('application', function ($aq) use ($submittedFrom, $submittedTo, $paymentStatus, $overdue, $overdueDays) {
+            ->whereHas('application', function ($aq) use ($submittedFrom, $submittedTo, $paymentStatus) {
                 $aq->whereIn('current_status', [
                     ApplicationStatus::Submitted,
                     ApplicationStatus::Resubmitted,
@@ -79,18 +81,18 @@ class QualificationsPoolService
                 } elseif ($paymentStatus === 'unpaid') {
                     $aq->whereNull('paid_at');
                 }
-
-                if ($overdue === '1') {
-                    $aq->whereNotNull('service_deadline_at')->where('service_deadline_at', '<', now());
-                }
-
-                if (is_string($overdueDays) && $overdueDays !== '') {
-                    $days = (int) $overdueDays;
-                    if (in_array($days, [30, 60, 90], true)) {
-                        $aq->whereNotNull('service_deadline_at')->where('service_deadline_at', '<', now()->subDays($days));
-                    }
-                }
             });
+
+        if ($overdue === '1') {
+            $this->applyQualificationOverdueFilter($query, now());
+        }
+
+        if (is_string($overdueDays) && $overdueDays !== '') {
+            $days = (int) $overdueDays;
+            if (in_array($days, [30, 60, 90], true)) {
+                $this->applyQualificationOverdueFilter($query, now()->subDays($days));
+            }
+        }
 
         if ($q !== '') {
             $query->where(function ($inner) use ($q) {
@@ -178,5 +180,37 @@ class QualificationsPoolService
             ->orderByDesc('updated_at')
             ->paginate(25)
             ->withQueryString();
+    }
+
+    private function applyQualificationOverdueFilter(Builder $query, Carbon $cutoff): void
+    {
+        $this->applyOpenQualificationSlaScope($query);
+
+        $query->where(function (Builder $deadline) use ($cutoff) {
+            $deadline
+                ->where(function (Builder $direct) use ($cutoff) {
+                    $direct->whereNotNull('qualifications.service_deadline_at')
+                        ->where('qualifications.service_deadline_at', '<', $cutoff);
+                })
+                ->orWhere(function (Builder $fallback) use ($cutoff) {
+                    $fallback->whereNull('qualifications.service_deadline_at')
+                        ->whereHas('application', function (Builder $application) use ($cutoff) {
+                            $application->whereNotNull('service_deadline_at')
+                                ->where('service_deadline_at', '<', $cutoff);
+                        });
+                });
+        });
+    }
+
+    private function applyOpenQualificationSlaScope(Builder $query): void
+    {
+        $query
+            ->where(function (Builder $states) {
+                $states->whereNull('qualifications.verification_state')
+                    ->orWhereNotIn('qualifications.verification_state', QualificationSlaService::CLOSED_QUALIFICATION_STATES);
+            })
+            ->whereHas('application', function (Builder $application) {
+                $application->whereNotIn('current_status', QualificationSlaService::CLOSED_APPLICATION_STATUSES);
+            });
     }
 }

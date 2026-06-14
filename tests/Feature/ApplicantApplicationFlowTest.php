@@ -182,6 +182,12 @@ class ApplicantApplicationFlowTest extends TestCase
         $this->assertStringStartsWith('ZAQA-Q-', $qualification->verification_reference_number);
         $this->assertNotNull($qualification->auto_verification_attempted_at);
         $this->assertSame('awaiting_assignment', $qualification->verification_state?->value);
+        $this->assertNotNull($qualification->service_started_at);
+        $this->assertNotNull($qualification->service_deadline_at);
+        $this->assertSame(
+            $application->service_deadline_at?->toIso8601String(),
+            $qualification->service_deadline_at?->toIso8601String(),
+        );
 
         $this->assertDatabaseHas('audit_logs', [
             'event_type' => 'applications.auto_submitted',

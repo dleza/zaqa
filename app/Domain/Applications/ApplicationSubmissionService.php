@@ -6,6 +6,7 @@ use App\Domain\Applications\Events\ApplicationSubmitted;
 use App\Domain\Audit\AuditLogService;
 use App\Domain\Payments\ApplicationPaymentSatisfaction;
 use App\Domain\Tracking\ApplicationLifecycleService;
+use App\Domain\Verification\QualificationSlaService;
 use App\Enums\ApplicationStatus;
 use App\Enums\ConsentType;
 use App\Enums\DocumentType;
@@ -31,6 +32,7 @@ class ApplicationSubmissionService
         private readonly ApplicationLifecycleService $lifecycle,
         private readonly QualificationCaptureService $qualificationCapture,
         private readonly ApplicationPaymentSatisfaction $paymentSatisfaction,
+        private readonly QualificationSlaService $qualificationSla,
     ) {}
 
     public function submit(Application $application, User $actor): Application
@@ -95,8 +97,8 @@ class ApplicationSubmissionService
 
             $this->assertWizardDeclarationsComplete($application);
 
+            $latestPayment = $application->payments->sortByDesc('id')->first();
             if (! $this->paymentSatisfaction->isSatisfied($application)) {
-                $latestPayment = $application->payments->sortByDesc('id')->first();
                 $this->audit->record(
                     eventType: 'applications.submission_blocked_due_to_payment',
                     module: 'Applications',
@@ -139,7 +141,6 @@ class ApplicationSubmissionService
                 // Once submitted (or resubmitted), applications must enter verification intake.
                 'verification_state' => VerificationState::AwaitingAssignment,
                 'submitted_at' => $application->submitted_at ?? $now,
-                'service_deadline_at' => $application->service_deadline_at ?? $now->copy()->addDays($application->is_foreign ? 60 : 14),
                 // Resubmissions must be re-assessed and re-assigned by Level 2.
                 'assigned_level1_user_id' => null,
                 'assigned_by_level2_user_id' => null,
@@ -156,6 +157,37 @@ class ApplicationSubmissionService
                     'required_documents' => array_map(fn (DocumentType $t) => $t->value, $requiredDocumentTypes),
                 ],
             ]);
+
+            $this->assignVerificationReferenceNumbers($application);
+
+            $application->loadMissing('qualifications');
+            foreach ($application->qualifications as $qualification) {
+                /** @var Qualification $qualification */
+                if ($fromStatus === ApplicationStatus::SentBack) {
+                    if ($qualification->verification_state === VerificationState::ReturnedToApplicant) {
+                        $this->qualificationCapture->reopenQualificationAfterApplicantAmendment($qualification, $actor);
+                    } else {
+                        $qualification->forceFill([
+                            'verification_state' => VerificationState::AwaitingAssignment,
+                            'returned_to_applicant_at' => null,
+                        ])->save();
+                    }
+
+                    continue;
+                }
+
+                if ($fromStatus === ApplicationStatus::Draft && $qualification->verification_state === null) {
+                    $qualification->verification_state = VerificationState::AwaitingAssignment;
+                    $qualification->save();
+                }
+            }
+
+            $this->qualificationSla->applyApplicationSla(
+                application: $application,
+                startedAt: $now,
+                forceReset: $fromStatus === ApplicationStatus::SentBack,
+            );
+            $application->refresh();
 
             $after = [
                 'current_status' => $application->current_status->value,
@@ -207,30 +239,6 @@ class ApplicationSubmissionService
                 ],
                 occurredAt: $now,
             );
-
-            $this->assignVerificationReferenceNumbers($application);
-
-            $application->loadMissing('qualifications');
-            foreach ($application->qualifications as $qualification) {
-                /** @var Qualification $qualification */
-                if ($fromStatus === ApplicationStatus::SentBack) {
-                    if ($qualification->verification_state === VerificationState::ReturnedToApplicant) {
-                        $this->qualificationCapture->reopenQualificationAfterApplicantAmendment($qualification, $actor);
-                    } else {
-                        $qualification->forceFill([
-                            'verification_state' => VerificationState::AwaitingAssignment,
-                            'returned_to_applicant_at' => null,
-                        ])->save();
-                    }
-
-                    continue;
-                }
-
-                if ($fromStatus === ApplicationStatus::Draft && $qualification->verification_state === null) {
-                    $qualification->verification_state = VerificationState::AwaitingAssignment;
-                    $qualification->save();
-                }
-            }
 
             event(new ApplicationSubmitted($application, $actor, $toStatus === ApplicationStatus::Resubmitted));
 

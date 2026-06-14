@@ -3,10 +3,15 @@
 namespace App\Http\Controllers\Admin\Finance;
 
 use App\Domain\Audit\AuditLogService;
+use App\Domain\Payments\PaymentService;
+use App\Enums\PaymentStatus;
+use App\Http\Requests\Finance\CorrectPaymentRequest;
 use App\Domain\Finance\PaymentSearchService;
 use App\Http\Controllers\Controller;
+use App\Models\AuditLog;
 use App\Models\Payment;
 use App\Models\PaymentWebhookLog;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -39,7 +44,7 @@ class AdminFinancePaymentsController extends Controller
 
     public function show(Request $request, Payment $payment, AuditLogService $audit): Response
     {
-        $payment->loadMissing(['application.applicant', 'invoice', 'proofDocument', 'reviewedBy', 'attempts']);
+        $payment->loadMissing(['application.applicant', 'application.qualifications', 'invoice', 'proofDocument', 'reviewedBy', 'attempts']);
 
         $audit->record(
             eventType: 'finance.payment_viewed',
@@ -70,6 +75,59 @@ class AdminFinancePaymentsController extends Controller
                 'received_at' => optional($w->received_at)?->toIso8601String(),
                 'processed_at' => optional($w->processed_at)?->toIso8601String(),
                 'error_message' => $w->error_message,
+            ])
+            ->values();
+
+        $canCorrectPayments = (bool) $request->user()?->can('finance.payments.correct');
+        $canViewApplicant = (bool) $request->user()?->can('admin.applicants.view');
+        $canViewQualifications = (bool) $request->user()?->can('verification.pool.view');
+        $correctionStatusOptions = $canCorrectPayments
+            ? $this->manualCorrectionStatusOptions($payment)
+            : [];
+        $correctionDisabledReason = $canCorrectPayments
+            ? $this->correctionDisabledReason($payment)
+            : null;
+        $qualifications = $payment->application?->qualifications
+            ? $payment->application->qualifications
+                ->sortBy('id')
+                ->values()
+                ->map(fn ($qualification) => [
+                    'id' => $qualification->id,
+                    'title' => $qualification->title_of_qualification,
+                    'holder_name' => $qualification->qualification_holder_name,
+                    'is_foreign' => (bool) $qualification->is_foreign_qualification,
+                    'href' => $canViewQualifications
+                        ? route('admin.verification.qualifications.show', ['qualification' => $qualification->id])
+                        : null,
+                ])
+                ->all()
+            : [];
+
+        $history = AuditLog::query()
+            ->with('actor:id,name,email')
+            ->where('entity_type', Payment::class)
+            ->where('entity_id', $payment->id)
+            ->whereIn('event_type', [
+                'finance.payment_corrected',
+                'finance.payment_approved',
+                'finance.payment_rejected',
+            ])
+            ->orderByDesc('id')
+            ->limit(20)
+            ->get()
+            ->map(fn (AuditLog $log) => [
+                'id' => $log->id,
+                'event_type' => $log->event_type,
+                'message' => $log->message,
+                'actor_name' => $log->actor_name_snapshot ?? $log->actor?->name,
+                'created_at' => optional($log->created_at)?->toIso8601String(),
+                'note' => data_get($log->metadata, 'note')
+                    ?? data_get($log->metadata, 'comment')
+                    ?? data_get($log->metadata, 'reason'),
+                'before_status' => data_get($log->before_state, 'status'),
+                'after_status' => data_get($log->after_state, 'status'),
+                'before_provider_transaction_id' => data_get($log->before_state, 'provider_transaction_id'),
+                'after_provider_transaction_id' => data_get($log->after_state, 'provider_transaction_id'),
             ])
             ->values();
 
@@ -116,7 +174,47 @@ class AdminFinancePaymentsController extends Controller
                 'raw_payload' => $payment->raw_payload,
             ],
             'webhooks' => $webhooks,
+            'can' => [
+                'correct' => $canCorrectPayments,
+                'view_applicant' => $canViewApplicant,
+                'view_qualifications' => $canViewQualifications,
+            ],
+            'correction' => [
+                'enabled' => $canCorrectPayments && $correctionDisabledReason === null,
+                'disabled_reason' => $correctionDisabledReason,
+                'status_options' => $correctionStatusOptions,
+            ],
+            'navigation' => [
+                'applicant' => $payment->application?->applicant
+                    ? [
+                        'name' => $payment->application->applicant->name,
+                        'href' => $canViewApplicant
+                            ? route('admin.applicants.show', ['user' => $payment->application->applicant->id])
+                            : null,
+                    ]
+                    : null,
+                'qualifications' => $qualifications,
+            ],
+            'history' => $history,
         ]);
+    }
+
+    public function correct(
+        CorrectPaymentRequest $request,
+        Payment $payment,
+        PaymentService $payments,
+    ): RedirectResponse {
+        $validated = $request->validated();
+
+        $payments->financeCorrect(
+            payment: $payment,
+            targetStatus: PaymentStatus::from((string) $validated['status']),
+            actor: $request->user(),
+            note: (string) $validated['note'],
+            providerTransactionId: $validated['provider_transaction_id'] ?? null,
+        );
+
+        return back()->with('success', 'Payment correction saved.');
     }
 
     /**
@@ -162,5 +260,56 @@ class AdminFinancePaymentsController extends Controller
                 ]
                 : null,
         ];
+    }
+
+    /**
+     * @return array<int, array{value: string, label: string}>
+     */
+    private function manualCorrectionStatusOptions(Payment $payment): array
+    {
+        if ($payment->status === PaymentStatus::AwaitingFinanceReview) {
+            return [];
+        }
+
+        $statuses = $payment->status === PaymentStatus::Confirmed
+            ? [PaymentStatus::Confirmed]
+            : [
+                PaymentStatus::PendingConfirmation,
+                PaymentStatus::Confirmed,
+                PaymentStatus::Rejected,
+                PaymentStatus::Failed,
+                PaymentStatus::Expired,
+            ];
+
+        return collect($statuses)
+            ->map(fn (PaymentStatus $status) => [
+                'value' => $status->value,
+                'label' => $this->paymentStatusLabel($status),
+            ])
+            ->values()
+            ->all();
+    }
+
+    private function correctionDisabledReason(Payment $payment): ?string
+    {
+        if ($payment->status === PaymentStatus::AwaitingFinanceReview) {
+            return 'Use the payment proof review flow while this payment is awaiting finance review.';
+        }
+
+        return null;
+    }
+
+    private function paymentStatusLabel(PaymentStatus $status): string
+    {
+        return match ($status) {
+            PaymentStatus::PendingConfirmation => 'Pending confirmation',
+            PaymentStatus::Confirmed => 'Confirmed',
+            PaymentStatus::Rejected => 'Rejected',
+            PaymentStatus::Failed => 'Failed',
+            PaymentStatus::Expired => 'Expired',
+            PaymentStatus::Draft => 'Draft',
+            PaymentStatus::Initiated => 'Initiated',
+            PaymentStatus::AwaitingFinanceReview => 'Awaiting finance review',
+        };
     }
 }

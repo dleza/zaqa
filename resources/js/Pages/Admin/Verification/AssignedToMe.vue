@@ -173,8 +173,8 @@ watch([q, overdue, overdueDays, submittedFrom, submittedTo, qualificationQ, list
                 <span v-else class="zaqa-badge zaqa-badge-danger">Missing</span>
               </td>
               <td class="px-5 py-3 text-text-primary">
-                <span v-if="row.application?.service_deadline_at">{{
-                  new Date(row.application.service_deadline_at).toLocaleDateString()
+                <span v-if="row.service_deadline_at">{{
+                  new Date(row.service_deadline_at).toLocaleDateString()
                 }}</span>
                 <span v-else class="text-text-muted">—</span>
               </td>

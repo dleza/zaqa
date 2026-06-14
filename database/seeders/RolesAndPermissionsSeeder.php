@@ -36,6 +36,7 @@ class RolesAndPermissionsSeeder extends Seeder
         'finance.payment_proofs.reject',
         'finance.payments.view',
         'finance.payments.detail',
+        'finance.payments.correct',
         'finance.receipts.view',
         'finance.reports.view',
 
@@ -133,6 +134,7 @@ class RolesAndPermissionsSeeder extends Seeder
         $financeOfficer->syncPermissions(Permission::query()->where('guard_name', 'web')->whereIn('name', [
             'dashboard.view',
             'admin.finance.view',
+            'admin.applicants.view',
             'finance.dashboard.view',
             'finance.payment_proofs.view',
             'finance.payment_proofs.review',
@@ -140,8 +142,10 @@ class RolesAndPermissionsSeeder extends Seeder
             'finance.payment_proofs.reject',
             'finance.payments.view',
             'finance.payments.detail',
+            'finance.payments.correct',
             'finance.receipts.view',
             'finance.reports.view',
+            'verification.pool.view',
         ])->get());
 
         $ver1 = Role::query()->firstOrCreate(['name' => 'Verification Officer Level 1', 'guard_name' => 'web']);

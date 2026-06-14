@@ -595,6 +595,7 @@ class VerificationQualificationAccessTest extends TestCase
             'assigned_verifier_id' => null,
             'verification_state' => VerificationState::UnderLevel2Review,
             'level2_review_owner_id' => $level2->id,
+            'service_deadline_at' => now()->addDays(14),
         ]);
 
         $this->actingAs($level2)
@@ -602,7 +603,8 @@ class VerificationQualificationAccessTest extends TestCase
             ->assertOk()
             ->assertInertia(fn ($page) => $page
                 ->has('qualifications.data', 1)
-                ->where('qualifications.data.0.id', $qOwned->id));
+                ->where('qualifications.data.0.id', $qOwned->id)
+                ->where('qualifications.data.0.service_deadline_at', $qOwned->service_deadline_at?->toIso8601String()));
     }
 
     public function test_assigned_to_me_forbidden_without_level1_or_level2_process(): void
