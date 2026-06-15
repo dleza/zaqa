@@ -59,6 +59,19 @@ class InvoicePdfService
         ];
     }
 
+    /**
+     * PDF-aligned payload for on-screen invoice preview (excludes embedded logo binary).
+     *
+     * @return array<string, mixed>
+     */
+    public function buildWebViewData(Invoice $invoice): array
+    {
+        $data = $this->buildViewData($invoice);
+        unset($data['logo_data_uri']);
+
+        return $data;
+    }
+
     public function renderBinary(Invoice $invoice): string
     {
         $data = $this->buildViewData($invoice);

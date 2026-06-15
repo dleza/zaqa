@@ -319,6 +319,9 @@ class ApplicantPaymentsPageTest extends TestCase
                 ->component('Applicant/InvoiceShow', false)
                 ->where('invoice.invoice_number', $inv->invoice_number)
                 ->has('invoice.payments')
+                ->has('document')
+                ->where('document.invoice_number', $inv->invoice_number)
+                ->has('document.line_items')
             );
     }
 }

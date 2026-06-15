@@ -102,7 +102,7 @@ class ApplicantBillingController extends Controller
         ]);
     }
 
-    public function showInvoice(Request $request, Invoice $invoice): Response
+    public function showInvoice(Request $request, Invoice $invoice, InvoicePdfService $pdf): Response
     {
         $invoice->load([
             'application',
@@ -112,6 +112,7 @@ class ApplicantBillingController extends Controller
         $this->assertApplicantOwnsApplication($request, $invoice->application);
 
         return Inertia::render('Applicant/InvoiceShow', [
+            'document' => $pdf->buildWebViewData($invoice),
             'invoice' => [
                 'id' => $invoice->id,
                 'invoice_number' => $invoice->invoice_number,
