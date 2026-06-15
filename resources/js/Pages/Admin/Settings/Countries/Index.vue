@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import AdminLayout from '@/Layouts/AdminLayout.vue'
 import AdminExcelImportModal from '@/Components/AdminExcelImportModal.vue'
+import AdminTablePagination from '@/Components/AdminTablePagination.vue'
 import AdminViewModal from '@/Components/AdminViewModal.vue'
 import { Link, router } from '@inertiajs/vue3'
 import { FileSpreadsheet, Globe, Plus, Search } from 'lucide-vue-next'
@@ -148,6 +149,8 @@ function openView(c: any) {
           </tbody>
         </table>
       </div>
+
+      <AdminTablePagination :paginator="countries" label="countries" />
     </div>
 
     <AdminViewModal v-model="viewOpen" :title="selected ? `Country: ${selected.name}` : 'Country'" description="Quick view (read-only).">

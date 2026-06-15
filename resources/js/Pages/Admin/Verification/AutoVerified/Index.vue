@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import AdminLayout from '@/Layouts/AdminLayout.vue'
+import AdminTablePagination from '@/Components/AdminTablePagination.vue'
 import { Link, router } from '@inertiajs/vue3'
 import { Search, Sparkles } from 'lucide-vue-next'
 import { computed, ref, watch } from 'vue'
@@ -168,19 +169,7 @@ const lockBadgeClass = computed(() => {
         </table>
       </div>
 
-      <div v-if="qualifications.links?.length" class="border-t border-border bg-surface px-5 py-4">
-        <div class="flex flex-wrap gap-2">
-          <Link
-            v-for="(l, idx) in qualifications.links"
-            :key="idx"
-            :href="l.url || ''"
-            class="zaqa-btn h-9 px-3 py-2 text-xs"
-            :class="l.active ? 'zaqa-btn-primary' : 'zaqa-btn-secondary'"
-            :disabled="!l.url"
-            v-html="l.label"
-          />
-        </div>
-      </div>
+      <AdminTablePagination :paginator="qualifications" label="qualifications" />
     </div>
   </AdminLayout>
 </template>

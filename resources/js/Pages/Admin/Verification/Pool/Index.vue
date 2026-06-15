@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import AdminLayout from '@/Layouts/AdminLayout.vue'
+import AdminTablePagination from '@/Components/AdminTablePagination.vue'
 import { Link, router } from '@inertiajs/vue3'
 import { Search, ShieldCheck, UserCheck } from 'lucide-vue-next'
 import { computed, ref, watch } from 'vue'
@@ -210,6 +211,8 @@ watch(
           </tbody>
         </table>
       </div>
+
+      <AdminTablePagination :paginator="qualifications" label="qualifications" />
     </div>
   </AdminLayout>
 </template>

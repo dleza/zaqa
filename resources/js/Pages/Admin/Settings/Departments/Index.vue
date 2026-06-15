@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import AdminLayout from '@/Layouts/AdminLayout.vue'
+import AdminTablePagination from '@/Components/AdminTablePagination.vue'
 import AdminViewModal from '@/Components/AdminViewModal.vue'
 import { Link, router } from '@inertiajs/vue3'
 import { Plus, Search, Users } from 'lucide-vue-next'
@@ -117,6 +118,8 @@ function openView(d: any) {
           </tbody>
         </table>
       </div>
+
+      <AdminTablePagination :paginator="departments" label="departments" />
     </div>
 
     <AdminViewModal v-model="viewOpen" :title="selected ? `Department: ${selected.name}` : 'Department'" description="Quick view (read-only).">

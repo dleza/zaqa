@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import AdminActionModal from '@/Components/AdminActionModal.vue'
 import AdminLayout from '@/Layouts/AdminLayout.vue'
+import AdminTablePagination from '@/Components/AdminTablePagination.vue'
 import SingleSelectCombobox from '@/Components/SingleSelectCombobox.vue'
 import { Link, useForm } from '@inertiajs/vue3'
 import { FileSpreadsheet, UploadCloud } from 'lucide-vue-next'
@@ -213,6 +214,8 @@ function statusBadgeClass(status: string | null | undefined) {
           </tbody>
         </table>
       </div>
+
+      <AdminTablePagination :paginator="imports" label="imports" />
     </div>
   </AdminLayout>
 </template>

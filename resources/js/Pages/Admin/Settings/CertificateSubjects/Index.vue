@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import AdminLayout from '@/Layouts/AdminLayout.vue'
 import AdminExcelImportModal from '@/Components/AdminExcelImportModal.vue'
+import AdminTablePagination from '@/Components/AdminTablePagination.vue'
 import AdminViewModal from '@/Components/AdminViewModal.vue'
 import { Link, router } from '@inertiajs/vue3'
 import { BookOpen, FileSpreadsheet, Plus, Search } from 'lucide-vue-next'
@@ -146,6 +147,8 @@ function openView(s: any) {
           </tbody>
         </table>
       </div>
+
+      <AdminTablePagination :paginator="subjects" label="subjects" />
     </div>
 
     <AdminViewModal v-model="viewOpen" :title="selected ? `Subject: ${selected.name}` : 'Subject'" description="Quick view (read-only).">

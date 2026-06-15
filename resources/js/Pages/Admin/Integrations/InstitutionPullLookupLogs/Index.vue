@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import AdminLayout from '@/Layouts/AdminLayout.vue'
+import AdminTablePagination from '@/Components/AdminTablePagination.vue'
 import { router } from '@inertiajs/vue3'
 import { FileText } from 'lucide-vue-next'
 import { computed, ref } from 'vue'
@@ -135,6 +136,8 @@ function applyFilters() {
             <div class="mt-2 text-xs text-text-muted">Correlation: {{ l.correlation_id || '—' }}</div>
           </div>
         </div>
+
+        <AdminTablePagination :paginator="logs" label="lookup logs" />
       </div>
     </div>
   </AdminLayout>

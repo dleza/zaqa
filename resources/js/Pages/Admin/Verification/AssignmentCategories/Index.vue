@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import AdminLayout from '@/Layouts/AdminLayout.vue'
+import AdminTablePagination from '@/Components/AdminTablePagination.vue'
 import { Link, router } from '@inertiajs/vue3'
 import { Plus, Search, ShieldCheck } from 'lucide-vue-next'
 import { ref, watch } from 'vue'
@@ -131,6 +132,8 @@ function typeLabel(t: string): string {
           </tbody>
         </table>
       </div>
+
+      <AdminTablePagination :paginator="categories" label="categories" />
     </div>
   </AdminLayout>
 </template>

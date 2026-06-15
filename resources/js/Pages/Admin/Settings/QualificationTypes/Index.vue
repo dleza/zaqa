@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import AdminLayout from '@/Layouts/AdminLayout.vue'
+import AdminTablePagination from '@/Components/AdminTablePagination.vue'
 import AdminViewModal from '@/Components/AdminViewModal.vue'
 import { Link, router } from '@inertiajs/vue3'
 import { GraduationCap, Plus, Search } from 'lucide-vue-next'
@@ -125,6 +126,8 @@ function openView(t: any) {
           </tbody>
         </table>
       </div>
+
+      <AdminTablePagination :paginator="types" label="types" />
     </div>
 
     <AdminViewModal
