@@ -143,6 +143,8 @@ class ApplicationAutoSubmissionIdempotencyTest extends TestCase
         Carbon::setTestNow($submittedAt);
 
         try {
+            $this->seed(FeeStructuresSeeder::class);
+
             $applicant = User::factory()->activated()->create([
                 'applicant_type' => ApplicantType::Individual,
             ]);

@@ -9,6 +9,7 @@ use App\Domain\Payments\ApplicationPaymentSatisfaction;
 use App\Domain\Verification\AutoAssignmentResult;
 use App\Domain\Verification\AssignmentService;
 use App\Domain\Verification\AutoVerifiedQualificationReviewService;
+use App\Domain\Verification\QualificationTitleCatalogStatus;
 use App\Domain\Verification\QualificationAutoAssignmentService;
 use App\Domain\Verification\QualificationAutoVerificationRecheckService;
 use App\Domain\Verification\QualificationDecisionService;
@@ -128,6 +129,7 @@ class AdminVerificationQualificationController extends Controller
             ? 'No linked awarding institution for this qualification.'
             : null;
         $certificateTemplate = $certificateService->describeTemplate($qualification);
+        $titleCatalog = app(QualificationTitleCatalogStatus::class)->forQualification($qualification);
         $qualificationServiceStartedAt = $qualification->service_started_at
             ?? $qualification->application?->submitted_at
             ?? $qualification->application?->created_at;
@@ -183,6 +185,7 @@ class AdminVerificationQualificationController extends Controller
                 'applicant_entered_qualification_title' => $qualification->applicant_entered_qualification_title,
                 'verified_qualification_title' => $qualification->verified_qualification_title,
                 'qualification_title_source' => $qualification->qualification_title_source?->value ?? (string) ($qualification->qualification_title_source ?? ''),
+                'title_catalog' => $titleCatalog,
                 'awarding_institution' => $qualification->awardingInstitution?->name ?? $qualification->awarding_institution_name_other ?? $qualification->awarding_institution_name,
                 'country' => $qualification->country?->name ?? $qualification->country_name_other,
                 'holder_name' => $qualification->qualification_holder_name,

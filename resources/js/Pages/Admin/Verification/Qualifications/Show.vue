@@ -1118,6 +1118,20 @@ const subjectResultsCount = computed(() => props.qualification.subject_results?.
             </div>
 
             <div class="mt-4 space-y-3">
+              <div
+                v-if="qualification.title_catalog?.show_new_title_prompt"
+                class="rounded-xl border border-amber-300/80 bg-amber-50 px-4 py-3 text-sm text-amber-950"
+                role="status"
+              >
+                <div class="font-semibold">New qualification title</div>
+                <p class="mt-1">
+                  The applicant entered a title that is not in the master catalog
+                  <span v-if="qualification.title_catalog?.resolved_title"> (“{{ qualification.title_catalog.resolved_title }}”)</span>.
+                  If you approve and issue the certificate, this title will be added to
+                  <strong>Qualification Titles</strong> for future applicants, and a learner record will be created when missing.
+                </p>
+              </div>
+
               <details class="group rounded-xl border border-border/70 bg-surface-muted/25">
                 <summary class="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 [&::-webkit-details-marker]:hidden">
                   <div>

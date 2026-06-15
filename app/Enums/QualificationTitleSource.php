@@ -9,5 +9,6 @@ enum QualificationTitleSource: string
     case AutoVerifiedInternal = 'auto_verified_internal';
     case InstitutionApi = 'institution_api';
     case ManualOverride = 'manual_override';
+    case VerifiedPromoted = 'verified_promoted';
 }
 

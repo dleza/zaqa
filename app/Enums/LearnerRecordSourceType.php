@@ -7,5 +7,6 @@ enum LearnerRecordSourceType: string
     case Import = 'import';
     case InstitutionApi = 'institution_api';
     case Manual = 'manual';
+    case ZaqaVerification = 'zaqa_verification';
 }
 

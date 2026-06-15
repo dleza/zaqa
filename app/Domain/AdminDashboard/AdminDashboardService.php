@@ -102,7 +102,7 @@ class AdminDashboardService
         $this->appendSmsDashboardWidgets($user, $kpis, $alerts);
 
         // ——— System / applications (broad) ———
-        if ($user->can('admin.applications.view') || $user->can('verification.pool.view')) {
+        if ($user->can('admin.applications.view')) {
             $kpis[] = [
                 'key' => 'applications_total',
                 'label' => 'Total applications',
@@ -448,7 +448,7 @@ class AdminDashboardService
         // ——— Charts (permission gated) ———
         $w = $this->weekWindow();
 
-        if ($user->can('admin.applications.view') || $user->can('verification.pool.view')) {
+        if ($user->can('admin.applications.view')) {
             $series = [];
             foreach ($w['dates'] as $date) {
                 $series[] = Application::query()->whereDate('submitted_at', $date)->count();

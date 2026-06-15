@@ -13,7 +13,19 @@ trait ValidatesQualificationTitleSelection
         $source = trim((string) $this->input('qualification_title_source', ''));
         if ($source === '') {
             $manualTitle = trim((string) $this->input('applicant_entered_qualification_title', ''));
-            $source = $manualTitle !== '' ? 'other' : 'catalog';
+            $titleId = (int) $this->input('qualification_title_id', 0);
+            $titleText = trim((string) $this->input('title_of_qualification', ''));
+
+            if ($titleId > 0) {
+                $source = 'catalog';
+            } elseif ($manualTitle !== '') {
+                $source = 'other';
+            } elseif ($titleText !== '') {
+                // Legacy submissions: free-text title without catalog source/id.
+                return;
+            } else {
+                $source = 'catalog';
+            }
         }
 
         if ($source === 'other') {
