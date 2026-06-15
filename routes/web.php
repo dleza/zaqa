@@ -10,7 +10,7 @@ use App\Http\Controllers\Admin\AdminProfileController;
 use App\Http\Controllers\Admin\AdminRolesController;
 use App\Http\Controllers\Admin\AdminSlaReportController;
 use App\Http\Controllers\Admin\AdminUsersController;
-use App\Http\Controllers\Admin\Finance\AdminFinanceDashboardController;
+use App\Http\Controllers\Admin\Finance\AdminFinanceInvoicesController;
 use App\Http\Controllers\Admin\Finance\AdminFinancePaymentProofController;
 use App\Http\Controllers\Admin\Finance\AdminFinancePaymentsController;
 use App\Http\Controllers\Admin\Integrations\AdminInstitutionApiClientsController;
@@ -194,6 +194,7 @@ Route::middleware('auth')->group(function () {
 
         Route::get('/invoices', [ApplicantBillingController::class, 'invoices'])->name('invoices');
         Route::get('/invoices/{invoice}', [ApplicantBillingController::class, 'showInvoice'])->name('invoices.show');
+        Route::get('/invoices/{invoice}/download', [ApplicantBillingController::class, 'downloadInvoice'])->name('invoices.download');
         Route::get('/payments', [ApplicantBillingController::class, 'payments'])->name('payments.index');
         Route::get('/payments/{payment}', [ApplicantBillingController::class, 'showPayment'])->name('payments.show');
 
@@ -263,6 +264,10 @@ Route::middleware('auth')->group(function () {
             Route::post('/payments/{payment}/correct', [AdminFinancePaymentsController::class, 'correct'])
                 ->middleware('can:finance.payments.correct')
                 ->name('payments.correct');
+
+            Route::get('/invoices/{invoice}/download', [AdminFinanceInvoicesController::class, 'download'])
+                ->middleware('can:finance.payments.view')
+                ->name('invoices.download');
 
             Route::get('/documents/{document}/preview', [AdminFinancePaymentProofController::class, 'preview'])
                 ->middleware('can:finance.payment_proofs.view')

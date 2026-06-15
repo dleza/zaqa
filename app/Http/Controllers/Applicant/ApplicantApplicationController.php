@@ -892,6 +892,7 @@ class ApplicantApplicationController extends Controller
                     'status' => $application->invoice->status?->value ?? (string) $application->invoice->status,
                     'issued_at' => optional($application->invoice->issued_at)?->toIso8601String(),
                     'paid_at' => optional($application->invoice->paid_at)?->toIso8601String(),
+                    'download_url' => route('applicant.invoices.download', $application->invoice),
                 ]
                 : null,
             'supplementary_invoice' => $openSupplementary
@@ -904,6 +905,7 @@ class ApplicantApplicationController extends Controller
                     'fee_label_snapshot' => $openSupplementary->fee_label_snapshot,
                     'issued_at' => optional($openSupplementary->issued_at)?->toIso8601String(),
                     'amendment_reason' => is_array($openSupplementary->metadata) ? ($openSupplementary->metadata['amendment_reason'] ?? null) : null,
+                    'download_url' => route('applicant.invoices.download', $openSupplementary),
                 ]
                 : null,
             'payment' => $displayPayment

@@ -164,6 +164,9 @@ class AdminFinancePaymentProofController extends Controller
                 'id' => $p->invoice?->id,
                 'invoice_number' => $p->invoice?->invoice_number,
                 'status' => $p->invoice?->status?->value ?? (string) ($p->invoice?->status ?? ''),
+                'download_url' => $p->invoice
+                    ? route('admin.finance.invoices.download', ['invoice' => $p->invoice->id])
+                    : null,
             ],
             'proof_document' => $p->proofDocument
                 ? [

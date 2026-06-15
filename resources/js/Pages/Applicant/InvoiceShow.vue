@@ -9,6 +9,7 @@ import {
   Globe,
   Link2,
   Receipt,
+  FileDown,
 } from 'lucide-vue-next'
 
 const props = defineProps<{
@@ -43,6 +44,7 @@ const props = defineProps<{
       created_at: string | null
       show_url: string
     }>
+    download_url: string
   }
 }>()
 
@@ -98,9 +100,18 @@ function humanMethod(m: string) {
               Fee invoice for your verification application. Payments recorded against this invoice are listed below.
             </p>
           </div>
-          <span class="zaqa-badge inline-flex w-fit shrink-0 items-center gap-1 self-start text-sm capitalize" :class="invoiceBadgeClass(invoice.status)">
-            {{ invoice.status }}
-          </span>
+          <div class="flex flex-col items-start gap-3 sm:items-end">
+            <span class="zaqa-badge inline-flex w-fit shrink-0 items-center gap-1 self-start text-sm capitalize sm:self-end" :class="invoiceBadgeClass(invoice.status)">
+              {{ invoice.status }}
+            </span>
+            <a
+              :href="invoice.download_url"
+              class="zaqa-btn zaqa-btn-secondary inline-flex items-center gap-2 px-4 py-2 text-sm"
+            >
+              <FileDown class="h-4 w-4" aria-hidden="true" />
+              Download invoice
+            </a>
+          </div>
         </div>
 
         <div

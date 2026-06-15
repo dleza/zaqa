@@ -78,6 +78,13 @@ const canAct = computed(() => props.payment.status === 'awaiting_finance_review'
               <div class="text-xs font-semibold uppercase tracking-wider text-text-muted">Invoice</div>
               <div class="mt-1 font-semibold text-text-primary">{{ payment.invoice?.invoice_number ?? '—' }}</div>
               <div class="mt-1 text-xs text-text-muted">Status: {{ payment.invoice?.status ?? '—' }}</div>
+              <a
+                v-if="payment.invoice?.download_url"
+                :href="payment.invoice.download_url"
+                class="zaqa-btn zaqa-btn-secondary mt-3 inline-flex items-center gap-2 px-3 py-1.5 text-xs"
+              >
+                Download invoice
+              </a>
             </div>
             <div class="rounded-xl border border-border bg-surface-muted p-4">
               <div class="text-xs font-semibold uppercase tracking-wider text-text-muted">Amount</div>

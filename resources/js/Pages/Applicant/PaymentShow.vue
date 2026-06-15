@@ -194,10 +194,17 @@ function humanMethod(m: string) {
                   </div>
                   <div class="mt-2 font-mono text-lg font-semibold text-text-primary">{{ payment.invoice.invoice_number }}</div>
                   <div class="mt-1 text-xs capitalize text-text-muted">Invoice status: {{ payment.invoice.status }}</div>
-                  <div class="mt-4">
+                  <div class="mt-4 flex flex-wrap gap-2">
                     <Link :href="payment.invoice.show_url" class="zaqa-btn zaqa-btn-primary px-3 py-2 text-xs font-semibold">
                       View invoice
                     </Link>
+                    <a
+                      v-if="payment.invoice.download_url"
+                      :href="payment.invoice.download_url"
+                      class="zaqa-btn zaqa-btn-secondary inline-flex items-center gap-1.5 px-3 py-2 text-xs font-semibold"
+                    >
+                      Download invoice
+                    </a>
                   </div>
                 </div>
               </div>

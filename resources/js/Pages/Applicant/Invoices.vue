@@ -2,7 +2,7 @@
 import ApplicantLayout from '@/Layouts/ApplicantLayout.vue'
 import { Link } from '@inertiajs/vue3'
 import { computed } from 'vue'
-import { ArrowRight, Eye, FileText, Receipt, Wallet } from 'lucide-vue-next'
+import { ArrowRight, Eye, FileDown, FileText, Receipt, Wallet } from 'lucide-vue-next'
 
 const props = defineProps<{
   invoices: Array<{
@@ -14,6 +14,7 @@ const props = defineProps<{
     issued_at: string | null
     paid_at: string | null
     application: { id: number; application_number: string; current_status: string } | null
+    download_url: string
   }>
 }>()
 
@@ -120,13 +121,22 @@ function invoiceBadgeClass(status: string) {
                   <td class="px-5 py-4 text-xs text-text-muted">{{ formatWhen(inv.issued_at) }}</td>
                   <td class="px-5 py-4 text-xs text-text-muted">{{ formatWhen(inv.paid_at) }}</td>
                   <td class="px-5 py-4 text-right">
-                    <Link
-                      :href="`/applicant/invoices/${inv.id}`"
-                      class="zaqa-btn zaqa-btn-primary inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold"
-                    >
-                      <Eye class="h-3.5 w-3.5" aria-hidden="true" />
-                      View
-                    </Link>
+                    <div class="inline-flex items-center gap-2">
+                      <a
+                        :href="inv.download_url"
+                        class="zaqa-btn zaqa-btn-secondary inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold"
+                      >
+                        <FileDown class="h-3.5 w-3.5" aria-hidden="true" />
+                        Download
+                      </a>
+                      <Link
+                        :href="`/applicant/invoices/${inv.id}`"
+                        class="zaqa-btn zaqa-btn-primary inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold"
+                      >
+                        <Eye class="h-3.5 w-3.5" aria-hidden="true" />
+                        View
+                      </Link>
+                    </div>
                   </td>
                 </tr>
               </tbody>
@@ -170,13 +180,22 @@ function invoiceBadgeClass(status: string) {
                     <div class="mt-1 text-text-primary">{{ formatWhen(inv.paid_at) }}</div>
                   </div>
                 </div>
-                <Link
-                  :href="`/applicant/invoices/${inv.id}`"
-                  class="zaqa-btn zaqa-btn-primary flex w-full items-center justify-center gap-2 py-2.5 text-xs font-semibold"
-                >
-                  <Eye class="h-4 w-4" aria-hidden="true" />
-                  View invoice
-                </Link>
+                <div class="flex flex-wrap gap-2">
+                  <a
+                    :href="inv.download_url"
+                    class="zaqa-btn zaqa-btn-secondary inline-flex flex-1 items-center justify-center gap-1.5 py-2.5 text-xs font-semibold"
+                  >
+                    <FileDown class="h-3.5 w-3.5" aria-hidden="true" />
+                    Download
+                  </a>
+                  <Link
+                    :href="`/applicant/invoices/${inv.id}`"
+                    class="zaqa-btn zaqa-btn-primary inline-flex flex-1 items-center justify-center gap-2 py-2.5 text-xs font-semibold"
+                  >
+                    <Eye class="h-4 w-4" aria-hidden="true" />
+                    View invoice
+                  </Link>
+                </div>
               </div>
             </div>
           </div>

@@ -819,6 +819,14 @@ function money(cents: number, currency: string) {
                   </div>
                 </div>
               </div>
+              <div v-if="application.invoice?.download_url" class="mt-4">
+                <a
+                  :href="application.invoice.download_url"
+                  class="zaqa-btn zaqa-btn-secondary inline-flex items-center gap-2 px-4 py-2 text-sm"
+                >
+                  Download invoice
+                </a>
+              </div>
             </section>
 
             <div class="my-10 h-px bg-gradient-to-r from-transparent via-border to-transparent" />

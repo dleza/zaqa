@@ -21,6 +21,7 @@ The system must generate an invoice for verification and evaluation services.
 - invoice must be visible to the applicant in the portal
 - invoice status must be tracked separately from payment status
 - invoice is the immutable billing record; it must not be altered when the applicant switches payment method
+- applicants and authorized finance users can download invoices as PDF from invoice and payment pages
 
 ## Fee master data and versioning (critical)
 Fees must be configured as first-class entities:

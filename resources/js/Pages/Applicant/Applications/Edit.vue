@@ -2001,6 +2001,12 @@ onBeforeUnmount(() => {
 	              </div>
 	            </div>
 
+	            <div v-if="invoice?.download_url" class="mt-4 flex flex-wrap gap-2">
+	              <a :href="invoice.download_url" class="zaqa-btn zaqa-btn-secondary inline-flex items-center gap-2 px-4 py-2 text-sm">
+	                Download invoice
+	              </a>
+	            </div>
+
 	            <div
 	              v-if="application?.supplementary_invoice"
 	              class="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-950"
@@ -2014,6 +2020,13 @@ onBeforeUnmount(() => {
               <p v-if="application.supplementary_invoice.amendment_reason" class="mt-2 text-xs leading-relaxed opacity-90">
                 {{ application.supplementary_invoice.amendment_reason }}
               </p>
+              <a
+                v-if="application.supplementary_invoice.download_url"
+                :href="application.supplementary_invoice.download_url"
+                class="zaqa-btn zaqa-btn-secondary mt-3 inline-flex items-center gap-2 px-3 py-1.5 text-xs font-semibold"
+              >
+                Download supplementary invoice
+              </a>
             </div>
             <div v-else class="mt-3 rounded-lg border border-border bg-surface-muted px-3 py-2 text-xs text-text-muted">
               You can edit your application until payment is confirmed.

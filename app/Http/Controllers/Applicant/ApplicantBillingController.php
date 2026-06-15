@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Applicant;
 
+use App\Domain\Finance\InvoicePdfService;
 use App\Http\Controllers\Controller;
 use App\Models\Application;
 use App\Models\Invoice;
@@ -10,6 +11,7 @@ use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
 use Illuminate\Support\Facades\URL;
+use Symfony\Component\HttpFoundation\Response as SymfonyResponse;
 
 class ApplicantBillingController extends Controller
 {
@@ -37,6 +39,7 @@ class ApplicantBillingController extends Controller
                         'current_status' => $inv->application->current_status?->value ?? (string) $inv->application->current_status,
                     ]
                     : null,
+                'download_url' => route('applicant.invoices.download', $inv),
             ]);
 
         return Inertia::render('Applicant/Invoices', [
@@ -140,8 +143,17 @@ class ApplicantBillingController extends Controller
                     'created_at' => optional($p->created_at)?->toIso8601String(),
                     'show_url' => route('applicant.payments.show', $p->id),
                 ])->values()->all(),
+                'download_url' => route('applicant.invoices.download', $invoice),
             ],
         ]);
+    }
+
+    public function downloadInvoice(Request $request, Invoice $invoice, InvoicePdfService $pdf): SymfonyResponse
+    {
+        $invoice->loadMissing('application');
+        $this->assertApplicantOwnsApplication($request, $invoice->application);
+
+        return $pdf->downloadResponse($invoice);
     }
 
     public function showPayment(Request $request, Payment $payment): Response
@@ -189,6 +201,7 @@ class ApplicantBillingController extends Controller
                         'invoice_number' => $payment->invoice->invoice_number,
                         'status' => $payment->invoice->status?->value ?? (string) $payment->invoice->status,
                         'show_url' => route('applicant.invoices.show', $payment->invoice->id),
+                        'download_url' => route('applicant.invoices.download', $payment->invoice),
                     ]
                     : null,
                 'proof_document' => $proof
