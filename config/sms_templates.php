@@ -22,4 +22,6 @@ return [
     'verification_assigned' => 'ZAQA: Task assigned for :application_number. Login to review.',
 
     'activation_otp' => 'ZAQA OTP: :code. Expires :expires_at.',
+
+    'password_reset_otp' => 'ZAQA password reset code: :code. Expires :expires_at.',
 ];

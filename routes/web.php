@@ -66,6 +66,7 @@ use App\Http\Controllers\Auth\AccountActivationController;
 use App\Http\Controllers\Auth\AuthenticatedSessionController;
 use App\Http\Controllers\Auth\NewPasswordController;
 use App\Http\Controllers\Auth\PasswordResetLinkController;
+use App\Http\Controllers\Auth\PhonePasswordResetController;
 use App\Http\Controllers\Auth\RegisteredApplicantController;
 use App\Http\Controllers\Finance\FinanceApplicationTrackingController;
 use App\Http\Controllers\Finance\FinancePaymentProofController;
@@ -102,6 +103,10 @@ Route::middleware('guest')->group(function () {
 
     Route::get('/forgot-password', [PasswordResetLinkController::class, 'create'])->name('password.request');
     Route::post('/forgot-password', [PasswordResetLinkController::class, 'store'])->name('password.email');
+
+    Route::get('/reset-password/phone', [PhonePasswordResetController::class, 'create'])->name('password.reset.phone');
+    Route::post('/reset-password/phone', [PhonePasswordResetController::class, 'store'])->name('password.update.phone');
+    Route::post('/reset-password/phone/resend', [PhonePasswordResetController::class, 'resend'])->name('password.resend.phone');
 
     Route::get('/reset-password/{token}', [NewPasswordController::class, 'create'])->name('password.reset');
     Route::post('/reset-password', [NewPasswordController::class, 'store'])->name('password.update');

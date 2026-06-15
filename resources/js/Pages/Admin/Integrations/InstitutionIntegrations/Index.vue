@@ -64,7 +64,7 @@ function applyFilters() {
       <div class="overflow-hidden rounded-2xl border border-border bg-surface shadow-sm">
         <div class="border-b border-border bg-surface-muted px-5 py-4">
           <div class="text-sm font-semibold text-text-primary">Institutions</div>
-          <div class="mt-1 text-xs text-text-muted">Each institution can optionally be configured for pull lookup during auto-verification.</div>
+          <div class="mt-1 text-xs text-text-muted">Configure pull lookup integration for manual preview and future use. Auto-verification uses only ZAQA learner achievement records and does not call institution systems automatically.</div>
         </div>
 
         <div v-if="institutions.data.length === 0" class="px-5 py-6">

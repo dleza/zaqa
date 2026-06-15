@@ -75,6 +75,7 @@ function testConnection() {
             <input type="checkbox" v-model="form.supports_pull" />
             Supports pull lookup (ZAQA → institution)
           </label>
+          <p class="mt-1 text-xs text-text-muted">For manual preview and future use. Not invoked automatically during auto-verification.</p>
         </div>
 
         <div class="sm:col-span-2">

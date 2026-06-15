@@ -28,7 +28,7 @@ class SendPhoneOtpSms implements ShouldQueue
         }
 
         $sms->queueTemplate(
-            templateKey: 'activation_otp',
+            templateKey: $event->purpose === 'password_reset' ? 'password_reset_otp' : 'activation_otp',
             placeholders: [
                 'code' => $event->code,
                 'expires_at' => $event->expiresAt

@@ -359,7 +359,7 @@ function copyText(value: string | null | undefined) {
 
         <div class="flex flex-1 flex-col p-5">
           <p class="text-sm text-text-muted">
-            During auto-verification, ZAQA calls the institution’s lookup URL when internal records do not match. Uses a <strong class="font-medium text-text-primary">separate</strong> shared token (not the push token).
+            Configure the institution lookup endpoint for <strong class="font-medium text-text-primary">manual preview and future institution lookup use</strong>. Auto-verification uses only ZAQA learner achievement records and does not call this URL automatically. Uses a <strong class="font-medium text-text-primary">separate</strong> shared token (not the push token).
           </p>
 
           <ol class="mt-4 space-y-2 text-sm text-text-primary">
@@ -521,7 +521,7 @@ function copyText(value: string | null | undefined) {
     <AdminActionModal
       v-model="pullConfigModalOpen"
       title="Configure pull lookup"
-      description="ZAQA → Institution. Set the URL ZAQA calls during auto-verification."
+      description="ZAQA → Institution. Set the lookup URL for manual preview and future institution lookup use (not called automatically during auto-verification)."
       max-width-class="max-w-3xl"
     >
       <div class="grid gap-4 sm:grid-cols-2">

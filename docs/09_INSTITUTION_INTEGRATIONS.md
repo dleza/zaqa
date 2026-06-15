@@ -4,8 +4,8 @@
 
 ZAQA supports two complementary integration patterns with Awarding Institutions:
 
-1. **Push (institution → ZAQA)** — the primary and recommended mode.
-2. **Pull (ZAQA → institution)** — used only during auto-verification for a specific qualification when internal records are insufficient and the institution has a configured lookup endpoint.
+1. **Push (institution → ZAQA)** — the primary and recommended mode for populating learner achievement records.
+2. **Pull (ZAQA → institution)** — optional configuration for **manual preview**, connectivity testing, and **future/manual** lookup workflows. Pull integrations are **not** called automatically during auto-verification.
 
 ## Push (institution → ZAQA)
 
@@ -24,17 +24,23 @@ Institutions push learner achievement records into ZAQA using the Institution In
 
 ## Pull (ZAQA → institution)
 
-Pull lookups are optional and only used when:
+Pull lookup integrations remain available for configuration, testing, and future/manual use. They are **not** invoked automatically when a qualification is auto-verified.
 
-- Internal learner record matching does not find a safe match.
-- The awarding institution has pull lookup enabled and configured in Admin → Integrations.
+Auto-verification checks **only** ZAQA learner achievement records (`learner_records`). When no safe internal match is found, the qualification routes directly to Level 1 assignment (or awaits Level 2 assignment).
 
-Pull lookups:
+Pull lookups can still be used for:
 
-- Run asynchronously (queued).
+- Admin **pull lookup preview** on an awarding institution profile
+- **Test connection** from integration admin screens
+- Direct calls to `InstitutionPullLookupService` (future manual workflows)
+
+When used (manually or in future workflows), pull lookups:
+
+- Run asynchronously when dispatched as queued jobs.
 - Are time-bounded (timeout and retry settings).
-- Are logged in a separate sanitized log stream.
-- Must never block the verification workflow indefinitely; failures fall back to normal Level 1 routing.
+- Are logged in a separate sanitized log stream (`institution_pull_lookup_logs`).
+
+Institutions that want auto-verification to match their learners must populate ZAQA learner achievement records through agreed channels (push API, Excel import, or other approved ingestion).
 
 ## Configuration model
 
@@ -68,9 +74,9 @@ Important:
    - Auth type: `bearer_token`
    - Bearer token: same value as SIS `ZAQA_LOOKUP_TOKEN`
    - Timeout / retries as required
-   - Use **Test connection** to verify connectivity
+   - Use **Test connection** or **Pull lookup preview** on the awarding institution profile to verify connectivity
 
-No ZAQA `.env` entries are required for this integration in production.
+**Note:** Configuring UNZA (or any institution) pull lookup does **not** cause auto-verification to call the institution system. Populate `learner_records` via push API or import if auto-verification should match those learners.
 
 ### Local development convenience seeder
 

@@ -147,12 +147,14 @@ class AccountActivationService
         DB::transaction(function () use ($user, $code, $expiresAt) {
             UserPhoneOtp::query()
                 ->where('user_id', $user->id)
+                ->where('purpose', PasswordResetService::OTP_PURPOSE_ACTIVATION)
                 ->whereNull('verified_at')
                 ->update(['verified_at' => now()]);
 
             UserPhoneOtp::create([
                 'user_id' => $user->id,
                 'phone_number' => $user->phone_primary,
+                'purpose' => PasswordResetService::OTP_PURPOSE_ACTIVATION,
                 'code_hash' => Hash::make($code),
                 'expires_at' => $expiresAt,
                 'verified_at' => null,
@@ -186,6 +188,7 @@ class AccountActivationService
         $otp = UserPhoneOtp::query()
             ->where('user_id', $user->id)
             ->where('phone_number', $user->phone_primary)
+            ->where('purpose', PasswordResetService::OTP_PURPOSE_ACTIVATION)
             ->whereNull('verified_at')
             ->where('expires_at', '>', now())
             ->latest('id')

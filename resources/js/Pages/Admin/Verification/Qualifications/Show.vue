@@ -981,7 +981,7 @@ const subjectResultsCount = computed(() => props.qualification.subject_results?.
             <div class="flex items-start justify-between gap-3">
               <div>
                 <h2 class="text-base font-bold tracking-tight text-text-primary">Auto-verification result</h2>
-                <p class="mt-1 text-sm text-text-muted">Review the match outcome first. Expand the lower sections only when deeper evidence is needed.</p>
+                <p class="mt-1 text-sm text-text-muted">Internal match against ZAQA learner achievement records only. Review the match outcome first. Expand the lower sections only when deeper evidence is needed.</p>
               </div>
               <span class="flex h-10 w-10 items-center justify-center rounded-xl bg-brand/10 text-brand">
                 <Sparkles class="h-5 w-5" aria-hidden="true" />
@@ -1043,7 +1043,8 @@ const subjectResultsCount = computed(() => props.qualification.subject_results?.
               </div>
               <div class="rounded-xl border border-border/70 bg-surface-muted/30 px-4 py-4">
                 <div class="text-[11px] font-bold uppercase tracking-wider text-text-muted">Source</div>
-                <div class="mt-2 text-sm font-semibold text-text-primary">{{ qualification.auto_verification?.source || '—' }}</div>
+                <div class="mt-2 text-sm font-semibold text-text-primary">{{ qualification.auto_verification?.source || 'ZAQA learner achievement records' }}</div>
+                <div class="mt-1 text-[11px] text-text-muted">Auto-verification checks ZAQA learner achievement records only.</div>
                 <div class="mt-1 text-[11px] text-text-muted">Attempted {{ formatTimelineAt(qualification.auto_verification?.attempted_at) }}</div>
               </div>
               <div class="rounded-xl border border-border/70 bg-surface-muted/30 px-4 py-4">
@@ -1731,6 +1732,7 @@ const subjectResultsCount = computed(() => props.qualification.subject_results?.
           <div v-if="(approveForm.errors as any).payment" class="mt-1 text-xs text-danger">{{ (approveForm.errors as any).payment }}</div>
           <div v-if="(approveForm.errors as any).application" class="mt-1 text-xs text-danger">{{ (approveForm.errors as any).application }}</div>
           <div v-if="(approveForm.errors as any).qualification" class="mt-1 text-xs text-danger">{{ (approveForm.errors as any).qualification }}</div>
+          <div v-if="(approveForm.errors as any).lock" class="mt-1 text-xs text-danger">{{ (approveForm.errors as any).lock }}</div>
         </div>
       </div>
       <template #footer>
@@ -1772,6 +1774,7 @@ const subjectResultsCount = computed(() => props.qualification.subject_results?.
         <textarea v-model="rejectForm.reason" class="zaqa-input mt-2 h-auto min-h-[10rem] py-3" placeholder="Provide a clear rejection reason." />
         <div v-if="rejectForm.errors.reason" class="mt-1 text-xs text-danger">{{ rejectForm.errors.reason }}</div>
         <div v-if="(rejectForm.errors as any).qualification" class="mt-1 text-xs text-danger">{{ (rejectForm.errors as any).qualification }}</div>
+        <div v-if="(rejectForm.errors as any).lock" class="mt-1 text-xs text-danger">{{ (rejectForm.errors as any).lock }}</div>
       </div>
       <template #footer>
         <button

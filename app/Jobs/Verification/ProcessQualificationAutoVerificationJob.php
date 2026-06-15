@@ -6,7 +6,6 @@ use App\Domain\Audit\AuditLogService;
 use App\Domain\Certificates\QualificationCertificateService;
 use App\Domain\LearnerRecords\LearnerRecordMatchingService;
 use App\Domain\Verification\QualificationAutoAssignmentService;
-use App\Jobs\InstitutionIntegrations\PerformInstitutionPullLookupJob;
 use App\Enums\LifecycleStage;
 use App\Enums\LifecycleVisibility;
 use App\Enums\VerificationState;
@@ -53,7 +52,7 @@ class ProcessQualificationAutoVerificationJob implements ShouldQueue
     ): void
     {
         $qualification = Qualification::query()
-            ->with(['application', 'learnerRecord', 'awardingInstitution.integration'])
+            ->with(['application', 'learnerRecord'])
             ->find($this->qualificationId);
 
         if (! $qualification) {
@@ -61,11 +60,6 @@ class ProcessQualificationAutoVerificationJob implements ShouldQueue
         }
 
         if (! $this->manualRecheck && $qualification->verification_state !== VerificationState::AwaitingAutoVerification) {
-            return;
-        }
-
-        if ($qualification->institution_pull_lookup_dispatched_at && ! $qualification->institution_pull_lookup_attempted_at) {
-            // A pull lookup is already in progress; avoid duplicate internal match attempts.
             return;
         }
 
@@ -77,7 +71,7 @@ class ProcessQualificationAutoVerificationJob implements ShouldQueue
 
         $result = DB::transaction(function () use ($qualification, $match, $threshold, $autoIssueEnabled, $enabled) {
             $locked = Qualification::query()->lockForUpdate()->findOrFail($qualification->id);
-            $locked->loadMissing('application', 'awardingInstitution.integration');
+            $locked->loadMissing('application');
 
             if (! $this->manualRecheck && $locked->verification_state !== VerificationState::AwaitingAutoVerification) {
                 return [
@@ -133,31 +127,6 @@ class ProcessQualificationAutoVerificationJob implements ShouldQueue
                     'candidate_record_ids' => $match->candidateRecordIds,
                 ],
             ])->save();
-
-            if ($match->status === \App\Enums\LearnerRecordMatchStatus::NotFound
-                && ! $locked->institution_pull_lookup_attempted_at
-                && ! $locked->institution_pull_lookup_dispatched_at) {
-                $integration = $locked->awardingInstitution?->integration;
-                $canPull = $integration
-                    && (bool) $integration->is_active
-                    && (bool) $integration->supports_pull
-                    && trim((string) ($integration->lookup_url ?? '')) !== '';
-
-                if ($canPull) {
-                    $locked->forceFill([
-                        'institution_pull_lookup_dispatched_at' => now(),
-                        'institution_pull_lookup_status' => null,
-                        'institution_pull_lookup_last_error' => null,
-                    ])->save();
-
-                    return [
-                        'changed' => true,
-                        'application_id' => (int) $locked->application_id,
-                        'action' => 'dispatch_institution_pull',
-                        'qualification_id' => (int) $locked->id,
-                    ];
-                }
-            }
 
             $action = 'fallback_level1';
 
@@ -241,22 +210,11 @@ class ProcessQualificationAutoVerificationJob implements ShouldQueue
         $action = (string) ($result['action'] ?? 'fallback_level1');
 
         $auditMessage = match ($action) {
-            'dispatch_institution_pull' => 'Internal learner record lookup failed; dispatched institution pull lookup.',
-            'awaiting_institution_pull' => 'Awaiting institution pull lookup result.',
             'issue_certificate' => 'Qualification auto-verified and queued for certificate issuance.',
             'pending_level2' => 'Qualification auto-verified (or possible match) and routed to Level 2 review.',
             'fallback_preserved' => 'Auto-verification recheck completed; existing manual review state was preserved.',
             default => 'Auto-verification completed; qualification routed to Level 1 assignment pool.',
         };
-
-        if ($action === 'dispatch_institution_pull') {
-            PerformInstitutionPullLookupJob::dispatch(
-                (int) ($result['qualification_id'] ?? $qualification->id),
-                $this->manualRecheck,
-                $this->resumeState,
-                $this->resumeAssigneeId,
-            );
-        }
 
         if ($action === 'issue_certificate') {
             $this->issueCertificateIfPossible(
@@ -295,10 +253,6 @@ class ProcessQualificationAutoVerificationJob implements ShouldQueue
             ],
             actor: null,
         );
-
-        if ($action === 'dispatch_institution_pull') {
-            return;
-        }
 
         if ($application && ! $this->manualRecheck) {
             $lifecycle->event(

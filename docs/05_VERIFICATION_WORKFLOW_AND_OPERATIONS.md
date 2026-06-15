@@ -151,11 +151,12 @@ When an application is **paid and payment satisfaction is confirmed**, the syste
 - dispatches an asynchronous job per qualification to attempt auto-verification
 
 ### Learner records module
-Auto-verification uses internal **Learner Achievement Records** (`learner_records`) as the first lookup source.
+Auto-verification uses **only** internal **Learner Achievement Records** (`learner_records`). No external institution systems are called during auto-verification.
 
 Records are populated primarily via:
 - admin Excel imports (`learner_record_imports`)
-- (future) institution integrations
+- institution push API (`/api/institution/v1`)
+- institution pull lookup ingestion when invoked manually or in future workflows (not during auto-verification)
 - (optional) manual/admin entry
 
 ### Matching threshold and safety
@@ -182,12 +183,59 @@ For each qualification in `awaiting_auto_verification`:
   - if confidence ≥ threshold → route to `auto_verified_pending_level2`
   - otherwise → fall back to `awaiting_assignment`
 - **Not found / error**:
-  - fall back to `awaiting_assignment`
+  - fall back directly to `awaiting_assignment` (no external institution lookup)
+  - attempt Level 1 category-based auto-assignment when configured
 
 All auto-verification attempts are audited in `learner_record_match_attempts`.
 
+### Stuck qualifications (legacy institution pull dispatch)
+
+Before this change, some qualifications may have been left in `awaiting_auto_verification` while an institution pull lookup was dispatched but not completed (`institution_pull_lookup_dispatched_at` set, `institution_pull_lookup_attempted_at` null).
+
+**Identify stuck rows (read-only):**
+
+```sql
+SELECT id, application_id, verification_state,
+       institution_pull_lookup_dispatched_at,
+       institution_pull_lookup_attempted_at
+FROM qualifications
+WHERE verification_state = 'awaiting_auto_verification'
+  AND institution_pull_lookup_dispatched_at IS NOT NULL
+  AND institution_pull_lookup_attempted_at IS NULL;
+```
+
+**Safe remediation (review each row first):**
+
+1. Clear pull-in-progress flags and re-queue auto-verification:
+
+```sql
+-- Example per qualification id — run only after manual review
+UPDATE qualifications
+SET institution_pull_lookup_dispatched_at = NULL,
+    institution_pull_lookup_status = NULL,
+    institution_pull_lookup_last_error = NULL
+WHERE id = ?;
+```
+
+Then dispatch `ProcessQualificationAutoVerificationJob` for that qualification (e.g. via tinker or admin recheck).
+
+2. Or route directly to Level 1 if auto-verification already ran and only the pull wait blocked progress:
+
+```sql
+UPDATE qualifications
+SET verification_state = 'awaiting_assignment',
+    institution_pull_lookup_dispatched_at = NULL,
+    institution_pull_lookup_status = NULL,
+    institution_pull_lookup_last_error = NULL
+WHERE id = ?;
+```
+
+Then run Level 1 auto-assignment or assign manually as appropriate.
+
+Do not run bulk updates without reviewing affected applications.
+
 ## Level 1 category-based auto-assignment
-When auto-verification (and optional institution pull lookup) does not produce a safe match, the qualification falls back to the Level 1 manual workflow.
+When auto-verification does not produce a safe internal match, the qualification falls back to the Level 1 manual workflow.
 
 To reduce manual triage effort, the system supports **category-based auto-assignment** to Level 1 officers.
 

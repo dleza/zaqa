@@ -22,6 +22,7 @@ return [
     */
     'admin_redaction' => [
         'activation_otp' => ['code'],
+    'password_reset_otp' => ['code'],
     ],
 
     'zamtel' => [

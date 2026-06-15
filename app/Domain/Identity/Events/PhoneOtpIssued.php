@@ -15,6 +15,7 @@ class PhoneOtpIssued
         public readonly User $user,
         public readonly string $code,
         public readonly CarbonImmutable $expiresAt,
+        public readonly string $purpose = 'activation',
     ) {
     }
 }

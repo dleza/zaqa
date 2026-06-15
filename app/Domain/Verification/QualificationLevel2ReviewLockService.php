@@ -87,6 +87,10 @@ class QualificationLevel2ReviewLockService
 
     public function assertActorHoldsLockOrIsSuperAdmin(Qualification $qualification, User $actor): void
     {
+        if ($actor->hasRole('Super Admin')) {
+            return;
+        }
+
         $lockedBy = (int) ($qualification->level2_review_locked_by ?? 0);
         $lockedAt = $qualification->level2_review_locked_at;
 
@@ -94,10 +98,6 @@ class QualificationLevel2ReviewLockService
             throw ValidationException::withMessages([
                 'lock' => 'Start review to lock this qualification before taking Level 2 actions.',
             ]);
-        }
-
-        if ($actor->hasRole('Super Admin')) {
-            return;
         }
 
         if ($lockedBy !== (int) $actor->id) {

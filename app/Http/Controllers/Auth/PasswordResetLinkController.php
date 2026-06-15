@@ -2,12 +2,12 @@
 
 namespace App\Http\Controllers\Auth;
 
-use App\Domain\Audit\AuditLogService;
+use App\Domain\Identity\PasswordResetService;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Auth\ForgotPasswordRequest;
-use App\Models\User;
+use App\Http\Requests\Auth\ResetPasswordWithOtpRequest;
 use Illuminate\Http\RedirectResponse;
-use Illuminate\Support\Facades\Password;
+use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -18,28 +18,28 @@ class PasswordResetLinkController extends Controller
         return Inertia::render('Auth/ForgotPassword');
     }
 
-    public function store(ForgotPasswordRequest $request, AuditLogService $audit): RedirectResponse
+    public function store(ForgotPasswordRequest $request, PasswordResetService $passwordReset): RedirectResponse
     {
-        $email = (string) $request->validated()['email'];
+        $identifier = (string) $request->validated()['identifier'];
+        $user = $passwordReset->findUserByIdentifier($identifier);
 
-        $user = User::query()->where('email', $email)->first();
+        if (! $user) {
+            throw ValidationException::withMessages([
+                'identifier' => 'No account found with this email or phone number.',
+            ]);
+        }
 
-        $audit->record(
-            eventType: 'identity.password_reset_requested',
-            module: 'Identity',
-            actionName: 'password_reset_requested',
-            message: 'Password reset requested.',
-            entityType: $user ? $user::class : null,
-            entityId: $user?->id,
-            metadata: [
-                'email' => $email,
-            ],
-            actor: $user,
-        );
+        $result = $passwordReset->requestReset($user, $identifier);
 
-        Password::sendResetLink(['email' => $email]);
+        if ($result['channel'] === 'phone') {
+            $request->session()->put('password_reset_user_id', (int) $user->id);
 
-        return back()->with('success', 'If the email exists in our system, a password reset link has been sent.');
+            return redirect()
+                ->route('password.reset.phone')
+                ->with('success', $result['message'])
+                ->with('password_reset_phone_hint', $result['phone_hint']);
+        }
+
+        return back()->with('success', $result['message']);
     }
 }
-

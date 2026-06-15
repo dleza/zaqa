@@ -2,9 +2,10 @@
 
 namespace Tests\Feature;
 
+use App\Domain\InstitutionIntegrations\InstitutionPullLookupService;
 use App\Enums\InstitutionLearnerLookupStatus;
-use App\Enums\LearnerRecordSourceType;
 use App\Enums\VerificationState;
+use App\Jobs\InstitutionIntegrations\PerformInstitutionPullLookupJob;
 use App\Jobs\Verification\ProcessQualificationAutoVerificationJob;
 use App\Models\Application;
 use App\Models\AwardingInstitution;
@@ -17,6 +18,7 @@ use App\Models\User;
 use Database\Seeders\RolesAndPermissionsSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Client\Request as HttpRequest;
+use Illuminate\Support\Facades\Bus;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Str;
 use Tests\TestCase;
@@ -38,85 +40,26 @@ class UnzaInstitutionPullLookupTest extends TestCase
         ]);
     }
 
-    public function test_unza_integration_triggers_pull_lookup_and_sends_student_id(): void
+    public function test_auto_verification_with_unza_integration_does_not_call_external_lookup(): void
     {
         $qualification = $this->makeUnzaQualification();
 
-        Http::fake([
-            self::LOOKUP_URL => Http::response([
-                'found' => true,
-                'source_reference' => 'verification_records:42',
-                'confidence_hint' => 85,
-                'record' => [
-                    'student_id' => '2019001',
-                    'certificate_no' => 'UNZA-2024-0001',
-                    'first_name' => 'Martin',
-                    'last_name' => 'Mwale',
-                    'other_names' => null,
-                    'nrc_number' => null,
-                    'passport_no' => null,
-                    'program_of_study' => 'Bachelor of Science',
-                    'year_awarded' => 2024,
-                    'award_date' => '2024-12-15',
-                ],
-            ], 200),
-        ]);
+        Http::fake();
+        Bus::fake([PerformInstitutionPullLookupJob::class]);
 
         ProcessQualificationAutoVerificationJob::dispatchSync((int) $qualification->id);
 
-        Http::assertSent(function (HttpRequest $request) {
-            $data = $request->data();
-            $this->assertSame('POST', $request->method());
-            $this->assertSame('2019001', $data['student_id'] ?? null);
-            $this->assertArrayHasKey('correlation_id', $data);
-            $this->assertTrue($request->hasHeader('Authorization'));
-
-            return true;
-        });
+        Http::assertNothingSent();
+        Bus::assertNotDispatched(PerformInstitutionPullLookupJob::class);
 
         $qualification->refresh();
-        $this->assertNotNull($qualification->institution_pull_lookup_attempted_at);
-    }
-
-    public function test_found_true_ingests_learner_record_and_reruns_auto_verification(): void
-    {
-        $qualification = $this->makeUnzaQualification();
-
-        Http::fake([
-            self::LOOKUP_URL => Http::response([
-                'found' => true,
-                'source_reference' => 'verification_records:42',
-                'confidence_hint' => 85,
-                'record' => [
-                    'student_id' => '2019001',
-                    'certificate_no' => 'UNZA-2024-0001',
-                    'first_name' => 'Martin',
-                    'last_name' => 'Mwale',
-                    'other_names' => null,
-                    'nrc_number' => null,
-                    'passport_no' => null,
-                    'program_of_study' => 'Bachelor of Science',
-                    'year_awarded' => 2024,
-                    'award_date' => '2024-12-15',
-                ],
-            ], 200),
-        ]);
-
+        $this->assertNull($qualification->institution_pull_lookup_dispatched_at);
+        $this->assertNull($qualification->institution_pull_lookup_attempted_at);
+        $this->assertSame(VerificationState::AwaitingAssignment, $qualification->verification_state);
         $this->assertSame(0, LearnerRecord::query()->count());
-
-        ProcessQualificationAutoVerificationJob::dispatchSync((int) $qualification->id);
-
-        $qualification->refresh();
-        $this->assertNotNull($qualification->learner_record_id);
-        $this->assertSame('institution_api', (string) $qualification->verification_source);
-        $this->assertSame(VerificationState::AutoVerifiedPendingLevel2, $qualification->verification_state);
-
-        $record = LearnerRecord::query()->findOrFail((int) $qualification->learner_record_id);
-        $this->assertSame(LearnerRecordSourceType::InstitutionApi, $record->source_type);
-        $this->assertSame('2019001', $record->student_id);
     }
 
-    public function test_found_false_falls_back_to_level_1_assignment(): void
+    public function test_unza_pull_service_sends_student_id_and_authorization(): void
     {
         $qualification = $this->makeUnzaQualification();
 
@@ -129,16 +72,56 @@ class UnzaInstitutionPullLookupTest extends TestCase
             ], 200),
         ]);
 
-        ProcessQualificationAutoVerificationJob::dispatchSync((int) $qualification->id);
+        app(InstitutionPullLookupService::class)->lookup($qualification);
 
-        $qualification->refresh();
-        $this->assertNotNull($qualification->institution_pull_lookup_attempted_at);
-        $this->assertNull($qualification->learner_record_id);
-        $this->assertSame(VerificationState::AwaitingAssignment, $qualification->verification_state);
-        $this->assertSame(0, LearnerRecord::query()->count());
+        Http::assertSent(function (HttpRequest $request) {
+            $data = $request->data();
+            $this->assertSame('POST', $request->method());
+            $this->assertSame('2019001', $data['student_id'] ?? null);
+            $this->assertArrayHasKey('correlation_id', $data);
+            $this->assertTrue($request->hasHeader('Authorization'));
+
+            return true;
+        });
     }
 
-    public function test_auth_failure_is_logged_safely_without_token_leak(): void
+    public function test_unza_pull_service_ingests_found_record(): void
+    {
+        $qualification = $this->makeUnzaQualification();
+
+        Http::fake([
+            self::LOOKUP_URL => Http::response([
+                'found' => true,
+                'source_reference' => 'verification_records:42',
+                'confidence_hint' => 85,
+                'record' => [
+                    'student_id' => '2019001',
+                    'certificate_no' => 'UNZA-2024-0001',
+                    'first_name' => 'Martin',
+                    'last_name' => 'Mwale',
+                    'other_names' => null,
+                    'nrc_number' => null,
+                    'passport_no' => null,
+                    'program_of_study' => 'Bachelor of Science',
+                    'year_awarded' => 2024,
+                    'award_date' => '2024-12-15',
+                ],
+            ], 200),
+        ]);
+
+        $this->assertSame(0, LearnerRecord::query()->count());
+
+        $result = app(InstitutionPullLookupService::class)->lookup($qualification);
+
+        $this->assertTrue($result->found);
+        $this->assertSame(InstitutionLearnerLookupStatus::Found, $result->status);
+        $this->assertSame(1, LearnerRecord::query()->count());
+
+        $record = LearnerRecord::query()->first();
+        $this->assertSame('2019001', $record->student_id);
+    }
+
+    public function test_unza_pull_service_auth_failure_is_logged_safely_without_token_leak(): void
     {
         $qualification = $this->makeUnzaQualification();
 
@@ -149,10 +132,7 @@ class UnzaInstitutionPullLookupTest extends TestCase
             ], 401),
         ]);
 
-        ProcessQualificationAutoVerificationJob::dispatchSync((int) $qualification->id);
-
-        $qualification->refresh();
-        $this->assertSame(VerificationState::AwaitingAssignment, $qualification->verification_state);
+        app(InstitutionPullLookupService::class)->lookup($qualification);
 
         $log = InstitutionPullLookupLog::query()->where('qualification_id', $qualification->id)->latest('id')->first();
         $this->assertNotNull($log);
@@ -167,7 +147,7 @@ class UnzaInstitutionPullLookupTest extends TestCase
         $this->assertStringNotContainsString('unza-secret-token', $serialized);
     }
 
-    public function test_timeout_failure_falls_back_to_level_1_and_is_logged(): void
+    public function test_unza_pull_service_timeout_is_logged(): void
     {
         $qualification = $this->makeUnzaQualification();
 
@@ -175,10 +155,9 @@ class UnzaInstitutionPullLookupTest extends TestCase
             self::LOOKUP_URL => fn () => throw new \Illuminate\Http\Client\ConnectionException('Connection timed out'),
         ]);
 
-        ProcessQualificationAutoVerificationJob::dispatchSync((int) $qualification->id);
+        $result = app(InstitutionPullLookupService::class)->lookup($qualification);
 
-        $qualification->refresh();
-        $this->assertSame(VerificationState::AwaitingAssignment, $qualification->verification_state);
+        $this->assertSame(InstitutionLearnerLookupStatus::Timeout, $result->status);
 
         $log = InstitutionPullLookupLog::query()->where('qualification_id', $qualification->id)->latest('id')->first();
         $this->assertNotNull($log);
@@ -186,7 +165,7 @@ class UnzaInstitutionPullLookupTest extends TestCase
         $this->assertStringContainsString('timeout', strtolower((string) $log->error_message));
     }
 
-    public function test_examination_number_is_included_in_payload_when_available(): void
+    public function test_unza_pull_service_includes_examination_number_in_payload(): void
     {
         $qualification = $this->makeUnzaQualification(examinationNumber: 'EXAM-2024-001');
 
@@ -199,7 +178,7 @@ class UnzaInstitutionPullLookupTest extends TestCase
             ], 200),
         ]);
 
-        ProcessQualificationAutoVerificationJob::dispatchSync((int) $qualification->id);
+        app(InstitutionPullLookupService::class)->lookup($qualification);
 
         Http::assertSent(function (HttpRequest $request) {
             return ($request->data()['examination_number'] ?? null) === 'EXAM-2024-001';

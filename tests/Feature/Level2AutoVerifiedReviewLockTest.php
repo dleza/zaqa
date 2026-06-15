@@ -188,6 +188,60 @@ class Level2AutoVerifiedReviewLockTest extends TestCase
         $this->assertSame($l2b->id, (int) $qualification->level2_review_locked_by);
     }
 
+    public function test_super_admin_can_approve_auto_verified_pending_level2_without_lock(): void
+    {
+        $this->seed(RolesAndPermissionsSeeder::class);
+
+        $superAdmin = User::factory()->activated()->create(['applicant_type' => null]);
+        $superAdmin->assignRole('Super Admin');
+
+        $country = Country::query()->create([
+            'iso_code' => 'ZMB',
+            'name' => 'Zambia',
+            'is_active' => true,
+            'sort_order' => 1,
+        ]);
+
+        $inst = AwardingInstitution::query()->create([
+            'country_id' => $country->id,
+            'name' => 'Test University',
+            'consent_form_path' => null,
+            'is_active' => true,
+            'sort_order' => 1,
+        ]);
+
+        $billing = BillingCategory::query()->create([
+            'name' => 'Test Billing',
+            'code' => 'TEST_BILLING',
+            'description' => null,
+            'local_processing_days' => 10,
+            'foreign_processing_days' => 20,
+            'is_active' => true,
+            'sort_order' => 1,
+        ]);
+
+        $type = QualificationType::query()->create([
+            'name' => 'Test Type',
+            'zqf_level_code' => 'L6',
+            'level_label' => 'Level 6',
+            'billing_category_id' => $billing->id,
+            'is_active' => true,
+            'requires_subject_results' => false,
+            'sort_order' => 1,
+        ]);
+
+        $qualification = $this->makeQualificationInAutoVerifiedState($superAdmin, $inst->id, $type->id);
+
+        $this->actingAs($superAdmin);
+        $this->post("/admin/verification/qualifications/{$qualification->id}/approve", [
+            'comment' => 'Super admin approval',
+            'issue_certificate' => false,
+        ])->assertSessionHasNoErrors();
+
+        $qualification->refresh();
+        $this->assertSame(VerificationState::ApprovedForCertificate, $qualification->verification_state);
+    }
+
     public function test_approve_and_issue_certificate_works_for_auto_verified_pending_level2_and_releases_lock(): void
     {
         $this->seed(BillingCategoriesSeeder::class);
