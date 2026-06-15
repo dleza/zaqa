@@ -1,10 +1,11 @@
 <script setup lang="ts">
 import AdminLayout from '@/Layouts/AdminLayout.vue'
 import AdminExcelImportModal from '@/Components/AdminExcelImportModal.vue'
+import AdminPagination from '@/Components/AdminPagination.vue'
 import AdminViewModal from '@/Components/AdminViewModal.vue'
 import { Link, router } from '@inertiajs/vue3'
-import { BookOpen, FileSpreadsheet, GraduationCap, Plus, Search } from 'lucide-vue-next'
-import { ref, watch } from 'vue'
+import { FileSpreadsheet, GraduationCap, Plus, Search } from 'lucide-vue-next'
+import { computed, ref, watch } from 'vue'
 
 const props = defineProps<{
   titles: any
@@ -42,6 +43,14 @@ function openView(t: any) {
   selected.value = t
   viewOpen.value = true
 }
+
+const titlesSummary = computed(() => {
+  const total = Number(props.titles?.total ?? 0)
+  if (total <= 0) return null
+  const from = Number(props.titles?.from ?? 0)
+  const to = Number(props.titles?.to ?? 0)
+  return `Showing ${from.toLocaleString()}–${to.toLocaleString()} of ${total.toLocaleString()} titles`
+})
 </script>
 
 <template>
@@ -161,6 +170,11 @@ function openView(t: any) {
             </tr>
           </tbody>
         </table>
+      </div>
+
+      <div v-if="titles.data.length > 0" class="border-t border-border bg-surface-muted px-5 py-4">
+        <div v-if="titlesSummary" class="text-center text-xs text-text-muted">{{ titlesSummary }}</div>
+        <AdminPagination :links="titles.links ?? []" />
       </div>
     </div>
 
