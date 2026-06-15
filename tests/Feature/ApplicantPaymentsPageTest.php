@@ -220,6 +220,9 @@ class ApplicantPaymentsPageTest extends TestCase
                 ->where('payment.id', $payment->id)
                 ->where('payment.application.application_number', $app->application_number)
                 ->where('payment.invoice.invoice_number', $inv->invoice_number)
+                ->has('document')
+                ->where('document.receipt_number_display', 'ZQ '.$payment->id)
+                ->where('document.is_official_receipt', true)
             );
     }
 

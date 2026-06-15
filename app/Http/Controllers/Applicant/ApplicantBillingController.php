@@ -172,7 +172,7 @@ class ApplicantBillingController extends Controller
         return $pdf->downloadResponse($payment);
     }
 
-    public function showPayment(Request $request, Payment $payment): Response
+    public function showPayment(Request $request, Payment $payment, PaymentReceiptPdfService $receiptPdf): Response
     {
         $payment->load(['application', 'invoice', 'proofDocument']);
 
@@ -183,6 +183,7 @@ class ApplicantBillingController extends Controller
         $proof = $payment->proofDocument;
 
         return Inertia::render('Applicant/PaymentShow', [
+            'document' => $receiptPdf->buildWebViewData($payment),
             'payment' => [
                 'id' => $payment->id,
                 'method' => $payment->method?->value ?? (string) $payment->method,
@@ -228,7 +229,7 @@ class ApplicantBillingController extends Controller
                         'download_url' => URL::temporarySignedRoute('applicant.documents.download', $signedExpiry, ['document' => $proof->id]),
                     ]
                     : null,
-                'receipt_download_url' => app(PaymentReceiptPdfService::class)->receiptDownloadUrl($payment, 'applicant.payments.receipt.download'),
+                'receipt_download_url' => $receiptPdf->receiptDownloadUrl($payment, 'applicant.payments.receipt.download'),
             ],
         ]);
     }

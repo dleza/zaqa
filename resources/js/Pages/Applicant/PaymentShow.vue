@@ -1,22 +1,43 @@
 <script setup lang="ts">
 import { Link } from '@inertiajs/vue3'
 import ApplicantLayout from '@/Layouts/ApplicantLayout.vue'
-import {
-  AlertCircle,
-  ArrowDownToLine,
-  ArrowLeft,
-  Building2,
-  CalendarClock,
-  CheckCircle2,
-  CreditCard,
-  Eye,
-  FileText,
-  Hash,
-  Link2,
-  Route,
-} from 'lucide-vue-next'
+import { zaqaLogoUrl } from '@/constants/zaqaLogo'
+import { AlertCircle, ArrowDownToLine, ArrowLeft, CheckCircle2, Eye } from 'lucide-vue-next'
 
 const props = defineProps<{
+  document: {
+    is_official_receipt: boolean
+    organization: {
+      legal_name?: string
+      address?: string
+      address_line_1?: string
+      address_line_2?: string
+      address_line_3?: string
+      tel?: string
+      fax?: string
+      email?: string
+      website?: string
+    }
+    receipt_number_display: string
+    receipt_date: string | null
+    receipt_time: string | null
+    account_label: string
+    account_reference: string
+    description: string
+    amount_in_words: string
+    reference: string
+    payment_method_label: string
+    breakdown: {
+      cheque_no: string
+      cheque_amount: string
+      cash_amount: string
+      electronic_amount: string
+      total: string
+    }
+    signature_data_uri: string | null
+    qr_data_uri: string | null
+    verification_url: string | null
+  }
   payment: {
     id: number
     method: string
@@ -48,6 +69,7 @@ const props = defineProps<{
       invoice_number: string
       status: string
       show_url: string
+      download_url: string
     } | null
     proof_document: {
       id: number
@@ -88,8 +110,8 @@ function humanMethod(m: string) {
   <ApplicantLayout>
     <div class="relative min-h-[40vh]">
       <div class="pointer-events-none absolute inset-0 -z-10 overflow-hidden" aria-hidden="true">
-        <div class="absolute -left-16 top-0 h-56 w-56 rounded-full bg-brand/10 blur-3xl" />
-        <div class="absolute right-0 top-20 h-64 w-64 rounded-full bg-accent/10 blur-3xl" />
+        <div class="absolute -left-16 top-0 h-64 w-64 rounded-full bg-brand/10 blur-3xl" />
+        <div class="absolute right-0 top-20 h-72 w-72 rounded-full bg-accent/10 blur-3xl" />
       </div>
 
       <div class="zaqa-wizard-shell">
@@ -101,241 +123,274 @@ function humanMethod(m: string) {
           All payments
         </Link>
 
-        <div class="mt-6 flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-          <div>
-            <p class="text-xs font-semibold uppercase tracking-[0.18em] text-text-muted">Payment</p>
-            <h1 class="mt-2 text-2xl font-semibold tracking-tight text-text-primary sm:text-3xl">
-              {{ humanMethod(payment.method) }}
-              <span class="text-text-muted">·</span>
-              {{ money(payment.amount_cents, payment.currency) }}
+        <div class="mt-6 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+          <div class="min-w-0">
+            <p class="text-xs font-semibold uppercase tracking-[0.18em] text-text-muted">Billing</p>
+            <h1 class="mt-2 font-mono text-2xl font-semibold tracking-tight text-text-primary sm:text-3xl">
+              ZQ {{ payment.id }}
             </h1>
             <p class="mt-2 max-w-2xl text-sm text-text-muted">
-              Full record of this payment attempt. Open your application or invoice for related context.
+              {{ humanMethod(payment.method) }} · {{ money(payment.amount_cents, payment.currency) }}
+              <span class="capitalize"> · {{ payment.status.replace(/_/g, ' ') }}</span>
             </p>
           </div>
-          <div class="flex flex-col items-start gap-3 self-start">
-            <span class="zaqa-badge inline-flex w-fit items-center gap-1.5 text-sm" :class="statusBadgeClass(payment.status)">
-              <CheckCircle2 v-if="payment.status === 'confirmed'" class="h-4 w-4" aria-hidden="true" />
-              <AlertCircle v-else class="h-4 w-4" aria-hidden="true" />
-              {{ payment.status }}
-            </span>
+
+          <div class="flex flex-wrap items-center gap-2 self-start lg:max-w-[50%] lg:justify-end">
             <a
               v-if="payment.receipt_download_url"
               :href="payment.receipt_download_url"
-              class="zaqa-btn zaqa-btn-secondary inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold"
+              class="zaqa-btn zaqa-btn-primary inline-flex items-center gap-2 px-4 py-2 text-sm"
             >
               <ArrowDownToLine class="h-4 w-4" aria-hidden="true" />
               Download receipt
             </a>
+
+            <template v-if="payment.application">
+              <Link :href="payment.application.show_url" class="zaqa-btn zaqa-btn-secondary px-4 py-2 text-sm font-semibold">
+                View application
+              </Link>
+              <Link :href="payment.application.track_url" class="zaqa-btn zaqa-btn-secondary px-4 py-2 text-sm font-semibold">
+                Track
+              </Link>
+              <Link
+                v-if="payment.application.can_edit"
+                :href="payment.application.edit_url"
+                class="zaqa-btn zaqa-btn-secondary px-4 py-2 text-sm font-semibold"
+              >
+                Edit
+              </Link>
+            </template>
+
+            <template v-if="payment.invoice">
+              <Link :href="payment.invoice.show_url" class="zaqa-btn zaqa-btn-secondary px-4 py-2 text-sm font-semibold">
+                View invoice
+              </Link>
+              <a :href="payment.invoice.download_url" class="zaqa-btn zaqa-btn-secondary px-4 py-2 text-sm font-semibold">
+                Download invoice
+              </a>
+            </template>
+
+            <template v-if="payment.proof_document">
+              <a
+                :href="payment.proof_document.preview_url"
+                target="_blank"
+                rel="noopener"
+                class="zaqa-btn zaqa-btn-secondary inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold"
+              >
+                <Eye class="h-4 w-4" aria-hidden="true" />
+                Preview proof
+              </a>
+              <a
+                :href="payment.proof_document.download_url"
+                target="_blank"
+                rel="noopener"
+                class="zaqa-btn zaqa-btn-secondary inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold"
+              >
+                <ArrowDownToLine class="h-4 w-4" aria-hidden="true" />
+                Download proof
+              </a>
+            </template>
           </div>
         </div>
 
-        <div
-          class="mt-8 overflow-hidden rounded-3xl border border-border/80 bg-surface shadow-[0_20px_50px_-12px_rgba(11,58,102,0.12)] ring-1 ring-black/[0.04]"
-        >
+        <div class="mt-8 space-y-8">
           <div
-            class="border-b border-border/70 bg-gradient-to-br from-brand-dark via-brand-dark to-brand px-6 py-8 text-text-on-dark sm:px-10"
+            v-if="!document.is_official_receipt"
+            class="rounded-xl border border-warning/30 bg-warning/10 px-4 py-3 text-sm text-warning"
           >
-            <div class="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
-              <div>
-                <div class="text-[11px] font-semibold uppercase tracking-[0.2em] text-white/70">Payment ID</div>
-                <div class="mt-2 font-mono text-2xl font-bold text-white">#{{ payment.id }}</div>
-                <div class="mt-3 flex flex-wrap gap-2 text-sm text-white/85">
-                  <span v-if="payment.provider_reference" class="rounded-lg bg-white/10 px-2 py-1 font-mono text-xs">
-                    {{ payment.provider_reference }}
-                  </span>
-                  <span v-else class="text-white/70">Reference pending</span>
+            This payment is not confirmed yet. The layout below is a preview; the official receipt PDF with verification QR code
+            is available once payment is confirmed.
+          </div>
+
+          <!-- PDF-style receipt document -->
+          <article
+            class="mx-auto w-full max-w-4xl border-[3px] border-black bg-white p-3 text-[10px] leading-snug text-black shadow-[0_8px_30px_rgba(15,23,42,0.08)] sm:p-4"
+            aria-label="Receipt document"
+          >
+            <!-- Header -->
+            <div class="grid grid-cols-1 gap-4 border-0 sm:grid-cols-[20%_44%_36%] sm:gap-2">
+              <div class="flex items-start justify-center sm:justify-start">
+                <img :src="zaqaLogoUrl" alt="ZAQA logo" class="h-14 w-auto object-contain" />
+              </div>
+              <div class="text-center">
+                <div class="text-[11px] font-bold uppercase leading-snug">
+                  {{ document.organization.legal_name || 'ZAMBIA QUALIFICATIONS AUTHORITY' }}
+                </div>
+                <div v-if="document.organization.address_line_1" class="mt-0.5 text-[9px] font-bold leading-snug">
+                  {{ document.organization.address_line_1 }}
+                </div>
+                <div v-if="document.organization.address_line_2" class="text-[9px] font-bold leading-snug">
+                  {{ document.organization.address_line_2 }}
+                </div>
+                <div v-if="document.organization.address_line_3" class="text-[9px] font-bold leading-snug">
+                  {{ document.organization.address_line_3 }}
+                </div>
+                <div v-else-if="document.organization.address" class="text-[9px] font-bold leading-snug">
+                  {{ document.organization.address }}
                 </div>
               </div>
-              <div class="rounded-xl border border-white/20 bg-white/10 px-5 py-4 backdrop-blur-sm">
-                <div class="text-[10px] font-semibold uppercase tracking-wider text-white/65">Amount</div>
-                <div class="mt-1 text-2xl font-bold text-white">{{ money(payment.amount_cents, payment.currency) }}</div>
+              <div class="text-center text-[9px] font-bold leading-snug sm:text-left">
+                <div v-if="document.organization.tel">Tel: {{ document.organization.tel }}</div>
+                <div v-if="document.organization.fax">Fax: {{ document.organization.fax }}</div>
+                <div v-if="document.organization.email">Email: {{ document.organization.email }}</div>
+                <div v-if="document.organization.website">Website: {{ document.organization.website }}</div>
               </div>
             </div>
-          </div>
 
-          <div class="divide-y divide-border/70 px-6 py-8 sm:px-10">
-            <!-- Related navigation -->
-            <section class="pb-8">
-              <div class="flex items-center gap-3 border-b border-border/60 pb-4">
-                <span class="flex h-10 w-10 items-center justify-center rounded-xl bg-brand/10 text-brand">
-                  <Link2 class="h-5 w-5" aria-hidden="true" />
+            <!-- Title -->
+            <div class="my-3 text-center sm:my-4">
+              <div class="inline-block border-2 border-black px-7 py-1.5 text-[17px] font-bold">Receipt</div>
+            </div>
+
+            <!-- Meta -->
+            <div class="mb-2 grid grid-cols-2 gap-y-0.5 font-bold">
+              <div>No. {{ document.receipt_number_display }}</div>
+              <div class="text-right">Date : {{ document.receipt_date || '—' }}</div>
+              <div></div>
+              <div class="text-right">Time : {{ document.receipt_time || '—' }}</div>
+            </div>
+
+            <!-- Details table -->
+            <div class="overflow-x-auto">
+              <table class="w-full min-w-[520px] border-collapse border-2 border-black text-[9.5px] leading-snug">
+                <tbody>
+                  <tr>
+                    <td class="border-2 border-black p-1.5 align-top sm:p-2" colspan="2">
+                      <strong>Account</strong> {{ document.account_label }} {{ document.account_reference }}
+                    </td>
+                    <td class="w-[22%] border-2 border-black p-1.5 font-bold whitespace-nowrap sm:p-2">Cheque No</td>
+                    <td class="w-[16%] border-2 border-black p-1.5 text-right font-bold whitespace-nowrap sm:p-2">
+                      {{ document.breakdown.cheque_no }}
+                    </td>
+                  </tr>
+                  <tr>
+                    <td class="border-2 border-black p-1.5 align-top sm:p-2" colspan="2">
+                      <strong>Description:</strong> {{ document.description }}
+                    </td>
+                    <td class="border-2 border-black p-1.5 font-bold whitespace-nowrap sm:p-2">Cheque Amount</td>
+                    <td class="border-2 border-black p-1.5 text-right font-bold whitespace-nowrap sm:p-2">
+                      {{ document.breakdown.cheque_amount }}
+                    </td>
+                  </tr>
+                  <tr>
+                    <td class="border-2 border-black p-1.5 align-top sm:p-2" colspan="2" rowspan="2">
+                      <strong>Amount In Words:</strong> {{ document.amount_in_words }}
+                    </td>
+                    <td class="border-2 border-black p-1.5 font-bold whitespace-nowrap sm:p-2">Cash Amount</td>
+                    <td class="border-2 border-black p-1.5 text-right font-bold whitespace-nowrap sm:p-2">
+                      {{ document.breakdown.cash_amount }}
+                    </td>
+                  </tr>
+                  <tr>
+                    <td class="border-2 border-black p-1.5 font-bold whitespace-nowrap sm:p-2">Electronic Cash Transfer</td>
+                    <td class="border-2 border-black p-1.5 text-right font-bold whitespace-nowrap sm:p-2">
+                      {{ document.breakdown.electronic_amount }}
+                    </td>
+                  </tr>
+                  <tr>
+                    <td class="border-2 border-black p-1.5 align-top sm:p-2" colspan="2">
+                      <strong>Reference:</strong> {{ document.reference }}
+                    </td>
+                    <td class="border-2 border-black p-1.5 font-bold whitespace-nowrap sm:p-2"><strong>Total</strong></td>
+                    <td class="border-2 border-black p-1.5 text-right font-bold whitespace-nowrap sm:p-2">
+                      <strong>{{ document.breakdown.total }}</strong>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            <!-- Signature + QR -->
+            <div class="mt-2 grid grid-cols-1 gap-3 sm:grid-cols-[58%_42%] sm:items-end">
+              <div class="border-2 border-black p-2 min-h-[58px]">
+                <img
+                  v-if="document.signature_data_uri"
+                  :src="document.signature_data_uri"
+                  alt="Signature"
+                  class="max-h-10 max-w-[180px] object-contain"
+                />
+                <div class="mt-2 text-[10px] font-bold">Signature..........................................</div>
+              </div>
+              <div class="flex justify-center sm:justify-end">
+                <img
+                  v-if="document.qr_data_uri"
+                  :src="document.qr_data_uri"
+                  alt="Receipt verification QR code"
+                  class="h-[78px] w-[78px]"
+                />
+              </div>
+            </div>
+
+            <!-- Footer -->
+            <div class="mt-2 grid grid-cols-1 gap-1 text-[8px] font-bold sm:grid-cols-2">
+              <div>This Is An Official Electronic Receipt From Zambia Qualifications Authority.</div>
+              <div class="sm:text-right">You Learn, We Standardize</div>
+            </div>
+          </article>
+
+          <!-- Web-only: payment status & timeline -->
+          <section class="rounded-2xl border border-border bg-surface shadow-sm">
+            <div class="border-b border-border px-5 py-4 sm:px-6">
+              <div class="flex flex-wrap items-center gap-3">
+                <h2 class="text-sm font-semibold text-text-primary">Payment record</h2>
+                <span class="zaqa-badge inline-flex items-center gap-1.5 text-xs capitalize" :class="statusBadgeClass(payment.status)">
+                  <CheckCircle2 v-if="payment.status === 'confirmed'" class="h-3.5 w-3.5" aria-hidden="true" />
+                  <AlertCircle v-else class="h-3.5 w-3.5" aria-hidden="true" />
+                  {{ payment.status.replace(/_/g, ' ') }}
                 </span>
-                <div>
-                  <h2 class="text-base font-semibold text-text-primary">Related records</h2>
-                  <p class="text-xs text-text-muted">Jump to the application or invoice this payment belongs to.</p>
-                </div>
               </div>
-              <div class="mt-6 grid grid-cols-1 gap-4 lg:grid-cols-2">
-                <div
-                  v-if="payment.application"
-                  class="rounded-2xl border border-border/80 bg-surface-muted/60 p-5"
-                >
-                  <div class="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-wider text-text-muted">
-                    <Building2 class="h-3.5 w-3.5" aria-hidden="true" />
-                    Application
-                  </div>
-                  <div class="mt-2 font-mono text-lg font-semibold text-text-primary">
-                    {{ payment.application.application_number }}
-                  </div>
-                  <div class="mt-1 text-xs capitalize text-text-muted">Status: {{ payment.application.current_status?.replace(/_/g, ' ') }}</div>
-                  <div class="mt-4 flex flex-wrap gap-2">
-                    <Link :href="payment.application.show_url" class="zaqa-btn zaqa-btn-primary px-3 py-2 text-xs font-semibold">
-                      View application
-                    </Link>
-                    <Link :href="payment.application.track_url" class="zaqa-btn zaqa-btn-secondary px-3 py-2 text-xs font-semibold">
-                      Track
-                    </Link>
-                    <Link
-                      v-if="payment.application.can_edit"
-                      :href="payment.application.edit_url"
-                      class="zaqa-btn zaqa-btn-secondary px-3 py-2 text-xs font-semibold"
-                    >
-                      Edit
-                    </Link>
-                  </div>
-                </div>
-                <div
-                  v-if="payment.invoice"
-                  class="rounded-2xl border border-border/80 bg-surface-muted/60 p-5"
-                >
-                  <div class="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-wider text-text-muted">
-                    <FileText class="h-3.5 w-3.5" aria-hidden="true" />
-                    Invoice
-                  </div>
-                  <div class="mt-2 font-mono text-lg font-semibold text-text-primary">{{ payment.invoice.invoice_number }}</div>
-                  <div class="mt-1 text-xs capitalize text-text-muted">Invoice status: {{ payment.invoice.status }}</div>
-                  <div class="mt-4 flex flex-wrap gap-2">
-                    <Link :href="payment.invoice.show_url" class="zaqa-btn zaqa-btn-primary px-3 py-2 text-xs font-semibold">
-                      View invoice
-                    </Link>
-                    <a
-                      v-if="payment.invoice.download_url"
-                      :href="payment.invoice.download_url"
-                      class="zaqa-btn zaqa-btn-secondary inline-flex items-center gap-1.5 px-3 py-2 text-xs font-semibold"
-                    >
-                      Download invoice
-                    </a>
-                    <a
-                      v-if="payment.receipt_download_url"
-                      :href="payment.receipt_download_url"
-                      class="zaqa-btn zaqa-btn-secondary inline-flex items-center gap-1.5 px-3 py-2 text-xs font-semibold"
-                    >
-                      Download receipt
-                    </a>
-                  </div>
-                </div>
-              </div>
-              <p v-if="!payment.application && !payment.invoice" class="mt-4 text-sm text-text-muted">
-                No linked application or invoice found.
-              </p>
-            </section>
+            </div>
 
-            <!-- Details -->
-            <section class="pb-8 pt-8">
-              <div class="flex items-center gap-3 border-b border-border/60 pb-4">
-                <span class="flex h-10 w-10 items-center justify-center rounded-xl bg-violet-500/15 text-violet-900">
-                  <CreditCard class="h-5 w-5" aria-hidden="true" />
-                </span>
-                <div>
-                  <h2 class="text-base font-semibold text-text-primary">Payment details</h2>
-                  <p class="text-xs text-text-muted">Provider, references, and timeline.</p>
-                </div>
+            <dl class="grid grid-cols-1 gap-px bg-border sm:grid-cols-2 lg:grid-cols-3">
+              <div class="bg-surface px-5 py-3 sm:px-6">
+                <dt class="text-[10px] font-semibold uppercase tracking-wider text-text-muted">Method</dt>
+                <dd class="mt-1 capitalize text-sm font-semibold text-text-primary">{{ humanMethod(payment.method) }}</dd>
               </div>
-              <dl class="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2">
-                <div class="rounded-2xl border border-border/80 bg-surface-muted/40 p-4">
-                  <dt class="text-[10px] font-semibold uppercase tracking-wider text-text-muted">Method</dt>
-                  <dd class="mt-1.5 capitalize text-sm font-semibold text-text-primary">{{ humanMethod(payment.method) }}</dd>
-                </div>
-                <div class="rounded-2xl border border-border/80 bg-surface-muted/40 p-4">
-                  <dt class="text-[10px] font-semibold uppercase tracking-wider text-text-muted">Provider</dt>
-                  <dd class="mt-1.5 text-sm font-semibold text-text-primary">{{ payment.provider || '—' }}</dd>
-                </div>
-                <div class="rounded-2xl border border-border/80 bg-surface-muted/40 p-4">
-                  <dt class="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider text-text-muted">
-                    <Hash class="h-3 w-3" aria-hidden="true" />
-                    Provider reference
-                  </dt>
-                  <dd class="mt-1.5 font-mono text-sm font-semibold text-text-primary">{{ payment.provider_reference || '—' }}</dd>
-                </div>
-                <div class="rounded-2xl border border-border/80 bg-surface-muted/40 p-4">
-                  <dt class="text-[10px] font-semibold uppercase tracking-wider text-text-muted">Transaction ID</dt>
-                  <dd class="mt-1.5 font-mono text-sm font-semibold text-text-primary">{{ payment.provider_transaction_id || '—' }}</dd>
-                </div>
-                <div v-if="payment.mobile_number" class="rounded-2xl border border-border/80 bg-surface-muted/40 p-4">
-                  <dt class="text-[10px] font-semibold uppercase tracking-wider text-text-muted">Mobile number</dt>
-                  <dd class="mt-1.5 font-mono text-sm font-semibold text-text-primary">{{ payment.mobile_number }}</dd>
-                </div>
-                <div class="rounded-2xl border border-border/80 bg-surface-muted/40 p-4">
-                  <dt class="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider text-text-muted">
-                    <CalendarClock class="h-3 w-3" aria-hidden="true" />
-                    Created
-                  </dt>
-                  <dd class="mt-1.5 text-sm font-semibold text-text-primary">{{ formatWhen(payment.created_at) }}</dd>
-                </div>
-                <div class="rounded-2xl border border-border/80 bg-surface-muted/40 p-4">
-                  <dt class="text-[10px] font-semibold uppercase tracking-wider text-text-muted">Initiated</dt>
-                  <dd class="mt-1.5 text-sm font-semibold text-text-primary">{{ formatWhen(payment.initiated_at) }}</dd>
-                </div>
-                <div class="rounded-2xl border border-border/80 bg-surface-muted/40 p-4">
-                  <dt class="text-[10px] font-semibold uppercase tracking-wider text-text-muted">Confirmed</dt>
-                  <dd class="mt-1.5 text-sm font-semibold text-text-primary">{{ formatWhen(payment.confirmed_at) }}</dd>
-                </div>
-              </dl>
+              <div class="bg-surface px-5 py-3 sm:px-6">
+                <dt class="text-[10px] font-semibold uppercase tracking-wider text-text-muted">Provider</dt>
+                <dd class="mt-1 text-sm font-semibold text-text-primary">{{ payment.provider || '—' }}</dd>
+              </div>
+              <div class="bg-surface px-5 py-3 sm:px-6">
+                <dt class="text-[10px] font-semibold uppercase tracking-wider text-text-muted">Provider reference</dt>
+                <dd class="mt-1 font-mono text-sm font-semibold text-text-primary">{{ payment.provider_reference || '—' }}</dd>
+              </div>
+              <div class="bg-surface px-5 py-3 sm:px-6">
+                <dt class="text-[10px] font-semibold uppercase tracking-wider text-text-muted">Transaction ID</dt>
+                <dd class="mt-1 font-mono text-sm font-semibold text-text-primary">{{ payment.provider_transaction_id || '—' }}</dd>
+              </div>
+              <div v-if="payment.mobile_number" class="bg-surface px-5 py-3 sm:px-6">
+                <dt class="text-[10px] font-semibold uppercase tracking-wider text-text-muted">Mobile number</dt>
+                <dd class="mt-1 font-mono text-sm font-semibold text-text-primary">{{ payment.mobile_number }}</dd>
+              </div>
+              <div class="bg-surface px-5 py-3 sm:px-6">
+                <dt class="text-[10px] font-semibold uppercase tracking-wider text-text-muted">Created</dt>
+                <dd class="mt-1 text-sm font-semibold text-text-primary">{{ formatWhen(payment.created_at) }}</dd>
+              </div>
+              <div class="bg-surface px-5 py-3 sm:px-6">
+                <dt class="text-[10px] font-semibold uppercase tracking-wider text-text-muted">Initiated</dt>
+                <dd class="mt-1 text-sm font-semibold text-text-primary">{{ formatWhen(payment.initiated_at) }}</dd>
+              </div>
+              <div class="bg-surface px-5 py-3 sm:px-6">
+                <dt class="text-[10px] font-semibold uppercase tracking-wider text-text-muted">Confirmed</dt>
+                <dd class="mt-1 text-sm font-semibold text-text-primary">{{ formatWhen(payment.confirmed_at) }}</dd>
+              </div>
+            </dl>
 
-              <div
-                v-if="payment.rejection_reason"
-                class="mt-6 rounded-2xl border border-danger/25 bg-danger/10 px-4 py-4 text-sm text-danger"
-              >
-                <div class="font-semibold">Rejection reason</div>
-                <div class="mt-2">{{ payment.rejection_reason }}</div>
-              </div>
-              <div
-                v-if="payment.review_comment"
-                class="mt-4 rounded-2xl border border-border bg-surface-muted/60 px-4 py-4 text-sm text-text-primary"
-              >
-                <div class="text-[10px] font-semibold uppercase tracking-wider text-text-muted">Review note</div>
-                <div class="mt-2">{{ payment.review_comment }}</div>
-              </div>
-            </section>
-
-            <!-- Proof -->
-            <section v-if="payment.proof_document" class="pt-8">
-              <div class="flex items-center gap-3 border-b border-border/60 pb-4">
-                <span class="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-500/15 text-emerald-900">
-                  <Route class="h-5 w-5" aria-hidden="true" />
-                </span>
-                <div>
-                  <h2 class="text-base font-semibold text-text-primary">Payment proof</h2>
-                  <p class="text-xs text-text-muted">Document you uploaded for manual / bank verification.</p>
-                </div>
-              </div>
-              <div class="mt-6 rounded-2xl border border-border/80 bg-surface-muted/50 p-5">
-                <div class="text-[10px] font-semibold uppercase tracking-wider text-text-muted">File</div>
-                <div class="mt-2 font-medium text-text-primary">{{ payment.proof_document.original_name || 'Uploaded document' }}</div>
-                <div class="mt-4 flex flex-wrap gap-3">
-                  <a
-                    :href="payment.proof_document.preview_url"
-                    target="_blank"
-                    rel="noopener"
-                    class="zaqa-btn zaqa-btn-secondary inline-flex items-center gap-2 px-4 py-2 text-xs font-semibold"
-                  >
-                    <Eye class="h-4 w-4" aria-hidden="true" />
-                    Preview
-                  </a>
-                  <a
-                    :href="payment.proof_document.download_url"
-                    target="_blank"
-                    rel="noopener"
-                    class="zaqa-btn zaqa-btn-secondary inline-flex items-center gap-2 px-4 py-2 text-xs font-semibold"
-                  >
-                    <ArrowDownToLine class="h-4 w-4" aria-hidden="true" />
-                    Download
-                  </a>
-                </div>
-              </div>
-            </section>
-          </div>
+            <div
+              v-if="payment.rejection_reason"
+              class="border-t border-border px-5 py-4 text-sm text-danger sm:px-6"
+            >
+              <div class="font-semibold">Rejection reason</div>
+              <div class="mt-1">{{ payment.rejection_reason }}</div>
+            </div>
+            <div
+              v-if="payment.review_comment"
+              class="border-t border-border px-5 py-4 text-sm text-text-primary sm:px-6"
+            >
+              <div class="text-[10px] font-semibold uppercase tracking-wider text-text-muted">Review note</div>
+              <div class="mt-1">{{ payment.review_comment }}</div>
+            </div>
+          </section>
         </div>
       </div>
     </div>

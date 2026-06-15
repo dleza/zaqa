@@ -41,6 +41,27 @@ class PaymentReceiptPdfService
             abort(SymfonyResponse::HTTP_NOT_FOUND);
         }
 
+        return array_merge(
+            ['logo_data_uri' => $this->logoDataUri()],
+            $this->composeReceiptData($payment, true),
+        );
+    }
+
+    /**
+     * Receipt-aligned payload for on-screen preview (excludes embedded logo binary).
+     *
+     * @return array<string, mixed>
+     */
+    public function buildWebViewData(Payment $payment): array
+    {
+        return $this->composeReceiptData($payment, $this->isEligible($payment));
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function composeReceiptData(Payment $payment, bool $official): array
+    {
         $payment->loadMissing([
             'application.applicant.applicantProfile',
             'invoice',
@@ -52,8 +73,10 @@ class PaymentReceiptPdfService
         $profile = $applicant?->applicantProfile;
         $applicantName = $this->applicantName($application, $applicant, $profile);
 
-        $confirmedAt = $payment->confirmed_at ?? $payment->reviewed_at ?? $payment->created_at;
-        $confirmedAt = $confirmedAt?->timezone(config('app.timezone'));
+        $receiptAt = $official
+            ? ($payment->confirmed_at ?? $payment->reviewed_at ?? $payment->created_at)
+            : ($payment->confirmed_at ?? $payment->initiated_at ?? $payment->created_at);
+        $receiptAt = $receiptAt?->timezone(config('app.timezone'));
 
         $currency = (string) ($payment->currency ?: 'ZMW');
         $amountCents = (int) $payment->amount_cents;
@@ -69,16 +92,16 @@ class PaymentReceiptPdfService
             ? $applicantName.' - Application for Validation & Evaluation'
             : 'Application for Qualification Verification'.($application?->application_number ? ' - '.$application->application_number : '');
 
-        $verificationUrl = $this->tokens->verificationUrl($payment);
+        $verificationUrl = $official ? $this->tokens->verificationUrl($payment) : null;
 
         return [
-            'logo_data_uri' => $this->logoDataUri(),
-            'signature_data_uri' => $this->signatures->dataUriForType(DocumentSignatureType::Receipt),
+            'is_official_receipt' => $official,
+            'signature_data_uri' => $official ? $this->signatures->dataUriForType(DocumentSignatureType::Receipt) : null,
             'organization' => config('zaqa.organization', []),
             'receipt_number' => $receiptNumber,
             'receipt_number_display' => 'ZQ '.$payment->id,
-            'receipt_date' => $confirmedAt?->format('n/j/Y'),
-            'receipt_time' => $confirmedAt?->format('g:i A'),
+            'receipt_date' => $receiptAt?->format('n/j/Y'),
+            'receipt_time' => $receiptAt?->format('g:i A'),
             'account_label' => $this->accountLabel($payment),
             'account_reference' => (string) ($payment->invoice_id ?: $payment->id),
             'description' => $description,
@@ -92,7 +115,7 @@ class PaymentReceiptPdfService
             'invoice_number' => $payment->invoice?->invoice_number,
             'breakdown' => $breakdown,
             'verification_url' => $verificationUrl,
-            'qr_data_uri' => $this->buildQrDataUri($verificationUrl),
+            'qr_data_uri' => $official && $verificationUrl ? $this->buildQrDataUri($verificationUrl) : null,
         ];
     }
 

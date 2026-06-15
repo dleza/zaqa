@@ -101,31 +101,39 @@ const applicationRef = props.document.application_reference || (props.document.a
 </script>
 
 <template>
-  <ApplicantLayout container-max-width-class="max-w-5xl">
-    <div class="mx-auto w-full max-w-4xl">
-      <div class="flex flex-col gap-4">
+  <ApplicantLayout>
+    <div class="relative min-h-[40vh]">
+      <div class="pointer-events-none absolute inset-0 -z-10 overflow-hidden" aria-hidden="true">
+        <div class="absolute -left-16 top-0 h-64 w-64 rounded-full bg-brand/10 blur-3xl" />
+        <div class="absolute right-0 top-20 h-72 w-72 rounded-full bg-accent/10 blur-3xl" />
+      </div>
+
+      <div class="zaqa-wizard-shell">
         <Link
           href="/applicant/invoices"
-          class="inline-flex w-fit items-center gap-1.5 text-sm font-medium text-text-muted transition hover:text-brand"
+          class="inline-flex items-center gap-1.5 text-sm font-medium text-text-muted transition hover:text-brand"
         >
           <ArrowLeft class="h-4 w-4" aria-hidden="true" />
           All invoices
         </Link>
 
-        <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div class="mt-6 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <div class="min-w-0">
-            <p class="text-xs font-semibold uppercase tracking-[0.18em] text-text-muted">Invoice</p>
-            <h1 class="mt-1 truncate font-mono text-xl font-semibold text-text-primary sm:text-2xl">
+            <p class="text-xs font-semibold uppercase tracking-[0.18em] text-text-muted">Billing</p>
+            <h1 class="mt-2 font-mono text-2xl font-semibold tracking-tight text-text-primary sm:text-3xl">
               {{ invoice.invoice_number }}
             </h1>
-            <p v-if="invoice.application" class="mt-1 text-sm text-text-muted">
+            <p v-if="invoice.application" class="mt-2 max-w-2xl text-sm text-text-muted">
               Application
               <span class="font-mono font-semibold text-text-primary">{{ invoice.application.application_number }}</span>
               <span class="capitalize"> · {{ invoice.application.current_status?.replace(/_/g, ' ') }}</span>
             </p>
+            <p v-else class="mt-2 max-w-2xl text-sm text-text-muted">
+              Fee invoice for your verification application.
+            </p>
           </div>
 
-          <div class="flex flex-wrap items-center gap-2">
+          <div class="flex flex-wrap items-center gap-2 self-start lg:max-w-[50%] lg:justify-end">
             <a
               :href="invoice.download_url"
               class="zaqa-btn zaqa-btn-primary inline-flex items-center gap-2 px-4 py-2 text-sm"
@@ -164,11 +172,11 @@ const applicationRef = props.document.application_reference || (props.document.a
             </template>
           </div>
         </div>
-      </div>
 
+        <div class="mt-8 space-y-8">
       <!-- PDF-style invoice document -->
       <article
-        class="mt-6 overflow-hidden rounded-lg border border-gray-300 bg-white shadow-[0_8px_30px_rgba(15,23,42,0.08)]"
+        class="mx-auto w-full max-w-4xl overflow-hidden rounded-lg border border-gray-300 bg-white shadow-[0_8px_30px_rgba(15,23,42,0.08)]"
         aria-label="Invoice document"
       >
         <header class="bg-[#8f1d2f] px-6 py-4 text-center text-[1.75rem] font-bold tracking-[0.04em] text-white sm:text-[1.85rem]">
@@ -332,6 +340,8 @@ const applicationRef = props.document.application_reference || (props.document.a
           </table>
         </div>
       </section>
+        </div>
+      </div>
     </div>
   </ApplicantLayout>
 </template>
