@@ -226,6 +226,7 @@ Fields:
 - program_of_study nullable
 - year_awarded nullable
 - award_date nullable
+- classification nullable (optional award/result classification such as Credit, Merit, Distinction; not used in auto-verification scoring)
 - source_type: import|institution_api|manual
 - source_reference nullable
 - raw_payload JSON nullable

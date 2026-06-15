@@ -189,8 +189,15 @@ class LearnerRecordExcelImportProcessor
             $otherNames = $this->stringOrNull($mapped['other_names'] ?? null);
             $gender = $this->stringOrNull($mapped['gender'] ?? null);
             $program = $this->stringOrNull($mapped['program_of_study'] ?? null);
+            $classification = $this->stringOrNull($mapped['classification'] ?? null);
             $yearAwarded = $this->intOrNull($mapped['year_awarded'] ?? null);
             $awardDate = $this->dateOrNull($mapped['award_date'] ?? null);
+
+            if ($classification !== null && mb_strlen($classification) > 150) {
+                $failed++;
+                $rowErrors[] = ['row' => $rowNumber, 'message' => 'Classification must not exceed 150 characters.'];
+                continue;
+            }
 
             $studentIdNorm = LearnerRecordNormalizer::normalizeStudentId($studentId);
             $certNorm = LearnerRecordNormalizer::normalizeCertificateNo($certificateNo);
@@ -233,6 +240,7 @@ class LearnerRecordExcelImportProcessor
                 'qualification_title_normalized' => $titleNorm,
                 'year_awarded' => $yearAwarded,
                 'award_date' => $awardDate,
+                'classification' => $classification,
                 'source_type' => LearnerRecordSourceType::Import->value,
                 'source_reference' => null,
                 'raw_payload' => null,
@@ -391,6 +399,7 @@ class LearnerRecordExcelImportProcessor
             'passportno', 'passportnumber', 'passport' => 'passport_no',
             'programofstudy', 'programmeofstudy', 'program', 'programme' => 'program_of_study',
             'yearawarded', 'awardyear', 'year' => 'year_awarded',
+            'classification', 'qualificationclassification', 'awardclassification', 'class', 'awardclass' => 'classification',
             'awarddate', 'dateawarded' => 'award_date',
             default => null,
         };

@@ -116,6 +116,7 @@ watch([q, countryId, awardingInstitutionId, yearAwarded], () => {
             <tr v-for="r in records.data" :key="r.id" class="hover:bg-surface-muted/60">
               <td class="px-5 py-3">
                 <div class="font-semibold text-text-primary">{{ r.program_of_study || '—' }}</div>
+                <div v-if="r.classification" class="mt-0.5 text-xs text-text-muted">Classification: {{ r.classification }}</div>
                 <div class="mt-0.5 text-xs text-text-muted">Source: {{ r.source_type || '—' }}</div>
               </td>
               <td class="px-5 py-3">

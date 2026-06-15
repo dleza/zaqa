@@ -173,6 +173,139 @@ class LearnerRecordImportTest extends TestCase
         $this->assertSame(LearnerRecordSourceType::Import, $record->source_type);
     }
 
+    public function test_processor_imports_classification_when_present(): void
+    {
+        Storage::fake('local');
+
+        [$institution, $import] = $this->createImportFixture(
+            headers: ['StudentID', 'CertificateNo', 'FirstName', 'LastName', 'ProgramOfStudy', 'YearAwarded', 'Classification'],
+            rows: [
+                ['S-010', 'C-010', 'Alice', 'Smith', 'Diploma in IT', 2023, 'Distinction'],
+            ],
+        );
+
+        app(LearnerRecordExcelImportProcessor::class)->process($import);
+
+        $record = LearnerRecord::query()->firstOrFail();
+        $this->assertSame('Distinction', $record->classification);
+    }
+
+    public function test_processor_leaves_classification_null_when_column_missing(): void
+    {
+        Storage::fake('local');
+
+        [, $import] = $this->createImportFixture(
+            headers: ['StudentID', 'CertificateNo', 'FirstName', 'LastName', 'ProgramOfStudy', 'YearAwarded'],
+            rows: [
+                ['S-011', 'C-011', 'Bob', 'Jones', 'Diploma in IT', 2022],
+            ],
+        );
+
+        app(LearnerRecordExcelImportProcessor::class)->process($import);
+
+        $this->assertNull(LearnerRecord::query()->firstOrFail()->classification);
+    }
+
+    public function test_processor_trims_classification_and_nulls_blank_values(): void
+    {
+        Storage::fake('local');
+
+        [, $import] = $this->createImportFixture(
+            headers: ['StudentID', 'CertificateNo', 'FirstName', 'LastName', 'ProgramOfStudy', 'YearAwarded', 'Classification'],
+            rows: [
+                ['S-012', 'C-012', 'Carol', 'Lee', 'Diploma in IT', 2021, '  Merit  '],
+                ['S-013', 'C-013', 'Dan', 'Kay', 'Diploma in IT', 2020, '   '],
+            ],
+        );
+
+        app(LearnerRecordExcelImportProcessor::class)->process($import);
+
+        $records = LearnerRecord::query()->orderBy('student_id')->get();
+        $this->assertSame('Merit', $records[0]->classification);
+        $this->assertNull($records[1]->classification);
+    }
+
+    public function test_processor_rejects_classification_longer_than_150_characters(): void
+    {
+        Storage::fake('local');
+
+        [, $import] = $this->createImportFixture(
+            headers: ['StudentID', 'CertificateNo', 'FirstName', 'LastName', 'ProgramOfStudy', 'YearAwarded', 'Classification'],
+            rows: [
+                ['S-014', 'C-014', 'Eve', 'Ngoma', 'Diploma in IT', 2019, str_repeat('A', 151)],
+            ],
+        );
+
+        app(LearnerRecordExcelImportProcessor::class)->process($import);
+
+        $import->refresh();
+        $this->assertSame(1, (int) $import->failed_rows);
+        $this->assertSame(0, LearnerRecord::query()->count());
+    }
+
+    public function test_learner_record_can_store_null_or_text_classification(): void
+    {
+        $record = LearnerRecord::query()->create([
+            'student_id' => 'S-NULL',
+            'certificate_no' => 'C-NULL',
+            'first_name' => 'Test',
+            'last_name' => 'User',
+            'program_of_study' => 'Program',
+            'year_awarded' => 2024,
+            'classification' => null,
+            'source_type' => LearnerRecordSourceType::Import->value,
+            'is_active' => true,
+        ]);
+
+        $this->assertNull($record->classification);
+
+        $record->forceFill(['classification' => 'Second Class Upper'])->save();
+        $this->assertSame('Second Class Upper', $record->fresh()->classification);
+    }
+
+    /**
+     * @return array{0: AwardingInstitution, 1: LearnerRecordImport}
+     */
+    private function createImportFixture(array $headers, array $rows): array
+    {
+        $country = Country::query()->create([
+            'iso_code' => 'ZMB',
+            'name' => 'Zambia',
+            'is_active' => true,
+            'sort_order' => 1,
+        ]);
+
+        $institution = AwardingInstitution::query()->create([
+            'country_id' => $country->id,
+            'name' => 'Test University',
+            'consent_form_path' => null,
+            'is_active' => true,
+            'sort_order' => 1,
+        ]);
+
+        $file = $this->makeXlsx($headers, $rows);
+        $storedPath = 'private/learner-record-imports/'.uniqid('fixture_', true).'.xlsx';
+        Storage::disk('local')->put($storedPath, file_get_contents($file->getRealPath()));
+
+        $import = LearnerRecordImport::query()->create([
+            'uploaded_by_user_id' => null,
+            'awarding_institution_id' => $institution->id,
+            'file_path' => $storedPath,
+            'original_filename' => 'fixture.xlsx',
+            'status' => LearnerRecordImportStatus::Pending,
+            'total_rows' => null,
+            'processed_rows' => 0,
+            'inserted_rows' => 0,
+            'updated_rows' => 0,
+            'failed_rows' => 0,
+            'errors' => null,
+            'started_at' => null,
+            'completed_at' => null,
+        ]);
+
+        return [$institution, $import];
+    }
+
     public function test_processor_uses_selected_institution_not_spreadsheet_institution_column(): void
     {
         Storage::fake('local');

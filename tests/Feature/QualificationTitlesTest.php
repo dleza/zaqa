@@ -215,6 +215,7 @@ class QualificationTitlesTest extends TestCase
         $response->assertRedirect()->assertSessionHasNoErrors();
 
         $qualification = Qualification::query()->where('application_id', $application->id)->firstOrFail();
+        $response->assertSessionHas('created_qualification_id', $qualification->id);
         $this->assertSame($title->id, $qualification->qualification_title_id);
         $this->assertSame('Catalog Title', $qualification->title_of_qualification);
         $this->assertSame('catalog', $qualification->qualification_title_source?->value);

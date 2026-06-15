@@ -1,12 +1,15 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, ref, watch } from 'vue'
-import { Link, router, useForm } from '@inertiajs/vue3'
+import { Link, router, useForm, usePage } from '@inertiajs/vue3'
 import ApplicantLayout from '@/Layouts/ApplicantLayout.vue'
 import InstitutionCombobox from '@/Components/InstitutionCombobox.vue'
 import QualificationTitleCombobox from '@/Components/QualificationTitleCombobox.vue'
 import InputError from '@/Components/InputError.vue'
 import Swal from 'sweetalert2'
+import 'sweetalert2/dist/sweetalert2.min.css'
 import { Building2, FileStack, GraduationCap, MapPin, Shield, Sparkles } from 'lucide-vue-next'
+
+const inertiaPage = usePage()
 
 const props = defineProps<{
   application: any
@@ -336,14 +339,42 @@ onMounted(() => {
   void initForm()
 })
 
+function readCreatedQualificationIdFromFlash(source: any): number {
+  const raw =
+    source?.flash?.created_qualification_id ??
+    source?.props?.flash?.created_qualification_id ??
+    null
+  const id = Number(raw ?? 0)
+  return id > 0 ? id : 0
+}
+
 function extractQualificationIdFromPage(page: any): number {
   if (mode.value === 'edit' && form.qualification_id) {
     return Number(form.qualification_id)
   }
+
+  const fromFlash = readCreatedQualificationIdFromFlash(page)
+  if (fromFlash > 0) return fromFlash
+
   const app = page?.props?.application
   const list = (app?.qualifications ?? []) as any[]
   const ids = list.map((q) => Number(q.id)).filter(Boolean)
   return ids.length ? Math.max(...ids) : 0
+}
+
+async function resolveSavedQualificationId(page: any): Promise<number> {
+  await nextTick()
+
+  let qid = extractQualificationIdFromPage(page)
+  if (qid > 0) return qid
+
+  qid = readCreatedQualificationIdFromFlash({
+    props: inertiaPage.props,
+    flash: page?.flash,
+  })
+  if (qid > 0) return qid
+
+  return extractQualificationIdFromPage({ props: inertiaPage.props })
 }
 
 /** Inertia router.post uses callbacks — wrap for async/await sequencing. */
@@ -440,8 +471,8 @@ async function promptAfterQualificationAdded(): Promise<'add_another' | 'back_to
   return result.isDenied ? 'add_another' : 'back_to_step'
 }
 
-async function handleAfterQualificationSavedSuccess(): Promise<void> {
-  if (mode.value !== 'add') {
+async function handleAfterQualificationSavedSuccess(isAddFlow: boolean): Promise<void> {
+  if (!isAddFlow) {
     router.visit(returnUrl.value)
     return
   }
@@ -460,10 +491,14 @@ function submitQualificationAndDocuments() {
   if (locked.value || savingAll.value || form.processing) return
   applyIdentifierToForm()
   form.awarding_institution_name = awardingDisplayName() || '—'
+  const isAddFlow = mode.value === 'add'
 
   const afterQualificationSaved = async (page: any) => {
-    const qid = extractQualificationIdFromPage(page)
-    if (!qid) {
+    const qid = await resolveSavedQualificationId(page)
+
+    if (qid > 0) {
+      modalQualId.value = qid
+    } else if (!isAddFlow) {
       await Swal.fire({
         icon: 'error',
         title: 'Could not resolve qualification',
@@ -472,24 +507,22 @@ function submitQualificationAndDocuments() {
       return
     }
 
-    modalQualId.value = qid
-
-    if (!hasPendingUploads()) {
-      await handleAfterQualificationSavedSuccess()
+    if (!hasPendingUploads() || qid <= 0) {
+      await handleAfterQualificationSavedSuccess(isAddFlow)
       return
     }
 
     savingAll.value = true
     try {
       await runPendingUploads(qid)
-      await handleAfterQualificationSavedSuccess()
+      await handleAfterQualificationSavedSuccess(isAddFlow)
     } catch {
       await Swal.fire({
         icon: 'error',
         title: 'Upload failed',
         text: 'Qualification was saved. Fix the file upload issue or try smaller files, then open this workspace again to add documents.',
       })
-      router.visit(returnUrl.value)
+      await handleAfterQualificationSavedSuccess(isAddFlow)
     } finally {
       savingAll.value = false
     }
@@ -497,6 +530,7 @@ function submitQualificationAndDocuments() {
 
   const visitOpts = {
     preserveScroll: true,
+    only: ['application'],
     onSuccess: (page: any) => {
       void afterQualificationSaved(page)
     },

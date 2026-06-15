@@ -75,6 +75,7 @@ class AdminLearnerRecordImportsController extends Controller
                 'PassportNo',
                 'ProgramOfStudy',
                 'YearAwarded',
+                'Classification',
                 'AwardDate',
             ],
             [
@@ -89,6 +90,7 @@ class AdminLearnerRecordImportsController extends Controller
                     '',
                     'Bachelor of Science in Nursing',
                     2024,
+                    'Merit',
                     '2024-11-15',
                 ],
             ],

@@ -25,6 +25,7 @@ class LearnerRecord extends Model
         'qualification_title_normalized',
         'year_awarded',
         'award_date',
+        'classification',
         'source_type',
         'source_reference',
         'raw_payload',

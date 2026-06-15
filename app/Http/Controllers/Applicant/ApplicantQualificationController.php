@@ -28,10 +28,12 @@ class ApplicantQualificationController extends Controller
         $this->authorize('update', $application);
 
         $payload = array_merge($request->validated(), ['create_new' => true]);
-        $service->upsertQualification($application, $payload, $request->user());
+        $qualification = $service->upsertQualification($application, $payload, $request->user());
         $this->syncInvoiceIfExists($application->fresh(), $request->user(), $invoices);
 
-        return back()->with('success', 'Qualification added.');
+        return back()
+            ->with('success', 'Qualification added.')
+            ->with('created_qualification_id', $qualification->id);
     }
 
     public function upsertDetails(UpsertQualificationDetailsRequest $request, Application $application, QualificationCaptureService $service, InvoiceService $invoices): RedirectResponse

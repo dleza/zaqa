@@ -99,7 +99,8 @@ function statusBadgeClass(status: string | null | undefined) {
       <div class="space-y-4">
         <div class="rounded-2xl border border-border bg-surface-muted/60 p-4 text-sm text-text-muted">
           Select one awarding institution per upload. Download the template, fill one row per learner record, then upload
-          the completed spreadsheet in `.xlsx`, `.xls`, or `.csv` format.
+          the completed spreadsheet in `.xlsx`, `.xls`, or `.csv` format. The optional `Classification` column stores
+          award/result classifications such as Credit, Merit, Distinction, or Pass. It is not used for auto-verification scoring.
         </div>
 
         <div class="flex flex-wrap gap-2">

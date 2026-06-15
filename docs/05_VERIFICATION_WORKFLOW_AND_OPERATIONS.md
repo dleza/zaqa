@@ -154,7 +154,7 @@ When an application is **paid and payment satisfaction is confirmed**, the syste
 Auto-verification uses **only** internal **Learner Achievement Records** (`learner_records`). No external institution systems are called during auto-verification.
 
 Records are populated primarily via:
-- admin Excel imports (`learner_record_imports`)
+- admin Excel imports (`learner_record_imports`) — optional `Classification` column for award/result values (Credit, Merit, Distinction, etc.); not used in matching
 - institution push API (`/api/institution/v1`)
 - institution pull lookup ingestion when invoked manually or in future workflows (not during auto-verification)
 - (optional) manual/admin entry

@@ -44,6 +44,7 @@ const props = defineProps<{
         <div class="mt-2 text-sm font-semibold text-text-primary">{{ record.program_of_study || '—' }}</div>
         <div class="mt-3 text-xs text-text-muted">Year awarded: {{ record.year_awarded || '—' }}</div>
         <div class="mt-1 text-xs text-text-muted">Award date: {{ record.award_date || '—' }}</div>
+        <div class="mt-1 text-xs text-text-muted">Classification: {{ record.classification || '—' }}</div>
       </div>
 
       <div class="rounded-2xl border border-border bg-surface p-5">
