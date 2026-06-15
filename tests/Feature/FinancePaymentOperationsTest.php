@@ -523,6 +523,13 @@ class FinancePaymentOperationsTest extends TestCase
                 && str_contains($rendered, (string) $payment->invoice?->invoice_number)
                 && ! str_contains($rendered, '/applicant/documents/');
         });
+
+        $this->assertDatabaseHas('email_logs', [
+            'application_id' => $application->id,
+            'email' => 'finance@example.test',
+            'template_key' => 'finance_payment_proof_submitted',
+            'status' => 'queued',
+        ]);
     }
 
     public function test_uploading_proof_uses_first_recipient_as_to_and_remaining_as_cc(): void
