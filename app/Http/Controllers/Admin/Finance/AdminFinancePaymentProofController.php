@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Admin\Finance;
 use App\Domain\Audit\AuditLogService;
 use App\Domain\Documents\ApplicantDocumentService;
 use App\Domain\Finance\PaymentProofReviewService;
+use App\Domain\Finance\PaymentReceiptPdfService;
 use App\Domain\Finance\PaymentSearchService;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Finance\ReviewPaymentProofRequest;
@@ -168,6 +169,7 @@ class AdminFinancePaymentProofController extends Controller
                     ? route('admin.finance.invoices.download', ['invoice' => $p->invoice->id])
                     : null,
             ],
+            'receipt_download_url' => app(PaymentReceiptPdfService::class)->receiptDownloadUrl($p, 'admin.finance.payments.receipt.download'),
             'proof_document' => $p->proofDocument
                 ? [
                     'id' => $p->proofDocument->id,

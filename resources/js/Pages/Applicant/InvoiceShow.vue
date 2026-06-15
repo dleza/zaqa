@@ -43,6 +43,7 @@ const props = defineProps<{
       confirmed_at: string | null
       created_at: string | null
       show_url: string
+      receipt_download_url: string | null
     }>
     download_url: string
   }
@@ -247,9 +248,18 @@ function humanMethod(m: string) {
                         <span class="zaqa-badge zaqa-badge-info text-[10px] capitalize">{{ p.status }}</span>
                       </td>
                       <td class="px-4 py-3 text-right">
-                        <Link :href="p.show_url" class="zaqa-btn zaqa-btn-secondary inline-flex px-3 py-1.5 text-xs font-semibold">
-                          View
-                        </Link>
+                        <div class="flex flex-wrap items-center justify-end gap-2">
+                          <Link :href="p.show_url" class="zaqa-btn zaqa-btn-secondary inline-flex px-3 py-1.5 text-xs font-semibold">
+                            View
+                          </Link>
+                          <a
+                            v-if="p.receipt_download_url"
+                            :href="p.receipt_download_url"
+                            class="zaqa-btn zaqa-btn-secondary inline-flex px-3 py-1.5 text-xs font-semibold"
+                          >
+                            Download receipt
+                          </a>
+                        </div>
                       </td>
                     </tr>
                   </tbody>

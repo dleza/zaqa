@@ -7,7 +7,9 @@ use App\Domain\Audit\AuditLogService;
 use App\Domain\Notifications\OutboundMailService;
 use App\Domain\Notifications\OutboundSmsService;
 use App\Domain\Payments\ApplicationPaymentSatisfaction;
+use App\Domain\Settings\DocumentSignatureService;
 use App\Domain\Verification\VerifiedQualificationIngestionService;
+use App\Enums\DocumentSignatureType;
 use App\Enums\VerificationState;
 use App\Mail\QualificationCertificateIssuedMail;
 use App\Models\Application;
@@ -391,6 +393,7 @@ class QualificationCertificateService
             'recognition_statement' => config('certificates.recognition_act_clause'),
             'director_name' => config('certificates.director_general_name'),
             'director_title' => config('certificates.director_general_title'),
+            'signature_data_uri' => app(DocumentSignatureService::class)->dataUriForType(DocumentSignatureType::Certificate),
             'logo_data_uri' => $logoDataUri,
             'coat_of_arms_watermark_data_uri' => $coatOfArmsWatermarkDataUri,
             'qr_data_uri' => $qrDataUri,

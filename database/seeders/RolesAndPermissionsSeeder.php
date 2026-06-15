@@ -110,6 +110,9 @@ class RolesAndPermissionsSeeder extends Seeder
         'settings.departments.edit',
         'settings.departments.delete',
 
+        'settings.document_signatures.view',
+        'settings.document_signatures.manage',
+
         'sms.balance.view',
         'sms.balance.manage',
         'sms.logs.view',

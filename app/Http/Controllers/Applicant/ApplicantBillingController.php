@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Applicant;
 
 use App\Domain\Finance\InvoicePdfService;
+use App\Domain\Finance\PaymentReceiptPdfService;
 use App\Http\Controllers\Controller;
 use App\Models\Application;
 use App\Models\Invoice;
@@ -86,6 +87,7 @@ class ApplicantBillingController extends Controller
                         'download_url' => \Illuminate\Support\Facades\URL::temporarySignedRoute('applicant.documents.download', now()->addMinutes(15), ['document' => $p->proofDocument->id]),
                     ]
                     : null,
+                'receipt_download_url' => app(PaymentReceiptPdfService::class)->receiptDownloadUrl($p, 'applicant.payments.receipt.download'),
             ]);
 
         $summary = [
@@ -142,6 +144,7 @@ class ApplicantBillingController extends Controller
                     'confirmed_at' => optional($p->confirmed_at)?->toIso8601String(),
                     'created_at' => optional($p->created_at)?->toIso8601String(),
                     'show_url' => route('applicant.payments.show', $p->id),
+                    'receipt_download_url' => app(PaymentReceiptPdfService::class)->receiptDownloadUrl($p, 'applicant.payments.receipt.download'),
                 ])->values()->all(),
                 'download_url' => route('applicant.invoices.download', $invoice),
             ],
@@ -154,6 +157,18 @@ class ApplicantBillingController extends Controller
         $this->assertApplicantOwnsApplication($request, $invoice->application);
 
         return $pdf->downloadResponse($invoice);
+    }
+
+    public function downloadReceipt(Request $request, Payment $payment, PaymentReceiptPdfService $pdf): SymfonyResponse
+    {
+        $payment->loadMissing('application');
+        $this->assertApplicantOwnsApplication($request, $payment->application);
+
+        if (! $pdf->isEligible($payment)) {
+            abort(404);
+        }
+
+        return $pdf->downloadResponse($payment);
     }
 
     public function showPayment(Request $request, Payment $payment): Response
@@ -212,6 +227,7 @@ class ApplicantBillingController extends Controller
                         'download_url' => URL::temporarySignedRoute('applicant.documents.download', $signedExpiry, ['document' => $proof->id]),
                     ]
                     : null,
+                'receipt_download_url' => app(PaymentReceiptPdfService::class)->receiptDownloadUrl($payment, 'applicant.payments.receipt.download'),
             ],
         ]);
     }

@@ -19,6 +19,7 @@ class Payment extends Model
         'currency',
         'amount_cents',
         'provider',
+        'public_receipt_token',
         'provider_reference',
         'provider_transaction_id',
         'mobile_number',

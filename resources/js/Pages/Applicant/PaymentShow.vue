@@ -55,6 +55,7 @@ const props = defineProps<{
       preview_url: string
       download_url: string
     } | null
+    receipt_download_url: string | null
   }
 }>()
 
@@ -112,11 +113,21 @@ function humanMethod(m: string) {
               Full record of this payment attempt. Open your application or invoice for related context.
             </p>
           </div>
-          <span class="zaqa-badge inline-flex w-fit items-center gap-1.5 self-start text-sm" :class="statusBadgeClass(payment.status)">
-            <CheckCircle2 v-if="payment.status === 'confirmed'" class="h-4 w-4" aria-hidden="true" />
-            <AlertCircle v-else class="h-4 w-4" aria-hidden="true" />
-            {{ payment.status }}
-          </span>
+          <div class="flex flex-col items-start gap-3 self-start">
+            <span class="zaqa-badge inline-flex w-fit items-center gap-1.5 text-sm" :class="statusBadgeClass(payment.status)">
+              <CheckCircle2 v-if="payment.status === 'confirmed'" class="h-4 w-4" aria-hidden="true" />
+              <AlertCircle v-else class="h-4 w-4" aria-hidden="true" />
+              {{ payment.status }}
+            </span>
+            <a
+              v-if="payment.receipt_download_url"
+              :href="payment.receipt_download_url"
+              class="zaqa-btn zaqa-btn-secondary inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold"
+            >
+              <ArrowDownToLine class="h-4 w-4" aria-hidden="true" />
+              Download receipt
+            </a>
+          </div>
         </div>
 
         <div
@@ -204,6 +215,13 @@ function humanMethod(m: string) {
                       class="zaqa-btn zaqa-btn-secondary inline-flex items-center gap-1.5 px-3 py-2 text-xs font-semibold"
                     >
                       Download invoice
+                    </a>
+                    <a
+                      v-if="payment.receipt_download_url"
+                      :href="payment.receipt_download_url"
+                      class="zaqa-btn zaqa-btn-secondary inline-flex items-center gap-1.5 px-3 py-2 text-xs font-semibold"
+                    >
+                      Download receipt
                     </a>
                   </div>
                 </div>

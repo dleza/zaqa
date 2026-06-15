@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Applicant;
 
 use App\Domain\Applications\ApplicationDraftService;
 use App\Domain\Documents\ApplicantDocumentService;
+use App\Domain\Finance\PaymentReceiptPdfService;
 use App\Domain\Payments\ApplicationPaymentSatisfaction;
 use App\Domain\Applications\ApplicationSubmissionReadinessService;
 use App\Domain\Payments\InvoiceService;
@@ -939,6 +940,7 @@ class ApplicantApplicationController extends Controller
                             'download_url' => URL::temporarySignedRoute('applicant.documents.download', $signedExpiry, ['document' => $paymentProof->id]),
                         ]
                         : null,
+                    'receipt_download_url' => app(PaymentReceiptPdfService::class)->receiptDownloadUrl($displayPayment, 'applicant.payments.receipt.download'),
                 ]
                 : null,
             'payment_review_pending' => $paymentReviewPending,

@@ -30,6 +30,7 @@ use App\Http\Controllers\Admin\Settings\AdminBillingCategoriesController;
 use App\Http\Controllers\Admin\Settings\AdminCertificateSubjectsController;
 use App\Http\Controllers\Admin\Settings\AdminCountriesController;
 use App\Http\Controllers\Admin\Settings\AdminDepartmentsController;
+use App\Http\Controllers\Admin\Settings\AdminDocumentSignaturesController;
 use App\Http\Controllers\Admin\Settings\AdminFeesController;
 use App\Http\Controllers\Admin\Settings\AdminQualificationTypesController;
 use App\Http\Controllers\Admin\Settings\AdminQualificationTitlesController;
@@ -63,6 +64,7 @@ use App\Http\Controllers\Applicant\ApplicantReferenceController;
 use App\Http\Controllers\Applicant\ApplicantServiceFeedbackController;
 use App\Http\Controllers\Applicant\DashboardController;
 use App\Http\Controllers\CertificateVerificationController;
+use App\Http\Controllers\ReceiptVerificationController;
 use App\Http\Controllers\Auth\AccountActivationController;
 use App\Http\Controllers\Auth\AuthenticatedSessionController;
 use App\Http\Controllers\Auth\NewPasswordController;
@@ -115,6 +117,7 @@ Route::middleware('guest')->group(function () {
 
 Route::get('/activate/email', [AccountActivationController::class, 'verifyEmail'])->name('activation.email.verify');
 Route::get('/certificates/{token}', [CertificateVerificationController::class, 'show'])->name('certificates.verify');
+Route::get('/receipts/{token}', [ReceiptVerificationController::class, 'show'])->name('receipts.verify');
 
 Route::middleware('auth')->group(function () {
     Route::post('/logout', [AuthenticatedSessionController::class, 'destroy'])->name('logout');
@@ -197,6 +200,7 @@ Route::middleware('auth')->group(function () {
         Route::get('/invoices/{invoice}/download', [ApplicantBillingController::class, 'downloadInvoice'])->name('invoices.download');
         Route::get('/payments', [ApplicantBillingController::class, 'payments'])->name('payments.index');
         Route::get('/payments/{payment}', [ApplicantBillingController::class, 'showPayment'])->name('payments.show');
+        Route::get('/payments/{payment}/receipt/download', [ApplicantBillingController::class, 'downloadReceipt'])->name('payments.receipt.download');
 
         Route::get('/profile', [ApplicantProfileController::class, 'show'])->name('profile.show');
         Route::get('/profile/edit', [ApplicantProfileEditController::class, 'edit'])->name('profile.edit');
@@ -264,6 +268,10 @@ Route::middleware('auth')->group(function () {
             Route::post('/payments/{payment}/correct', [AdminFinancePaymentsController::class, 'correct'])
                 ->middleware('can:finance.payments.correct')
                 ->name('payments.correct');
+
+            Route::get('/payments/{payment}/receipt/download', [AdminFinancePaymentsController::class, 'downloadReceipt'])
+                ->middleware('can:finance.payments.view')
+                ->name('payments.receipt.download');
 
             Route::get('/invoices/{invoice}/download', [AdminFinanceInvoicesController::class, 'download'])
                 ->middleware('can:finance.payments.view')
@@ -777,6 +785,22 @@ Route::middleware('auth')->group(function () {
             Route::delete('/departments/{department}', [AdminDepartmentsController::class, 'destroy'])
                 ->middleware('can:settings.departments.delete')
                 ->name('departments.destroy');
+
+            Route::get('/document-signatures', [AdminDocumentSignaturesController::class, 'index'])
+                ->middleware('can:settings.document_signatures.view')
+                ->name('document_signatures.index');
+            Route::post('/document-signatures', [AdminDocumentSignaturesController::class, 'store'])
+                ->middleware('can:settings.document_signatures.manage')
+                ->name('document_signatures.store');
+            Route::post('/document-signatures/{documentSignatureSetting}/deactivate', [AdminDocumentSignaturesController::class, 'deactivate'])
+                ->middleware('can:settings.document_signatures.manage')
+                ->name('document_signatures.deactivate');
+            Route::delete('/document-signatures/{documentSignatureSetting}', [AdminDocumentSignaturesController::class, 'destroy'])
+                ->middleware('can:settings.document_signatures.manage')
+                ->name('document_signatures.destroy');
+            Route::get('/document-signatures/{documentSignatureSetting}/preview', [AdminDocumentSignaturesController::class, 'preview'])
+                ->middleware('can:settings.document_signatures.view')
+                ->name('document_signatures.preview');
 
             Route::get('/sms/balance', [AdminSmsBalanceController::class, 'index'])
                 ->middleware('can:sms.balance.view')

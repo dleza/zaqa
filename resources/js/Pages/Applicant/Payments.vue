@@ -29,6 +29,7 @@ const props = defineProps<{
     application: { id: number; application_number: string } | null
     invoice: { id: number; invoice_number: string } | null
     proof_document: { id: number; preview_url: string; download_url: string } | null
+    receipt_download_url: string | null
   }>
   summary: { total_cents: number; confirmed_cents: number; count: number }
 }>()
@@ -186,6 +187,14 @@ function humanMethod(m: string) {
                         View
                       </Link>
                       <a
+                        v-if="p.receipt_download_url"
+                        :href="p.receipt_download_url"
+                        class="zaqa-btn zaqa-btn-secondary inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold"
+                      >
+                        <ArrowDownToLine class="h-3.5 w-3.5" aria-hidden="true" />
+                        Download receipt
+                      </a>
+                      <a
                         v-if="p.proof_document"
                         :href="p.proof_document.preview_url"
                         target="_blank"
@@ -246,6 +255,14 @@ function humanMethod(m: string) {
                     <Eye class="h-4 w-4" aria-hidden="true" />
                     View payment
                   </Link>
+                  <a
+                    v-if="p.receipt_download_url"
+                    :href="p.receipt_download_url"
+                    class="zaqa-btn zaqa-btn-secondary inline-flex flex-1 items-center justify-center gap-2 py-2.5 text-xs font-semibold"
+                  >
+                    <ArrowDownToLine class="h-4 w-4" aria-hidden="true" />
+                    Download receipt
+                  </a>
                   <a
                     v-if="p.proof_document"
                     :href="p.proof_document.preview_url"

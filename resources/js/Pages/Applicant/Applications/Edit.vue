@@ -2001,9 +2001,16 @@ onBeforeUnmount(() => {
 	              </div>
 	            </div>
 
-	            <div v-if="invoice?.download_url" class="mt-4 flex flex-wrap gap-2">
-	              <a :href="invoice.download_url" class="zaqa-btn zaqa-btn-secondary inline-flex items-center gap-2 px-4 py-2 text-sm">
+	            <div v-if="invoice?.download_url || payment?.receipt_download_url" class="mt-4 flex flex-wrap gap-2">
+	              <a v-if="invoice?.download_url" :href="invoice.download_url" class="zaqa-btn zaqa-btn-secondary inline-flex items-center gap-2 px-4 py-2 text-sm">
 	                Download invoice
+	              </a>
+	              <a
+	                v-if="payment?.receipt_download_url"
+	                :href="payment.receipt_download_url"
+	                class="zaqa-btn zaqa-btn-secondary inline-flex items-center gap-2 px-4 py-2 text-sm"
+	              >
+	                Download receipt
 	              </a>
 	            </div>
 

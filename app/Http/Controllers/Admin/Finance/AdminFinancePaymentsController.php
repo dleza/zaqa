@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Admin\Finance;
 
 use App\Domain\Audit\AuditLogService;
+use App\Domain\Finance\PaymentReceiptPdfService;
 use App\Domain\Payments\PaymentService;
 use App\Enums\PaymentStatus;
 use App\Http\Requests\Finance\CorrectPaymentRequest;
@@ -15,6 +16,7 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
+use Symfony\Component\HttpFoundation\Response as SymfonyResponse;
 
 class AdminFinancePaymentsController extends Controller
 {
@@ -217,6 +219,19 @@ class AdminFinancePaymentsController extends Controller
         return back()->with('success', 'Payment correction saved.');
     }
 
+    public function downloadReceipt(Request $request, Payment $payment, PaymentReceiptPdfService $pdf): SymfonyResponse
+    {
+        if (! $request->user()?->can('finance.payments.view')) {
+            abort(403);
+        }
+
+        if (! $pdf->isEligible($payment)) {
+            abort(404);
+        }
+
+        return $pdf->downloadResponse($payment);
+    }
+
     /**
      * @return array<string,mixed>
      */
@@ -254,6 +269,7 @@ class AdminFinancePaymentsController extends Controller
                     ? route('admin.finance.invoices.download', ['invoice' => $p->invoice->id])
                     : null,
             ],
+            'receipt_download_url' => app(PaymentReceiptPdfService::class)->receiptDownloadUrl($p, 'admin.finance.payments.receipt.download'),
             'proof_document' => $p->proofDocument
                 ? [
                     'id' => $p->proofDocument->id,

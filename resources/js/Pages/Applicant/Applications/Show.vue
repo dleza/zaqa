@@ -819,12 +819,20 @@ function money(cents: number, currency: string) {
                   </div>
                 </div>
               </div>
-              <div v-if="application.invoice?.download_url" class="mt-4">
+              <div v-if="application.invoice?.download_url || application.payment?.receipt_download_url" class="mt-4 flex flex-wrap gap-2">
                 <a
+                  v-if="application.invoice?.download_url"
                   :href="application.invoice.download_url"
                   class="zaqa-btn zaqa-btn-secondary inline-flex items-center gap-2 px-4 py-2 text-sm"
                 >
                   Download invoice
+                </a>
+                <a
+                  v-if="application.payment?.receipt_download_url"
+                  :href="application.payment.receipt_download_url"
+                  class="zaqa-btn zaqa-btn-secondary inline-flex items-center gap-2 px-4 py-2 text-sm"
+                >
+                  Download receipt
                 </a>
               </div>
             </section>

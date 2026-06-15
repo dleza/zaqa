@@ -230,6 +230,11 @@
     </div>
 
     <div class="issued-by">Issued by The Zambia Qualifications Authority</div>
+    @if(!empty($signature_data_uri))
+        <div style="margin-top:6px;">
+            <img src="{{ $signature_data_uri }}" alt="Signature" style="max-height:42px;">
+        </div>
+    @endif
     <div class="sig-name">{{ $director_name }}</div>
     <div class="sig-title">{{ $director_title }}</div>
 

@@ -262,6 +262,13 @@ function correctionSummary(entry: any) {
             >
               Download invoice
             </a>
+            <a
+              v-if="payment.receipt_download_url"
+              :href="payment.receipt_download_url"
+              class="zaqa-btn zaqa-btn-secondary inline-flex items-center gap-2 px-4 py-2 text-sm"
+            >
+              Download receipt
+            </a>
             <Link href="/admin/finance/payments" class="zaqa-btn zaqa-btn-secondary px-4 py-2 text-sm">
               Back to payments
             </Link>
