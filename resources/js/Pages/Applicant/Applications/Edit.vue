@@ -15,14 +15,11 @@ import {
   CreditCard,
   FileDown,
   GraduationCap,
-  Hash,
-  IdCard,
   Landmark,
   Lock,
   PenLine,
   PlusCircle,
   Smartphone,
-  UserRound,
   Upload,
 } from 'lucide-vue-next'
 
@@ -1774,167 +1771,141 @@ onBeforeUnmount(() => {
           </div>
         </section>
 
-        <section v-else-if="activeStep === 'consent'" class="rounded-2xl border border-border bg-surface p-5 sm:p-6">
-          <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-            <div class="flex items-start gap-3">
-              <div class="mt-0.5 inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-border bg-surface-muted text-brand">
-                <CheckCircle2 class="h-5 w-5" aria-hidden="true" />
-              </div>
-              <div>
-                <h2 class="text-base font-semibold text-text-primary sm:text-lg">Confirm your application</h2>
-                <p class="mt-1 text-sm text-text-muted">Please review and confirm your application before payment.</p>
-              </div>
-            </div>
-
-            <!-- Terms are available via "View full consent terms" in the confirmations card below. -->
-          </div>
-
-          <div v-if="applicationLocked" class="mt-4 rounded-xl border border-warning/20 bg-warning/10 px-4 py-3 text-sm text-warning">
+        <section v-else-if="activeStep === 'consent'" class="px-1 py-2 sm:px-0">
+          <div v-if="applicationLocked" class="mx-auto mb-4 w-full max-w-3xl rounded-xl border border-warning/20 bg-warning/10 px-4 py-3 text-sm text-warning">
             {{ applicationLockMessage }}
           </div>
 
-          <div class="mx-auto mt-6 w-full max-w-4xl space-y-6">
-            <div class="rounded-2xl border border-border bg-surface p-5 shadow-sm ring-1 ring-black/[0.03]">
-              <div class="flex items-start gap-3">
-                <div
-                  class="mt-0.5 inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-border bg-surface-muted text-brand"
-                >
-                  <UserRound class="h-5 w-5" aria-hidden="true" />
-                </div>
-                <div class="min-w-0 flex-1">
-                  <div class="text-sm font-semibold text-text-primary">
-                    {{ consentSubjectSummary.submittingFor === 'other' ? 'Qualification holder details' : 'Your details' }}
+          <div class="mx-auto w-full max-w-3xl">
+            <div class="overflow-hidden rounded-2xl border border-border bg-surface shadow-sm ring-1 ring-black/[0.04]">
+              <div class="border-b border-border px-6 py-5 sm:px-8">
+                <h2 class="text-xl font-semibold tracking-tight text-text-primary sm:text-2xl">Confirm your application</h2>
+                <p class="mt-2 text-sm leading-relaxed text-text-muted">
+                  Please review the details below and confirm that ZAQA may process your application.
+                </p>
+              </div>
+
+              <div class="border-b border-border bg-surface-muted/25 px-6 py-4 sm:px-8">
+                <p class="text-sm text-text-muted">
+                  <template v-if="consentSubjectSummary.submittingFor === 'other'">
+                    You are submitting this application on behalf of:
+                    <span class="font-semibold text-text-primary">{{ consentSubjectSummary.fullName }}</span>
+                  </template>
+                  <template v-else>
+                    You are personally authorizing ZAQA to verify your qualifications.
+                  </template>
+                </p>
+
+                <dl class="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-3 sm:gap-6">
+                  <div class="min-w-0">
+                    <dt class="text-xs font-semibold uppercase tracking-wider text-text-muted">Full name</dt>
+                    <dd class="mt-1 truncate text-sm font-semibold text-text-primary">{{ consentSubjectSummary.fullName }}</dd>
                   </div>
-                  <p class="mt-1 text-sm text-text-muted">
-                    {{
-                      consentSubjectSummary.submittingFor === 'other'
-                        ? 'You are personally authorizing ZAQA to verify qualifications for the holder below.'
-                        : 'You are personally authorizing ZAQA to verify your qualifications.'
-                    }}
-                  </p>
+                  <div class="min-w-0">
+                    <dt class="text-xs font-semibold uppercase tracking-wider text-text-muted">Identification</dt>
+                    <dd class="mt-1 truncate font-mono text-sm font-semibold text-text-primary">
+                      {{ consentSubjectSummary.identification }}
+                    </dd>
+                  </div>
+                  <div class="min-w-0">
+                    <dt class="text-xs font-semibold uppercase tracking-wider text-text-muted">Application reference</dt>
+                    <dd class="mt-1 truncate font-mono text-sm font-semibold text-text-primary">
+                      {{ consentSubjectSummary.applicationReference }}
+                    </dd>
+                  </div>
+                </dl>
+              </div>
+
+              <div class="px-6 py-5 sm:px-8">
+                <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                  <h3 class="text-sm font-semibold text-brand">Consent and verification authorization</h3>
+                  <button
+                    type="button"
+                    class="shrink-0 text-left text-sm font-semibold text-brand hover:underline sm:text-right"
+                    @click="openTermsModal"
+                  >
+                    View full consent terms
+                  </button>
+                </div>
+
+                <p class="mt-4 text-sm leading-relaxed text-text-primary">By continuing, I confirm that:</p>
+
+                <ul class="mt-3 space-y-2.5 text-sm leading-relaxed text-text-muted">
+                  <li class="flex gap-2.5">
+                    <span class="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-brand/70" aria-hidden="true" />
+                    <span>I authorize ZAQA to verify the qualification information submitted in this application.</span>
+                  </li>
+                  <li class="flex gap-2.5">
+                    <span class="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-brand/70" aria-hidden="true" />
+                    <span
+                      >The personal details, identification information, qualifications, and supporting documents provided are
+                      accurate and complete.</span
+                    >
+                  </li>
+                  <li class="flex gap-2.5">
+                    <span class="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-brand/70" aria-hidden="true" />
+                    <span>I understand that ZAQA may use the submitted information for verification and evaluation purposes.</span>
+                  </li>
+                  <li class="flex gap-2.5">
+                    <span class="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-brand/70" aria-hidden="true" />
+                    <span
+                      >I understand that incomplete, inaccurate, or misleading information may delay processing or lead to
+                      rejection.</span
+                    >
+                  </li>
+                  <li class="flex gap-2.5">
+                    <span class="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-brand/70" aria-hidden="true" />
+                    <span
+                      >I understand that my account, date, and time of confirmation may be recorded as part of the application
+                      audit trail.</span
+                    >
+                  </li>
+                </ul>
+              </div>
+
+              <div class="border-t border-border px-6 py-5 sm:px-8">
+                <h3 class="text-sm font-semibold text-text-primary">Your confirmation</h3>
+
+                <div class="mt-4 space-y-3">
+                  <label
+                    class="flex cursor-pointer items-start gap-3 rounded-xl border border-border bg-surface-muted/30 px-4 py-3.5 transition-colors hover:bg-surface-muted/50"
+                  >
+                    <input
+                      v-model="declarationsForm.accept_terms"
+                      type="checkbox"
+                      class="mt-0.5 h-4 w-4 shrink-0 rounded border-border text-brand focus:ring-brand/30"
+                      :disabled="applicationLocked"
+                    />
+                    <span class="text-sm leading-relaxed text-text-primary">I agree to the consent and verification terms above.</span>
+                  </label>
+                  <InputError :message="declarationsForm.errors.accept_terms" />
+
+                  <label
+                    class="flex cursor-pointer items-start gap-3 rounded-xl border border-border bg-surface-muted/30 px-4 py-3.5 transition-colors hover:bg-surface-muted/50"
+                  >
+                    <input
+                      v-model="declarationsForm.confirm_information_correct"
+                      type="checkbox"
+                      class="mt-0.5 h-4 w-4 shrink-0 rounded border-border text-brand focus:ring-brand/30"
+                      :disabled="applicationLocked"
+                    />
+                    <span class="text-sm leading-relaxed text-text-primary"
+                      >I confirm that the submitted information and documents are accurate and complete.</span
+                    >
+                  </label>
+                  <InputError :message="declarationsForm.errors.confirm_information_correct" />
                 </div>
               </div>
 
-              <dl class="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
-                <div class="rounded-xl border border-border bg-surface-muted/40 px-4 py-3">
-                  <dt class="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-text-muted">
-                    <UserRound class="h-4 w-4 text-brand" aria-hidden="true" />
-                    Full name
-                  </dt>
-                  <dd class="mt-1 truncate text-sm font-semibold text-text-primary">{{ consentSubjectSummary.fullName }}</dd>
-                </div>
-                <div class="rounded-xl border border-border bg-surface-muted/40 px-4 py-3">
-                  <dt class="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-text-muted">
-                    <IdCard class="h-4 w-4 text-brand" aria-hidden="true" />
-                    Identification
-                  </dt>
-                  <dd class="mt-1 truncate font-mono text-sm font-semibold text-text-primary">
-                    {{ consentSubjectSummary.identification }}
-                  </dd>
-                </div>
-                <div class="rounded-xl border border-border bg-surface-muted/40 px-4 py-3">
-                  <dt class="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-text-muted">
-                    <Hash class="h-4 w-4 text-brand" aria-hidden="true" />
-                    Application reference
-                  </dt>
-                  <dd class="mt-1 truncate font-mono text-sm font-semibold text-text-primary">
-                    {{ consentSubjectSummary.applicationReference }}
-                  </dd>
-                </div>
-              </dl>
-
-              <p class="mt-4 text-xs leading-relaxed text-text-muted">
-                This is a digital confirmation. Your account, date, and time will be recorded.
-              </p>
-            </div>
-
-              <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                <div class="rounded-2xl border border-border bg-surface-muted/40 p-4">
-                  <div class="flex items-start gap-3">
-                    <CheckCircle2 class="mt-0.5 h-5 w-5 shrink-0 text-success" aria-hidden="true" />
-                    <div>
-                      <div class="text-sm font-semibold text-text-primary">Verification authorization</div>
-                      <div class="mt-1 text-sm text-text-muted">I authorize ZAQA to verify my qualification information.</div>
-                    </div>
-                  </div>
-                </div>
-                <div class="rounded-2xl border border-border bg-surface-muted/40 p-4">
-                  <div class="flex items-start gap-3">
-                    <CheckCircle2 class="mt-0.5 h-5 w-5 shrink-0 text-success" aria-hidden="true" />
-                    <div>
-                      <div class="text-sm font-semibold text-text-primary">Information accuracy</div>
-                      <div class="mt-1 text-sm text-text-muted">I confirm the information and documents submitted are accurate.</div>
-                    </div>
-                  </div>
-                </div>
-                <div class="rounded-2xl border border-border bg-surface-muted/40 p-4">
-                  <div class="flex items-start gap-3">
-                    <CheckCircle2 class="mt-0.5 h-5 w-5 shrink-0 text-success" aria-hidden="true" />
-                    <div>
-                      <div class="text-sm font-semibold text-text-primary">Information use</div>
-                      <div class="mt-1 text-sm text-text-muted">I understand information is used for verification purposes only.</div>
-                    </div>
-                  </div>
-                </div>
-                <div class="rounded-2xl border border-border bg-surface-muted/40 p-4">
-                  <div class="flex items-start gap-3">
-                    <CheckCircle2 class="mt-0.5 h-5 w-5 shrink-0 text-success" aria-hidden="true" />
-                    <div>
-                      <div class="text-sm font-semibold text-text-primary">Application review</div>
-                      <div class="mt-1 text-sm text-text-muted">Incomplete or misleading applications may be rejected.</div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-            <div class="rounded-2xl border border-border bg-surface p-5 shadow-sm ring-1 ring-black/[0.03]">
-              <div class="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-                <div>
-                  <div class="text-sm font-semibold text-text-primary">Your confirmations</div>
-                  <p class="mt-1 text-sm text-text-muted">Confirm both items to continue.</p>
-                </div>
-                <button type="button" class="text-sm font-semibold text-brand hover:underline" @click="openTermsModal">
-                  View full consent terms
-                </button>
-              </div>
-
-              <div class="mt-5 space-y-3">
-                <label class="flex cursor-pointer items-start gap-3 rounded-xl border border-border bg-surface-muted/40 px-4 py-3">
-                  <input
-                    v-model="declarationsForm.accept_terms"
-                    type="checkbox"
-                    class="mt-1 h-4 w-4 rounded border-border text-brand focus:ring-brand/30"
-                    :disabled="applicationLocked"
-                  />
-                  <span class="text-sm text-text-primary">I agree to the consent and verification terms above.</span>
-                </label>
-                <InputError :message="declarationsForm.errors.accept_terms" />
-
-                <label class="flex cursor-pointer items-start gap-3 rounded-xl border border-border bg-surface-muted/40 px-4 py-3">
-                  <input
-                    v-model="declarationsForm.confirm_information_correct"
-                    type="checkbox"
-                    class="mt-1 h-4 w-4 rounded border-border text-brand focus:ring-brand/30"
-                    :disabled="applicationLocked"
-                  />
-                  <span class="text-sm text-text-primary">I confirm that the submitted information and documents are accurate and complete.</span>
-                </label>
-                <InputError :message="declarationsForm.errors.confirm_information_correct" />
-              </div>
-            </div>
-
-            <div class="rounded-2xl border border-border bg-surface-muted/40 px-4 py-3">
-              <div class="flex items-start gap-3">
-                <Lock class="mt-0.5 h-5 w-5 shrink-0 text-brand" aria-hidden="true" />
-                <div class="text-sm text-text-primary">
-                  <span class="font-semibold">Your information is securely processed by ZAQA.</span>
-                  <span class="text-text-muted"> You can review and edit your draft until payment is confirmed.</span>
-                </div>
+              <div class="border-t border-border bg-surface-muted/30 px-6 py-3.5 sm:px-8">
+                <p class="text-xs leading-relaxed text-text-muted">
+                  Your information is securely processed by ZAQA. You can review and edit your draft until payment is confirmed.
+                </p>
               </div>
             </div>
           </div>
 
-          <div class="mt-10">
+          <div class="mx-auto mt-8 w-full max-w-3xl">
             <WizardFooterBar
               :show-prev="!!stepNav.prev"
               :show-next="!!stepNav.next"
