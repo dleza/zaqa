@@ -85,6 +85,68 @@ class ApplicantMobileMoneyPaymentFlowTest extends TestCase
         Queue::assertPushedOn('payments', QueryCGratePaymentAttemptJob::class);
     }
 
+    public function test_successful_attempt_status_includes_feedback_redirect_url(): void
+    {
+        [$user, $payment] = $this->createMobileMoneyPaymentContext();
+        $attempt = $this->createAttempt($payment, PaymentAttemptStatus::Confirmed);
+        $payment->forceFill([
+            'status' => PaymentStatus::Confirmed,
+            'confirmed_at' => now(),
+        ])->save();
+
+        $this->actingAs($user)
+            ->getJson("/applicant/payments/attempts/{$attempt->id}/status")
+            ->assertOk()
+            ->assertJson([
+                'status' => 'successful',
+                'paid' => true,
+                'redirect_url' => route('applicant.applications.feedback.show', $payment->application_id),
+            ]);
+    }
+
+    public function test_confirmed_test_gateway_return_redirects_to_feedback(): void
+    {
+        [$user, $payment] = $this->createMobileMoneyPaymentContext();
+        $payment->forceFill([
+            'method' => PaymentMethod::Card,
+            'provider' => 'test',
+            'provider_reference' => 'TEST-REF-123',
+            'status' => PaymentStatus::PendingConfirmation,
+        ])->save();
+
+        $this->actingAs($user)
+            ->get(route('payments.test.redirect', [
+                'payment' => $payment->id,
+                'ref' => 'TEST-REF-123',
+                'status' => 'success',
+            ]))
+            ->assertRedirect(route('applicant.applications.feedback.show', $payment->application_id))
+            ->assertSessionHas('payment_completed', true);
+    }
+
+    public function test_failed_test_gateway_return_redirects_back_to_payment_step(): void
+    {
+        [$user, $payment] = $this->createMobileMoneyPaymentContext();
+        $payment->forceFill([
+            'method' => PaymentMethod::Card,
+            'provider' => 'test',
+            'provider_reference' => 'TEST-REF-FAIL',
+            'status' => PaymentStatus::PendingConfirmation,
+        ])->save();
+
+        $this->actingAs($user)
+            ->get(route('payments.test.redirect', [
+                'payment' => $payment->id,
+                'ref' => 'TEST-REF-FAIL',
+                'status' => 'failed',
+            ]))
+            ->assertRedirect(route('applicant.applications.edit', [
+                'application' => $payment->application_id,
+                'step' => 'payment',
+            ]))
+            ->assertSessionHas('error');
+    }
+
     public function test_pending_attempt_is_reused_and_reports_already_pending(): void
     {
         Queue::fake();

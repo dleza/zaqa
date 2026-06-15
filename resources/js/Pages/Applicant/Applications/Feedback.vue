@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import ApplicantLayout from '@/Layouts/ApplicantLayout.vue'
-import { Link, useForm } from '@inertiajs/vue3'
-import { computed, ref } from 'vue'
+import { Link, useForm, usePage } from '@inertiajs/vue3'
+import { computed, onMounted, ref } from 'vue'
 import Swal from 'sweetalert2'
 import { CheckCircle2, Star } from 'lucide-vue-next'
 
@@ -9,6 +9,8 @@ const props = defineProps<{
   application: any
   existingFeedback: any | null
 }>()
+
+const page = usePage()
 
 const labels = [
   { value: 1, label: 'Poor', range: 'Below 50%' },
@@ -54,6 +56,23 @@ function submit() {
     },
   })
 }
+
+const paymentConfirmed = computed(() => (props.application?.payment?.status ?? '') === 'confirmed')
+
+onMounted(() => {
+  const flash = page.props.flash as { payment_completed?: boolean; success?: string } | undefined
+  if (!flash?.payment_completed) return
+
+  void Swal.fire({
+    icon: 'success',
+    title: 'Payment confirmed',
+    html:
+      '<p class="text-sm text-left">Your payment was successful and your application has been submitted to ZAQA for verification.</p>' +
+      '<p class="mt-3 text-sm text-left text-text-muted">Please take a moment to rate your submission experience below.</p>',
+    confirmButtonText: 'Continue',
+    confirmButtonColor: '#0076BD',
+  })
+})
 </script>
 
 <template>
@@ -67,6 +86,7 @@ function submit() {
           </div>
           <div class="min-w-0">
             <div class="text-sm font-semibold text-text-primary">Application submitted</div>
+            <div v-if="paymentConfirmed" class="mt-0.5 text-xs text-success">Payment confirmed successfully</div>
             <div class="truncate font-mono text-xs text-text-muted">{{ application.application_number }}</div>
           </div>
         </div>

@@ -777,6 +777,29 @@ const mobileMoneyIsFailed = computed(() => (mobileMoneyAttempt.value?.status ?? 
 const mobileMoneyIsSuccessful = computed(() => (mobileMoneyAttempt.value?.status ?? '') === 'successful' || (payment.value?.status ?? '') === 'confirmed')
 const mobileMoneyCanInitiate = computed(() => !mobileMoneyIsPending.value && !mobileMoneyIsSuccessful.value && (payment.value?.status ?? '') !== 'confirmed')
 
+const feedbackUrl = computed(() => `/applicant/applications/${props.application.id}/feedback`)
+const paymentCelebrationInFlight = ref(false)
+
+async function celebratePaymentSuccessAndGoToFeedback() {
+  if (paymentCelebrationInFlight.value) return
+  paymentCelebrationInFlight.value = true
+  stopMobileMoneyPolling()
+  mobileMoneyModalOpen.value = false
+
+  await Swal.fire({
+    icon: 'success',
+    title: 'Payment confirmed',
+    html:
+      '<p class="text-sm text-left">Your payment was successful and your application has been submitted to ZAQA for verification.</p>' +
+      '<p class="mt-3 text-sm text-left text-text-muted">Next, please share a quick rating of your submission experience.</p>',
+    confirmButtonText: 'Continue to feedback',
+    confirmButtonColor: '#0076BD',
+    allowOutsideClick: false,
+  })
+
+  router.visit(feedbackUrl.value)
+}
+
 function mobileMoneyStatusBadgeClass(status: unknown): string {
   const s = (status ?? '').toString()
   if (s === 'successful') return 'zaqa-badge-success'
@@ -846,10 +869,7 @@ async function checkMobileMoneyStatus() {
     mobileMoneyLive.value = res.data ?? null
 
     if (res.data?.paid || res.data?.status === 'successful') {
-      setSaved('Payment confirmed.')
-      stopMobileMoneyPolling()
-      mobileMoneyModalOpen.value = false
-      router.reload({ only: ['application'] })
+      await celebratePaymentSuccessAndGoToFeedback()
       return
     }
 

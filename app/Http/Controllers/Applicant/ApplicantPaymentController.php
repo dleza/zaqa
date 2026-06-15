@@ -204,8 +204,7 @@ class ApplicantPaymentController extends Controller
 
         $payments->handleGatewayReturn($payment, $request->all());
 
-        return redirect()->route('applicant.applications.edit', ['application' => $payment->application_id, 'step' => 'payment'])
-            ->with('success', 'Payment status updated.');
+        return $this->redirectAfterGatewayReturn($payment);
     }
 
     /**
@@ -225,8 +224,43 @@ class ApplicantPaymentController extends Controller
 
         $payments->handleGatewayReturn($payment, $payload);
 
-        return redirect()->route('applicant.applications.edit', ['application' => $payment->application_id, 'step' => 'payment'])
-            ->with('success', $status === 'success' ? 'Payment confirmed.' : 'Payment failed.');
+        return $this->redirectAfterGatewayReturn($payment);
+    }
+
+    private function redirectAfterGatewayReturn(Payment $payment): RedirectResponse
+    {
+        $payment->refresh()->loadMissing('application');
+        $application = $payment->application;
+
+        if ($payment->status === PaymentStatus::Confirmed && $application) {
+            return redirect()
+                ->route('applicant.applications.feedback.show', $application)
+                ->with([
+                    'success' => 'Payment confirmed successfully. Your application has been submitted to ZAQA for verification.',
+                    'payment_completed' => true,
+                ]);
+        }
+
+        $isFailure = in_array($payment->status, [
+            PaymentStatus::Failed,
+            PaymentStatus::Rejected,
+            PaymentStatus::Expired,
+        ], true);
+
+        $flashKey = $isFailure ? 'error' : 'success';
+        $message = $isFailure
+            ? 'Payment was not completed. Please try again or choose another payment method.'
+            : 'Payment status updated.';
+
+        if ($application && auth()->user()?->can('update', $application)) {
+            return redirect()
+                ->route('applicant.applications.edit', ['application' => $application->id, 'step' => 'payment'])
+                ->with($flashKey, $message);
+        }
+
+        return redirect()
+            ->route('applicant.applications.show', $application)
+            ->with($flashKey, $message);
     }
 
     /**

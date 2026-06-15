@@ -159,7 +159,11 @@ class ApplicantApplicationFlowTest extends TestCase
         $initiate = $this->post("/applicant/applications/{$application->id}/payment/initiate-card");
         $initiate->assertRedirect();
 
-        $this->get($initiate->headers->get('Location'))->assertRedirect();
+        $testRedirect = $this->get($initiate->headers->get('Location'));
+        $testRedirect->assertRedirect(route('applicant.applications.feedback.show', $application));
+        $this->get($testRedirect->headers->get('Location'))
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page->component('Applicant/Applications/Feedback'));
 
         $payment = Payment::query()->where('application_id', $application->id)->latest('id')->firstOrFail();
         $payment->refresh();
@@ -351,7 +355,11 @@ class ApplicantApplicationFlowTest extends TestCase
 
         $initiate = $this->post("/applicant/applications/{$application->id}/payment/initiate-card");
         $initiate->assertRedirect();
-        $this->get($initiate->headers->get('Location'))->assertRedirect();
+        $testRedirect = $this->get($initiate->headers->get('Location'));
+        $testRedirect->assertRedirect(route('applicant.applications.feedback.show', $application));
+        $this->get($testRedirect->headers->get('Location'))
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page->component('Applicant/Applications/Feedback'));
 
         $application->refresh();
         $this->assertSame(ApplicationStatus::Submitted, $application->current_status);

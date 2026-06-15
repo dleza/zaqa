@@ -39,7 +39,7 @@ class ApplicantPaymentAttemptStatusPresenter
             'message' => $this->message($status),
             'paid' => $status === self::STATUS_SUCCESSFUL,
             'redirect_url' => $status === self::STATUS_SUCCESSFUL
-                ? route('applicant.applications.edit', ['application' => $payment->application_id, 'step' => 'payment'])
+                ? route('applicant.applications.feedback.show', $payment->application_id)
                 : null,
             'mobile_number' => $attempt->mobile_number,
             'amount_cents' => (int) $attempt->amount_cents,
