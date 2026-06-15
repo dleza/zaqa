@@ -280,6 +280,7 @@ export const adminNavSections: AdminNavSection[] = [
       'settings.certificate_subjects.view',
       'settings.awarding_institutions.view',
       'settings.qualification_types.view',
+      'settings.qualification_titles.view',
       'settings.billing_categories.view',
       'settings.fees.view',
       'settings.departments.view',
@@ -314,6 +315,13 @@ export const adminNavSections: AdminNavSection[] = [
         icon: GraduationCap,
         activeStartsWith: '/admin/settings/qualification-types',
         requiredAnyPermissions: ['settings.qualification_types.view'],
+      },
+      {
+        label: 'Qualification Titles',
+        href: '/admin/settings/qualification-titles',
+        icon: BookOpen,
+        activeStartsWith: '/admin/settings/qualification-titles',
+        requiredAnyPermissions: ['settings.qualification_titles.view'],
       },
       {
         label: 'Billing Categories',

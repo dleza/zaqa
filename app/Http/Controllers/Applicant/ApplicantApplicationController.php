@@ -800,6 +800,7 @@ class ApplicantApplicationController extends Controller
                     'student_number' => $q->student_number,
                     'examination_number' => $q->examination_number,
                     'title_of_qualification' => $q->title_of_qualification,
+                    'qualification_title_id' => $q->qualification_title_id,
                     'applicant_entered_qualification_title' => $q->applicant_entered_qualification_title,
                     'verified_qualification_title' => $q->verified_qualification_title,
                     'qualification_title_source' => $q->qualification_title_source?->value ?? (string) ($q->qualification_title_source ?? ''),

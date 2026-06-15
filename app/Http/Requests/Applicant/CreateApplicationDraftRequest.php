@@ -2,15 +2,18 @@
 
 namespace App\Http\Requests\Applicant;
 
+use App\Domain\Applications\ApplicationNotificationContact;
 use App\Enums\ApplicantType;
 use App\Enums\QualificationType;
 use App\Enums\ServiceType;
+use App\Http\Requests\Applicant\Concerns\ValidatesApplicationNotificationContact;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rules\Enum;
 use Illuminate\Validation\Validator;
 
 class CreateApplicationDraftRequest extends FormRequest
 {
+    use ValidatesApplicationNotificationContact;
     public function authorize(): bool
     {
         return (bool) $this->user();
@@ -29,8 +32,10 @@ class CreateApplicationDraftRequest extends FormRequest
             'subject_first_name' => ['nullable', 'string', 'max:255'],
             'subject_other_names' => ['nullable', 'string', 'max:255'],
             'subject_last_name' => ['nullable', 'string', 'max:255'],
-            'subject_email' => ['nullable', 'email:rfc,dns', 'max:255'],
-            'subject_phone' => ['nullable', 'string', 'max:30'],
+            'notification_contact_mode' => ['nullable', 'string', 'in:'.ApplicationNotificationContact::MODE_APPLICANT_ACCOUNT.','.ApplicationNotificationContact::MODE_ADDITIONAL_EMAIL],
+            'additional_notification_email' => ['nullable', 'email', 'max:255'],
+            'additional_notification_name' => ['nullable', 'string', 'max:255'],
+            'additional_notification_relationship' => ['nullable', 'string', 'max:100'],
             'gender' => ['nullable', 'string', 'in:male,female'],
             'identity_type' => ['nullable', 'string', 'in:nrc,passport'],
             'identity_number' => ['nullable', 'string', 'max:100'],
@@ -126,6 +131,8 @@ class CreateApplicationDraftRequest extends FormRequest
             if (! $this->hasFile('identity_file')) {
                 $validator->errors()->add('identity_file', 'Upload a clear copy of the holder’s NRC or passport.');
             }
+
+            $this->validateApplicationNotificationContact($validator, $submittingFor);
         });
     }
 }

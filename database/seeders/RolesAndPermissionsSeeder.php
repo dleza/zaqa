@@ -90,6 +90,11 @@ class RolesAndPermissionsSeeder extends Seeder
         'settings.qualification_types.edit',
         'settings.qualification_types.delete',
 
+        'settings.qualification_titles.view',
+        'settings.qualification_titles.create',
+        'settings.qualification_titles.edit',
+        'settings.qualification_titles.delete',
+
         'settings.billing_categories.view',
         'settings.billing_categories.create',
         'settings.billing_categories.edit',

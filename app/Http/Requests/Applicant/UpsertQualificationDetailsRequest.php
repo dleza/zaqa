@@ -2,12 +2,14 @@
 
 namespace App\Http\Requests\Applicant;
 
+use App\Http\Requests\Applicant\Concerns\ValidatesQualificationTitleSelection;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\Validator;
 
 class UpsertQualificationDetailsRequest extends FormRequest
 {
+    use ValidatesQualificationTitleSelection;
     public function authorize(): bool
     {
         $application = $this->route('application');
@@ -29,6 +31,7 @@ class UpsertQualificationDetailsRequest extends FormRequest
             'student_number' => ['nullable', 'string', 'max:100'],
             'examination_number' => ['nullable', 'string', 'max:100'],
             'title_of_qualification' => ['required', 'string', 'max:255'],
+            'qualification_title_id' => ['nullable', 'integer', 'exists:qualification_titles,id'],
             'qualification_title_source' => ['nullable', 'string', Rule::in(['catalog', 'other'])],
             'applicant_entered_qualification_title' => ['nullable', 'string', 'max:255'],
             'award_date' => ['required', 'date', 'before_or_equal:today'],
@@ -90,6 +93,8 @@ class UpsertQualificationDetailsRequest extends FormRequest
             if ($manualTitle !== '' && $source !== '' && $source !== 'other') {
                 $validator->errors()->add('applicant_entered_qualification_title', 'Remove the typed title when selecting from the list.');
             }
+
+            $this->validateQualificationTitleSelection($validator);
         });
     }
 }

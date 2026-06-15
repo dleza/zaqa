@@ -42,6 +42,14 @@ class AwardingInstitution extends Model
         return $this->hasOne(InstitutionIntegration::class);
     }
 
+    public function qualificationTitles(): \Illuminate\Database\Eloquent\Relations\BelongsToMany
+    {
+        return $this->belongsToMany(
+            QualificationTitle::class,
+            'awarding_institution_qualification_title',
+        )->withTimestamps();
+    }
+
     public function getHasConsentFormAttribute(): bool
     {
         return trim((string) ($this->consent_form_path ?? '')) !== '';

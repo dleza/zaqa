@@ -750,5 +750,6 @@ class ApplicantApplicationFlowTest extends TestCase
         $this->assertSame('female', $subject['gender'] ?? null);
         $this->assertSame('passport', $subject['identity_type'] ?? null);
         $this->assertSame('P1234567', $subject['passport_number'] ?? null);
+        $this->assertSame('applicant_account', $meta['notification_contact_mode'] ?? null);
     }
 }

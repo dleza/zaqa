@@ -2,14 +2,17 @@
 
 namespace App\Http\Requests\Applicant;
 
+use App\Domain\Applications\ApplicationNotificationContact;
 use App\Enums\ApplicantType;
 use App\Enums\ServiceType;
+use App\Http\Requests\Applicant\Concerns\ValidatesApplicationNotificationContact;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rules\Enum;
 use Illuminate\Validation\Validator;
 
 class UpdateApplicationDraftRequest extends FormRequest
 {
+    use ValidatesApplicationNotificationContact;
     public function authorize(): bool
     {
         $application = $this->route('application');
@@ -30,8 +33,10 @@ class UpdateApplicationDraftRequest extends FormRequest
             'subject_first_name' => ['sometimes', 'nullable', 'string', 'max:255'],
             'subject_other_names' => ['sometimes', 'nullable', 'string', 'max:255'],
             'subject_last_name' => ['sometimes', 'nullable', 'string', 'max:255'],
-            'subject_email' => ['sometimes', 'nullable', 'email:rfc,dns', 'max:255'],
-            'subject_phone' => ['sometimes', 'nullable', 'string', 'max:30'],
+            'notification_contact_mode' => ['sometimes', 'nullable', 'string', 'in:'.ApplicationNotificationContact::MODE_APPLICANT_ACCOUNT.','.ApplicationNotificationContact::MODE_ADDITIONAL_EMAIL],
+            'additional_notification_email' => ['sometimes', 'nullable', 'email', 'max:255'],
+            'additional_notification_name' => ['sometimes', 'nullable', 'string', 'max:255'],
+            'additional_notification_relationship' => ['sometimes', 'nullable', 'string', 'max:100'],
             'gender' => ['sometimes', 'nullable', 'string', 'in:male,female'],
             'identity_type' => ['sometimes', 'nullable', 'string', 'in:nrc,passport'],
             'identity_number' => ['sometimes', 'nullable', 'string', 'max:100'],
@@ -114,6 +119,8 @@ class UpdateApplicationDraftRequest extends FormRequest
             if ($number === '') {
                 $validator->errors()->add('identity_number', 'Provide NRC or passport number.');
             }
+
+            $this->validateApplicationNotificationContact($validator, $submittingFor);
         });
     }
 }

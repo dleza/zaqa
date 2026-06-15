@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Admin\Verification;
 
+use App\Domain\Applications\ApplicationNotificationContact;
 use App\Domain\Tracking\ApplicationLifecycleService;
 use App\Domain\Verification\DecisionService;
 use App\Domain\Verification\SendBackService;
@@ -149,6 +150,7 @@ class AdminVerificationApplicationController extends Controller
                             return ($subject['nrc_number'] ?? null) ?: ($subject['passport_number'] ?? null);
                         })(),
                 ],
+                'notification_contact_label' => ApplicationNotificationContact::adminLabel($application),
                 'qualification' => $primaryQualification
                     ? [
                         'title' => $primaryQualification->title_of_qualification,

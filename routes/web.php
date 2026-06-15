@@ -32,6 +32,7 @@ use App\Http\Controllers\Admin\Settings\AdminCountriesController;
 use App\Http\Controllers\Admin\Settings\AdminDepartmentsController;
 use App\Http\Controllers\Admin\Settings\AdminFeesController;
 use App\Http\Controllers\Admin\Settings\AdminQualificationTypesController;
+use App\Http\Controllers\Admin\Settings\AdminQualificationTitlesController;
 use App\Http\Controllers\Admin\Settings\AdminSmsBalanceController;
 use App\Http\Controllers\Admin\Settings\AdminSmsLogsController;
 use App\Http\Controllers\Admin\Verification\AdminVerificationApplicationController;
@@ -690,6 +691,30 @@ Route::middleware('auth')->group(function () {
             Route::delete('/qualification-types/{qualificationType}', [AdminQualificationTypesController::class, 'destroy'])
                 ->middleware('can:settings.qualification_types.delete')
                 ->name('qualification_types.destroy');
+
+            Route::get('/qualification-titles', [AdminQualificationTitlesController::class, 'index'])
+                ->middleware('can:settings.qualification_titles.view')
+                ->name('qualification_titles.index');
+            Route::get('/qualification-titles/import-template', [AdminQualificationTitlesController::class, 'importTemplate'])
+                ->middleware('can:settings.qualification_titles.view')
+                ->name('qualification_titles.import_template');
+            Route::post('/qualification-titles/import', [AdminQualificationTitlesController::class, 'import'])
+                ->name('qualification_titles.import');
+            Route::get('/qualification-titles/create', [AdminQualificationTitlesController::class, 'create'])
+                ->middleware('can:settings.qualification_titles.create')
+                ->name('qualification_titles.create');
+            Route::post('/qualification-titles', [AdminQualificationTitlesController::class, 'store'])
+                ->middleware('can:settings.qualification_titles.create')
+                ->name('qualification_titles.store');
+            Route::get('/qualification-titles/{qualification_title}/edit', [AdminQualificationTitlesController::class, 'edit'])
+                ->middleware('can:settings.qualification_titles.edit')
+                ->name('qualification_titles.edit');
+            Route::put('/qualification-titles/{qualification_title}', [AdminQualificationTitlesController::class, 'update'])
+                ->middleware('can:settings.qualification_titles.edit')
+                ->name('qualification_titles.update');
+            Route::delete('/qualification-titles/{qualification_title}', [AdminQualificationTitlesController::class, 'destroy'])
+                ->middleware('can:settings.qualification_titles.delete')
+                ->name('qualification_titles.destroy');
 
             Route::get('/billing-categories', [AdminBillingCategoriesController::class, 'index'])
                 ->middleware('can:settings.billing_categories.view')

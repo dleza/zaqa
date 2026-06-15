@@ -593,6 +593,12 @@ const subjectResultsCount = computed(() => props.qualification.subject_results?.
                 <div class="min-w-0">
                   <div class="text-[10px] font-semibold uppercase tracking-wider text-white/60">Application</div>
                   <div class="mt-1 font-mono text-base font-semibold text-white">{{ appNum }}</div>
+                  <div
+                    v-if="qualification.application?.notification_contact_label"
+                    class="mt-1 text-[11px] font-medium text-white/70"
+                  >
+                    Notification contact: {{ qualification.application.notification_contact_label }}
+                  </div>
                 </div>
                 <div class="min-w-0">
                   <div class="text-[10px] font-semibold uppercase tracking-wider text-white/60">Holder</div>

@@ -2,6 +2,7 @@
 
 namespace App\Domain\Verification;
 
+use App\Domain\Applications\ApplicationOutcomeNotificationDispatcher;
 use App\Domain\Audit\AuditLogService;
 use App\Enums\ApplicationStatus;
 use App\Enums\LifecycleStage;
@@ -19,6 +20,7 @@ class DecisionService
     public function __construct(
         private readonly AuditLogService $audit,
         private readonly VerificationWorkflowService $workflow,
+        private readonly ApplicationOutcomeNotificationDispatcher $outcomeNotifications,
     ) {}
 
     public function approve(Application $application, User $actor, ?string $comment = null): Application
@@ -102,6 +104,8 @@ class DecisionService
                 actor: $actor,
             );
 
+            $this->outcomeNotifications->notifyApplicationApproved($application);
+
             return $application;
         });
     }
@@ -173,6 +177,8 @@ class DecisionService
                 ],
                 actor: $actor,
             );
+
+            $this->outcomeNotifications->notifyApplicationRejected($application, $reason);
 
             return $application;
         });

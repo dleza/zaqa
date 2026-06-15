@@ -2,6 +2,7 @@
 
 namespace App\Domain\Verification;
 
+use App\Domain\Applications\ApplicationOutcomeNotificationDispatcher;
 use App\Domain\Audit\AuditLogService;
 use App\Domain\Certificates\QualificationCertificateService;
 use App\Domain\Tracking\ApplicationLifecycleService;
@@ -22,6 +23,7 @@ class QualificationDecisionService
         private readonly ApplicationLifecycleService $lifecycle,
         private readonly QualificationCertificateService $certificates,
         private readonly QualificationLevel2ReviewLockService $locks,
+        private readonly ApplicationOutcomeNotificationDispatcher $outcomeNotifications,
     ) {}
 
     public function approve(Qualification $qualification, User $actor, ?string $comment = null, bool $issueCertificate = false): Qualification
@@ -229,6 +231,8 @@ class QualificationDecisionService
                 ],
                 actor: $actor,
             );
+
+            $this->outcomeNotifications->notifyQualificationRejected($application, $qualification, $reason);
 
             return $qualification;
         });

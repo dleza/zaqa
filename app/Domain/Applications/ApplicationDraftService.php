@@ -65,8 +65,6 @@ class ApplicationDraftService
                     firstName: $data['subject_first_name'] ?? null,
                     otherNames: $data['subject_other_names'] ?? null,
                     lastName: $data['subject_last_name'] ?? null,
-                    email: $data['subject_email'] ?? null,
-                    phone: $data['subject_phone'] ?? null,
                     gender: $genderIn,
                     identityType: $identityTypeIn,
                     identityNumber: $identityNumberIn,
@@ -78,6 +76,7 @@ class ApplicationDraftService
                     identityNumberOverride: $identityNumberIn,
                 ), fn ($v) => $v !== null && $v !== '');
             $metadata['submitting_for'] = $submittingFor;
+            $metadata = ApplicationNotificationContact::mergeIntoMetadata($metadata, $data, $submittingFor);
 
             $application = $this->createWithUniqueNumber([
                 'uuid' => (string) Str::uuid(),
@@ -190,8 +189,6 @@ class ApplicationDraftService
                     firstName: $data['subject_first_name'] ?? null,
                     otherNames: $data['subject_other_names'] ?? null,
                     lastName: $data['subject_last_name'] ?? null,
-                    email: $data['subject_email'] ?? null,
-                    phone: $data['subject_phone'] ?? null,
                     gender: $genderIn,
                     identityType: $identityTypeIn,
                     identityNumber: $identityNumberIn,
@@ -202,6 +199,8 @@ class ApplicationDraftService
                     identityTypeOverride: $identityTypeIn,
                     identityNumberOverride: $identityNumberIn,
                 ), fn ($v) => $v !== null && $v !== '');
+
+            $meta = ApplicationNotificationContact::mergeIntoMetadata($meta, $data, $submittingFor);
 
             $application->metadata = $meta;
         }
@@ -503,8 +502,6 @@ class ApplicationDraftService
         mixed $firstName,
         mixed $otherNames,
         mixed $lastName,
-        mixed $email,
-        mixed $phone,
         ?string $gender,
         ?string $identityType,
         string $identityNumber,
@@ -516,9 +513,6 @@ class ApplicationDraftService
 
         $fullName = trim((string) implode(' ', array_filter([$first, $other, $last], fn ($v) => trim((string) $v) !== '')));
 
-        $email = trim((string) ($email ?? ''));
-        $phone = trim((string) ($phone ?? ''));
-
         return [
             'first_name' => $first !== '' ? $first : null,
             'other_names' => $other !== '' ? $other : null,
@@ -526,8 +520,6 @@ class ApplicationDraftService
             'full_name' => $fullName !== '' ? $fullName : null,
             'gender' => $gender,
             'identity_type' => $identityType,
-            'email' => $email !== '' ? $email : null,
-            'phone' => $phone !== '' ? $phone : null,
             'nrc_number' => $identityType === 'nrc' && $identityNumber !== '' ? $identityNumber : null,
             'passport_number' => $identityType === 'passport' && $identityNumber !== '' ? $identityNumber : null,
         ];

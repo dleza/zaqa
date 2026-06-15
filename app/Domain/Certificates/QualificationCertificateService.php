@@ -2,6 +2,7 @@
 
 namespace App\Domain\Certificates;
 
+use App\Domain\Applications\ApplicationOutcomeNotificationDispatcher;
 use App\Domain\Audit\AuditLogService;
 use App\Domain\Notifications\OutboundMailService;
 use App\Domain\Notifications\OutboundSmsService;
@@ -42,6 +43,7 @@ class QualificationCertificateService
         private readonly AuditLogService $audit,
         private readonly OutboundMailService $outboundMail,
         private readonly OutboundSmsService $outboundSms,
+        private readonly ApplicationOutcomeNotificationDispatcher $outcomeNotifications,
     ) {}
 
     /**
@@ -152,6 +154,12 @@ class QualificationCertificateService
                         'subject' => 'ZAQA qualification certificate issued',
                         'template_key' => 'qualification_certificate_issued',
                     ],
+                );
+
+                $this->outcomeNotifications->notifyCertificateIssuedCopy(
+                    qualification: $qualification,
+                    application: $application,
+                    certificate: $record,
                 );
             }
 

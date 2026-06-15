@@ -3,13 +3,15 @@ import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import InputError from '@/Components/InputError.vue'
 
 type Option = {
-  id: string | 'other'
+  id: number | 'other'
   title: string
 }
 
 const props = defineProps<{
   awardingInstitutionId: number | string | null
-  modelValue: string | 'other' | '' | null
+  qualificationTypeId?: number | string | null
+  modelValue: number | 'other' | '' | null
+  selectedTitle?: string | null
   queryEndpoint: string
   label?: string
   error?: string
@@ -17,20 +19,27 @@ const props = defineProps<{
 }>()
 
 const emit = defineEmits<{
-  (e: 'update:modelValue', value: string | 'other' | '' | null): void
+  (e: 'update:modelValue', value: number | 'other' | '' | null): void
   (e: 'selected', option: Option): void
 }>()
 
 const open = ref(false)
 const query = ref('')
 const loading = ref(false)
-const options = ref<Option[]>([{ id: 'other', title: 'Other (not listed)' }])
+const options = ref<Option[]>([{ id: 'other', title: 'Not Listed - Enter New' }])
 const activeIndex = ref(0)
+const loadedTitles = ref<Record<number, string>>({})
 
 const selectedOption = computed<Option | null>(() => {
   const id = props.modelValue
-  if (id === 'other') return { id: 'other', title: 'Other (not listed)' }
-  if (typeof id === 'string' && id !== '') return { id, title: id }
+  if (id === 'other') return { id: 'other', title: 'Not Listed - Enter New' }
+  if (typeof id === 'number' && id > 0) {
+    const fromOptions = options.value.find((o) => o.id === id)
+    if (fromOptions) return fromOptions
+    const cached = loadedTitles.value[id]
+    const fallbackTitle = (props.selectedTitle ?? '').toString().trim()
+    return { id, title: cached || fallbackTitle || `Title #${id}` }
+  }
   return null
 })
 
@@ -41,18 +50,28 @@ async function load() {
     const params = new URLSearchParams()
     const q = query.value.trim()
     if (q.length > 0) params.set('q', q)
-    if (props.awardingInstitutionId && props.awardingInstitutionId !== 'other') params.set('awarding_institution_id', String(props.awardingInstitutionId))
+    if (props.awardingInstitutionId && props.awardingInstitutionId !== 'other') {
+      params.set('awarding_institution_id', String(props.awardingInstitutionId))
+    }
+    if (props.qualificationTypeId && props.qualificationTypeId !== '') {
+      params.set('qualification_type_id', String(props.qualificationTypeId))
+    }
 
     const res = await fetch(`${props.queryEndpoint}?${params.toString()}`, { headers: { Accept: 'application/json' } })
     const json = await res.json()
     const data = Array.isArray(json?.data) ? json.data : []
-    options.value = [
-      ...data
-        .map((r: any) => String(r.title ?? '').trim())
-        .filter((t: string) => t.length > 0)
-        .map((t: string) => ({ id: t, title: t })),
-      { id: 'other', title: 'Not Listed - Enter New' },
-    ]
+    const mapped = data
+      .map((r: any) => ({
+        id: Number(r.id),
+        title: String(r.title ?? '').trim(),
+      }))
+      .filter((r: Option) => typeof r.id === 'number' && r.id > 0 && r.title.length > 0)
+
+    mapped.forEach((r: Option) => {
+      if (typeof r.id === 'number') loadedTitles.value[r.id] = r.title
+    })
+
+    options.value = [...mapped, { id: 'other', title: 'Not Listed - Enter New' }]
     activeIndex.value = 0
   } finally {
     loading.value = false
@@ -65,7 +84,7 @@ function debouncedLoad() {
 }
 
 function choose(opt: Option) {
-  emit('update:modelValue', opt.id === 'other' ? 'other' : opt.title)
+  emit('update:modelValue', opt.id === 'other' ? 'other' : opt.id)
   emit('selected', opt)
   open.value = false
 }
@@ -117,7 +136,7 @@ function onKeydown(e: KeyboardEvent) {
 }
 
 watch(
-  () => props.awardingInstitutionId,
+  () => [props.awardingInstitutionId, props.qualificationTypeId],
   async () => {
     query.value = ''
     emit('update:modelValue', '')
@@ -126,6 +145,9 @@ watch(
 )
 
 onMounted(async () => {
+  if (typeof props.modelValue === 'number' && props.modelValue > 0 && props.selectedTitle) {
+    loadedTitles.value[props.modelValue] = props.selectedTitle
+  }
   await load()
 })
 </script>
@@ -150,6 +172,8 @@ onMounted(async () => {
         </span>
         <span class="text-text-muted text-xs">{{ loading ? 'Loading…' : '▼' }}</span>
       </button>
+
+      <p v-if="disabled" class="mt-1 text-xs text-text-muted">Select the awarding institution first.</p>
 
       <div v-if="open" class="absolute z-30 mt-2 w-full overflow-hidden rounded-xl border border-border bg-surface shadow-lg">
         <div class="border-b border-border bg-surface-muted p-2">
@@ -176,4 +200,3 @@ onMounted(async () => {
     <InputError :message="error" />
   </div>
 </template>
-

@@ -2,12 +2,10 @@
 
 namespace Tests\Feature;
 
-use App\Enums\LearnerRecordSourceType;
 use App\Models\AwardingInstitution;
 use App\Models\Country;
-use App\Models\LearnerRecord;
+use App\Models\QualificationTitle;
 use App\Models\User;
-use App\Support\Normalization\LearnerRecordNormalizer;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -30,7 +28,6 @@ class ApplicantQualificationTitleOptionsTest extends TestCase
         $instA = AwardingInstitution::query()->create([
             'country_id' => $country->id,
             'name' => 'Institution A',
-            'consent_form_path' => null,
             'is_active' => true,
             'sort_order' => 1,
         ]);
@@ -38,25 +35,14 @@ class ApplicantQualificationTitleOptionsTest extends TestCase
         $instB = AwardingInstitution::query()->create([
             'country_id' => $country->id,
             'name' => 'Institution B',
-            'consent_form_path' => null,
             'is_active' => true,
             'sort_order' => 2,
         ]);
 
-        foreach ([
-            [$instA->id, 'Diploma in Testing'],
-            [$instA->id, 'Diploma in Testing'], // duplicate
-            [$instA->id, 'Bachelor of Science'],
-            [$instB->id, 'Diploma in Testing'], // other institution
-        ] as [$instId, $title]) {
-            LearnerRecord::query()->create([
-                'awarding_institution_id' => $instId,
-                'program_of_study' => $title,
-                'qualification_title_normalized' => LearnerRecordNormalizer::normalizeProgramTitle($title),
-                'source_type' => LearnerRecordSourceType::Manual,
-                'is_active' => true,
-            ]);
-        }
+        $titleA = QualificationTitle::query()->create(['name' => 'Diploma in Testing', 'is_active' => true]);
+        $titleB = QualificationTitle::query()->create(['name' => 'Bachelor of Science', 'is_active' => true]);
+        $titleA->awardingInstitutions()->sync([$instA->id, $instB->id]);
+        $titleB->awardingInstitutions()->sync([$instA->id]);
 
         $res = $this->getJson('/applicant/reference/qualification-titles?awarding_institution_id='.$instA->id);
         $res->assertOk();
@@ -71,11 +57,9 @@ class ApplicantQualificationTitleOptionsTest extends TestCase
         $this->assertContains('Bachelor of Science', $titles);
         $this->assertSame(count($titles), count(array_unique($titles)));
 
-        // Search term narrows
         $res2 = $this->getJson('/applicant/reference/qualification-titles?awarding_institution_id='.$instA->id.'&q=bachelor');
         $res2->assertOk();
         $titles2 = collect($res2->json('data'))->pluck('title')->filter()->values()->all();
         $this->assertSame(['Bachelor of Science'], $titles2);
     }
 }
-

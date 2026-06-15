@@ -30,6 +30,7 @@ class Qualification extends Model
         'student_number',
         'examination_number',
         'title_of_qualification',
+        'qualification_title_id',
         'applicant_entered_qualification_title',
         'verified_qualification_title',
         'qualification_title_source',
@@ -117,6 +118,11 @@ class Qualification extends Model
     public function awardingInstitution(): BelongsTo
     {
         return $this->belongsTo(AwardingInstitution::class);
+    }
+
+    public function qualificationTitle(): BelongsTo
+    {
+        return $this->belongsTo(QualificationTitle::class);
     }
 
     public function qualificationTypeMaster(): BelongsTo

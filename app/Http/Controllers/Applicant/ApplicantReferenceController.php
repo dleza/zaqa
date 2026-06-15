@@ -2,17 +2,20 @@
 
 namespace App\Http\Controllers\Applicant;
 
+use App\Domain\Settings\QualificationTitleQueryService;
 use App\Http\Controllers\Controller;
 use App\Models\AwardingInstitution;
-use App\Models\LearnerRecord;
 use App\Support\CountryIso;
-use App\Support\Normalization\LearnerRecordNormalizer;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 use Illuminate\Http\Resources\Json\JsonResource;
 
 class ApplicantReferenceController extends Controller
 {
+    public function __construct(
+        private readonly QualificationTitleQueryService $qualificationTitles,
+    ) {}
+
     public function awardingInstitutions(Request $request): AnonymousResourceCollection
     {
         $query = trim((string) $request->query('q', ''));
@@ -47,28 +50,27 @@ class ApplicantReferenceController extends Controller
     }
 
     /**
-     * Title options sourced from internal Learner Records (non-sensitive).
+     * Title options from admin-managed qualification_titles master data.
      */
     public function qualificationTitles(Request $request): AnonymousResourceCollection
     {
         $query = trim((string) $request->query('q', ''));
         $institutionId = $request->query('awarding_institution_id');
+        $qualificationTypeId = $request->query('qualification_type_id');
+        $limit = (int) $request->query('limit', 30);
 
-        $normalized = $query !== '' ? LearnerRecordNormalizer::normalizeProgramTitle($query) : null;
+        $institutionIdInt = is_numeric($institutionId) ? (int) $institutionId : null;
 
-        $titles = LearnerRecord::query()
-            ->where('is_active', true)
-            ->whereNotNull('program_of_study')
-            ->when(is_string($institutionId) && $institutionId !== '', fn ($q2) => $q2->where('awarding_institution_id', (int) $institutionId))
-            ->when($normalized, fn ($q2) => $q2->where('qualification_title_normalized', 'like', '%'.$normalized.'%'))
-            ->when(! $normalized && $query !== '', fn ($q2) => $q2->where('program_of_study', 'like', '%'.$query.'%'))
-            ->select('program_of_study')
-            ->distinct()
-            ->orderBy('program_of_study')
-            ->limit(30)
-            ->get()
-            ->map(fn ($r) => ['title' => (string) $r->program_of_study])
-            ->values();
+        $titles = $this->qualificationTitles->searchForApplicant(
+            awardingInstitutionId: $institutionIdInt,
+            search: $query,
+            qualificationTypeId: is_numeric($qualificationTypeId) ? (int) $qualificationTypeId : null,
+            limit: $limit,
+        )->map(fn ($t) => [
+            'id' => $t->id,
+            'title' => $t->name,
+            'qualification_type_id' => $t->qualification_type_id,
+        ])->values();
 
         return JsonResource::collection($titles);
     }

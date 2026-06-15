@@ -238,6 +238,9 @@ const slaProgressPct = computed(() => {
               <div class="mt-1 text-xs text-text-muted">{{ application.applicant?.phone ?? '—' }}</div>
               <div class="mt-1 text-xs text-text-muted">Gender: {{ applicantGenderLabel ?? '—' }}</div>
               <div class="mt-1 text-xs text-text-muted">NRC/Passport: {{ application.applicant?.nrc_passport ?? '—' }}</div>
+              <div v-if="application.notification_contact_label" class="mt-1 text-xs text-text-muted">
+                Notification contact: {{ application.notification_contact_label }}
+              </div>
             </div>
             <div class="sm:col-span-2">
               <div class="text-xs font-semibold uppercase tracking-wider text-text-muted">Qualification(s)</div>

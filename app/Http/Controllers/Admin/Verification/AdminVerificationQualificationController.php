@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Admin\Verification;
 
+use App\Domain\Applications\ApplicationNotificationContact;
 use App\Domain\Applications\QualificationCaptureService;
 use App\Domain\Certificates\QualificationCertificateService;
 use App\Domain\Payments\ApplicationPaymentSatisfaction;
@@ -162,6 +163,9 @@ class AdminVerificationQualificationController extends Controller
                     'service_deadline_at' => optional($qualification->application?->service_deadline_at)?->toIso8601String(),
                     'completed_at' => optional($qualification->application?->completed_at)?->toIso8601String(),
                     'applicant_name' => $qualification->application?->metadata['verification_subject']['full_name'] ?? $qualification->application?->applicant?->name,
+                    'notification_contact_label' => $qualification->application instanceof \App\Models\Application
+                        ? ApplicationNotificationContact::adminLabel($qualification->application)
+                        : 'Applicant account',
                 ],
                 'cveq_certificate' => $activeCveq
                     ? [

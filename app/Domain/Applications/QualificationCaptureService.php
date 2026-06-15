@@ -13,6 +13,7 @@ use App\Models\AwardingInstitution;
 use App\Models\CertificateSubject;
 use App\Models\Country;
 use App\Models\Qualification;
+use App\Models\QualificationTitle;
 use App\Models\QualificationType;
 use App\Models\User;
 use App\Support\CountryIso;
@@ -122,15 +123,8 @@ class QualificationCaptureService
                 'raw_subject_results' => $subjectResults,
             ];
 
-            if ($titleSourceRaw !== '' || $manualTitleRaw !== '') {
-                $source = $titleSourceRaw !== '' ? $titleSourceRaw : ($manualTitleRaw !== '' ? 'other' : 'catalog');
-                if ($source === 'other') {
-                    $payload['qualification_title_source'] = 'other';
-                    $payload['applicant_entered_qualification_title'] = $manualTitleRaw !== '' ? $manualTitleRaw : null;
-                } else {
-                    $payload['qualification_title_source'] = 'catalog';
-                    $payload['applicant_entered_qualification_title'] = null;
-                }
+            if ($titleSourceRaw !== '' || $manualTitleRaw !== '' || array_key_exists('qualification_title_id', $data)) {
+                $this->applyQualificationTitleFields($payload, $data, $titleSourceRaw, $manualTitleRaw);
             }
 
             // Backward compatibility: if the awarding institution isn't posted as an id/other,
@@ -481,15 +475,8 @@ class QualificationCaptureService
                 'notes' => $notesVal,
             ];
 
-            if ($titleSourceRaw !== '' || $manualTitleRaw !== '') {
-                $source = $titleSourceRaw !== '' ? $titleSourceRaw : ($manualTitleRaw !== '' ? 'other' : 'catalog');
-                if ($source === 'other') {
-                    $payload['qualification_title_source'] = 'other';
-                    $payload['applicant_entered_qualification_title'] = $manualTitleRaw !== '' ? $manualTitleRaw : null;
-                } else {
-                    $payload['qualification_title_source'] = 'catalog';
-                    $payload['applicant_entered_qualification_title'] = null;
-                }
+            if ($titleSourceRaw !== '' || $manualTitleRaw !== '' || array_key_exists('qualification_title_id', $data)) {
+                $this->applyQualificationTitleFields($payload, $data, $titleSourceRaw, $manualTitleRaw);
             }
 
             $qualification->forceFill($payload)->save();
@@ -660,5 +647,33 @@ class QualificationCaptureService
                 'display_order' => $index,
             ]);
         }
+    }
+
+    /**
+     * @param  array<string, mixed>  $payload
+     * @param  array<string, mixed>  $data
+     */
+    private function applyQualificationTitleFields(array &$payload, array $data, string $titleSourceRaw, string $manualTitleRaw): void
+    {
+        $source = $titleSourceRaw !== '' ? $titleSourceRaw : ($manualTitleRaw !== '' ? 'other' : 'catalog');
+
+        if ($source === 'other') {
+            $payload['qualification_title_source'] = 'other';
+            $payload['applicant_entered_qualification_title'] = $manualTitleRaw !== '' ? $manualTitleRaw : null;
+            $payload['qualification_title_id'] = null;
+            $payload['title_of_qualification'] = $manualTitleRaw !== ''
+                ? $manualTitleRaw
+                : (string) ($data['title_of_qualification'] ?? '');
+
+            return;
+        }
+
+        $titleId = (int) ($data['qualification_title_id'] ?? 0);
+        $master = $titleId > 0 ? QualificationTitle::query()->find($titleId) : null;
+
+        $payload['qualification_title_source'] = 'catalog';
+        $payload['applicant_entered_qualification_title'] = null;
+        $payload['qualification_title_id'] = $master?->id;
+        $payload['title_of_qualification'] = $master?->name ?? (string) ($data['title_of_qualification'] ?? '');
     }
 }

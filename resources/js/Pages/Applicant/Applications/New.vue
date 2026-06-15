@@ -52,6 +52,8 @@ const identityNumberCache = ref<{ nrc: string; passport: string }>({
   passport: profilePassport,
 })
 
+const applicantAccountEmail = computed(() => (props.applicant?.email ?? '').toString().trim())
+
 const form = useForm({
   service_type: 'verification',
   qualification_category: props.qualificationTypes[0]?.value ?? 'certificate',
@@ -60,8 +62,10 @@ const form = useForm({
   subject_first_name: '',
   subject_other_names: '',
   subject_last_name: '',
-  subject_email: '',
-  subject_phone: '',
+  notification_contact_mode: 'applicant_account' as 'applicant_account' | 'additional_email',
+  additional_notification_email: '',
+  additional_notification_name: '',
+  additional_notification_relationship: '',
   gender: profileGender,
   identity_type: defaultIdentityType as 'nrc' | 'passport',
   identity_number: identityNumberCache.value[defaultIdentityType] ?? '',
@@ -99,7 +103,10 @@ const canSubmit = computed(() => {
     const firstOk = (form.subject_first_name ?? '').toString().trim() !== ''
     const lastOk = (form.subject_last_name ?? '').toString().trim() !== ''
     const fileOk = !!form.identity_file
-    return firstOk && lastOk && genderOk && idTypeOk && idOk && fileOk
+    const notificationOk =
+      form.notification_contact_mode !== 'additional_email'
+      || (form.additional_notification_email ?? '').toString().trim() !== ''
+    return firstOk && lastOk && genderOk && idTypeOk && idOk && fileOk && notificationOk
   }
 
   const fileOk = profileHasIdentityUpload.value || !!form.identity_file
@@ -119,6 +126,12 @@ function submit() {
   form.post('/applicant/applications', { forceFormData: true })
 }
 
+const additionalEmailMatchesAccount = computed(() => {
+  const additional = (form.additional_notification_email ?? '').toString().trim().toLowerCase()
+  const account = applicantAccountEmail.value.toLowerCase()
+  return additional !== '' && account !== '' && additional === account
+})
+
 watch(
   () => form.submitting_for,
   (val) => {
@@ -126,8 +139,10 @@ watch(
       form.subject_first_name = ''
       form.subject_other_names = ''
       form.subject_last_name = ''
-      form.subject_email = ''
-      form.subject_phone = ''
+      form.notification_contact_mode = 'applicant_account'
+      form.additional_notification_email = ''
+      form.additional_notification_name = ''
+      form.additional_notification_relationship = ''
       form.clearErrors()
     }
   },
@@ -324,17 +339,6 @@ watch(
             </div>
 
             <div>
-              <label class="text-sm font-medium text-text-primary">Email (required if no phone number provided)</label>
-              <input v-model="form.subject_email" type="email" class="zaqa-input" />
-              <InputError :message="(form.errors as any).subject_email" />
-            </div>
-            <div>
-              <label class="text-sm font-medium text-text-primary">Primary phone (required if no email provided)</label>
-              <input v-model="form.subject_phone" class="zaqa-input" />
-              <InputError :message="(form.errors as any).subject_phone" />
-            </div>
-
-            <div>
               <label class="text-sm font-medium text-text-primary">Identity type</label>
               <select v-model="form.identity_type" class="zaqa-input">
                 <option value="nrc">NRC</option>
@@ -346,6 +350,72 @@ watch(
               <label class="text-sm font-medium text-text-primary">{{ identityNumberLabel }}</label>
               <input v-model="form.identity_number" class="zaqa-input" autocomplete="off" />
               <InputError :message="(form.errors as any).identity_number" />
+            </div>
+
+            <div class="sm:col-span-2 rounded-xl border border-border bg-surface-muted/40 px-4 py-4">
+              <div class="text-sm font-semibold text-text-primary">Notification contact</div>
+              <p class="mt-1 text-xs text-text-muted">
+                Choose where important updates for this application should be sent. The authenticated applicant will always be able to view the application from their account.
+              </p>
+
+              <div class="mt-4 grid gap-3">
+                <label
+                  class="zaqa-radio-card"
+                  :class="form.notification_contact_mode === 'applicant_account' ? 'zaqa-radio-card-active' : ''"
+                >
+                  <input
+                    v-model="form.notification_contact_mode"
+                    type="radio"
+                    value="applicant_account"
+                    class="mt-1 rounded border-border text-brand focus:ring-brand/25"
+                  />
+                  <span>
+                    <span class="block text-sm font-semibold text-text-primary">Use my account contact details</span>
+                    <span class="mt-1 block text-xs text-text-muted">Updates will be sent to the email or phone number linked to your account.</span>
+                  </span>
+                </label>
+
+                <label
+                  class="zaqa-radio-card"
+                  :class="form.notification_contact_mode === 'additional_email' ? 'zaqa-radio-card-active' : ''"
+                >
+                  <input
+                    v-model="form.notification_contact_mode"
+                    type="radio"
+                    value="additional_email"
+                    class="mt-1 rounded border-border text-brand focus:ring-brand/25"
+                  />
+                  <span>
+                    <span class="block text-sm font-semibold text-text-primary">Add another email recipient</span>
+                    <span class="mt-1 block text-xs text-text-muted">A final approval, rejection, or certificate notification can also be sent to another email address.</span>
+                  </span>
+                </label>
+              </div>
+              <InputError :message="(form.errors as any).notification_contact_mode" class="mt-2" />
+
+              <div v-if="form.notification_contact_mode === 'additional_email'" class="mt-4 space-y-3">
+                <div>
+                  <label class="text-sm font-medium text-text-primary">Additional recipient email</label>
+                  <input v-model="form.additional_notification_email" type="email" class="zaqa-input" autocomplete="off" />
+                  <p class="mt-1 text-xs text-text-muted">This does not create a portal account. The application will still remain under your account.</p>
+                  <p v-if="additionalEmailMatchesAccount" class="mt-1 text-xs text-warning">
+                    This matches your account email. Updates will only be sent once to your account address.
+                  </p>
+                  <InputError :message="(form.errors as any).additional_notification_email" />
+                </div>
+                <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <div>
+                    <label class="text-sm font-medium text-text-primary">Recipient name (optional)</label>
+                    <input v-model="form.additional_notification_name" class="zaqa-input" autocomplete="off" />
+                    <InputError :message="(form.errors as any).additional_notification_name" />
+                  </div>
+                  <div>
+                    <label class="text-sm font-medium text-text-primary">Relationship (optional)</label>
+                    <input v-model="form.additional_notification_relationship" class="zaqa-input" autocomplete="off" placeholder="e.g. parent, employer" />
+                    <InputError :message="(form.errors as any).additional_notification_relationship" />
+                  </div>
+                </div>
+              </div>
             </div>
 
             <div class="sm:col-span-2 rounded-xl border border-border bg-surface-muted/40 px-4 py-4">

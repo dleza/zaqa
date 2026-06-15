@@ -351,13 +351,17 @@ watch(
 const applicantIdentityNumberLabel = computed(() =>
   (applicantForm.identity_type ?? '').toString().toLowerCase() === 'passport' ? 'Passport number' : 'NRC number',
 )
+const applicantAccountEmail = computed(() => (props.applicant?.email ?? '').toString().trim())
+
 const submittingForForm = useForm<{
   submitting_for: SubmittingFor
   subject_first_name: string
   subject_other_names: string
   subject_last_name: string
-  subject_email: string
-  subject_phone: string
+  notification_contact_mode: 'applicant_account' | 'additional_email'
+  additional_notification_email: string
+  additional_notification_name: string
+  additional_notification_relationship: string
   gender: string
   identity_type: string
   identity_number: string
@@ -366,8 +370,12 @@ const submittingForForm = useForm<{
   subject_first_name: (props.application?.metadata?.verification_subject?.first_name ?? '').toString(),
   subject_other_names: (props.application?.metadata?.verification_subject?.other_names ?? '').toString(),
   subject_last_name: (props.application?.metadata?.verification_subject?.last_name ?? '').toString(),
-  subject_email: (props.application?.metadata?.verification_subject?.email ?? '').toString(),
-  subject_phone: (props.application?.metadata?.verification_subject?.phone ?? '').toString(),
+  notification_contact_mode: (
+    props.application?.metadata?.notification_contact_mode === 'additional_email' ? 'additional_email' : 'applicant_account'
+  ) as 'applicant_account' | 'additional_email',
+  additional_notification_email: (props.application?.metadata?.additional_notification_email ?? '').toString(),
+  additional_notification_name: (props.application?.metadata?.additional_notification_name ?? '').toString(),
+  additional_notification_relationship: (props.application?.metadata?.additional_notification_relationship ?? '').toString(),
   gender: (props.application?.metadata?.verification_subject?.gender ?? '').toString(),
   identity_type: (
     trimStr(props.application?.metadata?.verification_subject?.identity_type) ||
@@ -418,6 +426,12 @@ const identityUploadForm = useForm<{ identity_type: string; file: File | null }>
 
 const savedSubmittingFor = computed(() => trimStr(props.application?.metadata?.submitting_for ?? 'self') || 'self')
 const effectiveSubmittingFor = computed(() => (institutionOnlyOnBehalf.value ? 'other' : submittingForForm.submitting_for))
+
+const additionalEmailMatchesAccount = computed(() => {
+  const additional = (submittingForForm.additional_notification_email ?? '').toString().trim().toLowerCase()
+  const account = applicantAccountEmail.value.toLowerCase()
+  return additional !== '' && account !== '' && additional === account
+})
 
 const identityUploadDisabled = computed(() => {
   if (identityUploadForm.processing) return true
@@ -1334,17 +1348,6 @@ onBeforeUnmount(() => {
               </div>
 
               <div>
-                <label class="text-sm font-medium">Email (required if no phone provided)</label>
-                <input v-model="submittingForForm.subject_email" type="email" class="zaqa-input" />
-                <InputError :message="(submittingForForm.errors as any).subject_email" />
-              </div>
-              <div>
-                <label class="text-sm font-medium">Phone (required if no email provided)</label>
-                <input v-model="submittingForForm.subject_phone" class="zaqa-input" />
-                <InputError :message="(submittingForForm.errors as any).subject_phone" />
-              </div>
-
-              <div>
                 <label class="text-sm font-medium">Identity type</label>
                 <select v-model="submittingForForm.identity_type" class="zaqa-input">
                   <option value="nrc">NRC</option>
@@ -1356,6 +1359,72 @@ onBeforeUnmount(() => {
                 <label class="text-sm font-medium">{{ submittingForIdentityNumberLabel }}</label>
                 <input v-model="submittingForForm.identity_number" class="zaqa-input" autocomplete="off" />
                 <InputError :message="(submittingForForm.errors as any).identity_number" />
+              </div>
+
+              <div class="sm:col-span-2 rounded-xl border border-border bg-surface-muted/40 px-4 py-4">
+                <div class="text-sm font-semibold text-text-primary">Notification contact</div>
+                <p class="mt-1 text-xs text-text-muted">
+                  Choose where important updates for this application should be sent. The authenticated applicant will always be able to view the application from their account.
+                </p>
+
+                <div class="mt-4 grid gap-3">
+                  <label
+                    class="zaqa-radio-card"
+                    :class="submittingForForm.notification_contact_mode === 'applicant_account' ? 'zaqa-radio-card-active' : ''"
+                  >
+                    <input
+                      v-model="submittingForForm.notification_contact_mode"
+                      type="radio"
+                      value="applicant_account"
+                      class="mt-1 rounded border-border text-brand focus:ring-brand/25"
+                    />
+                    <span>
+                      <span class="block text-sm font-semibold text-text-primary">Use my account contact details</span>
+                      <span class="mt-1 block text-xs text-text-muted">Updates will be sent to the email or phone number linked to your account.</span>
+                    </span>
+                  </label>
+
+                  <label
+                    class="zaqa-radio-card"
+                    :class="submittingForForm.notification_contact_mode === 'additional_email' ? 'zaqa-radio-card-active' : ''"
+                  >
+                    <input
+                      v-model="submittingForForm.notification_contact_mode"
+                      type="radio"
+                      value="additional_email"
+                      class="mt-1 rounded border-border text-brand focus:ring-brand/25"
+                    />
+                    <span>
+                      <span class="block text-sm font-semibold text-text-primary">Add another email recipient</span>
+                      <span class="mt-1 block text-xs text-text-muted">A final approval, rejection, or certificate notification can also be sent to another email address.</span>
+                    </span>
+                  </label>
+                </div>
+                <InputError :message="(submittingForForm.errors as any).notification_contact_mode" class="mt-2" />
+
+                <div v-if="submittingForForm.notification_contact_mode === 'additional_email'" class="mt-4 space-y-3">
+                  <div>
+                    <label class="text-sm font-medium text-text-primary">Additional recipient email</label>
+                    <input v-model="submittingForForm.additional_notification_email" type="email" class="zaqa-input" autocomplete="off" />
+                    <p class="mt-1 text-xs text-text-muted">This does not create a portal account. The application will still remain under your account.</p>
+                    <p v-if="additionalEmailMatchesAccount" class="mt-1 text-xs text-warning">
+                      This matches your account email. Updates will only be sent once to your account address.
+                    </p>
+                    <InputError :message="(submittingForForm.errors as any).additional_notification_email" />
+                  </div>
+                  <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                    <div>
+                      <label class="text-sm font-medium text-text-primary">Recipient name (optional)</label>
+                      <input v-model="submittingForForm.additional_notification_name" class="zaqa-input" autocomplete="off" />
+                      <InputError :message="(submittingForForm.errors as any).additional_notification_name" />
+                    </div>
+                    <div>
+                      <label class="text-sm font-medium text-text-primary">Relationship (optional)</label>
+                      <input v-model="submittingForForm.additional_notification_relationship" class="zaqa-input" autocomplete="off" placeholder="e.g. parent, employer" />
+                      <InputError :message="(submittingForForm.errors as any).additional_notification_relationship" />
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
           </div>

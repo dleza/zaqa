@@ -78,6 +78,7 @@ function blankQualificationForm() {
     student_number: '',
     examination_number: '',
     title_of_qualification: '',
+    qualification_title_id: null as number | null,
     qualification_title_source: 'catalog' as 'catalog' | 'other' | '',
     applicant_entered_qualification_title: '',
     award_date: '',
@@ -88,7 +89,7 @@ function blankQualificationForm() {
 }
 
 const form = useForm(blankQualificationForm())
-const titleChoice = ref<string | 'other' | ''>('')
+const titleChoice = ref<number | 'other' | ''>('')
 
 /** Staged files uploaded in the same action as qualification save */
 const pendingCertificateFile = ref<File | null>(null)
@@ -144,6 +145,7 @@ watch(
   () => {
     titleChoice.value = ''
     form.title_of_qualification = ''
+    form.qualification_title_id = null
     form.applicant_entered_qualification_title = ''
     form.qualification_title_source = 'catalog'
   },
@@ -152,19 +154,21 @@ watch(
 watch(titleChoice, (choice) => {
   if (choice === 'other') {
     form.qualification_title_source = 'other'
+    form.qualification_title_id = null
     const manual = (form.applicant_entered_qualification_title ?? '').toString().trim()
     form.title_of_qualification = manual
     return
   }
 
-  if (typeof choice === 'string' && choice.trim() !== '') {
+  if (typeof choice === 'number' && choice > 0) {
     form.qualification_title_source = 'catalog'
     form.applicant_entered_qualification_title = ''
-    form.title_of_qualification = choice
+    form.qualification_title_id = choice
     return
   }
 
   form.qualification_title_source = 'catalog'
+  form.qualification_title_id = null
   form.title_of_qualification = ''
 })
 
@@ -252,6 +256,7 @@ async function loadFromQualification(q: any) {
   form.student_number = q.student_number ?? ''
   form.examination_number = q.examination_number ?? ''
   form.title_of_qualification = q.title_of_qualification ?? ''
+  form.qualification_title_id = q.qualification_title_id != null ? Number(q.qualification_title_id) : null
   form.qualification_title_source = (q.qualification_title_source ?? '') || (q.applicant_entered_qualification_title ? 'other' : 'catalog')
   form.applicant_entered_qualification_title =
     (q.applicant_entered_qualification_title ?? '') || (form.qualification_title_source === 'other' ? (q.title_of_qualification ?? '') : '')
@@ -281,7 +286,12 @@ async function loadFromQualification(q: any) {
         ? 'other'
         : ''
 
-  titleChoice.value = form.qualification_title_source === 'other' ? 'other' : (form.title_of_qualification ?? '')
+  titleChoice.value =
+    form.qualification_title_source === 'other'
+      ? 'other'
+      : form.qualification_title_id && form.qualification_title_id > 0
+        ? form.qualification_title_id
+        : ''
   syncIdentifierFromForm()
 }
 
@@ -677,10 +687,18 @@ const pendingConsentName = computed(() => pendingConsentFile.value?.name ?? '')
                   <QualificationTitleCombobox
                     v-model="titleChoice"
                     :awarding-institution-id="form.awarding_institution_id && form.awarding_institution_id !== 'other' ? form.awarding_institution_id : null"
+                    :qualification-type-id="form.qualification_type_id || null"
+                    :selected-title="form.title_of_qualification"
                     query-endpoint="/applicant/reference/qualification-titles"
-                    :disabled="locked || !form.awarding_institution_id"
-                    :error="form.errors.title_of_qualification"
+                    :disabled="locked || !form.awarding_institution_id || form.awarding_institution_id === 'other'"
+                    :error="form.errors.qualification_title_id || form.errors.title_of_qualification"
                     label="Qualification title"
+                    @selected="(opt) => {
+                      if (opt.id !== 'other') {
+                        form.title_of_qualification = opt.title
+                        form.qualification_title_id = opt.id
+                      }
+                    }"
                   />
                   <div v-if="titleChoice === 'other'" class="mt-3">
                     <label class="text-sm font-medium">Qualification title (other)</label>
