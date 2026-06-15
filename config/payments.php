@@ -21,5 +21,11 @@ return [
             explode(',', (string) env('BANK_TRANSFER_POP_NOTIFICATION_EMAILS', ''))
         ))),
         'mail_attachment_max_bytes' => (int) env('BANK_TRANSFER_POP_EMAIL_ATTACHMENT_MAX_BYTES', 5 * 1024 * 1024),
+        'deposit_account' => [
+            'bank_name' => env('BANK_TRANSFER_BANK_NAME', 'Zambia National Commercial Bank Plc'),
+            'account_name' => env('BANK_TRANSFER_ACCOUNT_NAME', 'Zambia Qualifications Authority'),
+            'account_number' => env('BANK_TRANSFER_ACCOUNT_NUMBER', ''),
+            'branch_code' => env('BANK_TRANSFER_BRANCH_CODE', ''),
+        ],
     ],
 ];

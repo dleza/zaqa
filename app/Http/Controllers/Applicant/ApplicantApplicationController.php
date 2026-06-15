@@ -547,6 +547,7 @@ class ApplicantApplicationController extends Controller
                 'poll_interval_seconds' => (int) config('cgrate.poll_interval_seconds', 10),
                 'payment_expiry_minutes' => (int) config('cgrate.payment_expiry_minutes', 10),
             ],
+            'bankTransfer' => $this->bankTransferConfigPayload(),
             'certificateSubjects' => $certificateSubjects,
             'serviceTypes' => array_map(
                 fn (ServiceType $type) => ['value' => $type->value, 'label' => ucfirst($type->value)],
@@ -665,6 +666,23 @@ class ApplicantApplicationController extends Controller
 
         return redirect()->route('applicant.applications.index')
             ->with('success', "Application {$applicationNumber} deleted.");
+    }
+
+    /**
+     * @return array{deposit_account: array{bank_name: string, account_name: string, account_number: string, branch_code: string}}
+     */
+    private function bankTransferConfigPayload(): array
+    {
+        $account = (array) config('payments.bank_transfer.deposit_account', []);
+
+        return [
+            'deposit_account' => [
+                'bank_name' => trim((string) ($account['bank_name'] ?? '')),
+                'account_name' => trim((string) ($account['account_name'] ?? '')),
+                'account_number' => trim((string) ($account['account_number'] ?? '')),
+                'branch_code' => trim((string) ($account['branch_code'] ?? '')),
+            ],
+        ];
     }
 
     private function applicationPayload(Request $request, Application $application): array

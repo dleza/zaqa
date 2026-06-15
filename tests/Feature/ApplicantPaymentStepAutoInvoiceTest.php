@@ -229,5 +229,41 @@ class ApplicantPaymentStepAutoInvoiceTest extends TestCase
 
         $this->assertDatabaseCount('invoices', 0);
     }
+
+    public function test_payment_step_includes_configured_bank_transfer_deposit_details(): void
+    {
+        config([
+            'payments.bank_transfer.deposit_account' => [
+                'bank_name' => 'Test Bank Plc',
+                'account_name' => 'ZAQA Collections',
+                'account_number' => '1234567890',
+                'branch_code' => '250012',
+            ],
+        ]);
+
+        $user = User::factory()->activated()->create(['applicant_type' => ApplicantType::Individual]);
+        $application = Application::query()->create([
+            'uuid' => (string) \Illuminate\Support\Str::uuid(),
+            'application_number' => 'APP-BANK-DETAILS',
+            'applicant_user_id' => $user->id,
+            'applicant_type' => 'individual',
+            'service_type' => 'verification',
+            'qualification_category' => 'certificate',
+            'current_status' => 'draft',
+            'verification_state' => 'awaiting_assignment',
+            'is_foreign' => false,
+        ]);
+
+        $this->actingAs($user)
+            ->get(route('applicant.applications.edit', ['application' => $application->id, 'step' => 'payment']))
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->component('Applicant/Applications/Edit', false)
+                ->where('bankTransfer.deposit_account.bank_name', 'Test Bank Plc')
+                ->where('bankTransfer.deposit_account.account_name', 'ZAQA Collections')
+                ->where('bankTransfer.deposit_account.account_number', '1234567890')
+                ->where('bankTransfer.deposit_account.branch_code', '250012')
+            );
+    }
 }
 

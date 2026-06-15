@@ -36,6 +36,14 @@ const props = withDefaults(
   defineProps<{
     application: any
     cgrate?: { enabled: boolean; poll_interval_seconds: number; payment_expiry_minutes: number }
+    bankTransfer?: {
+      deposit_account: {
+        bank_name: string
+        account_name: string
+        account_number: string
+        branch_code: string
+      }
+    }
     applicant: ApplicantPayload
     serviceTypes: Array<{ value: string; label: string }>
     qualificationTypes: Array<any>
@@ -51,6 +59,14 @@ const props = withDefaults(
   }>(),
   {
     cgrate: () => ({ enabled: false, poll_interval_seconds: 10, payment_expiry_minutes: 10 }),
+    bankTransfer: () => ({
+      deposit_account: {
+        bank_name: '',
+        account_name: '',
+        account_number: '',
+        branch_code: '',
+      },
+    }),
     certificateSubjects: () => [],
     declarationsCopy: () => ({}),
     amendmentQualificationId: null,
@@ -920,6 +936,19 @@ function setPaymentTab(tab: PaymentTabKey) {
 }
 
 const activePaymentTab = ref<PaymentTabKey>(paymentTabFromMethod(payment.value?.method) ?? loadPaymentTabPreference() ?? 'card')
+
+const bankDepositAccount = computed(() => props.bankTransfer?.deposit_account ?? null)
+
+const bankDepositReference = computed(() => {
+  const invoiceNumber = (invoice.value?.invoice_number ?? '').toString().trim()
+  if (invoiceNumber) return invoiceNumber
+  return (props.application?.application_number ?? '').toString().trim() || '—'
+})
+
+function bankDepositField(value: string | null | undefined): string {
+  const v = (value ?? '').toString().trim()
+  return v || '—'
+}
 watch(
   () => payment.value?.method,
   (m) => {
@@ -2158,7 +2187,7 @@ onBeforeUnmount(() => {
 		                  @click="setPaymentTab('bank_transfer')"
 		                >
 		                  <Landmark class="h-4 w-4" aria-hidden="true" />
-	                  <span>Bank transfer</span>
+	                  <span>Bank Deposit or Transfer</span>
 	                </button>
 		                <button
 		                  type="button"
@@ -2196,9 +2225,41 @@ onBeforeUnmount(() => {
 
               <!-- Bank transfer -->
 	              <div v-else-if="activePaymentTab === 'bank_transfer'">
-	                <div class="text-sm font-semibold text-text-primary">Upload proof of payment</div>
+	                <div class="text-sm font-semibold text-text-primary">Pay by bank transfer or deposit</div>
 	                <div class="mt-1 text-xs text-text-muted">
-	                  Upload your bank transfer proof or bank deposit slip. Finance will review and confirm your payment.
+	                  Transfer the invoice amount to the ZAQA account below, then upload your proof of payment for finance review.
+	                </div>
+
+	                <div class="mt-4 rounded-xl border border-brand/15 bg-brand/5 p-4">
+	                  <div class="text-[11px] font-semibold uppercase tracking-wider text-text-muted">Deposit account details</div>
+	                  <dl class="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
+	                    <div>
+	                      <dt class="text-xs font-medium text-text-muted">Bank name</dt>
+	                      <dd class="mt-1 text-sm font-semibold text-text-primary">{{ bankDepositField(bankDepositAccount?.bank_name) }}</dd>
+	                    </div>
+	                    <div>
+	                      <dt class="text-xs font-medium text-text-muted">Branch code</dt>
+	                      <dd class="mt-1 font-mono text-sm font-semibold text-text-primary">{{ bankDepositField(bankDepositAccount?.branch_code) }}</dd>
+	                    </div>
+	                    <div>
+	                      <dt class="text-xs font-medium text-text-muted">Account name</dt>
+	                      <dd class="mt-1 text-sm font-semibold text-text-primary">{{ bankDepositField(bankDepositAccount?.account_name) }}</dd>
+	                    </div>
+	                    <div>
+	                      <dt class="text-xs font-medium text-text-muted">Account number</dt>
+	                      <dd class="mt-1 font-mono text-sm font-semibold text-text-primary">{{ bankDepositField(bankDepositAccount?.account_number) }}</dd>
+	                    </div>
+	                  </dl>
+	                  <p class="mt-3 text-xs leading-relaxed text-text-muted">
+	                    Use
+	                    <span class="font-mono font-semibold text-text-primary">{{ bankDepositReference }}</span>
+	                    as your payment reference where possible.
+	                  </p>
+	                </div>
+
+	                <div class="mt-4 text-sm font-semibold text-text-primary">Upload proof of payment</div>
+	                <div class="mt-1 text-xs text-text-muted">
+	                  Upload your bank transfer proof or bank deposit slip once payment has been made.
 	                </div>
 	
 	                <div class="mt-3 flex items-center justify-between gap-3">
