@@ -73,9 +73,11 @@ class QualificationCaptureService
             // Determine foreign/local primarily from the selected awarding institution country (business rule),
             // falling back to the qualification country if institution is not selected yet.
             $isForeignQualification = (bool) ($qualification?->is_foreign_qualification ?? false);
-            $awardingInstitutionId = $data['awarding_institution_id'] ?? ($data['awarding_body_id'] ?? null);
-            if ($awardingInstitutionId) {
-                $inst = AwardingInstitution::query()->with('country')->find((int) $awardingInstitutionId);
+            $resolvedInstitutionId = $this->resolveNumericAwardingInstitutionId(
+                $data['awarding_institution_id'] ?? ($data['awarding_body_id'] ?? null),
+            );
+            if ($resolvedInstitutionId) {
+                $inst = AwardingInstitution::query()->with('country')->find($resolvedInstitutionId);
                 $iso = strtoupper((string) ($inst?->country?->iso_code ?? ''));
                 if ($iso !== '') {
                     $isForeignQualification = ! CountryIso::isZambia($iso);
@@ -99,7 +101,7 @@ class QualificationCaptureService
                 : '';
 
             $payload = [
-                'awarding_institution_id' => $data['awarding_institution_id'] ?? ($data['awarding_body_id'] ?? null),
+                'awarding_institution_id' => $resolvedInstitutionId,
                 'awarding_institution_name_other' => $data['awarding_institution_name_other'] ?? ($data['awarding_body_name_other'] ?? null),
                 'awarding_institution_name' => (string) ($data['awarding_institution_name'] ?? ''),
                 'qualification_holder_name' => $holderIdentity['holder_name'],
@@ -110,6 +112,7 @@ class QualificationCaptureService
                 'student_number' => $data['student_number'] ?? null,
                 'examination_number' => $data['examination_number'] ?? null,
                 'title_of_qualification' => (string) $data['title_of_qualification'],
+                'names_as_on_qualification_document' => $this->normalizeNamesAsOnQualificationDocument($data['names_as_on_qualification_document'] ?? null),
                 'award_date' => (string) $data['award_date'],
                 // Legacy string column retained for existing schema reads; stores the ZQF level code.
                 'qualification_type' => $qualificationType->zqf_level_code,
@@ -466,6 +469,7 @@ class QualificationCaptureService
                 'student_number' => trim((string) ($data['student_number'] ?? '')) ?: null,
                 'examination_number' => trim((string) ($data['examination_number'] ?? '')) ?: null,
                 'title_of_qualification' => (string) $data['title_of_qualification'],
+                'names_as_on_qualification_document' => $this->normalizeNamesAsOnQualificationDocument($data['names_as_on_qualification_document'] ?? null),
                 'award_date' => (string) $data['award_date'],
                 'qualification_type' => $qualificationType->zqf_level_code,
                 'qualification_type_id' => $qualificationTypeId,
@@ -675,5 +679,10 @@ class QualificationCaptureService
         $payload['applicant_entered_qualification_title'] = null;
         $payload['qualification_title_id'] = $master?->id;
         $payload['title_of_qualification'] = $master?->name ?? (string) ($data['title_of_qualification'] ?? '');
+    }
+
+    private function normalizeNamesAsOnQualificationDocument(mixed $value): string
+    {
+        return trim((string) ($value ?? ''));
     }
 }

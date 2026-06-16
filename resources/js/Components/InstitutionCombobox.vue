@@ -16,6 +16,8 @@ const props = defineProps<{
   queryEndpoint: string
   label?: string
   error?: string
+  /** When true, dependency changes reload options without clearing the selection (form hydration). */
+  suppressDependencyReset?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -122,7 +124,9 @@ watch(
   () => props.countryId,
   async () => {
     query.value = ''
-    emit('update:modelValue', '')
+    if (!props.suppressDependencyReset) {
+      emit('update:modelValue', '')
+    }
     await load()
   },
 )

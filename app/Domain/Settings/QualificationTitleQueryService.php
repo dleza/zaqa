@@ -50,11 +50,9 @@ class QualificationTitleQueryService
         ?int $qualificationTypeId = null,
         int $limit = 30,
     ): Collection {
-        if (! $awardingInstitutionId || $awardingInstitutionId < 1) {
-            return collect();
-        }
+        $institutionId = ($awardingInstitutionId && $awardingInstitutionId > 0) ? $awardingInstitutionId : null;
 
-        $query = $this->applicantTitlesQuery($awardingInstitutionId, $qualificationTypeId);
+        $query = $this->applicantTitlesQuery($institutionId, $qualificationTypeId);
 
         $search = trim((string) $search);
         if ($search !== '') {

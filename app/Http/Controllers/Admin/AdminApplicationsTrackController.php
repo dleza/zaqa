@@ -79,6 +79,7 @@ class AdminApplicationsTrackController extends Controller
                         'id' => $q->id,
                         'verification_reference_number' => $q->verification_reference_number,
                         'title_of_qualification' => $q->title_of_qualification,
+                        'names_as_on_qualification_document' => $q->names_as_on_qualification_document,
                         'verification_state' => $state?->value,
                         'verification_state_label' => $this->verificationStateLabel($state),
                         'assigned_verifier_name' => $q->assignedVerifier?->name,

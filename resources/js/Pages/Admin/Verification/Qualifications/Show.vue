@@ -452,6 +452,12 @@ const qualificationFacts = computed(() => [
     value: props.qualification.qualification_type ?? '—',
   },
   {
+    label: 'Names on qualification document',
+    value: displayValue(props.qualification.names_as_on_qualification_document) === '—'
+      ? 'Not captured'
+      : displayValue(props.qualification.names_as_on_qualification_document),
+  },
+  {
     label: 'Scope / locality',
     value: isForeign.value ? 'Foreign qualification' : 'Local qualification',
   },
@@ -571,6 +577,14 @@ const subjectResultsCount = computed(() => props.qualification.subject_results?.
               <h1 class="mt-3 text-2xl font-bold tracking-tight text-white sm:text-3xl">
                 {{ qualification.title ?? 'Qualification' }}
               </h1>
+              <div
+                class="mt-3 inline-flex max-w-full flex-col rounded-xl border border-amber-300/35 bg-amber-500/15 px-4 py-3 text-amber-50"
+              >
+                <div class="text-[10px] font-bold uppercase tracking-wider text-amber-100/90">Names on qualification document</div>
+                <div class="mt-1 break-words text-base font-semibold text-white">
+                  {{ qualification.names_as_on_qualification_document?.trim() || 'Not captured' }}
+                </div>
+              </div>
 
               <div class="mt-4 grid gap-x-4 gap-y-2 sm:grid-cols-2 xl:grid-cols-[minmax(0,1.45fr)_minmax(0,0.95fr)_minmax(0,1fr)_auto] xl:items-end">
                 <div class="min-w-0">

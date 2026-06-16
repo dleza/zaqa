@@ -191,6 +191,75 @@ class QualificationTitlesTest extends TestCase
         $this->assertCount(2, $res->json('data'));
     }
 
+    public function test_applicant_endpoint_returns_active_titles_without_institution_id(): void
+    {
+        $user = User::factory()->activated()->create(['applicant_type' => 'individual']);
+
+        QualificationTitle::query()->create(['name' => 'Title A', 'is_active' => true]);
+        QualificationTitle::query()->create(['name' => 'Title B', 'is_active' => true]);
+        QualificationTitle::query()->create(['name' => 'Inactive Title', 'is_active' => false]);
+
+        $res = $this->actingAs($user)->getJson('/applicant/reference/qualification-titles');
+        $res->assertOk();
+        $titles = collect($res->json('data'))->pluck('title')->all();
+        $this->assertEqualsCanonicalizing(['Title A', 'Title B'], $titles);
+    }
+
+    public function test_catalog_title_allowed_when_awarding_institution_is_other(): void
+    {
+        $user = User::factory()->activated()->create(['applicant_type' => 'individual']);
+        $application = $this->makeApplication($user);
+        [$inst] = $this->makeInstitutionPair();
+        $type = $this->diplomaQualificationType();
+
+        $linked = QualificationTitle::query()->create(['name' => 'Institution Only Title', 'is_active' => true]);
+        $linked->awardingInstitutions()->sync([$inst->id]);
+
+        $this->actingAs($user)->post("/applicant/applications/{$application->id}/qualifications", [
+            'country_id' => $inst->country_id,
+            'awarding_institution_id' => 'other',
+            'awarding_institution_name' => 'Unlisted Foreign University',
+            'awarding_institution_name_other' => 'Unlisted Foreign University',
+            'qualification_type_id' => $type->id,
+            'title_of_qualification' => $linked->name,
+            'names_as_on_qualification_document' => 'Mary C. Mwansa',
+            'qualification_title_id' => $linked->id,
+            'qualification_title_source' => 'catalog',
+            'award_date' => now()->subYear()->toDateString(),
+            'certificate_number' => 'CERT-OTHER-001',
+        ])->assertRedirect()->assertSessionHasNoErrors();
+
+        $qualification = Qualification::query()->where('application_id', $application->id)->firstOrFail();
+        $this->assertNull($qualification->awarding_institution_id);
+        $this->assertSame('Unlisted Foreign University', $qualification->awarding_institution_name_other);
+        $this->assertSame($linked->id, $qualification->qualification_title_id);
+        $this->assertSame('catalog', $qualification->qualification_title_source?->value);
+    }
+
+    public function test_inactive_catalog_title_rejected_when_awarding_institution_is_other(): void
+    {
+        $user = User::factory()->activated()->create(['applicant_type' => 'individual']);
+        $application = $this->makeApplication($user);
+        [$inst] = $this->makeInstitutionPair();
+        $type = $this->diplomaQualificationType();
+
+        $title = QualificationTitle::query()->create(['name' => 'Inactive For Other', 'is_active' => false]);
+
+        $this->actingAs($user)->post("/applicant/applications/{$application->id}/qualifications", [
+            'country_id' => $inst->country_id,
+            'awarding_institution_id' => 'other',
+            'awarding_institution_name' => 'Unlisted School',
+            'awarding_institution_name_other' => 'Unlisted School',
+            'qualification_type_id' => $type->id,
+            'title_of_qualification' => $title->name,
+            'names_as_on_qualification_document' => 'Mary C. Mwansa',
+            'qualification_title_id' => $title->id,
+            'qualification_title_source' => 'catalog',
+            'award_date' => now()->subYear()->toDateString(),
+            'certificate_number' => 'CERT-OTHER-002',
+        ])->assertSessionHasErrors('qualification_title_id');
+    }
+
     public function test_catalog_selection_stores_qualification_title_id_and_snapshot(): void
     {
         Storage::fake('local');
@@ -207,6 +276,7 @@ class QualificationTitlesTest extends TestCase
             'awarding_institution_name' => $inst->name,
             'qualification_type_id' => $type->id,
             'title_of_qualification' => $title->name,
+            'names_as_on_qualification_document' => 'Mary C. Mwansa',
             'qualification_title_id' => $title->id,
             'qualification_title_source' => 'catalog',
             'award_date' => now()->subYear()->toDateString(),
@@ -236,6 +306,7 @@ class QualificationTitlesTest extends TestCase
             'awarding_institution_name' => $inst->name,
             'qualification_type_id' => $type->id,
             'title_of_qualification' => $title->name,
+            'names_as_on_qualification_document' => 'Mary C. Mwansa',
             'qualification_title_id' => $title->id,
             'qualification_title_source' => 'catalog',
             'award_date' => now()->subYear()->toDateString(),
@@ -260,6 +331,7 @@ class QualificationTitlesTest extends TestCase
             'awarding_institution_name' => $inst->name,
             'qualification_type_id' => $type->id,
             'title_of_qualification' => $blocked->name,
+            'names_as_on_qualification_document' => 'Mary C. Mwansa',
             'qualification_title_id' => $blocked->id,
             'qualification_title_source' => 'catalog',
             'award_date' => now()->subYear()->toDateString(),
@@ -280,6 +352,7 @@ class QualificationTitlesTest extends TestCase
             'awarding_institution_name' => $inst->name,
             'qualification_type_id' => $type->id,
             'title_of_qualification' => 'Custom Manual Title',
+            'names_as_on_qualification_document' => 'Mary C. Mwansa',
             'qualification_title_source' => 'other',
             'applicant_entered_qualification_title' => 'Custom Manual Title',
             'award_date' => now()->subYear()->toDateString(),
@@ -345,6 +418,7 @@ class QualificationTitlesTest extends TestCase
             'qualification_holder_name' => 'Holder',
             'nrc_passport_number' => '999999/99/9',
             'title_of_qualification' => $title->name,
+            'names_as_on_qualification_document' => 'Mary C. Mwansa',
             'qualification_title_id' => $title->id,
             'award_date' => now()->subYear()->toDateString(),
             'qualification_type' => $type->zqf_level_code,

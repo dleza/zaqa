@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests\Applicant;
 
+use App\Http\Requests\Applicant\Concerns\ValidatesNamesAsOnQualificationDocument;
 use App\Http\Requests\Applicant\Concerns\ValidatesQualificationTitleSelection;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
@@ -9,6 +10,7 @@ use Illuminate\Validation\Validator;
 
 class UpsertQualificationRequest extends FormRequest
 {
+    use ValidatesNamesAsOnQualificationDocument;
     use ValidatesQualificationTitleSelection;
     public function authorize(): bool
     {
@@ -38,6 +40,7 @@ class UpsertQualificationRequest extends FormRequest
             'student_number' => ['nullable', 'string', 'max:100'],
             'examination_number' => ['nullable', 'string', 'max:100'],
             'title_of_qualification' => ['required', 'string', 'max:255'],
+            ...$this->namesAsOnQualificationDocumentRules(),
             'qualification_title_id' => ['nullable', 'integer', 'exists:qualification_titles,id'],
             'qualification_title_source' => ['nullable', 'string', Rule::in(['catalog', 'other'])],
             'applicant_entered_qualification_title' => ['nullable', 'string', 'max:255'],
@@ -53,6 +56,14 @@ class UpsertQualificationRequest extends FormRequest
             ],
             'subject_results.*.grade' => ['required_with:subject_results', 'string', 'max:50'],
         ];
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    public function messages(): array
+    {
+        return $this->namesAsOnQualificationDocumentMessages();
     }
 
     public function withValidator(Validator $validator): void

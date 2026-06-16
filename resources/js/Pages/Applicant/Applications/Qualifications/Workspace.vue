@@ -7,7 +7,7 @@ import QualificationTitleCombobox from '@/Components/QualificationTitleCombobox.
 import InputError from '@/Components/InputError.vue'
 import Swal from 'sweetalert2'
 import 'sweetalert2/dist/sweetalert2.min.css'
-import { Building2, FileStack, GraduationCap, MapPin, Shield, Sparkles } from 'lucide-vue-next'
+import { Building2, FileStack, GraduationCap, MapPin, Shield, Sparkles, Trash2 } from 'lucide-vue-next'
 
 const inertiaPage = usePage()
 
@@ -81,6 +81,7 @@ function blankQualificationForm() {
     student_number: '',
     examination_number: '',
     title_of_qualification: '',
+    names_as_on_qualification_document: '',
     qualification_title_id: null as number | null,
     qualification_title_source: 'catalog' as 'catalog' | 'other' | '',
     applicant_entered_qualification_title: '',
@@ -93,6 +94,7 @@ function blankQualificationForm() {
 
 const form = useForm(blankQualificationForm())
 const titleChoice = ref<number | 'other' | ''>('')
+const isHydratingForm = ref(false)
 
 /** Staged files uploaded in the same action as qualification save */
 const pendingCertificateFile = ref<File | null>(null)
@@ -146,6 +148,7 @@ watch(identifierValue, () => applyIdentifierToForm())
 watch(
   () => form.awarding_institution_id,
   () => {
+    if (isHydratingForm.value) return
     titleChoice.value = ''
     form.title_of_qualification = ''
     form.qualification_title_id = null
@@ -251,51 +254,70 @@ function removeSubjectRow(idx: number) {
 }
 
 async function loadFromQualification(q: any) {
-  form.qualification_id = q.id
-  form.country_name_other = q.country_name_other ?? ''
-  form.awarding_institution_name_other = q.awarding_institution_name_other ?? ''
-  form.awarding_institution_name = q.awarding_institution_name ?? ''
-  form.certificate_number = q.certificate_number ?? ''
-  form.student_number = q.student_number ?? ''
-  form.examination_number = q.examination_number ?? ''
-  form.title_of_qualification = q.title_of_qualification ?? ''
-  form.qualification_title_id = q.qualification_title_id != null ? Number(q.qualification_title_id) : null
-  form.qualification_title_source = (q.qualification_title_source ?? '') || (q.applicant_entered_qualification_title ? 'other' : 'catalog')
-  form.applicant_entered_qualification_title =
-    (q.applicant_entered_qualification_title ?? '') || (form.qualification_title_source === 'other' ? (q.title_of_qualification ?? '') : '')
-  form.award_date = q.award_date ?? ''
-  form.qualification_type_id = q.qualification_type_id ?? ''
-  form.transcript_reason = q.transcript_reason ?? ''
-  form.subject_results = (q.subject_results ?? []).map((r: any) => ({
-    certificate_subject_id: r.certificate_subject_id != null && r.certificate_subject_id !== '' ? Number(r.certificate_subject_id) : '',
-    grade: r.grade ?? '',
-  }))
-  institutionMeta.value = {
-    name:
-      (q.awarding_institution?.name ?? '').trim() ||
-      (q.awarding_institution_name_other ?? '').trim() ||
-      (q.awarding_institution_name ?? '').trim() ||
-      '',
-    consent_form_url: q.institution_consent_form_url ?? null,
-    has_consent_form: q.institution_has_consent_form ?? !!q.institution_consent_form_url,
-  }
-  form.awarding_institution_id = ''
-  form.country_id = q.country_id ?? ''
-  await nextTick()
-  form.awarding_institution_id =
-    q.awarding_institution_id != null && q.awarding_institution_id !== ''
-      ? q.awarding_institution_id
-      : q.awarding_institution_name_other
-        ? 'other'
-        : ''
+  isHydratingForm.value = true
+  try {
+    form.qualification_id = q.id
+    form.country_name_other = q.country_name_other ?? ''
+    form.awarding_institution_name_other = q.awarding_institution_name_other ?? ''
+    form.awarding_institution_name = q.awarding_institution_name ?? ''
+    form.certificate_number = q.certificate_number ?? ''
+    form.student_number = q.student_number ?? ''
+    form.examination_number = q.examination_number ?? ''
+    form.names_as_on_qualification_document = q.names_as_on_qualification_document ?? ''
+    form.award_date = q.award_date ?? ''
+    form.qualification_type_id = q.qualification_type_id ?? ''
+    form.transcript_reason = q.transcript_reason ?? ''
+    form.subject_results = (q.subject_results ?? []).map((r: any) => ({
+      certificate_subject_id: r.certificate_subject_id != null && r.certificate_subject_id !== '' ? Number(r.certificate_subject_id) : '',
+      grade: r.grade ?? '',
+    }))
 
-  titleChoice.value =
-    form.qualification_title_source === 'other'
-      ? 'other'
-      : form.qualification_title_id && form.qualification_title_id > 0
-        ? form.qualification_title_id
-        : ''
-  syncIdentifierFromForm()
+    const resolvedSource = (q.qualification_title_source ?? '').toString()
+    const isOtherTitle =
+      resolvedSource === 'other' ||
+      (!q.qualification_title_id && !!(q.applicant_entered_qualification_title ?? q.title_of_qualification))
+
+    form.qualification_title_source = isOtherTitle ? 'other' : resolvedSource || 'catalog'
+    form.qualification_title_id = q.qualification_title_id != null ? Number(q.qualification_title_id) : null
+    form.applicant_entered_qualification_title = isOtherTitle
+      ? (q.applicant_entered_qualification_title ?? q.title_of_qualification ?? '')
+      : (q.applicant_entered_qualification_title ?? '')
+    form.title_of_qualification = isOtherTitle
+      ? (q.applicant_entered_qualification_title ?? q.title_of_qualification ?? '')
+      : (q.title_of_qualification ?? '')
+
+    institutionMeta.value = {
+      name:
+        (q.awarding_institution?.name ?? '').trim() ||
+        (q.awarding_institution_name_other ?? '').trim() ||
+        (q.awarding_institution_name ?? '').trim() ||
+        '',
+      consent_form_url: q.institution_consent_form_url ?? null,
+      has_consent_form: q.institution_has_consent_form ?? !!q.institution_consent_form_url,
+    }
+
+    form.country_id = q.country_id ?? ''
+    form.awarding_institution_id =
+      q.awarding_institution_id != null && q.awarding_institution_id !== ''
+        ? q.awarding_institution_id
+        : q.awarding_institution_name_other
+          ? 'other'
+          : ''
+
+    await nextTick()
+
+    titleChoice.value =
+      form.qualification_title_source === 'other'
+        ? 'other'
+        : form.qualification_title_id && form.qualification_title_id > 0
+          ? form.qualification_title_id
+          : ''
+
+    syncIdentifierFromForm()
+    await nextTick()
+  } finally {
+    isHydratingForm.value = false
+  }
 }
 
 async function initForm() {
@@ -390,14 +412,46 @@ function routerPostMultipart(url: string, data: Record<string, unknown>): Promis
 }
 
 function hasExistingDoc(docType: string): boolean {
+  return !!existingDocument(docType)
+}
+
+function existingDocument(docType: string): { id: number; original_name?: string | null } | null {
   const qid = modalQualId.value
-  if (!qid) return false
-  return (props.application?.documents ?? []).some(
+  if (!qid) return null
+  const doc = (props.application?.documents ?? []).find(
     (d: any) =>
       d.document_type === docType &&
       d.is_current_version &&
       Number(d.qualification_id ?? 0) === Number(qid),
   )
+  return doc ?? null
+}
+
+const deletingDocumentId = ref<number | null>(null)
+
+async function confirmDeleteDocument(doc: { id: number; original_name?: string | null } | null) {
+  if (!doc || locked.value) return
+
+  const result = await Swal.fire({
+    icon: 'warning',
+    title: 'Remove document?',
+    text: 'This will remove the uploaded file. You can attach a new one afterwards.',
+    showCancelButton: true,
+    confirmButtonText: 'Remove',
+    cancelButtonText: 'Cancel',
+    confirmButtonColor: '#B42318',
+  })
+
+  if (!result.isConfirmed) return
+
+  deletingDocumentId.value = doc.id
+  router.delete(`/applicant/documents/${doc.id}`, {
+    preserveScroll: true,
+    only: ['application'],
+    onFinish: () => {
+      deletingDocumentId.value = null
+    },
+  })
 }
 
 function hasPendingUploads(): boolean {
@@ -655,6 +709,7 @@ const pendingConsentName = computed(() => pendingConsentFile.value?.name ?? '')
                     query-endpoint="/applicant/reference/awarding-institutions"
                     :error="form.errors.awarding_institution_id"
                     :disabled="locked"
+                    :suppress-dependency-reset="isHydratingForm"
                     @selected="onInstitutionSelected"
                   />
                 </div>
@@ -724,7 +779,8 @@ const pendingConsentName = computed(() => pendingConsentFile.value?.name ?? '')
                     :qualification-type-id="form.qualification_type_id || null"
                     :selected-title="form.title_of_qualification"
                     query-endpoint="/applicant/reference/qualification-titles"
-                    :disabled="locked || !form.awarding_institution_id || form.awarding_institution_id === 'other'"
+                    :disabled="locked || !form.awarding_institution_id"
+                    :suppress-dependency-reset="isHydratingForm"
                     :error="form.errors.qualification_title_id || form.errors.title_of_qualification"
                     label="Qualification title"
                     @selected="(opt) => {
@@ -740,6 +796,23 @@ const pendingConsentName = computed(() => pendingConsentFile.value?.name ?? '')
                     <InputError :message="form.errors.applicant_entered_qualification_title" />
                     <div class="mt-1 text-xs text-text-muted">This title is for your application only and will be verified by ZAQA.</div>
                   </div>
+                </div>
+                <div class="sm:col-span-2">
+                  <label class="text-sm font-medium text-text-primary">
+                    Qualification Holder Names as on qualification document
+                    <span class="text-danger" aria-hidden="true">*</span>
+                  </label>
+                  <input
+                    v-model="form.names_as_on_qualification_document"
+                    class="zaqa-input ring-1 ring-brand/15 focus:ring-brand/30"
+                    :disabled="locked"
+                    placeholder="Enter the names exactly as printed on the certificate or transcript"
+                    autocomplete="off"
+                  />
+                  <InputError :message="form.errors.names_as_on_qualification_document" />
+                  <p class="mt-2 text-xs leading-relaxed text-text-muted">
+                    This may differ from the qualification holder name captured earlier. Use the spelling, initials, and order shown on the document.
+                  </p>
                 </div>
                 <div>
                   <label class="text-sm font-medium">Reference type</label>
@@ -802,20 +875,33 @@ const pendingConsentName = computed(() => pendingConsentFile.value?.name ?? '')
               <h3 class="text-base font-semibold">Upload documents</h3>
             </div>
             <p class="mt-1 text-sm text-text-muted">Upload your certificate or supporting document.</p>
-            <p v-if="modalQualId && hasExistingDoc('certificate_copy')" class="mt-2 text-xs text-success">
-              Certificate already on file — upload again only if you want to replace it.
-            </p>
-            <p v-if="modalQualId && transcriptRequiredForDocs && hasExistingDoc('transcript')" class="mt-1 text-xs text-success">
-                Transcript already on file — upload again only if you want to replace it.
-              </p>
 
               <div class="mt-5 grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <div class="sm:col-span-2">
                   <label class="text-sm font-medium">Certificate or qualification document</label>
+                  <div
+                    v-if="existingDocument('certificate_copy')"
+                    class="mt-2 flex items-center justify-between gap-3 rounded-lg border border-success/25 bg-success/5 px-3 py-2"
+                  >
+                    <p class="min-w-0 text-xs text-text-primary">
+                      On file:
+                      <span class="font-semibold">{{ existingDocument('certificate_copy')?.original_name || 'Certificate' }}</span>
+                    </p>
+                    <button
+                      type="button"
+                      class="zaqa-btn shrink-0 border border-danger/20 bg-danger/10 px-2.5 py-2 text-danger hover:bg-danger/15"
+                      :disabled="locked || deletingDocumentId === existingDocument('certificate_copy')?.id"
+                      :title="locked ? 'Documents cannot be changed after payment' : 'Remove uploaded certificate'"
+                      @click="confirmDeleteDocument(existingDocument('certificate_copy'))"
+                    >
+                      <Trash2 class="h-4 w-4" aria-hidden="true" />
+                      <span class="sr-only">Remove certificate</span>
+                    </button>
+                  </div>
                   <input
                     ref="certificateFileInputEl"
                     type="file"
-                    class="zaqa-input"
+                    class="zaqa-input mt-2"
                     accept=".pdf,.jpg,.jpeg,.png,.webp,application/pdf,image/jpeg,image/png,image/webp"
                     :disabled="locked"
                     @change="onPendingCertificateChange"
@@ -829,10 +915,29 @@ const pendingConsentName = computed(() => pendingConsentFile.value?.name ?? '')
                     Transcript
                     <span v-if="!isForeignAwarding" class="font-normal text-text-muted">(if applicable)</span>
                   </label>
+                  <div
+                    v-if="existingDocument('transcript')"
+                    class="mt-2 flex items-center justify-between gap-3 rounded-lg border border-success/25 bg-success/5 px-3 py-2"
+                  >
+                    <p class="min-w-0 text-xs text-text-primary">
+                      On file:
+                      <span class="font-semibold">{{ existingDocument('transcript')?.original_name || 'Transcript' }}</span>
+                    </p>
+                    <button
+                      type="button"
+                      class="zaqa-btn shrink-0 border border-danger/20 bg-danger/10 px-2.5 py-2 text-danger hover:bg-danger/15"
+                      :disabled="locked || deletingDocumentId === existingDocument('transcript')?.id"
+                      :title="locked ? 'Documents cannot be changed after payment' : 'Remove uploaded transcript'"
+                      @click="confirmDeleteDocument(existingDocument('transcript'))"
+                    >
+                      <Trash2 class="h-4 w-4" aria-hidden="true" />
+                      <span class="sr-only">Remove transcript</span>
+                    </button>
+                  </div>
                   <input
                     ref="transcriptFileInputEl"
                     type="file"
-                    class="zaqa-input"
+                    class="zaqa-input mt-2"
                     accept=".pdf,.jpg,.jpeg,.png,.webp,application/pdf,image/jpeg,image/png,image/webp"
                     :disabled="locked"
                     @change="onPendingTranscriptChange"
@@ -877,11 +982,30 @@ const pendingConsentName = computed(() => pendingConsentFile.value?.name ?? '')
               <div class="mt-5 grid grid-cols-1 gap-3 sm:max-w-lg">
                 <div>
                   <label class="text-sm font-medium">Upload signed consent</label>
+                  <div
+                    v-if="existingDocument('consent_form_signed')"
+                    class="mt-2 flex items-center justify-between gap-3 rounded-lg border border-success/25 bg-success/5 px-3 py-2"
+                  >
+                    <p class="min-w-0 text-xs text-text-primary">
+                      On file:
+                      <span class="font-semibold">{{ existingDocument('consent_form_signed')?.original_name || 'Signed consent' }}</span>
+                    </p>
+                    <button
+                      type="button"
+                      class="zaqa-btn shrink-0 border border-danger/20 bg-danger/10 px-2.5 py-2 text-danger hover:bg-danger/15"
+                      :disabled="locked || deletingDocumentId === existingDocument('consent_form_signed')?.id"
+                      :title="locked ? 'Documents cannot be changed after payment' : 'Remove uploaded consent'"
+                      @click="confirmDeleteDocument(existingDocument('consent_form_signed'))"
+                    >
+                      <Trash2 class="h-4 w-4" aria-hidden="true" />
+                      <span class="sr-only">Remove consent</span>
+                    </button>
+                  </div>
                   <input
                     ref="consentFileInputEl"
                     type="file"
                     accept=".pdf,.doc,.docx,.jpg,.jpeg,.png,.webp,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,image/jpeg,image/png,image/webp"
-                    class="zaqa-input"
+                    class="zaqa-input mt-2"
                     :disabled="locked"
                     @change="onPendingConsentChange"
                   />

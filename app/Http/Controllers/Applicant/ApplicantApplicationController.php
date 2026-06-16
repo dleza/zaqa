@@ -244,6 +244,7 @@ class ApplicantApplicationController extends Controller
             || ! (bool) $q->country_id
             || (! (bool) $q->awarding_institution_id && trim((string) ($q->awarding_institution_name_other ?? '')) === '')
             || trim((string) ($q->title_of_qualification ?? '')) === ''
+            || trim((string) ($q->names_as_on_qualification_document ?? '')) === ''
             || empty($q->award_date)
             || (int) ($q->qualification_type_id ?? 0) < 1) {
             return false;
@@ -819,6 +820,7 @@ class ApplicantApplicationController extends Controller
                     'student_number' => $q->student_number,
                     'examination_number' => $q->examination_number,
                     'title_of_qualification' => $q->title_of_qualification,
+                    'names_as_on_qualification_document' => $q->names_as_on_qualification_document,
                     'qualification_title_id' => $q->qualification_title_id,
                     'applicant_entered_qualification_title' => $q->applicant_entered_qualification_title,
                     'verified_qualification_title' => $q->verified_qualification_title,
@@ -990,6 +992,7 @@ class ApplicantApplicationController extends Controller
                     'student_number' => $application->qualification->student_number,
                     'examination_number' => $application->qualification->examination_number,
                     'title_of_qualification' => $application->qualification->title_of_qualification,
+                    'names_as_on_qualification_document' => $application->qualification->names_as_on_qualification_document,
                     'award_date' => optional($application->qualification->award_date)?->toDateString(),
                     'qualification_type' => (string) $application->qualification->qualification_type,
                     'qualification_type_id' => $application->qualification->qualification_type_id,

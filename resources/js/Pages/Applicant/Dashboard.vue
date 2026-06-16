@@ -11,9 +11,12 @@ import {
   Eye,
   FileText,
   LayoutDashboard,
+  Plus,
   Send,
   Sparkles,
 } from 'lucide-vue-next'
+
+const newApplicationHref = '/applicant/applications/new'
 
 const page = usePage()
 const authUserName = computed(() => ((page.props as any).auth?.user?.name ?? '').toString().trim())
@@ -124,7 +127,7 @@ const nextStep = computed(() => {
     badge: 'New',
     icon: Sparkles,
     tone: 'brand' as const,
-    href: '/applicant/applications/new',
+    href: newApplicationHref,
     subtitle: 'Create your first verification request',
   }
 })
@@ -132,10 +135,9 @@ const nextStep = computed(() => {
 const actionCards = computed(() => {
   const latestId = latestApplication.value?.id
   return [
-    { label: 'New application', href: '/applicant/applications/new', icon: ClipboardList, tone: 'primary' as const },
-    { label: 'Track status', href: latestId ? `/applicant/applications/${latestId}/track` : '/applicant/applications', icon: Eye, tone: 'surface' as const },
-    { label: 'My applications', href: '/applicant/applications', icon: FileText, tone: 'surface' as const },
-    { label: 'Invoices', href: '/applicant/invoices', icon: CreditCard, tone: 'surface' as const },
+    { label: 'Track status', href: latestId ? `/applicant/applications/${latestId}/track` : '/applicant/applications', icon: Eye },
+    { label: 'My applications', href: '/applicant/applications', icon: FileText },
+    { label: 'Invoices', href: '/applicant/invoices', icon: CreditCard },
   ]
 })
 
@@ -149,10 +151,10 @@ const statusCards = computed(() => [
 </script>
 
 <template>
-  <ApplicantLayout>
-    <div class="mx-auto w-full max-w-7xl">
-      <!-- Greeting -->
-      <div class="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+  <ApplicantLayout wide>
+    <div class="w-full">
+      <!-- Greeting + primary CTA -->
+      <div class="flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
         <div class="min-w-0">
           <div class="inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-text-muted">
             <LayoutDashboard class="h-4 w-4" aria-hidden="true" />
@@ -163,21 +165,30 @@ const statusCards = computed(() => [
           </h2>
           <p class="mt-2 text-sm text-text-muted">Track your applications, payments, and verification status.</p>
         </div>
+
+        <div class="w-full shrink-0 sm:w-auto">
+          <Link
+            :href="newApplicationHref"
+            class="zaqa-btn zaqa-btn-primary inline-flex h-12 w-full items-center justify-center gap-2 rounded-xl px-6 text-base font-semibold shadow-sm transition hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40 sm:w-auto"
+          >
+            <Plus class="h-5 w-5 shrink-0" aria-hidden="true" />
+            Start new application
+          </Link>
+          <p class="mt-2 hidden text-right text-xs text-text-muted sm:block">Begin a new verification request</p>
+        </div>
       </div>
 
-      <!-- Primary actions -->
-      <div class="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
+      <!-- Shortcut actions -->
+      <div class="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
         <Link
           v-for="a in actionCards"
           :key="a.label"
           :href="a.href"
           class="group relative overflow-hidden rounded-2xl border border-border bg-surface p-4 shadow-sm ring-1 ring-black/[0.04] transition hover:-translate-y-[1px] hover:border-brand/25 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40 sm:p-5"
-          :class="a.tone === 'primary' ? 'border-brand/20 bg-gradient-to-br from-brand/[0.10] via-surface to-surface' : ''"
         >
           <div class="flex items-center justify-between gap-3">
             <span
-              class="inline-flex h-10 w-10 items-center justify-center rounded-2xl border"
-              :class="a.tone === 'primary' ? 'border-brand/20 bg-brand/10 text-brand' : 'border-border bg-surface-muted text-text-muted'"
+              class="inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-border bg-surface-muted text-text-muted"
               aria-hidden="true"
             >
               <component :is="a.icon" class="h-5 w-5" />
@@ -189,7 +200,7 @@ const statusCards = computed(() => [
       </div>
 
       <!-- Status summary -->
-      <div class="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-5">
+      <div class="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
         <Link
           v-for="c in statusCards"
           :key="c.key"
@@ -219,9 +230,9 @@ const statusCards = computed(() => [
       </div>
 
       <!-- Main grid -->
-      <div class="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-12">
+      <div class="mt-6 grid grid-cols-1 items-start gap-6 xl:grid-cols-[minmax(0,2fr)_minmax(380px,1fr)]">
         <!-- Recent applications -->
-        <section class="overflow-hidden rounded-2xl border border-border bg-surface shadow-sm ring-1 ring-black/[0.04] lg:col-span-8">
+        <section class="overflow-hidden rounded-2xl border border-border bg-surface shadow-sm ring-1 ring-black/[0.04]">
           <div class="flex items-center justify-between gap-3 border-b border-border bg-surface-muted px-5 py-4 sm:px-6">
             <div class="text-sm font-semibold text-text-primary">Recent applications</div>
             <Link href="/applicant/applications" class="zaqa-link text-sm font-semibold">View all</Link>
@@ -236,7 +247,7 @@ const statusCards = computed(() => [
                 <div class="text-sm font-semibold text-text-primary">No applications yet</div>
                 <div class="mt-1 text-sm text-text-muted">Start your first verification request.</div>
                 <div class="mt-4">
-                  <Link href="/applicant/applications/new" class="zaqa-btn zaqa-btn-primary h-11 px-6">New application</Link>
+                  <Link :href="newApplicationHref" class="zaqa-btn zaqa-btn-primary h-11 px-6">Start new application</Link>
                 </div>
               </div>
             </div>
@@ -270,7 +281,7 @@ const statusCards = computed(() => [
         </section>
 
         <!-- Next step -->
-        <aside class="space-y-4 lg:col-span-4">
+        <aside class="space-y-4">
           <Link
             :href="nextStep.href"
             class="group block overflow-hidden rounded-2xl border border-border bg-surface shadow-sm ring-1 ring-black/[0.04] transition hover:-translate-y-[1px] hover:border-brand/25 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"

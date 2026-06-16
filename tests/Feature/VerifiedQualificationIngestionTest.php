@@ -52,6 +52,7 @@ class VerifiedQualificationIngestionTest extends TestCase
 
         [$qualification] = $this->approvedQualification([
             'title_of_qualification' => 'Custom Diploma in Applied Analytics',
+            'names_as_on_qualification_document' => 'Mary C. Mwansa',
             'applicant_entered_qualification_title' => 'Custom Diploma in Applied Analytics',
             'qualification_title_source' => QualificationTitleSource::Other,
             'certificate_number' => 'CERT-NEW-001',
@@ -95,6 +96,7 @@ class VerifiedQualificationIngestionTest extends TestCase
 
         [$qualification] = $this->approvedQualification([
             'title_of_qualification' => $title->name,
+            'names_as_on_qualification_document' => 'Mary C. Mwansa',
             'qualification_title_id' => $title->id,
             'qualification_title_source' => QualificationTitleSource::Catalog,
             'certificate_number' => 'CERT-CAT-002',
@@ -124,6 +126,7 @@ class VerifiedQualificationIngestionTest extends TestCase
 
         [$qualification, $institution] = $this->approvedQualification([
             'title_of_qualification' => 'Existing Program',
+            'names_as_on_qualification_document' => 'Mary C. Mwansa',
             'certificate_number' => 'CERT-DEDUPE-003',
         ]);
 
@@ -157,6 +160,7 @@ class VerifiedQualificationIngestionTest extends TestCase
         [$qualification] = $this->approvedQualification([
             'verification_state' => VerificationState::UnderLevel2Review,
             'title_of_qualification' => 'Brand New Qualification Title',
+            'names_as_on_qualification_document' => 'Mary C. Mwansa',
             'applicant_entered_qualification_title' => 'Brand New Qualification Title',
             'qualification_title_source' => QualificationTitleSource::Other,
             'certificate_number' => 'CERT-PROMPT-004',
@@ -207,6 +211,7 @@ class VerifiedQualificationIngestionTest extends TestCase
             'awarding_institution_name' => $institution->name,
             'qualification_type_id' => $type->id,
             'title_of_qualification' => 'Legacy Free Text Title',
+            'names_as_on_qualification_document' => 'Mary C. Mwansa',
             'award_date' => now()->subYear()->toDateString(),
             'certificate_number' => 'LEG-001',
         ])->assertRedirect()->assertSessionHasNoErrors();
@@ -214,6 +219,7 @@ class VerifiedQualificationIngestionTest extends TestCase
         $this->assertDatabaseHas('qualifications', [
             'application_id' => $application->id,
             'title_of_qualification' => 'Legacy Free Text Title',
+            'names_as_on_qualification_document' => 'Mary C. Mwansa',
         ]);
     }
 
@@ -264,6 +270,7 @@ class VerifiedQualificationIngestionTest extends TestCase
             'country_id' => $country->id,
             'nrc_passport_number' => '999999/99/9',
             'title_of_qualification' => 'Diploma in Testing',
+            'names_as_on_qualification_document' => 'Mary C. Mwansa',
             'award_date' => now()->subYear()->toDateString(),
             'qualification_type' => $type->zqf_level_code,
             'qualification_type_id' => $type->id,

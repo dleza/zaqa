@@ -12,10 +12,31 @@ import { zaqaLogoUrl } from '@/constants/zaqaLogo'
 const props = withDefaults(
   defineProps<{
     containerMaxWidthClass?: string
+    /** Full-width main area with generous horizontal padding (dashboard workspace). */
+    wide?: boolean
   }>(),
   {
     containerMaxWidthClass: 'max-w-none',
+    wide: false,
   },
+)
+
+const mainClass = computed(() =>
+  props.wide
+    ? 'w-full min-w-0 flex-1 py-6'
+    : `mx-auto w-full flex-1 px-4 py-6 lg:px-6 2xl:px-10 ${props.containerMaxWidthClass}`,
+)
+
+const headerInnerClass = computed(() =>
+  props.wide
+    ? 'flex w-full items-center justify-between px-4 py-4 sm:px-6 lg:px-8 xl:px-10 2xl:px-12'
+    : `mx-auto flex w-full items-center justify-between px-4 py-4 lg:px-6 2xl:px-10 ${props.containerMaxWidthClass}`,
+)
+
+const footerInnerClass = computed(() =>
+  props.wide
+    ? 'flex w-full flex-col gap-2 px-4 py-8 text-sm sm:flex-row sm:items-center sm:justify-between sm:px-6 lg:px-8 xl:px-10 2xl:px-12'
+    : `zaqa-footer-inner ${props.containerMaxWidthClass}`,
 )
 
 const page = usePage()
@@ -121,7 +142,7 @@ const user = computed(() => (page.props as any).auth?.user)
       <div class="flex min-w-0 flex-1 flex-col">
         <!-- Desktop header (minimal, no horizontal nav) -->
         <header class="hidden border-b border-border bg-surface lg:block">
-          <div class="mx-auto flex w-full items-center justify-between px-4 py-4 lg:px-6 2xl:px-10" :class="props.containerMaxWidthClass">
+          <div :class="headerInnerClass">
             <div>
               <div class="text-sm font-semibold text-text-primary">Applicant Portal</div>
             </div>
@@ -133,14 +154,21 @@ const user = computed(() => (page.props as any).auth?.user)
           </div>
         </header>
 
-        <main class="mx-auto w-full flex-1 px-4 py-6 lg:px-6 2xl:px-10" :class="props.containerMaxWidthClass">
-          <FlashMessages />
-          <slot name="pageHeader" />
-          <slot />
+        <main :class="mainClass">
+          <div v-if="wide" class="w-full px-4 sm:px-6 lg:px-8 xl:px-10 2xl:px-12">
+            <FlashMessages />
+            <slot name="pageHeader" />
+            <slot />
+          </div>
+          <template v-else>
+            <FlashMessages />
+            <slot name="pageHeader" />
+            <slot />
+          </template>
         </main>
 
         <footer class="zaqa-footer hidden md:block">
-          <div class="zaqa-footer-inner" :class="props.containerMaxWidthClass">
+          <div :class="footerInnerClass">
             <span class="text-text-on-dark/90">© {{ new Date().getFullYear() }} Zambia Qualifications Authority (ZAQA)</span>
             <span class="text-text-on-dark/75">Applicant services • Verification workflow • Secure downloads</span>
           </div>

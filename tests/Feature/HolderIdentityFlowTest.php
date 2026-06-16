@@ -104,6 +104,7 @@ class HolderIdentityFlowTest extends TestCase
             'student_number' => '',
             'examination_number' => '',
             'title_of_qualification' => 'Test Qualification',
+            'names_as_on_qualification_document' => 'Mary C. Mwansa',
             'award_date' => now()->subYear()->toDateString(),
             'qualification_type_id' => $qt->id,
             'notes' => null,

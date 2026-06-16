@@ -33,6 +33,7 @@ const props = defineProps<{
     id: number
     verification_reference_number: string | null
     title_of_qualification: string | null
+    names_as_on_qualification_document?: string | null
     verification_state: string | null
     verification_state_label: string
     assigned_verifier_name: string | null
@@ -548,6 +549,10 @@ function activityIcon(kind: string) {
                       <h3 class="mt-2 text-sm font-semibold leading-snug text-text-primary">
                         {{ q.title_of_qualification ?? 'Untitled qualification' }}
                       </h3>
+                      <p class="mt-1 text-xs font-semibold text-text-primary">
+                        <span class="font-medium text-text-muted">Names on qualification document:</span>
+                        {{ q.names_as_on_qualification_document?.trim() || 'Not captured' }}
+                      </p>
                       <div class="mt-2 space-y-1 text-xs text-text-muted">
                         <div v-if="q.qualification_type_label" class="flex gap-1">
                           <BookOpen class="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden="true" />

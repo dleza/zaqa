@@ -119,7 +119,7 @@ function submit() {
                 <input
                   v-model="form.identifier"
                   type="text"
-                  placeholder="Enter your email or phone number"
+                  placeholder="Enter your email or phone number ( starting with 260)"
                   class="zaqa-input h-12 rounded-xl pl-10 transition focus:shadow-[0_0_0_4px_rgba(11,58,102,0.12)]"
                   autocomplete="username"
                 />

@@ -182,6 +182,7 @@ class AdminVerificationQualificationController extends Controller
                 'certificate_template' => $certificateTemplate,
                 'qualification_type' => $qualification->qualificationTypeMaster?->name,
                 'title' => $qualification->title_of_qualification,
+                'names_as_on_qualification_document' => $qualification->names_as_on_qualification_document,
                 'applicant_entered_qualification_title' => $qualification->applicant_entered_qualification_title,
                 'verified_qualification_title' => $qualification->verified_qualification_title,
                 'qualification_title_source' => $qualification->qualification_title_source?->value ?? (string) ($qualification->qualification_title_source ?? ''),

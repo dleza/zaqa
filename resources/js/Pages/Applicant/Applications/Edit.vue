@@ -1752,6 +1752,10 @@ onBeforeUnmount(() => {
                           </span>
                         </div>
                         <p class="mt-1 text-sm text-text-muted">Award date {{ q.award_date || '—' }}</p>
+                        <p class="mt-2 rounded-xl border border-brand/20 bg-brand/[0.05] px-3 py-2 text-sm text-text-primary">
+                          <span class="text-[10px] font-bold uppercase tracking-wider text-brand">Names on qualification document</span>
+                          <span class="mt-1 block font-semibold">{{ q.names_as_on_qualification_document?.trim() || 'Not captured' }}</span>
+                        </p>
                         <div class="mt-3 flex flex-wrap gap-2 text-xs font-medium">
                           <span class="inline-flex items-center gap-1.5 rounded-full border border-border bg-surface-muted px-2.5 py-1 text-text-primary">
                             Documents
@@ -1791,7 +1795,7 @@ onBeforeUnmount(() => {
                         @click="openQualificationWorkspace('edit', q)"
                       >
                         <PenLine class="h-4 w-4" aria-hidden="true" />
-                        Open workspace
+                        Edit application
                       </button>
                       <button
                         v-if="!applicationLocked"

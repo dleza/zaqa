@@ -482,6 +482,14 @@ function money(cents: number, currency: string) {
                         <h3 class="mt-2 text-lg font-semibold leading-snug tracking-tight text-text-primary sm:text-xl">
                           {{ q.title_of_qualification || 'Untitled qualification' }}
                         </h3>
+                        <div
+                          class="mt-3 rounded-2xl border border-brand/25 bg-brand/[0.06] px-4 py-3"
+                        >
+                          <div class="text-[10px] font-bold uppercase tracking-wider text-brand">Names on qualification document</div>
+                          <div class="mt-1 text-sm font-semibold text-text-primary">
+                            {{ q.names_as_on_qualification_document?.trim() || 'Not captured' }}
+                          </div>
+                        </div>
                       </div>
 
                       <div

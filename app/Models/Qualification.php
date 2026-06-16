@@ -30,6 +30,7 @@ class Qualification extends Model
         'student_number',
         'examination_number',
         'title_of_qualification',
+        'names_as_on_qualification_document',
         'qualification_title_id',
         'applicant_entered_qualification_title',
         'verified_qualification_title',

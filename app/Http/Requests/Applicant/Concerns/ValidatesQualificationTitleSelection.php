@@ -51,6 +51,15 @@ trait ValidatesQualificationTitleSelection
         }
 
         $institutionId = $this->input('awarding_institution_id');
+        if ((string) $institutionId === 'other') {
+            $submittedText = trim((string) $this->input('title_of_qualification', ''));
+            if ($submittedText !== '' && $submittedText !== $title->name) {
+                $validator->errors()->add('title_of_qualification', 'Qualification title text does not match the selected catalog title.');
+            }
+
+            return;
+        }
+
         $institutionIdInt = is_numeric($institutionId) && (string) $institutionId !== 'other'
             ? (int) $institutionId
             : null;
