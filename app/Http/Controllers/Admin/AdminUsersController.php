@@ -3,8 +3,10 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Domain\Audit\AuditLogService;
+use App\Domain\Notifications\OutboundMailService;
 use App\Enums\VerificationState;
 use App\Http\Controllers\Controller;
+use App\Mail\AdminStaffAccountCreatedMail;
 use App\Models\Qualification;
 use App\Models\QualificationAssignment;
 use App\Models\VerificationAssignmentCategoryUser;
@@ -290,7 +292,7 @@ class AdminUsersController extends Controller
         ]);
     }
 
-    public function store(Request $request): \Illuminate\Http\RedirectResponse
+    public function store(Request $request, OutboundMailService $mail): \Illuminate\Http\RedirectResponse
     {
         $validated = $request->validate([
             'email' => ['required', 'email', 'max:255', 'unique:users,email'],
@@ -323,17 +325,38 @@ class AdminUsersController extends Controller
                 'password' => $generatedPassword, // hashed via cast
                 'applicant_type' => null,
                 'is_active' => true,
+            ]);
+
+            $u->forceFill([
                 'email_verified_at' => now(),
                 'phone_verified_at' => null,
-            ]);
+            ])->save();
 
             $u->syncRoles([$role->name]);
 
             return $u;
         });
 
+        $mail->queue(
+            mailable: new AdminStaffAccountCreatedMail(
+                recipientName: $user->name,
+                email: (string) $user->email,
+                plainTextPassword: $generatedPassword,
+                roleName: $role->name,
+                loginUrl: route('login'),
+            ),
+            to: (string) $user->email,
+            logContext: [
+                'user_id' => $user->id,
+                'application_id' => null,
+                'email' => (string) $user->email,
+                'subject' => 'Your ZAQA staff account',
+                'template_key' => 'admin_staff_account_created',
+            ],
+        );
+
         return redirect('/admin/users')
-            ->with('success', 'User created.')
+            ->with('success', 'User created. Login details have been emailed to the user.')
             ->with('generated_password', $generatedPassword)
             ->with('generated_password_for', $user->email);
     }

@@ -2,11 +2,13 @@
 
 namespace Tests\Feature;
 
+use App\Mail\AdminStaffAccountCreatedMail;
 use App\Models\AuditLog;
 use App\Models\Department;
 use App\Models\User;
 use Database\Seeders\RolesAndPermissionsSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Mail;
 use Inertia\Testing\AssertableInertia as Assert;
 use Spatie\Permission\Models\Role;
 use Tests\TestCase;
@@ -156,6 +158,44 @@ class AdminUsersManagementTest extends TestCase
             'event_type' => 'admin.managed_user_updated',
             'entity_type' => User::class,
             'entity_id' => $managedUser->id,
+        ]);
+    }
+
+    public function test_super_admin_create_user_queues_login_details_email(): void
+    {
+        Mail::fake();
+
+        $admin = User::factory()->activated()->create(['applicant_type' => null]);
+        $admin->assignRole('Super Admin');
+
+        $this->actingAs($admin)
+            ->post('/admin/users', [
+                'first_name' => 'New',
+                'last_name' => 'Officer',
+                'email' => 'new.officer@example.test',
+                'phone_primary' => '260970000123',
+                'role' => 'Finance Officer',
+            ])
+            ->assertRedirect('/admin/users')
+            ->assertSessionHas('generated_password')
+            ->assertSessionHas('generated_password_for', 'new.officer@example.test');
+
+        $created = User::query()->where('email', 'new.officer@example.test')->first();
+        $this->assertNotNull($created);
+        $this->assertTrue($created->hasRole('Finance Officer'));
+        $this->assertNotNull($created->email_verified_at);
+
+        Mail::assertQueued(AdminStaffAccountCreatedMail::class, function (AdminStaffAccountCreatedMail $mailable): bool {
+            return $mailable->email === 'new.officer@example.test'
+                && $mailable->roleName === 'Finance Officer'
+                && $mailable->plainTextPassword !== ''
+                && str_contains($mailable->loginUrl, '/login');
+        });
+
+        $this->assertDatabaseHas('email_logs', [
+            'email' => 'new.officer@example.test',
+            'template_key' => 'admin_staff_account_created',
+            'status' => 'queued',
         ]);
     }
 
