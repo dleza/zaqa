@@ -33,6 +33,7 @@ class AdminUpdateVerificationQualificationRequest extends FormRequest
     {
         return [
             'qualification_holder_name' => ['required', 'string', 'max:255'],
+            'names_as_on_qualification_document' => ['required', 'string', 'max:255'],
             'nrc_passport_number' => ['required', 'string', 'max:100'],
             'country_id' => ['required', 'integer', 'exists:countries,id'],
             'country_name_other' => ['nullable', 'string', 'max:255'],

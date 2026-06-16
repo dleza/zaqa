@@ -478,7 +478,9 @@ class QualificationCaptureService
                 'student_number' => trim((string) ($data['student_number'] ?? '')) ?: null,
                 'examination_number' => trim((string) ($data['examination_number'] ?? '')) ?: null,
                 'title_of_qualification' => (string) $data['title_of_qualification'],
-                'names_as_on_qualification_document' => $this->normalizeNamesAsOnQualificationDocument($data['names_as_on_qualification_document'] ?? null),
+                'names_as_on_qualification_document' => array_key_exists('names_as_on_qualification_document', $data)
+                    ? $this->normalizeNamesAsOnQualificationDocument($data['names_as_on_qualification_document'])
+                    : (string) ($qualification->names_as_on_qualification_document ?? ''),
                 'award_date' => (string) $data['award_date'],
                 'qualification_type' => $qualificationType->zqf_level_code,
                 'qualification_type_id' => $qualificationTypeId,

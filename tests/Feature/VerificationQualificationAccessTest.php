@@ -350,6 +350,7 @@ class VerificationQualificationAccessTest extends TestCase
             'awarding_institution_id' => $inst->id,
             'awarding_institution_name' => $inst->name,
             'qualification_holder_name' => 'Jane Doe',
+            'names_as_on_qualification_document' => 'JANE DOE',
             'country_id' => $zambia->id,
             'country_name_other' => null,
             'nrc_passport_number' => '111111/11/1',
@@ -371,6 +372,7 @@ class VerificationQualificationAccessTest extends TestCase
 
         $payload = [
             'qualification_holder_name' => 'Jane D. Corrected',
+            'names_as_on_qualification_document' => 'JANE D. CORRECTED',
             'nrc_passport_number' => '111111/11/1',
             'country_id' => $zambia->id,
             'country_name_other' => null,
@@ -393,6 +395,7 @@ class VerificationQualificationAccessTest extends TestCase
 
         $qualification->refresh();
         $this->assertSame('Jane D. Corrected', $qualification->qualification_holder_name);
+        $this->assertSame('JANE D. CORRECTED', $qualification->names_as_on_qualification_document);
         $this->assertSame('CERT-UPD', $qualification->certificate_number);
         $this->assertSame('Applicant note kept', $qualification->transcript_reason);
         $this->assertSame('Internal verifier note kept', $qualification->notes);
@@ -434,6 +437,7 @@ class VerificationQualificationAccessTest extends TestCase
             'awarding_institution_id' => $inst->id,
             'awarding_institution_name' => $inst->name,
             'qualification_holder_name' => 'Jane Doe',
+            'names_as_on_qualification_document' => 'JANE DOE (CERT)',
             'country_id' => $zambia->id,
             'nrc_passport_number' => '111111/11/1',
             'title_of_qualification' => 'Diploma',
@@ -474,7 +478,8 @@ class VerificationQualificationAccessTest extends TestCase
                 ->where('documents.0.id', $existing->id)
                 ->has('identity_document')
                 ->has('expected_document_types')
-                ->where('expected_document_types.0', DocumentType::CertificateCopy->value));
+                ->where('expected_document_types.0', DocumentType::CertificateCopy->value)
+                ->where('qualification.names_as_on_qualification_document', 'JANE DOE (CERT)'));
 
         $beforeState = $qualification->verification_state;
 

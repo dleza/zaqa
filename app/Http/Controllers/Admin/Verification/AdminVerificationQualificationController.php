@@ -413,6 +413,7 @@ class AdminVerificationQualificationController extends Controller
             'qualification' => [
                 'id' => $qualification->id,
                 'qualification_holder_name' => $qualification->qualification_holder_name,
+                'names_as_on_qualification_document' => $qualification->names_as_on_qualification_document,
                 'nrc_passport_number' => $qualification->nrc_passport_number,
                 'country_id' => $qualification->country_id,
                 'country_name_other' => $qualification->country_name_other,

@@ -80,6 +80,7 @@ const identifierValue = ref('')
 
 const form = useForm({
   qualification_holder_name: props.qualification.qualification_holder_name ?? '',
+  names_as_on_qualification_document: props.qualification.names_as_on_qualification_document ?? '',
   nrc_passport_number: props.qualification.nrc_passport_number ?? '',
   country_id: props.qualification.country_id ?? ('' as number | string | ''),
   country_name_other: props.qualification.country_name_other ?? '',
@@ -386,6 +387,17 @@ function identityDocumentRow(): DocumentRow | null {
                 </div>
                 <p class="mt-1 text-sm text-text-muted">Name and primary ID as recorded on this qualification item.</p>
                 <div class="mt-5 grid grid-cols-1 gap-4">
+                  <div>
+                    <label class="text-sm font-medium">Name as on qualification document</label>
+                    <input
+                      v-model="form.names_as_on_qualification_document"
+                      class="zaqa-input"
+                      placeholder="Enter the names exactly as printed on the certificate or transcript"
+                      autocomplete="off"
+                    />
+                    <p class="mt-1.5 text-xs text-text-muted">Use the spelling, initials, and order shown on the document.</p>
+                    <InputError :message="form.errors.names_as_on_qualification_document" />
+                  </div>
                   <div>
                     <label class="text-sm font-medium">Full name</label>
                     <input v-model="form.qualification_holder_name" class="zaqa-input" />

@@ -12,6 +12,7 @@ final class VerificationQualificationCorrectionDiff
      */
     private const FIELD_LABELS = [
         'qualification_holder_name' => 'Holder name',
+        'names_as_on_qualification_document' => 'Name as on qualification document',
         'nrc_passport_number' => 'NRC / passport',
         'country_id' => 'Country of award',
         'country_name_other' => 'Country (other)',
