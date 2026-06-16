@@ -9,6 +9,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\Admin\ImportCertificateBulkIssueExcelRequest;
 use App\Http\Requests\Admin\RevokeQualificationCertificateRequest;
 use App\Models\QualificationCertificate;
+use App\Support\Certificates\CertificateHolderName;
 use App\Support\Imports\ExcelTemplateDownload;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -86,7 +87,8 @@ class AdminCertificatesController extends Controller
                     'revoked_by_name' => $cert->revokedBy?->name,
                     'recipient_email' => $cert->recipient_email,
                     'qualification_title' => $cert->qualification?->title_of_qualification,
-                    'holder_name' => $cert->qualification?->qualification_holder_name,
+                    'holder_name' => CertificateHolderName::displayFromCertificateMetadata($cert->metadata)
+                        ?? $cert->qualification?->qualification_holder_name,
                     'application_number' => $cert->application?->application_number,
                     'applicant_name' => $cert->application?->applicant?->name,
                     'issued_by_name' => $cert->issuedBy?->name,

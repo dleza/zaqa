@@ -19,6 +19,7 @@ use App\Models\QualificationCertificate;
 use App\Models\QualificationSubjectResult;
 use App\Models\QualificationType;
 use App\Models\User;
+use App\Support\Certificates\CertificateHolderName;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Endroid\QrCode\Builder\Builder;
 use Endroid\QrCode\Writer\PngWriter;
@@ -485,13 +486,7 @@ class QualificationCertificateService
      */
     private function buildRejectionRenderContext(Qualification $qualification, Application $application, array $issue): array
     {
-        $holderName = trim((string) ($qualification->qualification_holder_name ?? ''));
-        if ($holderName === '') {
-            $meta = $application->metadata;
-            if (is_array($meta) && isset($meta['verification_subject']['full_name'])) {
-                $holderName = trim((string) $meta['verification_subject']['full_name']);
-            }
-        }
+        $holder = CertificateHolderName::resolve($qualification, $application);
 
         $institutionName = $qualification->awardingInstitution?->name
             ?? (string) ($qualification->awarding_institution_name_other ?: $qualification->awarding_institution_name);
@@ -520,7 +515,7 @@ class QualificationCertificateService
             'verification_url' => $issue['verification_url'],
             'issued_at' => $issue['issued_at'],
             'issued_at_formatted' => $issuedAt->format('d M Y'),
-            'holder_name' => $holderName !== '' ? $holderName : '—',
+            'holder_name' => $holder['display'],
             'holder_id' => trim((string) ($qualification->nrc_passport_number ?? '')) ?: '—',
             'application_number' => (string) $application->application_number,
             'zaqa_reference' => (string) ($qualification->verification_reference_number ?? ''),
@@ -530,7 +525,7 @@ class QualificationCertificateService
             'decision_is_generic' => $decisionIsGeneric,
             'director_name' => config('certificates.director_general_name'),
             'director_title' => config('certificates.director_general_title'),
-            'signature_data_uri' => app(DocumentSignatureService::class)->dataUriForType(DocumentSignatureType::Certificate),
+            ...$this->certificateSignatureViewData(),
             'logo_data_uri' => $logoDataUri,
             'coat_of_arms_watermark_data_uri' => $coatOfArmsWatermarkDataUri,
             'qr_data_uri' => $this->buildQrDataUri($issue['verification_url']),
@@ -540,12 +535,12 @@ class QualificationCertificateService
         return [
             'view' => 'pdf.rejection-certificate',
             'data' => $viewData,
-            'metadata' => [
+            'metadata' => array_merge([
                 'certificate_type' => QualificationCertificate::TYPE_REJECTION,
                 'template_version' => self::TEMPLATE_VERSION,
                 'decision_is_generic' => $decisionIsGeneric,
                 'verification_base_url' => config('certificates.verify_url_base'),
-            ],
+            ], CertificateHolderName::metadataSnapshot($holder)),
         ];
     }
 
@@ -613,13 +608,7 @@ class QualificationCertificateService
             ? 'At '.trim((string) $type->level_label).' of the Zambia Qualifications Framework.'
             : 'As recognised under the Zambia Qualifications Framework.';
 
-        $holderName = trim((string) ($qualification->qualification_holder_name ?? ''));
-        if ($holderName === '') {
-            $meta = $application->metadata;
-            if (is_array($meta) && isset($meta['verification_subject']['full_name'])) {
-                $holderName = trim((string) $meta['verification_subject']['full_name']);
-            }
-        }
+        $holder = CertificateHolderName::resolve($qualification, $application);
 
         $institutionName = $qualification->awardingInstitution?->name
             ?? (string) ($qualification->awarding_institution_name_other ?: $qualification->awarding_institution_name);
@@ -661,7 +650,7 @@ class QualificationCertificateService
             'certificate_number' => $issue['certificate_number'],
             'verification_url' => $issue['verification_url'],
             'issued_at' => $issue['issued_at'],
-            'holder_name' => $holderName !== '' ? $holderName : '—',
+            'holder_name' => $holder['display'],
             'holder_id' => trim((string) ($qualification->nrc_passport_number ?? '')) ?: '—',
             'zaqa_reference' => (string) ($qualification->verification_reference_number ?? ''),
             'qualification_title' => $qualificationTitle !== '' ? $qualificationTitle : '—',
@@ -672,7 +661,7 @@ class QualificationCertificateService
             'recognition_statement' => config('certificates.recognition_act_clause'),
             'director_name' => config('certificates.director_general_name'),
             'director_title' => config('certificates.director_general_title'),
-            'signature_data_uri' => app(DocumentSignatureService::class)->dataUriForType(DocumentSignatureType::Certificate),
+            ...$this->certificateSignatureViewData(),
             'logo_data_uri' => $logoDataUri,
             'coat_of_arms_watermark_data_uri' => $coatOfArmsWatermarkDataUri,
             'qr_data_uri' => $qrDataUri,
@@ -692,13 +681,35 @@ class QualificationCertificateService
         return [
             'view' => self::TEMPLATE_VIEWS[$templateKey] ?? self::TEMPLATE_VIEWS[QualificationType::CERTIFICATE_TEMPLATE_DEFAULT],
             'data' => $viewData,
-            'metadata' => [
+            'metadata' => array_merge([
                 'template_key' => $templateKey,
                 'template_version' => self::TEMPLATE_VERSION,
                 'watermark_enabled' => $watermarkEnabled,
                 'watermark_asset_present' => $watermarkAssetPresent,
                 'verification_base_url' => config('certificates.verify_url_base'),
-            ],
+            ], CertificateHolderName::metadataSnapshot($holder)),
+        ];
+    }
+
+    /**
+     * @return array{signature_data_uri: string|null, signature_display_name: string|null}
+     */
+    private function certificateSignatureViewData(): array
+    {
+        $signatureService = app(DocumentSignatureService::class);
+        $activeSetting = $signatureService->activeForType(DocumentSignatureType::Certificate);
+        $dataUri = $signatureService->dataUriForType(DocumentSignatureType::Certificate);
+
+        if ($activeSetting && $dataUri === null) {
+            Log::warning('Certificate signature file could not be loaded; continuing without signature image.', [
+                'document_signature_setting_id' => $activeSetting->id,
+                'file_path' => $activeSetting->file_path,
+            ]);
+        }
+
+        return [
+            'signature_data_uri' => $dataUri,
+            'signature_display_name' => $activeSetting?->display_name,
         ];
     }
 

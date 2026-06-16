@@ -71,6 +71,17 @@
             font-weight: bold;
             font-size: 11px;
         }
+        .sig-block {
+            margin-top: 10px;
+            text-align: center;
+        }
+        .sig-img {
+            display: inline-block;
+            max-width: 160px;
+            max-height: 56px;
+            width: auto;
+            height: auto;
+        }
         .sig-name {
             margin-top: 12px;
             text-align: center;
@@ -177,8 +188,8 @@
     <div class="issued-by">Issued by the Zambia Qualifications Authority</div>
 
     @if(!empty($signature_data_uri))
-        <div style="margin-top: 10px; text-align: center;">
-            <img src="{{ $signature_data_uri }}" alt="Signature" style="max-height: 48px;">
+        <div class="sig-block">
+            <img class="sig-img" src="{{ $signature_data_uri }}" alt="Authorized signature">
         </div>
     @endif
 

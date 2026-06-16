@@ -6,6 +6,7 @@ use App\Models\QualificationCertificate;
 use App\Models\QualificationSubjectResult;
 use App\Models\QualificationType;
 use Illuminate\Support\Facades\Schema;
+use App\Support\Certificates\CertificateHolderName;
 use Inertia\Inertia;
 
 class CertificateVerificationController extends Controller
@@ -14,7 +15,9 @@ class CertificateVerificationController extends Controller
     {
         $certificate = QualificationCertificate::query()
             ->with([
-                'qualification:id,application_id,qualification_holder_name,title_of_qualification,awarding_institution_id,awarding_institution_name,awarding_institution_name_other,verification_reference_number,nrc_passport_number,award_date,qualification_type,qualification_type_id',
+                'qualification:id,application_id,qualification_holder_name,names_as_on_qualification_document,title_of_qualification,awarding_institution_id,awarding_institution_name,awarding_institution_name_other,verification_reference_number,nrc_passport_number,award_date,qualification_type,qualification_type_id',
+                'qualification.application:id,applicant_user_id,metadata',
+                'qualification.application.applicant:id,name',
                 'qualification.awardingInstitution:id,name',
                 'qualification.qualificationTypeMaster:'.implode(',', $this->qualificationTypeSelectColumns()),
                 'qualification.subjectResults' => fn ($query) => $query
@@ -96,7 +99,11 @@ class CertificateVerificationController extends Controller
                     'zaqa_reference_number' => $certificate->zaqa_reference_number,
                     'issued_at' => optional($certificate->issued_at)?->toIso8601String(),
                     'award_date' => optional($qualification?->award_date)?->toIso8601String(),
-                    'holder_name' => $qualification?->qualification_holder_name,
+                    'holder_name' => CertificateHolderName::displayForPublicVerification(
+                        $certificate,
+                        $qualification,
+                        $qualification?->application,
+                    ),
                     'holder_identifier' => $qualification?->nrc_passport_number,
                     'qualification_title' => $qualification?->title_of_qualification,
                     'awarding_institution' => $institutionName,
