@@ -3,6 +3,9 @@
 namespace App\Http\Controllers\InstitutionApi\V1;
 
 use App\Domain\InstitutionApi\InstitutionLearnerRecordIngestionService;
+use App\Domain\LearnerRecords\LearnerRecordSubmissionIngestionService;
+use App\Enums\LearnerRecordSubmissionBatchStatus;
+use App\Enums\LearnerRecordSubmissionSourceType;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\InstitutionApi\V1\BatchInstitutionLearnerRecordsRequest;
 use App\Http\Requests\InstitutionApi\V1\SearchInstitutionLearnerRecordsRequest;
@@ -11,6 +14,7 @@ use App\Jobs\InstitutionApi\ProcessInstitutionLearnerRecordBatchJob;
 use App\Models\InstitutionApiBatch;
 use App\Models\InstitutionApiClient;
 use App\Models\LearnerRecord;
+use App\Models\LearnerRecordSubmissionBatch;
 use App\Support\Normalization\LearnerRecordNormalizer;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -19,25 +23,53 @@ class LearnerRecordsController extends Controller
 {
     public function store(
         StoreInstitutionLearnerRecordRequest $request,
-        InstitutionLearnerRecordIngestionService $ingestion
+        InstitutionLearnerRecordIngestionService $ingestion,
+        LearnerRecordSubmissionIngestionService $submissionIngestion,
     ): JsonResponse {
         /** @var InstitutionApiClient $client */
         $client = $request->user();
 
-        $res = $ingestion->upsertOne($client, $request->validated());
-        $record = $res['record'];
+        $batch = $submissionIngestion->createBatch(
+            sourceType: LearnerRecordSubmissionSourceType::InstitutionPush,
+            sourceInstitutionId: (int) $client->awarding_institution_id,
+            institutionApiClientId: (int) $client->id,
+            totalRecords: 1,
+        );
+
+        $res = $ingestion->stageOne($client, $request->validated(), $batch, 1);
+        $submission = $res['submission'];
+        $batch = $res['batch'];
+
+        $submissionIngestion->finalizeBatch((int) $batch->id);
+        $batch->refresh();
+
+        if ($res['validation_failed']) {
+            return response()->json([
+                'accepted' => false,
+                'success' => false,
+                'message' => 'Validation failed.',
+                'errors' => $submission->validation_errors,
+            ], 422);
+        }
 
         return response()->json([
+            'accepted' => true,
             'success' => true,
+            'submission_id' => (int) $submission->id,
+            'batch_reference' => $batch->reference,
+            'status' => $submission->status?->value ?? 'pending',
+            'message' => 'Record received and pending ZAQA review.',
             'data' => [
-                'learner_record_id' => (int) $record->id,
-                'created' => (bool) ($res['created'] ?? false),
+                'submission_id' => (int) $submission->id,
+                'batch_reference' => $batch->reference,
+                'status' => $submission->status?->value ?? 'pending',
             ],
-        ], 201);
+        ], 202);
     }
 
     public function batch(
-        BatchInstitutionLearnerRecordsRequest $request
+        BatchInstitutionLearnerRecordsRequest $request,
+        LearnerRecordSubmissionIngestionService $submissionIngestion,
     ): JsonResponse {
         /** @var InstitutionApiClient $client */
         $client = $request->user();
@@ -63,32 +95,61 @@ class LearnerRecordsController extends Controller
             'total_records' => count($records),
         ]);
 
+        $submissionBatch = $submissionIngestion->createBatch(
+            sourceType: LearnerRecordSubmissionSourceType::InstitutionPush,
+            sourceInstitutionId: (int) $client->awarding_institution_id,
+            institutionApiClientId: (int) $client->id,
+            institutionApiBatchId: (int) $batch->id,
+            totalRecords: count($records),
+        );
+
+        $submissionBatch->forceFill([
+            'status' => LearnerRecordSubmissionBatchStatus::Processing,
+        ])->save();
+
         if (count($records) <= $syncThreshold) {
-            // Process quickly inline for very small batches.
-            ProcessInstitutionLearnerRecordBatchJob::dispatchSync((int) $batch->id);
+            ProcessInstitutionLearnerRecordBatchJob::dispatchSync((int) $batch->id, (int) $submissionBatch->id);
             $batch->refresh();
+            $submissionBatch->refresh();
+
+            $pendingReview = (int) $submissionBatch->pending_count;
+            $failedValidation = (int) $submissionBatch->failed_validation_count;
 
             return response()->json([
+                'accepted' => true,
                 'success' => true,
+                'batch_reference' => $submissionBatch->reference,
+                'submission_batch_id' => (int) $submissionBatch->id,
+                'institution_api_batch_id' => (int) $batch->id,
+                'received' => count($records),
+                'pending_review' => $pendingReview,
+                'failed_validation' => $failedValidation,
+                'message' => 'Records received and pending ZAQA review.',
                 'data' => [
                     'batch_id' => (int) $batch->id,
-                    'status' => $batch->status?->value ?? 'unknown',
-                    'total' => (int) $batch->total_records,
-                    'processed' => (int) $batch->processed_records,
-                    'inserted' => (int) $batch->inserted_records,
-                    'updated' => (int) $batch->updated_records,
-                    'failed' => (int) $batch->failed_records,
+                    'batch_reference' => $submissionBatch->reference,
+                    'status' => $submissionBatch->status?->value ?? 'pending_review',
+                    'total' => count($records),
+                    'pending_review' => $pendingReview,
+                    'failed_validation' => $failedValidation,
                 ],
             ], 200);
         }
 
-        ProcessInstitutionLearnerRecordBatchJob::dispatch((int) $batch->id);
+        ProcessInstitutionLearnerRecordBatchJob::dispatch((int) $batch->id, (int) $submissionBatch->id);
 
         return response()->json([
+            'accepted' => true,
             'success' => true,
+            'batch_reference' => $submissionBatch->reference,
+            'submission_batch_id' => (int) $submissionBatch->id,
+            'institution_api_batch_id' => (int) $batch->id,
+            'received' => count($records),
+            'message' => 'Records received and pending ZAQA review.',
             'data' => [
                 'batch_id' => (int) $batch->id,
-                'status' => $batch->status?->value ?? 'pending',
+                'batch_reference' => $submissionBatch->reference,
+                'status' => 'processing',
             ],
         ], 202);
     }
@@ -183,4 +244,3 @@ class LearnerRecordsController extends Controller
         ]);
     }
 }
-

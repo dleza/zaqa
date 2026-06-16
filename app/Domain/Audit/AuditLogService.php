@@ -3,6 +3,7 @@
 namespace App\Domain\Audit;
 
 use App\Models\AuditLog;
+use App\Models\User;
 use Illuminate\Contracts\Auth\Authenticatable;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -27,7 +28,7 @@ class AuditLogService
         $request = $this->currentRequest();
 
         return AuditLog::create([
-            'actor_user_id' => $actor?->getAuthIdentifier(),
+            'actor_user_id' => $actor instanceof User ? $actor->getAuthIdentifier() : null,
             'actor_name_snapshot' => $this->actorNameSnapshot($actor),
             'event_type' => $eventType,
             'module' => $module,

@@ -256,14 +256,22 @@ export const adminNavSections: AdminNavSection[] = [
   },
   {
     label: 'Learner records',
-    requiredAnyPermissions: ['learner_records.view'],
+    requiredAnyPermissions: ['learner_records.view', 'learner_record_submissions.view'],
     items: [
       {
         label: 'Records',
         href: '/admin/learner-records',
         icon: BookOpen,
         activeStartsWith: '/admin/learner-records',
+        activeExcludePrefixes: ['/admin/learner-records/submissions'],
         requiredAnyPermissions: ['learner_records.view'],
+      },
+      {
+        label: 'Pending submissions',
+        href: '/admin/learner-records/submissions',
+        icon: ClipboardList,
+        activeStartsWith: '/admin/learner-records/submissions',
+        requiredAnyPermissions: ['learner_record_submissions.view'],
       },
       {
         label: 'Imports',

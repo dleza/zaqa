@@ -13,6 +13,7 @@ use App\Models\Country;
 use App\Models\InstitutionIntegration;
 use App\Models\InstitutionPullLookupLog;
 use App\Models\LearnerRecord;
+use App\Models\LearnerRecordSubmission;
 use App\Models\Qualification;
 use App\Models\User;
 use Database\Seeders\RolesAndPermissionsSeeder;
@@ -85,7 +86,7 @@ class UnzaInstitutionPullLookupTest extends TestCase
         });
     }
 
-    public function test_unza_pull_service_ingests_found_record(): void
+    public function test_unza_pull_service_stages_found_record_for_review(): void
     {
         $qualification = $this->makeUnzaQualification();
 
@@ -115,10 +116,12 @@ class UnzaInstitutionPullLookupTest extends TestCase
 
         $this->assertTrue($result->found);
         $this->assertSame(InstitutionLearnerLookupStatus::Found, $result->status);
-        $this->assertSame(1, LearnerRecord::query()->count());
+        $this->assertSame(0, LearnerRecord::query()->count());
+        $this->assertSame(1, LearnerRecordSubmission::query()->count());
 
-        $record = LearnerRecord::query()->first();
-        $this->assertSame('2019001', $record->student_id);
+        $submission = LearnerRecordSubmission::query()->first();
+        $this->assertSame('2019001', $submission->student_id);
+        $this->assertSame('pending', $submission->status?->value);
     }
 
     public function test_unza_pull_service_auth_failure_is_logged_safely_without_token_leak(): void

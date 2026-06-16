@@ -18,6 +18,7 @@ use App\Http\Controllers\Admin\Integrations\AdminInstitutionIntegrationLogsContr
 use App\Http\Controllers\Admin\Integrations\AdminInstitutionIntegrationsController;
 use App\Http\Controllers\Admin\Integrations\AdminInstitutionPullLookupLogsController;
 use App\Http\Controllers\Admin\LearnerRecords\AdminLearnerRecordImportsController;
+use App\Http\Controllers\Admin\LearnerRecords\AdminLearnerRecordSubmissionsController;
 use App\Http\Controllers\Admin\LearnerRecords\AdminLearnerRecordsController;
 use App\Http\Controllers\Admin\Reports\ApplicationsReportController;
 use App\Http\Controllers\Admin\Reports\AwardingInstitutionsReportController;
@@ -305,6 +306,31 @@ Route::middleware('auth')->group(function () {
             Route::get('/imports/{import}', [AdminLearnerRecordImportsController::class, 'show'])
                 ->middleware('can:learner_records.view')
                 ->name('imports.show');
+
+            Route::get('/submissions', [AdminLearnerRecordSubmissionsController::class, 'index'])
+                ->middleware('can:learner_record_submissions.view')
+                ->name('submissions.index');
+            Route::get('/submissions/batches/{batch}', [AdminLearnerRecordSubmissionsController::class, 'showBatch'])
+                ->middleware('can:learner_record_submissions.view')
+                ->name('submissions.batches.show');
+            Route::get('/submissions/{submission}', [AdminLearnerRecordSubmissionsController::class, 'show'])
+                ->middleware('can:learner_record_submissions.view')
+                ->name('submissions.show');
+            Route::post('/submissions/{submission}/approve', [AdminLearnerRecordSubmissionsController::class, 'approve'])
+                ->middleware('can:learner_record_submissions.approve')
+                ->name('submissions.approve');
+            Route::post('/submissions/{submission}/reject', [AdminLearnerRecordSubmissionsController::class, 'reject'])
+                ->middleware('can:learner_record_submissions.reject')
+                ->name('submissions.reject');
+            Route::post('/submissions/{submission}/mark-duplicate', [AdminLearnerRecordSubmissionsController::class, 'markDuplicate'])
+                ->middleware('can:learner_record_submissions.reject')
+                ->name('submissions.mark_duplicate');
+            Route::post('/submissions/{submission}/start-review', [AdminLearnerRecordSubmissionsController::class, 'startReview'])
+                ->middleware('can:learner_record_submissions.review')
+                ->name('submissions.start_review');
+            Route::post('/submissions/{submission}/release-review', [AdminLearnerRecordSubmissionsController::class, 'releaseReview'])
+                ->middleware('can:learner_record_submissions.review')
+                ->name('submissions.release_review');
         });
 
         Route::prefix('integrations')->name('integrations.')->group(function () {

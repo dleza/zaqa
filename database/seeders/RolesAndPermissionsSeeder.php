@@ -48,6 +48,10 @@ class RolesAndPermissionsSeeder extends Seeder
         // Learner achievement records
         'learner_records.view',
         'learner_records.import',
+        'learner_record_submissions.view',
+        'learner_record_submissions.review',
+        'learner_record_submissions.approve',
+        'learner_record_submissions.reject',
 
         // Institution integration API
         'institution_api.manage',

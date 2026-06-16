@@ -3,9 +3,11 @@
 namespace App\Jobs\InstitutionApi;
 
 use App\Domain\InstitutionApi\InstitutionLearnerRecordIngestionService;
+use App\Domain\LearnerRecords\LearnerRecordSubmissionIngestionService;
 use App\Enums\InstitutionApiBatchStatus;
 use App\Models\InstitutionApiBatch;
 use App\Models\InstitutionApiClient;
+use App\Models\LearnerRecordSubmissionBatch;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
@@ -22,12 +24,15 @@ class ProcessInstitutionLearnerRecordBatchJob implements ShouldQueue
 
     private const MAX_ERROR_ROWS_STORED = 200;
 
-    public function __construct(public int $batchId)
-    {
-    }
+    public function __construct(
+        public int $batchId,
+        public ?int $submissionBatchId = null,
+    ) {}
 
-    public function handle(InstitutionLearnerRecordIngestionService $ingestion): void
-    {
+    public function handle(
+        InstitutionLearnerRecordIngestionService $ingestion,
+        LearnerRecordSubmissionIngestionService $submissionIngestion,
+    ): void {
         $batch = InstitutionApiBatch::query()->find($this->batchId);
         if (! $batch) {
             return;
@@ -58,14 +63,19 @@ class ProcessInstitutionLearnerRecordBatchJob implements ShouldQueue
             return;
         }
 
+        $submissionBatch = $this->resolveSubmissionBatch($submissionIngestion, $client, $batch);
+        if (! $submissionBatch) {
+            $this->failBatch($batch, 'Submission batch is missing.');
+            return;
+        }
+
         $records = $this->decodeRecords($batch->records_json);
         if ($records === null) {
             $this->failBatch($batch, 'Batch payload is missing or invalid JSON.');
             return;
         }
 
-        $inserted = 0;
-        $updated = 0;
+        $pending = 0;
         $failed = 0;
         $processed = 0;
         $errors = [];
@@ -79,12 +89,18 @@ class ProcessInstitutionLearnerRecordBatchJob implements ShouldQueue
                     continue;
                 }
 
-                $res = $ingestion->upsertOne($client, $payload);
-                $created = (bool) ($res['created'] ?? false);
-                if ($created) {
-                    $inserted++;
+                $res = $ingestion->stageOne($client, $payload, $submissionBatch, $idx + 1);
+                if ($res['validation_failed']) {
+                    $failed++;
+                    if (count($errors) < self::MAX_ERROR_ROWS_STORED) {
+                        $errors[] = [
+                            'row' => $idx + 1,
+                            'message' => 'Validation failed.',
+                            'errors' => $res['submission']->validation_errors,
+                        ];
+                    }
                 } else {
-                    $updated++;
+                    $pending++;
                 }
             } catch (\Throwable $e) {
                 $failed++;
@@ -94,11 +110,12 @@ class ProcessInstitutionLearnerRecordBatchJob implements ShouldQueue
             }
 
             if ($processed % 50 === 0) {
-                $this->progress($batch->id, $processed, $inserted, $updated, $failed, $errors);
+                $this->progress($batch->id, $processed, $pending, $failed, $errors);
             }
         }
 
-        $this->progress($batch->id, $processed, $inserted, $updated, $failed, $errors);
+        $this->progress($batch->id, $processed, $pending, $failed, $errors);
+        $submissionIngestion->finalizeBatch((int) $submissionBatch->id);
 
         DB::transaction(function () use ($batch) {
             $locked = InstitutionApiBatch::query()->lockForUpdate()->findOrFail($batch->id);
@@ -117,9 +134,23 @@ class ProcessInstitutionLearnerRecordBatchJob implements ShouldQueue
         });
     }
 
-    private function progress(int $batchId, int $processed, int $inserted, int $updated, int $failed, array $errors): void
+    private function resolveSubmissionBatch(
+        LearnerRecordSubmissionIngestionService $submissionIngestion,
+        InstitutionApiClient $client,
+        InstitutionApiBatch $batch,
+    ): ?LearnerRecordSubmissionBatch {
+        if ($this->submissionBatchId) {
+            return LearnerRecordSubmissionBatch::query()->find($this->submissionBatchId);
+        }
+
+        return LearnerRecordSubmissionBatch::query()
+            ->where('institution_api_batch_id', $batch->id)
+            ->first();
+    }
+
+    private function progress(int $batchId, int $processed, int $pending, int $failed, array $errors): void
     {
-        DB::transaction(function () use ($batchId, $processed, $inserted, $updated, $failed, $errors) {
+        DB::transaction(function () use ($batchId, $processed, $pending, $failed, $errors) {
             $locked = InstitutionApiBatch::query()->lockForUpdate()->findOrFail($batchId);
             if ($locked->status?->isTerminal()) {
                 return;
@@ -127,8 +158,8 @@ class ProcessInstitutionLearnerRecordBatchJob implements ShouldQueue
 
             $locked->forceFill([
                 'processed_records' => $processed,
-                'inserted_records' => $inserted,
-                'updated_records' => $updated,
+                'inserted_records' => $pending,
+                'updated_records' => 0,
                 'failed_records' => $failed,
                 'errors' => $errors !== [] ? $errors : null,
             ])->save();
@@ -166,10 +197,10 @@ class ProcessInstitutionLearnerRecordBatchJob implements ShouldQueue
 
         try {
             $decoded = json_decode($json, true, 512, JSON_THROW_ON_ERROR);
+
             return is_array($decoded) ? array_values($decoded) : null;
         } catch (\Throwable) {
             return null;
         }
     }
 }
-

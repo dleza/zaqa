@@ -2,10 +2,14 @@
 
 namespace Tests\Feature;
 
+use App\Domain\LearnerRecords\LearnerRecordSubmissionReviewService;
+use App\Models\AuditLog;
 use App\Models\AwardingInstitution;
 use App\Models\Country;
 use App\Models\InstitutionApiClient;
 use App\Models\LearnerRecord;
+use App\Models\LearnerRecordSubmission;
+use App\Models\User;
 use Database\Seeders\RolesAndPermissionsSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
@@ -44,7 +48,7 @@ class InstitutionApiLearnerRecordsTest extends TestCase
         $this->postJson('/api/institution/v1/learner-records', [])->assertStatus(401);
     }
 
-    public function test_institution_token_can_create_learner_record_scoped_to_institution(): void
+    public function test_institution_token_creates_submission_not_learner_record(): void
     {
         $instA = $this->makeInstitution('Institution A');
         $instB = $this->makeInstitution('Institution B');
@@ -58,7 +62,6 @@ class InstitutionApiLearnerRecordsTest extends TestCase
             'last_name' => 'Banda',
             'program_of_study' => 'BSc Nursing',
             'year_awarded' => 2024,
-            // Should be ignored (institution inferred from token).
             'awarding_institution_id' => (int) $instB->id,
         ];
 
@@ -66,14 +69,20 @@ class InstitutionApiLearnerRecordsTest extends TestCase
             'Authorization' => 'Bearer '.$token,
         ]);
 
-        $res->assertStatus(201)->assertJsonPath('success', true);
+        $res->assertStatus(202)
+            ->assertJsonPath('accepted', true)
+            ->assertJsonPath('status', 'pending')
+            ->assertJsonPath('message', 'Record received and pending ZAQA review.');
 
-        $id = (int) ($res->json('data.learner_record_id') ?? 0);
-        $this->assertGreaterThan(0, $id);
+        $submissionId = (int) ($res->json('submission_id') ?? 0);
+        $this->assertGreaterThan(0, $submissionId);
+        $this->assertSame(0, LearnerRecord::query()->count());
+        $this->assertSame(1, LearnerRecordSubmission::query()->count());
 
-        $record = LearnerRecord::query()->findOrFail($id);
-        $this->assertSame((int) $instA->id, (int) $record->awarding_institution_id);
-        $this->assertSame('STU-100', $record->student_id);
+        $submission = LearnerRecordSubmission::query()->findOrFail($submissionId);
+        $this->assertSame((int) $instA->id, (int) $submission->source_institution_id);
+        $this->assertSame('STU-100', $submission->student_id);
+        $this->assertSame('pending', $submission->status?->value);
     }
 
     public function test_token_without_write_ability_cannot_create_records(): void
@@ -91,6 +100,57 @@ class InstitutionApiLearnerRecordsTest extends TestCase
         ], [
             'Authorization' => 'Bearer '.$token,
         ])->assertStatus(403);
+    }
+
+    public function test_batch_push_creates_submissions_and_returns_pending_message(): void
+    {
+        $inst = $this->makeInstitution('Institution A');
+        $client = $this->makeClient($inst, ['learner-records:batch']);
+        $token = $client->createToken('t', ['learner-records:batch'])->plainTextToken;
+
+        $res = $this->postJson('/api/institution/v1/learner-records/batch', [
+            'records' => [
+                [
+                    'student_id' => 'STU-200',
+                    'first_name' => 'Jane',
+                    'last_name' => 'Doe',
+                    'program_of_study' => 'BSc Nursing',
+                    'year_awarded' => 2024,
+                ],
+                [
+                    'student_id' => 'STU-201',
+                    'first_name' => 'John',
+                    'last_name' => 'Doe',
+                    'program_of_study' => 'BSc Nursing',
+                    'year_awarded' => 2024,
+                ],
+            ],
+        ], [
+            'Authorization' => 'Bearer '.$token,
+        ]);
+
+        $res->assertStatus(200)
+            ->assertJsonPath('accepted', true)
+            ->assertJsonPath('pending_review', 2)
+            ->assertJsonPath('message', 'Records received and pending ZAQA review.');
+
+        $this->assertSame(0, LearnerRecord::query()->count());
+        $this->assertSame(2, LearnerRecordSubmission::query()->where('status', 'pending')->count());
+    }
+
+    public function test_validation_errors_do_not_create_learner_records(): void
+    {
+        $inst = $this->makeInstitution('Institution A');
+        $client = $this->makeClient($inst, ['learner-records:write']);
+        $token = $client->createToken('t', ['learner-records:write'])->plainTextToken;
+
+        $this->postJson('/api/institution/v1/learner-records', [
+            'first_name' => 'Mary',
+        ], [
+            'Authorization' => 'Bearer '.$token,
+        ])->assertStatus(422);
+
+        $this->assertSame(0, LearnerRecord::query()->count());
     }
 
     public function test_search_only_returns_records_for_authenticated_institution(): void

@@ -7,7 +7,7 @@ info:
     This OpenAPI spec is intentionally limited to `/api/institution/v1/*` endpoints and does not expose internal admin/applicant APIs.
     
     **Push vs Pull**
-    - **Push (institution → ZAQA):** Institutions should normally push learner achievement records to ZAQA using the endpoints in this spec.
+    - **Push (institution → ZAQA):** Institutions push learner achievement records using the endpoints in this spec. Records are staged as **pending submissions** and require ZAQA approval before entering the trusted learner records catalog.
     - **Pull (ZAQA → institution):** ZAQA may optionally configure a separate institution-specific pull lookup during auto-verification when internal records are not sufficient.
       That pull lookup endpoint is **not** part of this ZAQA Institution API spec.
 
@@ -114,6 +114,44 @@ components:
         year_awarded: 2024
         award_date: "2024-09-30"
         source_reference: "INSTITUTION-REF-0001"
+    SubmissionResult:
+      type: object
+      required: [submission_id, batch_reference, status]
+      properties:
+        submission_id:
+          type: integer
+          example: 123
+        batch_reference:
+          type: string
+          example: LRB-2026-0001
+        status:
+          type: string
+          example: pending
+    BatchSubmissionResult:
+      type: object
+      required: [batch_reference, received, pending_review]
+      properties:
+        batch_reference:
+          type: string
+          example: LRB-2026-0002
+        submission_batch_id:
+          type: integer
+          example: 42
+        institution_api_batch_id:
+          type: integer
+          example: 10
+        received:
+          type: integer
+          example: 50
+        pending_review:
+          type: integer
+          example: 48
+        failed_validation:
+          type: integer
+          example: 2
+        message:
+          type: string
+          example: Records received and pending ZAQA review.
     LearnerRecordResult:
       type: object
       required: [learner_record_id, created]
@@ -176,9 +214,10 @@ paths:
   /api/institution/v1/learner-records:
     post:
       tags: [Learner Records]
-      summary: Submit one learner record (upsert)
+      summary: Submit one learner record for ZAQA review
       description: >
-        Creates or updates a learner record within ZAQA.
+        Accepts a learner record from the institution and stages it for ZAQA review.
+        Records are not inserted into the trusted learner_records catalog until approved by an authorized ZAQA user.
         The awarding institution is inferred from the bearer token and not accepted from the payload.
       security:
         - BearerAuth: []
@@ -221,17 +260,34 @@ paths:
                   program_of_study: "Bachelor of Science in Nursing"
                   year_awarded: 2024
       responses:
-        "201":
-          description: Created/updated
+        "202":
+          description: Accepted for ZAQA review
           content:
             application/json:
               schema:
-                allOf:
-                  - $ref: '#/components/schemas/SuccessEnvelope'
-                  - type: object
-                    properties:
-                      data:
-                        $ref: '#/components/schemas/LearnerRecordResult'
+                type: object
+                required: [accepted, success, submission_id, batch_reference, status, message]
+                properties:
+                  accepted:
+                    type: boolean
+                    example: true
+                  success:
+                    type: boolean
+                    example: true
+                  submission_id:
+                    type: integer
+                    example: 123
+                  batch_reference:
+                    type: string
+                    example: LRB-2026-0001
+                  status:
+                    type: string
+                    example: pending
+                  message:
+                    type: string
+                    example: Record received and pending ZAQA review.
+                  data:
+                    $ref: '#/components/schemas/SubmissionResult'
         "401":
           description: Unauthorized
           content:
@@ -256,9 +312,10 @@ paths:
   /api/institution/v1/learner-records/batch:
     post:
       tags: [Learner Records, Batches]
-      summary: Submit batch learner records
+      summary: Submit batch learner records for ZAQA review
       description: >
-        Accepts a batch array of learner records. Small batches may process inline; larger batches are queued.
+        Accepts a batch array of learner records and stages them for ZAQA review.
+        Small batches may process inline; larger batches are queued.
       requestBody:
         required: true
         content:
@@ -277,23 +334,50 @@ paths:
           content:
             application/json:
               schema:
-                allOf:
-                  - $ref: '#/components/schemas/SuccessEnvelope'
-                  - type: object
-                    properties:
-                      data:
-                        $ref: '#/components/schemas/BatchStatusResult'
+                type: object
+                properties:
+                  accepted:
+                    type: boolean
+                  success:
+                    type: boolean
+                  batch_reference:
+                    type: string
+                  received:
+                    type: integer
+                  pending_review:
+                    type: integer
+                  failed_validation:
+                    type: integer
+                  message:
+                    type: string
+                  data:
+                    $ref: '#/components/schemas/BatchSubmissionResult'
         "202":
           description: Accepted for asynchronous processing
           content:
             application/json:
               schema:
-                allOf:
-                  - $ref: '#/components/schemas/SuccessEnvelope'
-                  - type: object
+                type: object
+                properties:
+                  accepted:
+                    type: boolean
+                  success:
+                    type: boolean
+                  batch_reference:
+                    type: string
+                  received:
+                    type: integer
+                  message:
+                    type: string
+                  data:
+                    type: object
                     properties:
-                      data:
-                        $ref: '#/components/schemas/BatchCreateResult'
+                      batch_id:
+                        type: integer
+                      batch_reference:
+                        type: string
+                      status:
+                        type: string
         "422":
           description: Validation failed
           content:

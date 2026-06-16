@@ -3,9 +3,11 @@
 namespace App\Providers;
 
 use App\Models\Application;
+use App\Models\LearnerRecordSubmission;
 use App\Models\QualificationDocument;
 use App\Models\User;
 use App\Policies\ApplicationPolicy;
+use App\Policies\LearnerRecordSubmissionPolicy;
 use App\Policies\QualificationDocumentPolicy;
 use App\Policies\UserPolicy;
 use Illuminate\Foundation\Support\Providers\AuthServiceProvider as ServiceProvider;
@@ -21,6 +23,7 @@ class AuthServiceProvider extends ServiceProvider
         Application::class => ApplicationPolicy::class,
         QualificationDocument::class => QualificationDocumentPolicy::class,
         User::class => UserPolicy::class,
+        LearnerRecordSubmission::class => LearnerRecordSubmissionPolicy::class,
     ];
 
     /**

@@ -11,6 +11,7 @@ use App\Models\Country;
 use App\Models\InstitutionIntegration;
 use App\Models\InstitutionPullLookupLog;
 use App\Models\LearnerRecord;
+use App\Models\LearnerRecordSubmission;
 use App\Models\Qualification;
 use App\Models\User;
 use Database\Seeders\RolesAndPermissionsSeeder;
@@ -122,7 +123,11 @@ class InstitutionPullLookupContractTest extends TestCase
         $this->assertSame(95, $result->confidenceHint);
         $this->assertSame('INST-REF-0001', $result->sourceReference);
 
-        $this->assertSame(1, LearnerRecord::query()->count());
+        $this->assertSame(0, LearnerRecord::query()->count());
+        $this->assertSame(1, LearnerRecordSubmission::query()->count());
+        $submission = LearnerRecordSubmission::query()->first();
+        $this->assertSame('STU-001', $submission->student_id);
+        $this->assertSame('pending', $submission->status?->value);
 
         $log = InstitutionPullLookupLog::query()->where('qualification_id', $qualification->id)->latest('id')->first();
         $this->assertNotNull($log);

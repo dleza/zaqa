@@ -50,10 +50,11 @@ class InstitutionPullLookupService
         $this->logLookup($integration, $qualification, $result, $latencyMs);
 
         if ($result->isFound() && is_array($result->learnerRecordPayload)) {
-            $this->ingestion->upsertFromLookup(
+            $this->ingestion->stageFromLookup(
                 awardingInstitutionId: (int) $integration->awarding_institution_id,
                 payload: $result->learnerRecordPayload,
                 sourceReference: $result->sourceReference,
+                sourceIntegrationId: (int) $integration->id,
             );
         }
 

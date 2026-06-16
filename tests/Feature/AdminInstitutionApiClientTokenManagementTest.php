@@ -88,7 +88,7 @@ class AdminInstitutionApiClientTokenManagementTest extends TestCase
             'last_name' => 'Banda',
             'program_of_study' => 'BSc Nursing',
             'year_awarded' => 2024,
-        ], ['Authorization' => 'Bearer '.$token])->assertStatus(201);
+        ], ['Authorization' => 'Bearer '.$token])->assertStatus(202)->assertJsonPath('status', 'pending');
         $this->actingAs($admin);
 
         // Rotate token revokes old.
@@ -122,7 +122,7 @@ class AdminInstitutionApiClientTokenManagementTest extends TestCase
             'last_name' => 'Banda',
             'program_of_study' => 'BSc Nursing',
             'year_awarded' => 2024,
-        ], ['Authorization' => 'Bearer '.$newToken])->assertStatus(201);
+        ], ['Authorization' => 'Bearer '.$newToken])->assertStatus(202)->assertJsonPath('status', 'pending');
     }
 
     public function test_plain_token_is_only_visible_once_after_generation(): void

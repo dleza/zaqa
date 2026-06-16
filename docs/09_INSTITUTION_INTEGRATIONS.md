@@ -9,7 +9,7 @@ ZAQA supports two complementary integration patterns with Awarding Institutions:
 
 ## Push (institution → ZAQA)
 
-Institutions push learner achievement records into ZAQA using the Institution Integration API.
+Institutions push learner achievement records into ZAQA using the Institution Integration API. **Push submissions are staged for ZAQA review** and are not inserted directly into the trusted `learner_records` catalog until an authorized user approves them. Pending submissions are **not** used by auto-verification.
 
 - API base: `/api/institution/v1`
 - Swagger UI: `/docs/institution-api` (public, feature-flag protected)
@@ -36,11 +36,12 @@ Pull lookups can still be used for:
 
 When used (manually or in future workflows), pull lookups:
 
+- Stage found records as pending submissions (they do not write directly to `learner_records`).
 - Run asynchronously when dispatched as queued jobs.
 - Are time-bounded (timeout and retry settings).
 - Are logged in a separate sanitized log stream (`institution_pull_lookup_logs`).
 
-Institutions that want auto-verification to match their learners must populate ZAQA learner achievement records through agreed channels (push API, Excel import, or other approved ingestion).
+Institutions that want auto-verification to match their learners must have records approved into `learner_records` via push API (after ZAQA review), Excel import, or other approved ingestion channels.
 
 ## Configuration model
 
