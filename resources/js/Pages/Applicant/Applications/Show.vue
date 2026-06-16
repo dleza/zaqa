@@ -202,6 +202,31 @@ function docTypeLabel(documentType: string) {
 function money(cents: number, currency: string) {
   return new Intl.NumberFormat(undefined, { style: 'currency', currency: currency || 'ZMW' }).format((cents ?? 0) / 100)
 }
+
+function statusBadgeClass(status: string) {
+  const s = (status ?? '').toString()
+  if (s === 'draft' || s === 'pending_payment') return 'zaqa-badge zaqa-badge-warning'
+  if (s === 'sent_back') return 'zaqa-badge zaqa-badge-warning'
+  if (s === 'submitted' || s === 'resubmitted' || s === 'in_progress') return 'zaqa-badge zaqa-badge-info'
+  if (s === 'approved') return 'zaqa-badge zaqa-badge-success'
+  if (s === 'rejected') return 'zaqa-badge zaqa-badge-danger'
+  return 'zaqa-badge'
+}
+
+function paymentStatusLabel(status: unknown): string {
+  const s = (status ?? '').toString().trim()
+  if (!s) return 'Not paid yet'
+  return s.replaceAll('_', ' ')
+}
+
+function invoiceStatusLabel(status: unknown): string {
+  const s = (status ?? '').toString().trim()
+  if (!s || s === 'issued') return 'Awaiting payment'
+  if (s === 'paid') return 'Paid'
+  if (s === 'draft') return 'Preparing'
+  if (s === 'void') return 'Cancelled'
+  return s.replaceAll('_', ' ')
+}
 </script>
 
 <template>
@@ -244,7 +269,17 @@ function money(cents: number, currency: string) {
                 <h1 class="text-xl font-semibold tracking-tight text-text-primary sm:text-2xl">
                   Application overview
                 </h1>
-                <p class="mt-0.5 max-w-xl text-sm text-text-muted">
+                <div class="mt-2 flex flex-wrap items-center gap-2">
+                  <span
+                    class="zaqa-badge inline-flex items-center gap-1.5 text-xs"
+                    :class="statusBadgeClass(application.current_status)"
+                  >
+                    <CheckCircle2 class="h-3.5 w-3.5 shrink-0 opacity-80" aria-hidden="true" />
+                    {{ application.status_label }}
+                  </span>
+                  <span class="font-mono text-xs text-text-muted">{{ application.application_number }}</span>
+                </div>
+                <p class="mt-2 max-w-xl text-sm text-text-muted">
                   <template v-if="isDraftLike">
                     Your verification application — complete the wizard and proceed to payment. Once payment is confirmed,
                     your application is automatically submitted for verification.
@@ -290,24 +325,34 @@ function money(cents: number, currency: string) {
               "
             />
             <div class="relative flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
-              <div class="min-w-0">
+              <div class="min-w-0 flex-1">
                 <div class="text-[11px] font-semibold uppercase tracking-[0.2em] text-white/70">Application reference</div>
                 <div class="mt-2 font-mono text-2xl font-bold tracking-tight text-white sm:text-3xl">
                   {{ application.application_number }}
                 </div>
-                <div class="mt-3 flex flex-wrap items-center gap-2">
-                  <span
-                    class="inline-flex items-center rounded-full border border-white/20 bg-white/10 px-3 py-1 text-xs font-semibold backdrop-blur-sm"
-                  >
-                    {{ application.status_label }}
-                  </span>
-                  <span v-if="application.service_type" class="text-xs text-white/80">
-                    {{ application.service_type }} · {{ application.is_foreign ? 'Foreign scope' : 'Local (Zambia)' }}
-                  </span>
+                <div v-if="application.service_type" class="mt-3 text-xs text-white/80">
+                  {{ application.service_type }} · {{ application.is_foreign ? 'Foreign scope' : 'Local (Zambia)' }}
                 </div>
               </div>
+              <div
+                class="shrink-0 rounded-2xl border border-white/25 bg-white/15 px-5 py-4 shadow-lg shadow-black/10 backdrop-blur-sm sm:min-w-[220px]"
+              >
+                <div class="text-[10px] font-semibold uppercase tracking-[0.18em] text-white/70">Application status</div>
+                <div class="mt-2 flex items-center gap-2">
+                  <CheckCircle2 class="h-5 w-5 shrink-0 text-white/90" aria-hidden="true" />
+                  <span class="text-lg font-bold leading-tight text-white sm:text-xl">
+                    {{ application.status_label }}
+                  </span>
+                </div>
+                <p v-if="isDraftLike" class="mt-2 text-xs leading-relaxed text-white/75">
+                  Complete the wizard and pay to submit for verification.
+                </p>
+                <p v-else-if="(application.current_status ?? '') === 'sent_back'" class="mt-2 text-xs leading-relaxed text-white/75">
+                  Action required — update the returned qualification(s).
+                </p>
+              </div>
               <dl
-                class="grid shrink-0 grid-cols-1 gap-3 text-sm sm:grid-cols-2 lg:text-right"
+                class="grid shrink-0 grid-cols-1 gap-3 text-sm sm:grid-cols-2 lg:w-full lg:max-w-md lg:grid-cols-2 lg:text-right"
               >
                 <div class="rounded-xl border border-white/15 bg-white/10 px-4 py-3 backdrop-blur-sm">
                   <dt class="text-[10px] font-semibold uppercase tracking-wider text-white/65">Submitted</dt>
@@ -521,8 +566,7 @@ function money(cents: number, currency: string) {
                         </p>
                       <p v-else class="text-sm leading-relaxed text-text-muted">
                         <template v-if="isDraftLike">
-                            This unique reference is generated automatically once your payment is confirmed. Complete the
-                            wizard and proceed to payment to receive a verification reference for this qualification.
+                            This unique reference is generated automatically once your payment is confirmed.
                         </template>
                         <template v-else>
                             A verification reference was not recorded for this row. If you submitted recently, refresh
@@ -801,47 +845,67 @@ function money(cents: number, currency: string) {
                   <p class="text-xs text-text-muted">Invoice and payment confirmation for this application.</p>
                 </div>
               </div>
-              <div class="mt-5 grid grid-cols-1 gap-4 sm:grid-cols-2">
-                <div class="rounded-2xl border border-border/80 bg-surface-muted/50 p-5">
-                  <div class="text-[10px] font-semibold uppercase tracking-wider text-text-muted">Invoice number</div>
-                  <div class="mt-2 font-mono text-sm font-semibold text-text-primary">
-                    {{ application.invoice?.invoice_number ?? '—' }}
+              <div class="mt-5 overflow-hidden rounded-2xl border border-border/80 bg-surface-muted/30">
+                <dl class="divide-y divide-border/60">
+                  <div class="flex flex-col gap-1 px-5 py-4 sm:flex-row sm:items-center sm:justify-between sm:gap-6">
+                    <dt class="text-xs font-semibold uppercase tracking-wider text-text-muted">Invoice number</dt>
+                    <dd class="font-mono text-sm font-semibold text-text-primary">
+                      {{ application.invoice?.invoice_number ?? '—' }}
+                    </dd>
                   </div>
-                </div>
-                <div class="rounded-2xl border border-border/80 bg-surface-muted/50 p-5">
-                  <div class="text-[10px] font-semibold uppercase tracking-wider text-text-muted">Amount</div>
-                  <div class="mt-2 text-lg font-bold text-text-primary">
-                    {{ money(application.invoice?.amount_cents ?? 0, application.invoice?.currency ?? 'ZMW') }}
+                  <div class="flex flex-col gap-1 px-5 py-4 sm:flex-row sm:items-center sm:justify-between sm:gap-6">
+                    <dt class="text-xs font-semibold uppercase tracking-wider text-text-muted">Amount</dt>
+                    <dd class="text-lg font-bold text-text-primary">
+                      {{ money(application.invoice?.amount_cents ?? 0, application.invoice?.currency ?? 'ZMW') }}
+                    </dd>
                   </div>
-                </div>
-                <div class="rounded-2xl border border-border/80 bg-surface-muted/50 p-5">
-                  <div class="text-[10px] font-semibold uppercase tracking-wider text-text-muted">Method</div>
-                  <div class="mt-2 text-sm font-semibold capitalize text-text-primary">
-                    {{ application.payment?.method?.replace(/_/g, ' ') ?? '—' }}
+                  <div class="flex flex-col gap-1 px-5 py-4 sm:flex-row sm:items-center sm:justify-between sm:gap-6">
+                    <dt class="text-xs font-semibold uppercase tracking-wider text-text-muted">Invoice status</dt>
+                    <dd class="text-sm font-semibold capitalize text-text-primary">
+                      {{ invoiceStatusLabel(application.invoice?.status) }}
+                    </dd>
                   </div>
-                </div>
-                <div class="rounded-2xl border border-border/80 bg-surface-muted/50 p-5">
-                  <div class="text-[10px] font-semibold uppercase tracking-wider text-text-muted">Payment status</div>
-                  <div class="mt-2 text-sm font-semibold capitalize text-text-primary">
-                    {{ application.payment?.status?.replace(/_/g, ' ') ?? '—' }}
+                  <div class="flex flex-col gap-1 px-5 py-4 sm:flex-row sm:items-center sm:justify-between sm:gap-6">
+                    <dt class="text-xs font-semibold uppercase tracking-wider text-text-muted">Payment method</dt>
+                    <dd class="text-sm font-semibold capitalize text-text-primary">
+                      {{ application.payment?.method?.replace(/_/g, ' ') ?? '—' }}
+                    </dd>
                   </div>
-                </div>
-              </div>
-              <div v-if="application.invoice?.download_url || application.payment?.receipt_download_url" class="mt-4 flex flex-wrap gap-2">
-                <a
-                  v-if="application.invoice?.download_url"
-                  :href="application.invoice.download_url"
-                  class="zaqa-btn zaqa-btn-secondary inline-flex items-center gap-2 px-4 py-2 text-sm"
+                  <div class="flex flex-col gap-1 px-5 py-4 sm:flex-row sm:items-center sm:justify-between sm:gap-6">
+                    <dt class="text-xs font-semibold uppercase tracking-wider text-text-muted">Payment status</dt>
+                    <dd class="text-sm font-semibold capitalize text-text-primary">
+                      {{ paymentStatusLabel(application.payment?.status) }}
+                    </dd>
+                  </div>
+                  <div
+                    v-if="application.paid_at"
+                    class="flex flex-col gap-1 px-5 py-4 sm:flex-row sm:items-center sm:justify-between sm:gap-6"
+                  >
+                    <dt class="text-xs font-semibold uppercase tracking-wider text-text-muted">Paid on</dt>
+                    <dd class="text-sm font-semibold text-text-primary">
+                      {{ formatDisplayDate(application.paid_at) }}
+                    </dd>
+                  </div>
+                </dl>
+                <div
+                  v-if="application.invoice?.download_url || application.payment?.receipt_download_url"
+                  class="flex flex-wrap gap-2 border-t border-border/60 bg-surface/50 px-5 py-4"
                 >
-                  Download invoice
-                </a>
-                <a
-                  v-if="application.payment?.receipt_download_url"
-                  :href="application.payment.receipt_download_url"
-                  class="zaqa-btn zaqa-btn-secondary inline-flex items-center gap-2 px-4 py-2 text-sm"
-                >
-                  Download receipt
-                </a>
+                  <a
+                    v-if="application.invoice?.download_url"
+                    :href="application.invoice.download_url"
+                    class="zaqa-btn zaqa-btn-secondary inline-flex items-center gap-2 px-4 py-2 text-sm"
+                  >
+                    Download invoice
+                  </a>
+                  <a
+                    v-if="application.payment?.receipt_download_url"
+                    :href="application.payment.receipt_download_url"
+                    class="zaqa-btn zaqa-btn-secondary inline-flex items-center gap-2 px-4 py-2 text-sm"
+                  >
+                    Download receipt
+                  </a>
+                </div>
               </div>
             </section>
 
