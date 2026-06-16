@@ -45,8 +45,6 @@ class AdminUpdateVerificationQualificationRequest extends FormRequest
             'title_of_qualification' => ['required', 'string', 'max:255'],
             'award_date' => ['required', 'date', 'before_or_equal:today'],
             'qualification_type_id' => ['required', 'integer', 'exists:qualification_types,id'],
-            'transcript_reason' => ['nullable', 'string', 'max:2000'],
-            'notes' => ['nullable', 'string', 'max:5000'],
             'correction_note' => ['nullable', 'string', 'max:2000'],
             'subject_results' => ['nullable', 'array'],
             'subject_results.*.certificate_subject_id' => [

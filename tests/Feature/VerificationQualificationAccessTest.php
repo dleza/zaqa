@@ -362,6 +362,8 @@ class VerificationQualificationAccessTest extends TestCase
             'qualification_type_id' => $type->id,
             'is_foreign_qualification' => false,
             'transcript_required' => false,
+            'transcript_reason' => 'Applicant note kept',
+            'notes' => 'Internal verifier note kept',
         ]);
 
         $level2 = User::factory()->activated()->create(['applicant_type' => null]);
@@ -381,8 +383,6 @@ class VerificationQualificationAccessTest extends TestCase
             'title_of_qualification' => 'Diploma',
             'award_date' => now()->subYear()->format('Y-m-d'),
             'qualification_type_id' => $type->id,
-            'transcript_reason' => null,
-            'notes' => null,
             'correction_note' => 'Fixed certificate number.',
             'subject_results' => [],
         ];
@@ -394,11 +394,160 @@ class VerificationQualificationAccessTest extends TestCase
         $qualification->refresh();
         $this->assertSame('Jane D. Corrected', $qualification->qualification_holder_name);
         $this->assertSame('CERT-UPD', $qualification->certificate_number);
+        $this->assertSame('Applicant note kept', $qualification->transcript_reason);
+        $this->assertSame('Internal verifier note kept', $qualification->notes);
 
         $this->assertDatabaseHas('audit_logs', [
             'event_type' => 'verification.qualification_corrected',
             'entity_id' => $qualification->id,
         ]);
+
+        $audit = \App\Models\AuditLog::query()
+            ->where('event_type', 'verification.qualification_corrected')
+            ->where('entity_id', $qualification->id)
+            ->latest('id')
+            ->first();
+        $this->assertNotNull($audit);
+        $metadata = (array) ($audit->metadata ?? []);
+        $fieldChanges = $metadata['field_changes'] ?? [];
+        $this->assertNotEmpty($fieldChanges);
+        $afterState = (array) ($audit->after_state ?? []);
+        $this->assertArrayHasKey('workflow', $afterState);
+    }
+
+    public function test_edit_page_includes_documents_and_admin_can_replace_certificate_with_audit(): void
+    {
+        $this->seed([
+            BillingCategoriesSeeder::class,
+            QualificationTypesSeeder::class,
+            CountriesSeeder::class,
+            AwardingInstitutionsSeeder::class,
+        ]);
+
+        $application = $this->makeSubmittedApplication();
+        $zambia = Country::query()->where('iso_code', 'ZMB')->firstOrFail();
+        $type = QualificationType::query()->where('zqf_level_code', 'L6')->firstOrFail();
+        $inst = AwardingInstitution::query()->where('country_id', $zambia->id)->firstOrFail();
+
+        $qualification = Qualification::query()->create([
+            'application_id' => $application->id,
+            'awarding_institution_id' => $inst->id,
+            'awarding_institution_name' => $inst->name,
+            'qualification_holder_name' => 'Jane Doe',
+            'country_id' => $zambia->id,
+            'nrc_passport_number' => '111111/11/1',
+            'title_of_qualification' => 'Diploma',
+            'award_date' => now()->subYear()->toDateString(),
+            'qualification_type' => $type->zqf_level_code,
+            'qualification_type_id' => $type->id,
+            'is_foreign_qualification' => false,
+            'transcript_required' => false,
+            'verification_state' => VerificationState::UnderLevel1Review,
+        ]);
+
+        $existing = \App\Models\QualificationDocument::query()->create([
+            'application_id' => $application->id,
+            'qualification_id' => $qualification->id,
+            'document_type' => DocumentType::CertificateCopy,
+            'original_name' => 'old-cert.pdf',
+            'stored_name' => 'old-cert.pdf',
+            'disk' => 'local',
+            'path' => 'private/test/old-cert.pdf',
+            'mime_type' => 'application/pdf',
+            'extension' => 'pdf',
+            'size_bytes' => 100,
+            'sha256_hash' => str_repeat('a', 64),
+            'visibility' => 'private',
+            'version_number' => 1,
+            'is_current_version' => true,
+            'uploaded_by_user_id' => $application->applicant_user_id,
+        ]);
+
+        $level2 = User::factory()->activated()->create(['applicant_type' => null]);
+        $level2->givePermissionTo(['verification.level2.review', 'verification.pool.view', 'dashboard.view']);
+
+        $this->actingAs($level2)
+            ->get(route('admin.verification.qualifications.edit', ['qualification' => $qualification->id]))
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page
+                ->has('documents', 1)
+                ->where('documents.0.id', $existing->id)
+                ->has('identity_document')
+                ->has('expected_document_types')
+                ->where('expected_document_types.0', DocumentType::CertificateCopy->value));
+
+        $beforeState = $qualification->verification_state;
+
+        $this->actingAs($level2)
+            ->post(route('admin.verification.qualifications.documents.store', ['qualification' => $qualification->id]), [
+                'document_type' => DocumentType::CertificateCopy->value,
+                'file' => UploadedFile::fake()->create('new-cert.pdf', 100, 'application/pdf'),
+                'correction_note' => 'Clearer scan uploaded.',
+            ])
+            ->assertRedirect(route('admin.verification.qualifications.edit', $qualification));
+
+        $qualification->refresh();
+        $this->assertSame($beforeState, $qualification->verification_state);
+
+        $this->assertDatabaseHas('audit_logs', [
+            'event_type' => 'verification.qualification_document_uploaded',
+            'entity_id' => $qualification->id,
+        ]);
+
+        $this->actingAs($level2)
+            ->delete(route('admin.verification.qualifications.documents.destroy', [
+                'qualification' => $qualification->id,
+                'document' => $existing->id,
+            ]), [
+                'correction_note' => 'Removed duplicate scan.',
+            ])
+            ->assertRedirect(route('admin.verification.qualifications.edit', $qualification));
+
+        $this->assertDatabaseHas('audit_logs', [
+            'event_type' => 'verification.qualification_document_deleted',
+            'entity_id' => $qualification->id,
+        ]);
+    }
+
+    public function test_edit_page_expected_document_types_include_transcript_and_consent_when_required(): void
+    {
+        $this->seed([
+            BillingCategoriesSeeder::class,
+            QualificationTypesSeeder::class,
+            CountriesSeeder::class,
+            AwardingInstitutionsSeeder::class,
+        ]);
+
+        $application = $this->makeSubmittedApplication();
+        $type = QualificationType::query()->where('zqf_level_code', 'L6')->firstOrFail();
+
+        $qualification = Qualification::query()->create([
+            'application_id' => $application->id,
+            'awarding_institution_name' => 'Foreign Uni',
+            'qualification_holder_name' => 'Jane Doe',
+            'country_name_other' => 'United Kingdom',
+            'nrc_passport_number' => '111111/11/1',
+            'title_of_qualification' => 'Degree',
+            'award_date' => now()->subYear()->toDateString(),
+            'qualification_type' => $type->zqf_level_code,
+            'qualification_type_id' => $type->id,
+            'is_foreign_qualification' => true,
+            'transcript_required' => true,
+            'verification_state' => VerificationState::UnderLevel1Review,
+        ]);
+
+        $level2 = User::factory()->activated()->create(['applicant_type' => null]);
+        $level2->givePermissionTo(['verification.level2.review', 'verification.pool.view', 'dashboard.view']);
+
+        $this->actingAs($level2)
+            ->get(route('admin.verification.qualifications.edit', ['qualification' => $qualification->id]))
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page
+                ->where('expected_document_types', [
+                    DocumentType::CertificateCopy->value,
+                    DocumentType::Transcript->value,
+                    DocumentType::ConsentFormSigned->value,
+                ]));
     }
 
     public function test_level1_cannot_open_edit_when_qualification_not_assigned_to_them(): void

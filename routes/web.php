@@ -47,6 +47,7 @@ use App\Http\Controllers\Admin\Verification\AdminVerificationCategoryController;
 use App\Http\Controllers\Admin\Verification\AdminVerificationDocumentController;
 use App\Http\Controllers\Admin\Verification\AdminVerificationPoolController;
 use App\Http\Controllers\Admin\Verification\AdminVerificationQualificationController;
+use App\Http\Controllers\Admin\Verification\AdminVerificationQualificationDocumentController;
 use App\Http\Controllers\Applicant\ApplicantApplicationController;
 use App\Http\Controllers\Applicant\ApplicantApplicationIdentityDocumentController;
 use App\Http\Controllers\Applicant\ApplicantApplicationTrackingController;
@@ -590,6 +591,18 @@ Route::middleware('auth')->group(function () {
             Route::put('/qualifications/{qualification}', [AdminVerificationQualificationController::class, 'update'])
                 ->middleware('can:verification.pool.view')
                 ->name('qualifications.update');
+            Route::post('/qualifications/{qualification}/documents', [AdminVerificationQualificationDocumentController::class, 'store'])
+                ->middleware('can:verification.pool.view')
+                ->name('qualifications.documents.store');
+            Route::delete('/qualifications/{qualification}/documents/{document}', [AdminVerificationQualificationDocumentController::class, 'destroy'])
+                ->middleware('can:verification.pool.view')
+                ->name('qualifications.documents.destroy');
+            Route::get('/qualifications/{qualification}/profile-identity/preview', [AdminVerificationQualificationDocumentController::class, 'previewProfileIdentity'])
+                ->middleware('can:verification.pool.view')
+                ->name('qualifications.profile_identity.preview');
+            Route::get('/qualifications/{qualification}/profile-identity/download', [AdminVerificationQualificationDocumentController::class, 'downloadProfileIdentity'])
+                ->middleware('can:verification.pool.view')
+                ->name('qualifications.profile_identity.download');
             Route::post('/qualifications/{qualification}/assign', [AdminVerificationQualificationController::class, 'assign'])
                 ->middleware('can:verification.assign')
                 ->name('qualifications.assign');

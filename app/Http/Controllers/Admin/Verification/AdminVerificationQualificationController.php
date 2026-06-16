@@ -17,6 +17,7 @@ use App\Domain\Verification\QualificationLevel1ReviewService;
 use App\Domain\Verification\QualificationLevel2ReviewLockService;
 use App\Domain\Verification\QualificationSendBackService;
 use App\Domain\Verification\VerificationQualificationAccess;
+use App\Enums\DocumentType;
 use App\Enums\VerificationState;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Admin\Verification\AdminUpdateVerificationQualificationRequest;
@@ -29,6 +30,7 @@ use App\Http\Requests\Admin\Verification\RevokeQualificationAssignmentRequest;
 use App\Http\Requests\Admin\Verification\SendBackRequest;
 use App\Models\ApplicationComment;
 use App\Models\ApplicationLifecycleEvent;
+use App\Models\AuditLog;
 use App\Models\CertificateSubject;
 use App\Models\Country;
 use App\Models\Qualification;
@@ -375,7 +377,9 @@ class AdminVerificationQualificationController extends Controller
             'country',
             'awardingInstitution',
             'qualificationTypeMaster',
-            'application',
+            'application.applicant.applicantProfile',
+            'application.documents.uploadedBy',
+            'documents.uploadedBy',
         ]);
 
         $countries = Country::query()
@@ -421,8 +425,8 @@ class AdminVerificationQualificationController extends Controller
                 'title_of_qualification' => $qualification->title_of_qualification,
                 'award_date' => $qualification->award_date?->format('Y-m-d'),
                 'qualification_type_id' => $qualification->qualification_type_id,
-                'transcript_reason' => $qualification->transcript_reason,
-                'notes' => $qualification->notes,
+                'is_foreign_qualification' => (bool) $qualification->is_foreign_qualification,
+                'transcript_required' => (bool) $qualification->transcript_required,
                 'subject_results' => $qualification->subjectResults->map(fn ($r) => [
                     'certificate_subject_id' => $r->certificate_subject_id,
                     'grade' => $r->grade,
@@ -441,6 +445,10 @@ class AdminVerificationQualificationController extends Controller
                 'requires_subject_results' => (bool) $t->requires_subject_results,
             ])->values()->all(),
             'certificateSubjects' => $certificateSubjects,
+            'documents' => $this->qualificationEditDocumentsPayload($qualification),
+            'expected_document_types' => $this->qualificationEditExpectedDocumentTypes($qualification),
+            'identity_document' => $this->qualificationEditIdentityPayload($qualification),
+            'correction_history' => $this->qualificationCorrectionHistory($qualification),
         ]);
     }
 
@@ -717,6 +725,171 @@ class AdminVerificationQualificationController extends Controller
         );
 
         return back()->with($result->assigned ? 'success' : 'error', $message);
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function qualificationEditExpectedDocumentTypes(Qualification $qualification): array
+    {
+        $types = [DocumentType::CertificateCopy->value];
+
+        if ($qualification->transcript_required) {
+            $types[] = DocumentType::Transcript->value;
+        }
+
+        if ($qualification->is_foreign_qualification) {
+            $types[] = DocumentType::ConsentFormSigned->value;
+        }
+
+        foreach ($qualification->documents->where('is_current_version', true) as $document) {
+            $type = $document->document_type?->value ?? (string) $document->document_type;
+            if ($type !== '' && ! in_array($type, $types, true)) {
+                $types[] = $type;
+            }
+        }
+
+        return $types;
+    }
+
+    /**
+     * @return list<array<string, mixed>>
+     */
+    private function qualificationEditDocumentsPayload(Qualification $qualification): array
+    {
+        return $qualification->documents
+            ->where('is_current_version', true)
+            ->sortByDesc('id')
+            ->values()
+            ->map(fn ($d) => $this->mapEditDocumentRow($d))
+            ->all();
+    }
+
+    /**
+     * @return array<string, mixed>|null
+     */
+    private function qualificationEditIdentityPayload(Qualification $qualification): ?array
+    {
+        $application = $qualification->application;
+        if (! $application) {
+            return null;
+        }
+
+        $appIdentity = $application->documents
+            ->filter(fn ($d) => in_array($d->document_type, [DocumentType::NrcCopy, DocumentType::PassportCopy], true)
+                && $d->qualification_id === null
+                && $d->is_current_version)
+            ->sortByDesc('id')
+            ->first();
+
+        if ($appIdentity) {
+            return [
+                'source' => 'application',
+                'document_type' => $appIdentity->document_type?->value ?? (string) $appIdentity->document_type,
+                'original_name' => $appIdentity->original_name,
+                'preview_url' => route('admin.verification.documents.preview', ['document' => $appIdentity->id]),
+                'download_url' => route('admin.verification.documents.download', ['document' => $appIdentity->id]),
+                'document_id' => $appIdentity->id,
+                'can_delete' => true,
+                'delete_url' => route('admin.verification.qualifications.documents.destroy', [
+                    'qualification' => $qualification,
+                    'document' => $appIdentity->id,
+                ]),
+            ];
+        }
+
+        $profile = $application->applicant?->applicantProfile;
+        if ($profile?->identity_document_path) {
+            $meta = $application->metadata['verification_subject'] ?? [];
+            $identityType = is_array($meta) ? strtolower((string) ($meta['identity_type'] ?? 'nrc')) : 'nrc';
+
+            return [
+                'source' => 'profile',
+                'document_type' => $identityType === 'passport' ? DocumentType::PassportCopy->value : DocumentType::NrcCopy->value,
+                'original_name' => $profile->identity_document_original_name,
+                'preview_url' => route('admin.verification.qualifications.profile_identity.preview', ['qualification' => $qualification]),
+                'download_url' => route('admin.verification.qualifications.profile_identity.download', ['qualification' => $qualification]),
+                'document_id' => null,
+                'can_delete' => false,
+            ];
+        }
+
+        return null;
+    }
+
+    /**
+     * @return list<array<string, mixed>>
+     */
+    private function qualificationCorrectionHistory(Qualification $qualification): array
+    {
+        return AuditLog::query()
+            ->where('entity_type', Qualification::class)
+            ->where('entity_id', $qualification->id)
+            ->whereIn('event_type', [
+                'verification.qualification_corrected',
+                'verification.qualification_document_uploaded',
+                'verification.qualification_document_deleted',
+            ])
+            ->orderByDesc('created_at')
+            ->limit(30)
+            ->get()
+            ->map(function (AuditLog $log) {
+                $metadata = (array) ($log->metadata ?? []);
+                $fieldChanges = is_array($metadata['field_changes'] ?? null) ? $metadata['field_changes'] : [];
+                $beforeState = (array) ($log->before_state ?? []);
+                $afterState = (array) ($log->after_state ?? []);
+
+                $summary = match ($log->event_type) {
+                    'verification.qualification_document_uploaded' => isset($afterState['document_type'])
+                        ? 'Uploaded '.str_replace('_', ' ', (string) $afterState['document_type'])
+                        : 'Document uploaded',
+                    'verification.qualification_document_deleted' => isset($beforeState['document_type'])
+                        ? 'Removed '.str_replace('_', ' ', (string) $beforeState['document_type'])
+                        : 'Document removed',
+                    default => $fieldChanges === []
+                        ? 'Saved with no field changes'
+                        : count($fieldChanges).' field(s) updated',
+                };
+
+                return [
+                    'id' => $log->id,
+                    'event_type' => $log->event_type,
+                    'at' => optional($log->created_at)?->toIso8601String(),
+                    'actor_name' => $log->actor_name_snapshot,
+                    'note' => $metadata['correction_note'] ?? null,
+                    'summary' => $summary,
+                    'field_changes' => $fieldChanges,
+                    'document_before' => $beforeState['original_name'] ?? ($beforeState['document_type'] ?? null),
+                    'document_after' => $afterState['original_name'] ?? ($afterState['document_type'] ?? null),
+                ];
+            })
+            ->values()
+            ->all();
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function mapEditDocumentRow(\App\Models\QualificationDocument $d): array
+    {
+        return [
+            'id' => $d->id,
+            'document_type' => $d->document_type?->value ?? (string) $d->document_type,
+            'original_name' => $d->original_name,
+            'version_number' => $d->version_number,
+            'is_current_version' => (bool) $d->is_current_version,
+            'qualification_id' => $d->qualification_id,
+            'uploaded_by' => $d->uploadedBy?->name,
+            'created_at' => optional($d->created_at)?->toIso8601String(),
+            'preview_url' => route('admin.verification.documents.preview', ['document' => $d->id]),
+            'download_url' => route('admin.verification.documents.download', ['document' => $d->id]),
+            'can_delete' => ! in_array($d->document_type, [
+                DocumentType::PaymentProof,
+                DocumentType::GeneratedReceipt,
+                DocumentType::GeneratedCertificate,
+                DocumentType::Level1ReviewAttachment,
+            ], true),
+        ];
     }
 
     /**

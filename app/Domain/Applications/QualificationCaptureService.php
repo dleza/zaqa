@@ -5,6 +5,7 @@ namespace App\Domain\Applications;
 use App\Domain\Audit\AuditLogService;
 use App\Domain\Tracking\ApplicationLifecycleService;
 use App\Domain\Verification\QualificationSlaService;
+use App\Domain\Verification\VerificationQualificationCorrectionDiff;
 use App\Enums\LifecycleStage;
 use App\Enums\LifecycleVisibility;
 use App\Enums\VerificationState;
@@ -399,6 +400,14 @@ class QualificationCaptureService
                 ->values()
                 ->all();
 
+            $workflowSnapshot = [
+                'verification_state' => $qualification->verification_state?->value ?? (string) ($qualification->verification_state ?? ''),
+                'assigned_verifier_id' => $qualification->assigned_verifier_id,
+                'verification_reference_number' => $qualification->verification_reference_number,
+                'fee_amount_cents' => $qualification->fee_amount_cents,
+                'fee_currency' => $qualification->fee_currency,
+            ];
+
             $qualificationTypeId = (int) $data['qualification_type_id'];
             $qualificationType = QualificationType::query()->whereKey($qualificationTypeId)->firstOrFail();
 
@@ -475,7 +484,9 @@ class QualificationCaptureService
                 'qualification_type_id' => $qualificationTypeId,
                 'is_foreign_qualification' => $isForeignQualification,
                 'transcript_required' => $transcriptRequired,
-                'transcript_reason' => (($data['transcript_reason'] ?? '') !== '' ? (string) $data['transcript_reason'] : null),
+                'transcript_reason' => array_key_exists('transcript_reason', $data)
+                    ? ((($data['transcript_reason'] ?? '') !== '') ? (string) $data['transcript_reason'] : null)
+                    : $qualification->transcript_reason,
                 'notes' => $notesVal,
             ];
 
@@ -495,6 +506,26 @@ class QualificationCaptureService
                 ->values()
                 ->all();
 
+            $afterWorkflowSnapshot = [
+                'verification_state' => $qualification->verification_state?->value ?? (string) ($qualification->verification_state ?? ''),
+                'assigned_verifier_id' => $qualification->assigned_verifier_id,
+                'verification_reference_number' => $qualification->verification_reference_number,
+                'fee_amount_cents' => $qualification->fee_amount_cents,
+                'fee_currency' => $qualification->fee_currency,
+            ];
+            if ($afterWorkflowSnapshot !== $workflowSnapshot) {
+                throw ValidationException::withMessages([
+                    'qualification' => 'Correction would have altered verification workflow state.',
+                ]);
+            }
+
+            $fieldChanges = VerificationQualificationCorrectionDiff::build(
+                $beforeQualification,
+                $afterQualification,
+                $beforeSubjects,
+                $afterSubjects,
+            );
+
             $correctionNoteRaw = array_key_exists('correction_note', $data) ? trim((string) $data['correction_note']) : '';
             $correctionNote = $correctionNoteRaw !== '' ? $correctionNoteRaw : null;
 
@@ -502,20 +533,26 @@ class QualificationCaptureService
                 eventType: 'verification.qualification_corrected',
                 module: 'Verification',
                 actionName: 'qualification_corrected',
-                message: 'Verifier corrected qualification data submitted for review.',
+                message: $fieldChanges === []
+                    ? 'Verifier saved qualification details with no field changes.'
+                    : 'Verifier corrected qualification data submitted for review.',
                 entityType: Qualification::class,
                 entityId: $qualification->id,
                 beforeState: [
                     'qualification' => $beforeQualification,
                     'subject_results' => $beforeSubjects,
+                    'workflow' => $workflowSnapshot,
                 ],
                 afterState: [
                     'qualification' => $afterQualification,
                     'subject_results' => $afterSubjects,
+                    'workflow' => $afterWorkflowSnapshot,
                 ],
                 metadata: [
                     'application_id' => $application->id,
                     'correction_note' => $correctionNote,
+                    'field_changes' => $fieldChanges,
+                    'source' => 'admin_verification_edit',
                 ],
                 actor: $actor,
             );
