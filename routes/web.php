@@ -10,6 +10,7 @@ use App\Http\Controllers\Admin\AdminProfileController;
 use App\Http\Controllers\Admin\AdminRolesController;
 use App\Http\Controllers\Admin\AdminSlaReportController;
 use App\Http\Controllers\Admin\AdminUsersController;
+use App\Http\Controllers\Admin\Finance\AdminFinanceDashboardController;
 use App\Http\Controllers\Admin\Finance\AdminFinanceInvoicesController;
 use App\Http\Controllers\Admin\Finance\AdminFinancePaymentProofController;
 use App\Http\Controllers\Admin\Finance\AdminFinancePaymentsController;
