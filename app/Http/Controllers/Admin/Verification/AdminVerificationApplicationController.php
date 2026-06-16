@@ -23,6 +23,7 @@ use App\Models\Application;
 use App\Models\ApplicationComment;
 use App\Models\User;
 use Illuminate\Http\RedirectResponse;
+use Illuminate\Validation\ValidationException;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Inertia\Inertia;
@@ -269,6 +270,13 @@ class AdminVerificationApplicationController extends Controller
 
     public function sendBack(SendBackRequest $request, Application $application, SendBackService $sendBack): RedirectResponse
     {
+        $application->loadCount('qualifications');
+        if ((int) $application->qualifications_count > 1) {
+            throw ValidationException::withMessages([
+                'application' => 'Use qualification-level send back so the applicant receives correction instructions for the specific qualification.',
+            ]);
+        }
+
         $sendBack->sendBackToApplicant($application, $request->user(), (string) $request->validated('comment'));
 
         return back()->with('success', 'Sent back to applicant.');

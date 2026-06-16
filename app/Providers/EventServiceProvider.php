@@ -25,13 +25,16 @@ use App\Domain\Verification\Events\ApplicationAssignedToLevel1;
 use App\Domain\Verification\Events\ApplicationLevel1Completed;
 use App\Domain\Verification\Events\ApplicationSentBackToApplicant;
 use App\Domain\Verification\Events\QualificationAssignedToVerifier;
+use App\Domain\Verification\Events\QualificationCorrectionsSubmitted;
 use App\Domain\Verification\Events\QualificationLevel1Completed;
 use App\Domain\Verification\Events\QualificationSentBackToApplicant;
 use App\Domain\Verification\Listeners\CreateQualificationAssignmentPortalNotification;
+use App\Domain\Verification\Listeners\CreateQualificationCorrectionsSubmittedPortalNotification;
 use App\Domain\Verification\Listeners\CreateQualificationLevel1CompletedPortalNotification;
 use App\Domain\Verification\Listeners\CreateQualificationSendBackApplicantPortalNotification;
 use App\Domain\Verification\Listeners\SendAssignmentNotification;
 use App\Domain\Verification\Listeners\SendLevel1CompletedNotification;
+use App\Domain\Verification\Listeners\SendQualificationCorrectionsSubmittedNotification;
 use App\Domain\Verification\Listeners\SendQualificationLevel1CompletedNotification;
 use App\Domain\Verification\Listeners\SendQualificationSendBackNotification;
 use App\Domain\Verification\Listeners\SendSendBackNotification;
@@ -81,6 +84,10 @@ class EventServiceProvider extends ServiceProvider
         QualificationLevel1Completed::class => [
             SendQualificationLevel1CompletedNotification::class,
             CreateQualificationLevel1CompletedPortalNotification::class,
+        ],
+        QualificationCorrectionsSubmitted::class => [
+            SendQualificationCorrectionsSubmittedNotification::class,
+            CreateQualificationCorrectionsSubmittedPortalNotification::class,
         ],
         PaymentProofApproved::class => [
             SendPaymentProofApprovedNotification::class,

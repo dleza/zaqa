@@ -2,6 +2,7 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch, withDefaults } from 'vue'
 import { Link, router, useForm, usePage } from '@inertiajs/vue3'
 import ApplicantLayout from '@/Layouts/ApplicantLayout.vue'
+import QualificationAmendmentBanner from '@/Components/QualificationAmendmentBanner.vue'
 import InputError from '@/Components/InputError.vue'
 import WizardStepper from '@/Components/WizardStepper.vue'
 import WizardShell from '@/Components/WizardShell.vue'
@@ -511,6 +512,12 @@ const applicationLocked = computed(() => {
   return props.application?.can_edit === false
 })
 
+const correctionRequiredMode = computed(() => props.application?.correction_required_mode === true)
+
+const displayStatusLabel = computed(
+  () => props.application?.display_status_label ?? props.application?.status_label ?? 'Application',
+)
+
 const paymentAwaitingFinanceReview = computed(() => (payment.value?.status ?? '') === 'awaiting_finance_review')
 const applicationLockMessage = computed(() =>
   paymentAwaitingFinanceReview.value
@@ -532,7 +539,10 @@ const selectedQualification = computed<any | null>(() => {
 })
 
 function openQualificationWorkspace(mode: 'add' | 'edit', qual?: any) {
-  if (applicationLocked.value && mode === 'add') return
+  if ((applicationLocked.value || correctionRequiredMode.value) && mode === 'add') return
+  if (mode === 'edit' && qual && correctionRequiredMode.value && (qual.verification_state ?? '') !== 'returned_to_applicant') {
+    return
+  }
   if (qual?.id) selectedQualificationId.value = qual.id
   const base = `/applicant/applications/${props.application.id}`
   if (mode === 'add') {
@@ -1310,7 +1320,7 @@ onBeforeUnmount(() => {
           <div>
             <h1 class="text-2xl font-semibold tracking-tight text-text-primary">Application</h1>
             <p class="mt-1 text-sm text-text-muted">
-              {{ application.application_number }} • {{ application.status_label }} — work through Applicant, Qualification, Confirm, then Payment.
+              {{ application.application_number }} • {{ displayStatusLabel }} — work through Applicant, Qualification, Confirm, then Payment.
             </p>
           </div>
 
@@ -1688,7 +1698,7 @@ onBeforeUnmount(() => {
             <button
               type="button"
               class="zaqa-btn zaqa-btn-primary inline-flex h-11 shrink-0 items-center gap-2 px-5 text-sm font-semibold shadow-md shadow-brand/15"
-              :disabled="applicationLocked"
+              :disabled="applicationLocked || correctionRequiredMode"
               @click="openQualificationWorkspace('add')"
             >
               <PlusCircle class="h-4 w-4" aria-hidden="true" />
@@ -1698,22 +1708,17 @@ onBeforeUnmount(() => {
 
           <div
             v-if="qualificationsReturnedForAmendment.length > 0"
-            class="mt-6 rounded-2xl border border-brand/25 bg-brand/[0.06] px-5 py-4 sm:px-6"
+            class="mt-6 space-y-4"
           >
-            <div class="text-sm font-semibold text-text-primary">Submit corrections back to ZAQA</div>
-            <p class="mt-1 text-sm leading-relaxed text-text-muted">
-              Updating details in the workspace only saves your draft. When you are satisfied with this qualification, submit it here so verification staff can continue your case.
-            </p>
-            <ul class="mt-4 space-y-3">
-              <li
-                v-for="q in qualificationsReturnedForAmendment"
-                :key="'ret-' + q.id"
-                class="flex flex-col gap-3 rounded-xl border border-border bg-surface px-4 py-3 sm:flex-row sm:items-center sm:justify-between"
-              >
-                <div class="min-w-0">
-                  <div class="font-medium text-text-primary">{{ q.title_of_qualification || 'Qualification' }}</div>
-                  <p v-if="q.amendment_comment" class="mt-1 whitespace-pre-wrap text-xs text-text-muted">{{ q.amendment_comment }}</p>
-                </div>
+            <div class="rounded-2xl border border-brand/25 bg-brand/[0.06] px-5 py-4 sm:px-6">
+              <div class="text-sm font-semibold text-text-primary">Submit corrections back to ZAQA</div>
+              <p class="mt-1 text-sm leading-relaxed text-text-muted">
+                Updating details in the workspace only saves your draft. When you are satisfied with a qualification, submit it here so verification staff can continue your case.
+              </p>
+            </div>
+            <div v-for="q in qualificationsReturnedForAmendment" :key="'ret-' + q.id" class="space-y-3">
+              <QualificationAmendmentBanner :application-id="application.id" :qualification="q" />
+              <div class="flex justify-end">
                 <button
                   type="button"
                   class="zaqa-btn zaqa-btn-primary shrink-0 px-5"
@@ -1722,8 +1727,8 @@ onBeforeUnmount(() => {
                 >
                   Submit corrections to ZAQA
                 </button>
-              </li>
-            </ul>
+              </div>
+            </div>
             <p v-if="!applicationPaymentSatisfied" class="mt-3 text-sm text-amber-900">
               Pay any additional balance on the
               <button type="button" class="font-semibold underline decoration-brand/40 underline-offset-2 hover:text-brand" @click="goToStep('payment')">

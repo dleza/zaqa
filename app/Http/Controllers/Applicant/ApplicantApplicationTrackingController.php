@@ -6,6 +6,7 @@ use App\Enums\LifecycleVisibility;
 use App\Enums\PaymentStatus;
 use App\Http\Controllers\Controller;
 use App\Models\Application;
+use App\Models\Qualification;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -21,26 +22,39 @@ class ApplicantApplicationTrackingController extends Controller
             'statusHistories',
             'invoice',
             'payments',
+            'qualifications:id,application_id,title_of_qualification',
         ]);
+
+        $qualificationTitles = $application->qualifications
+            ->keyBy('id')
+            ->map(fn (Qualification $q) => (string) ($q->title_of_qualification ?? 'Qualification'));
 
         $events = $application->lifecycleEvents
             ->filter(fn ($e) => in_array($e->visibility, [LifecycleVisibility::Applicant, LifecycleVisibility::Both], true))
             ->sortByDesc('occurred_at')
             ->values()
-            ->map(fn ($e) => [
-                'id' => $e->id,
-                'event_type' => $e->event_type,
-                'event_code' => $e->event_code,
-                'stage' => $e->stage?->value ?? (string) $e->stage,
-                'status_snapshot' => $e->status_snapshot,
-                'title' => $e->title,
-                'description' => $e->description,
-                'comment' => $e->comment,
-                'occurred_at' => optional($e->occurred_at)?->toIso8601String(),
-                'actor_name' => $e->actor_name_snapshot,
-                'visibility' => $e->visibility?->value ?? (string) $e->visibility,
-                'metadata' => (array) ($e->metadata ?? []),
-            ]);
+            ->map(function ($e) use ($qualificationTitles) {
+                $metadata = (array) ($e->metadata ?? []);
+                $qualificationId = isset($metadata['qualification_id']) ? (int) $metadata['qualification_id'] : null;
+                $qualificationTitle = $qualificationId ? ($qualificationTitles->get($qualificationId) ?? null) : null;
+
+                return [
+                    'id' => $e->id,
+                    'event_type' => $e->event_type,
+                    'event_code' => $e->event_code,
+                    'stage' => $e->stage?->value ?? (string) $e->stage,
+                    'status_snapshot' => $e->status_snapshot,
+                    'title' => $e->title,
+                    'description' => $e->description,
+                    'comment' => $e->comment,
+                    'occurred_at' => optional($e->occurred_at)?->toIso8601String(),
+                    'actor_name' => $e->actor_name_snapshot,
+                    'visibility' => $e->visibility?->value ?? (string) $e->visibility,
+                    'metadata' => $metadata,
+                    'qualification_id' => $qualificationId,
+                    'qualification_title' => $qualificationTitle,
+                ];
+            });
 
         $statusHistoryFallback = $application->statusHistories
             ->sortByDesc('changed_at')
@@ -63,6 +77,8 @@ class ApplicantApplicationTrackingController extends Controller
                 'application_number' => $application->application_number,
                 'current_status' => $application->current_status?->value ?? (string) $application->current_status,
                 'status_label' => $application->applicantStatusLabel(),
+                'display_status_label' => $application->applicantDisplayStatusLabel(),
+                'correction_required' => $application->hasQualificationsAwaitingCorrection(),
                 'is_foreign' => (bool) $application->is_foreign,
                 'created_at' => optional($application->created_at)?->toIso8601String(),
                 'submitted_at' => optional($application->submitted_at)?->toIso8601String(),

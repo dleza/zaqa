@@ -166,4 +166,20 @@ class Application extends Model
             ApplicationStatus::Completed => 'Completed',
         };
     }
+
+    public function hasQualificationsAwaitingCorrection(): bool
+    {
+        return $this->qualifications()
+            ->where('verification_state', VerificationState::ReturnedToApplicant->value)
+            ->exists();
+    }
+
+    public function applicantDisplayStatusLabel(): string
+    {
+        if ($this->hasQualificationsAwaitingCorrection()) {
+            return 'Correction required';
+        }
+
+        return $this->applicantStatusLabel();
+    }
 }

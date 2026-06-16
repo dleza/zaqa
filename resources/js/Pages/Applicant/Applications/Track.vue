@@ -59,6 +59,22 @@ function statusBadgeClass(status: string) {
   return 'zaqa-badge'
 }
 
+const displayStatusLabel = computed(
+  () => props.application?.display_status_label ?? props.application?.status_label ?? '—',
+)
+
+const correctionRequired = computed(() => props.application?.correction_required === true)
+
+function eventDisplayTitle(ev: any): string {
+  const code = (ev?.event_code ?? '').toString()
+  const title = (ev?.title ?? '').toString()
+  const qualTitle = (ev?.qualification_title ?? '').toString().trim()
+  if (code.includes('qualification_sent_back') && qualTitle) {
+    return `Correction requested for ${qualTitle}`
+  }
+  return title || 'Update'
+}
+
 function eventIcon(code: string | undefined) {
   const c = (code ?? '').toString()
   if (c.startsWith('draft.')) return FileEdit
@@ -134,7 +150,9 @@ function relativeLabel(iso: string | undefined): string | null {
           <div class="text-xs font-semibold uppercase tracking-wider text-text-muted">Track application</div>
           <div class="mt-1 flex flex-wrap items-center gap-2">
             <h1 class="text-2xl font-semibold tracking-tight text-text-primary">{{ application.application_number }}</h1>
-            <span :class="statusBadgeClass(application.current_status)">{{ application.status_label }}</span>
+            <span :class="correctionRequired ? 'zaqa-badge zaqa-badge-warning' : statusBadgeClass(application.current_status)">
+              {{ displayStatusLabel }}
+            </span>
           </div>
           <div class="mt-1 text-sm text-text-muted">
             {{ application.is_foreign ? 'Foreign' : 'Local' }} • Submitted: {{ application.submitted_at ?? '—' }}
@@ -228,7 +246,7 @@ function relativeLabel(iso: string | undefined): string | null {
                             <component :is="eventIcon(latestActivity.event_code)" class="h-5 w-5" aria-hidden="true" />
                           </div>
                           <div class="min-w-0 flex-1">
-                            <h3 class="text-base font-semibold leading-snug text-text-primary">{{ latestActivity.title }}</h3>
+                            <h3 class="text-base font-semibold leading-snug text-text-primary">{{ eventDisplayTitle(latestActivity) }}</h3>
                             <div class="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-text-muted">
                               <time :datetime="latestActivity.occurred_at ?? undefined" class="font-medium text-text-primary">
                                 {{ formatDateTime(latestActivity.occurred_at) }}
@@ -281,7 +299,7 @@ function relativeLabel(iso: string | undefined): string | null {
                             </div>
                             <div class="min-w-0">
                               <div class="flex flex-wrap items-center gap-2">
-                                <span class="text-sm font-semibold text-text-primary">{{ ev.title }}</span>
+                                <span class="text-sm font-semibold text-text-primary">{{ eventDisplayTitle(ev) }}</span>
                                 <span
                                   v-if="idx === earlierActivities.length - 1"
                                   class="inline-flex rounded-full border border-emerald-500/25 bg-emerald-500/[0.08] px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-emerald-800"

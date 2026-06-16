@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Applicant;
 
+use App\Domain\Applications\ApplicantQualificationAmendmentGuard;
 use App\Domain\Applications\QualificationCaptureService;
 use App\Domain\Payments\ApplicationPaymentSatisfaction;
 use App\Domain\Payments\InvoiceService;
@@ -26,6 +27,7 @@ class ApplicantQualificationController extends Controller
     public function store(UpsertQualificationRequest $request, Application $application, QualificationCaptureService $service, InvoiceService $invoices): RedirectResponse
     {
         $this->authorize('update', $application);
+        ApplicantQualificationAmendmentGuard::assertCanCreateQualification($application);
 
         $payload = array_merge($request->validated(), ['create_new' => true]);
         $qualification = $service->upsertQualification($application, $payload, $request->user());

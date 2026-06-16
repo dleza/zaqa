@@ -4,6 +4,7 @@ namespace App\Domain\Applications;
 
 use App\Domain\Audit\AuditLogService;
 use App\Domain\Tracking\ApplicationLifecycleService;
+use App\Domain\Verification\Events\QualificationCorrectionsSubmitted;
 use App\Domain\Verification\QualificationSlaService;
 use App\Domain\Verification\VerificationQualificationCorrectionDiff;
 use App\Enums\LifecycleStage;
@@ -56,6 +57,12 @@ class QualificationCaptureService
                     ->where('application_id', $application->id)
                     ->orderByDesc('id')
                     ->first();
+            }
+
+            if ($createNew) {
+                ApplicantQualificationAmendmentGuard::assertCanCreateQualification($application);
+            } else {
+                ApplicantQualificationAmendmentGuard::assertQualificationEditable($application, $qualification);
             }
 
             $beforeQualification = $qualification?->toArray();
@@ -261,15 +268,30 @@ class QualificationCaptureService
             return;
         }
 
-        $sendBackBy = $qualification->send_back_by_user_id;
+        $sendBackById = $qualification->send_back_by_user_id ? (int) $qualification->send_back_by_user_id : null;
         $reopenLevel = (string) ($qualification->send_back_reopen_level ?? 'level1');
+        $officer = $sendBackById ? User::query()->find($sendBackById) : null;
+        $officerUnavailableFallback = false;
+        $returnedToOfficer = null;
 
-        if (! $sendBackBy) {
+        if (! $sendBackById) {
             $qualification->forceFill([
                 'verification_state' => VerificationState::AwaitingAssignment,
                 'returned_to_applicant_at' => null,
             ])->save();
+        } elseif (! ApplicantQualificationAmendmentGuard::officerCanReceiveReopenedQualification($officer, $reopenLevel)) {
+            $officerUnavailableFallback = true;
+            $qualification->forceFill([
+                'verification_state' => VerificationState::AwaitingAssignment,
+                'assigned_verifier_id' => null,
+                'assigned_at' => null,
+                'returned_to_applicant_at' => null,
+                'send_back_by_user_id' => null,
+                'send_back_reopen_level' => null,
+                'level2_review_owner_id' => null,
+            ])->save();
         } elseif ($reopenLevel === 'level2') {
+            $returnedToOfficer = $officer;
             $qualification->forceFill([
                 'verification_state' => VerificationState::UnderLevel2Review,
                 'assigned_verifier_id' => null,
@@ -277,12 +299,13 @@ class QualificationCaptureService
                 'returned_to_applicant_at' => null,
                 'send_back_by_user_id' => null,
                 'send_back_reopen_level' => null,
-                'level2_review_owner_id' => (int) $sendBackBy,
+                'level2_review_owner_id' => (int) $sendBackById,
             ])->save();
         } else {
+            $returnedToOfficer = $officer;
             $qualification->forceFill([
                 'verification_state' => VerificationState::UnderLevel1Review,
-                'assigned_verifier_id' => (int) $sendBackBy,
+                'assigned_verifier_id' => (int) $sendBackById,
                 'assigned_at' => now(),
                 'returned_to_applicant_at' => null,
                 'send_back_by_user_id' => null,
@@ -301,15 +324,43 @@ class QualificationCaptureService
             eventCodeBase: 'submission.qualification_amended.q'.$qualification->id,
             stage: LifecycleStage::Review,
             title: 'Qualification amended',
-            description: 'Applicant updated a qualification item after ZAQA feedback.',
+            description: 'Applicant submitted corrections for a qualification item after ZAQA feedback.',
             visibility: LifecycleVisibility::Both,
             actor: $actor,
             comment: null,
             metadata: [
                 'qualification_id' => $qualification->id,
+                'qualification_title' => $qualification->title_of_qualification,
             ],
             occurredAt: now(),
         );
+
+        if ($officerUnavailableFallback) {
+            $this->lifecycle->event(
+                application: $application,
+                eventType: 'review',
+                eventCodeBase: 'review.qualification_reopen_fallback.q'.$qualification->id,
+                stage: LifecycleStage::Review,
+                title: 'Returned to assignment pool',
+                description: 'Original reviewer unavailable; returned to assignment pool.',
+                visibility: LifecycleVisibility::Internal,
+                actor: $actor,
+                comment: null,
+                metadata: [
+                    'qualification_id' => $qualification->id,
+                    'original_send_back_by_user_id' => $sendBackById,
+                ],
+                occurredAt: now(),
+            );
+        }
+
+        event(new QualificationCorrectionsSubmitted(
+            qualification: $qualification->fresh(),
+            application: $application->fresh(),
+            applicant: $actor,
+            returnedToOfficer: $returnedToOfficer,
+            officerUnavailableFallback: $officerUnavailableFallback,
+        ));
     }
 
     /**

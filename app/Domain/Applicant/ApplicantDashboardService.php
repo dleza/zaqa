@@ -130,6 +130,8 @@ class ApplicantDashboardService
                 'application_number' => $a->application_number,
                 'current_status' => $a->current_status?->value ?? (string) $a->current_status,
                 'status_label' => $a->applicantStatusLabel(),
+                'display_status_label' => $a->applicantDisplayStatusLabel(),
+                'correction_required' => $returnedCount > 0,
                 'is_foreign' => (bool) $a->is_foreign,
                 'service_type' => $a->service_type?->value ?? (string) $a->service_type,
                 'updated_at' => optional($a->updated_at)?->toIso8601String(),

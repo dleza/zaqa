@@ -2,6 +2,8 @@
 
 namespace App\Http\Controllers\Applicant;
 
+use App\Domain\Applications\ApplicantQualificationAmendmentComments;
+use App\Domain\Applications\ApplicantQualificationAmendmentGuard;
 use App\Domain\Applications\ApplicationDraftService;
 use App\Domain\Documents\ApplicantDocumentService;
 use App\Domain\Finance\InvoicePdfService;
@@ -21,7 +23,6 @@ use App\Http\Requests\Applicant\CreateApplicationDraftRequest;
 use App\Http\Requests\Applicant\SaveWizardDeclarationsRequest;
 use App\Http\Requests\Applicant\UpdateApplicationDraftRequest;
 use App\Models\Application;
-use App\Models\ApplicationComment;
 use App\Models\AwardingInstitution;
 use App\Models\BillingCategory;
 use App\Models\CertificateSubject;
@@ -66,6 +67,9 @@ class ApplicantApplicationController extends Controller
                 'payments',
                 'consentForm',
             ])
+            ->withCount([
+                'qualifications as returned_qualifications_count' => fn ($q) => $q->where('verification_state', VerificationState::ReturnedToApplicant->value),
+            ])
             ->latest('id')
             ->get()
             ->map(fn (Application $application) => [
@@ -74,6 +78,10 @@ class ApplicantApplicationController extends Controller
                 'application_number' => $application->application_number,
                 'current_status' => $application->current_status?->value ?? (string) $application->current_status,
                 'status_label' => $application->applicantStatusLabel(),
+                'display_status_label' => ((int) ($application->returned_qualifications_count ?? 0)) > 0
+                    ? 'Correction required'
+                    : $application->applicantStatusLabel(),
+                'correction_required' => ((int) ($application->returned_qualifications_count ?? 0)) > 0,
                 'service_type' => $application->service_type?->value ?? (string) $application->service_type,
                 'qualification_category' => $application->qualification_category,
                 'is_foreign' => (bool) $application->is_foreign,
@@ -455,6 +463,16 @@ class ApplicantApplicationController extends Controller
             return redirect()->route('applicant.applications.show', $application);
         }
 
+        try {
+            ApplicantQualificationAmendmentGuard::assertWorkspaceAccessible($application, null, true);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return redirect()->route('applicant.applications.show', $application)
+                ->withErrors($e->errors());
+        } catch (\Illuminate\Auth\Access\AuthorizationException $e) {
+            return redirect()->route('applicant.applications.show', $application)
+                ->withErrors(['application' => $e->getMessage()]);
+        }
+
         return $this->buildQualificationWorkspaceInertiaResponse($request, $application, null);
     }
 
@@ -468,6 +486,16 @@ class ApplicantApplicationController extends Controller
 
         if (! $request->user()->can('update', $application)) {
             return redirect()->route('applicant.applications.show', $application);
+        }
+
+        try {
+            ApplicantQualificationAmendmentGuard::assertWorkspaceAccessible($application, $qualification, false);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return redirect()->route('applicant.applications.show', $application)
+                ->withErrors($e->errors());
+        } catch (\Illuminate\Auth\Access\AuthorizationException $e) {
+            return redirect()->route('applicant.applications.show', $application)
+                ->withErrors(['application' => $e->getMessage()]);
         }
 
         return $this->buildQualificationWorkspaceInertiaResponse($request, $application, (int) $qualification->id);
@@ -733,20 +761,17 @@ class ApplicantApplicationController extends Controller
         $currentDocs = $application->documents
             ->filter(fn ($d) => (bool) $d->is_current_version);
 
-        $sendBackLatest = ApplicationComment::query()
-            ->whereIn('qualification_id', $application->qualifications->pluck('id'))
-            ->where('type', 'send_back')
-            ->where('visibility', 'applicant_visible')
-            ->orderByDesc('id')
-            ->get()
-            ->unique('qualification_id')
-            ->keyBy('qualification_id');
+        $sendBackHistoryByQualification = ApplicantQualificationAmendmentComments::historyGroupedByQualification(
+            $application->qualifications,
+        );
 
         $qualifications = $application->qualifications
             ->sortBy('id')
             ->values()
-            ->map(function ($q) use ($application, $currentDocs, $sendBackLatest) {
+            ->map(function ($q) use ($application, $currentDocs, $sendBackHistoryByQualification) {
                 $qid = (int) $q->id;
+                $commentHistory = $sendBackHistoryByQualification[$qid] ?? [];
+                $latestComment = $commentHistory[0] ?? null;
                 $instIso = strtoupper((string) (($q->awardingInstitution?->country?->iso_code) ?: ($q->country?->iso_code) ?: ''));
                 $institutionIsForeign = $instIso !== '' && ! CountryIso::isZambia($instIso);
                 $institutionHasConsentForm = (bool) ($q->awardingInstitution?->has_consent_form ?? false);
@@ -871,7 +896,11 @@ class ApplicantApplicationController extends Controller
                     'missing_requirements' => $missing,
                     'verification_state' => $q->verification_state?->value ?? (string) ($q->verification_state ?? ''),
                     'returned_to_applicant_at' => optional($q->returned_to_applicant_at)?->toIso8601String(),
-                    'amendment_comment' => $sendBackLatest->get((int) $q->id)?->body,
+                    'send_back_reopen_level' => $q->send_back_reopen_level,
+                    'amendment_comment' => $latestComment['body'] ?? null,
+                    'latest_amendment_comment' => $latestComment,
+                    'amendment_comments_count' => count($commentHistory),
+                    'amendment_comment_history' => $commentHistory,
                     'cveq_certificate' => $cveqCertificate,
                 ];
             })
@@ -901,6 +930,10 @@ class ApplicantApplicationController extends Controller
             'qualification_category' => $application->qualification_category,
             'current_status' => $application->current_status?->value ?? (string) $application->current_status,
             'status_label' => $application->applicantStatusLabel(),
+            'display_status_label' => $application->applicantDisplayStatusLabel(),
+            'correction_required' => $application->hasQualificationsAwaitingCorrection(),
+            'correction_required_count' => ApplicantQualificationAmendmentGuard::returnedQualificationsCount($application),
+            'correction_required_mode' => ApplicantQualificationAmendmentGuard::isRestrictedAmendmentMode($application),
             'is_foreign' => (bool) $application->is_foreign,
             'submitted_at' => optional($application->submitted_at)?->toIso8601String(),
             'service_deadline_at' => optional($application->service_deadline_at)?->toIso8601String(),

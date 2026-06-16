@@ -64,8 +64,15 @@ const isQualificationScopedVerifier = computed(
 const canShowSendBack = computed(() => {
   if (isQualificationScopedVerifier.value) return false
   if (!props.can.send_back) return false
+  if (qualificationsList.value.length > 1) return false
   return !['approved_for_certificate', 'rejected', 'certificate_issued', 'closed'].includes(state.value)
 })
+
+const applicationSendBackBlockedReason = computed(() =>
+  qualificationsList.value.length > 1
+    ? 'Use qualification-level send back so the applicant receives correction instructions for the specific qualification.'
+    : null,
+)
 
 /** Per-item verification tasks on this application (filtered server-side for Level 1). */
 const qualificationsList = computed<any[]>(() => {
@@ -439,6 +446,13 @@ const slaProgressPct = computed(() => {
 
           <div v-if="can.assign" class="rounded-xl border border-border bg-surface-muted p-4 text-xs text-text-muted">
             Level 1 assignment is handled per qualification item. Open a qualification below to assign or reassign.
+          </div>
+
+          <div
+            v-if="applicationSendBackBlockedReason && props.can.send_back && !isQualificationScopedVerifier"
+            class="rounded-xl border border-amber-300/40 bg-amber-50 px-4 py-3 text-xs text-amber-950"
+          >
+            {{ applicationSendBackBlockedReason }}
           </div>
 
           <button

@@ -2,6 +2,7 @@
 import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { Link, router, useForm, usePage } from '@inertiajs/vue3'
 import ApplicantLayout from '@/Layouts/ApplicantLayout.vue'
+import QualificationAmendmentBanner from '@/Components/QualificationAmendmentBanner.vue'
 import InstitutionCombobox from '@/Components/InstitutionCombobox.vue'
 import QualificationTitleCombobox from '@/Components/QualificationTitleCombobox.vue'
 import InputError from '@/Components/InputError.vue'
@@ -54,11 +55,15 @@ const editingQualification = computed<any | null>(() => {
 })
 
 const invoiceSettled = computed(() => props.application?.payment_satisfied === true)
+const correctionRequiredMode = computed(() => props.application?.correction_required_mode === true)
 const anyReturnedForAmendment = computed(() =>
   qualifications.value.some((q: any) => (q.verification_state ?? '') === 'returned_to_applicant'),
 )
 const locked = computed(() => {
-  if (anyReturnedForAmendment.value) return false
+  if (correctionRequiredMode.value || anyReturnedForAmendment.value) {
+    const q = editingQualification.value
+    return !q || (q.verification_state ?? '') !== 'returned_to_applicant'
+  }
   return invoiceSettled.value || !!props.application?.paid_at
 })
 
@@ -682,6 +687,9 @@ const pendingConsentName = computed(() => pendingConsentFile.value?.name ?? '')
         </div>
 
         <div class="min-h-0">
+          <div v-if="editingQualification && (editingQualification.verification_state ?? '') === 'returned_to_applicant'" class="border-b border-amber-300/40 bg-amber-50 px-6 py-4 sm:px-8">
+            <QualificationAmendmentBanner :application-id="application.id" :qualification="editingQualification" compact />
+          </div>
           <div class="space-y-8 px-6 py-6 sm:px-8 sm:py-8">
           <!-- Location -->
           <section class="rounded-2xl border border-border bg-surface-muted/40 p-5 ring-1 ring-black/[0.03]">
@@ -975,7 +983,7 @@ const pendingConsentName = computed(() => pendingConsentFile.value?.name ?? '')
                   Download consent form
                 </a>
                 <p v-else class="text-xs leading-relaxed text-text-muted">
-                  No portal-hosted template for this institution—you can still upload a signed consent you obtained from them.
+                  No template for this institution, you can still upload a signed consent you obtained from them.
                 </p>
               </div>
 

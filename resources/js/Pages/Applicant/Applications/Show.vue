@@ -2,6 +2,7 @@
 import { computed, ref } from 'vue'
 import { Link } from '@inertiajs/vue3'
 import ApplicantLayout from '@/Layouts/ApplicantLayout.vue'
+import QualificationAmendmentBanner from '@/Components/QualificationAmendmentBanner.vue'
 import {
   ArrowLeft,
   Building2,
@@ -53,6 +54,12 @@ const qualificationsList = computed<any[]>(() => {
   const single = props.application?.qualification
   return single ? [single] : []
 })
+
+const correctionRequired = computed(() => props.application?.correction_required === true)
+
+const displayStatusLabel = computed(
+  () => props.application?.display_status_label ?? props.application?.status_label ?? '—',
+)
 
 const qualificationsNeedingAmendment = computed(() =>
   qualificationsList.value.filter((q: any) => (q.verification_state ?? '') === 'returned_to_applicant'),
@@ -339,13 +346,25 @@ function invoiceStatusLabel(status: unknown): string {
               >
                 <div class="text-[10px] font-semibold uppercase tracking-[0.18em] text-white/70">Application status</div>
                 <div class="mt-2 flex items-center gap-2">
-                  <CheckCircle2 class="h-5 w-5 shrink-0 text-white/90" aria-hidden="true" />
-                  <span class="text-lg font-bold leading-tight text-white sm:text-xl">
-                    {{ application.status_label }}
+                  <CheckCircle2
+                    class="h-5 w-5 shrink-0"
+                    :class="correctionRequired ? 'text-amber-200' : 'text-white/90'"
+                    aria-hidden="true"
+                  />
+                  <span
+                    class="text-lg font-bold leading-tight sm:text-xl"
+                    :class="correctionRequired ? 'text-amber-100' : 'text-white'"
+                  >
+                    {{ displayStatusLabel }}
                   </span>
                 </div>
                 <p v-if="isDraftLike" class="mt-2 text-xs leading-relaxed text-white/75">
                   Complete the wizard and pay to submit for verification.
+                </p>
+                <p v-else-if="correctionRequired" class="mt-2 text-xs leading-relaxed text-amber-100/90">
+                  Action required — {{ application.correction_required_count ?? qualificationsNeedingAmendment.length }}
+                  qualification{{ (application.correction_required_count ?? qualificationsNeedingAmendment.length) === 1 ? '' : 's' }}
+                  need{{ (application.correction_required_count ?? qualificationsNeedingAmendment.length) === 1 ? 's' : '' }} correction.
                 </p>
                 <p v-else-if="(application.current_status ?? '') === 'sent_back'" class="mt-2 text-xs leading-relaxed text-white/75">
                   Action required — update the returned qualification(s).
@@ -375,24 +394,7 @@ function invoiceStatusLabel(status: unknown): string {
             :key="'amend-' + q.id"
             class="border-b border-amber-300/40 bg-amber-50 px-5 py-4 sm:px-8"
           >
-            <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-              <div class="min-w-0">
-                <div class="text-sm font-semibold text-amber-950">Qualification update required</div>
-                <div class="mt-0.5 text-sm font-medium text-text-primary">{{ q.title_of_qualification || 'Qualification' }}</div>
-                <p v-if="q.amendment_comment" class="mt-2 whitespace-pre-wrap text-sm leading-relaxed text-amber-950/90">
-                  {{ q.amendment_comment }}
-                </p>
-                <p v-else class="mt-2 text-sm text-amber-950/90">
-                  ZAQA has returned this item for amendment. Use the button to update only this qualification.
-                </p>
-              </div>
-              <Link
-                :href="`/applicant/applications/${application.id}/qualifications/${q.id}/amend`"
-                class="zaqa-btn zaqa-btn-warning h-10 shrink-0 px-4 py-2 text-sm"
-              >
-                Update qualification
-              </Link>
-            </div>
+            <QualificationAmendmentBanner :application-id="application.id" :qualification="q" />
           </div>
 
           <div

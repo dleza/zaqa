@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Applicant;
 
 use App\Domain\Audit\AuditLogService;
+use App\Domain\Applications\ApplicantQualificationAmendmentGuard;
 use App\Domain\Documents\ApplicantDocumentService;
 use App\Enums\DocumentType;
 use App\Http\Controllers\Controller;
@@ -22,6 +23,8 @@ class ApplicantDocumentController extends Controller
         $file = $request->file('file');
         $qualificationId = $request->validated()['qualification_id'] ?? null;
         $qualification = $qualificationId ? Qualification::query()->whereKey((int) $qualificationId)->first() : null;
+
+        ApplicantQualificationAmendmentGuard::assertDocumentEditable($application, $qualification);
 
         $documents->upload($application, $documentType, $file, $request->user(), $qualification);
 
@@ -75,6 +78,11 @@ class ApplicantDocumentController extends Controller
     public function destroy(Request $request, QualificationDocument $document, ApplicantDocumentService $documents)
     {
         $this->authorize('delete', $document);
+
+        $application = $document->application;
+        if ($application) {
+            ApplicantQualificationAmendmentGuard::assertDocumentDeletable($application, $document);
+        }
 
         $documents->delete($document, $request->user());
 

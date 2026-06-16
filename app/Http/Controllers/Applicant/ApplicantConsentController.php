@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Applicant;
 
+use App\Domain\Applications\ApplicantQualificationAmendmentGuard;
 use App\Domain\Audit\AuditLogService;
 use App\Domain\Documents\ApplicantDocumentService;
 use App\Domain\Tracking\ApplicationLifecycleService;
@@ -113,6 +114,8 @@ class ApplicantConsentController extends Controller
                 'qualification_id' => 'Selected qualification does not belong to this application.',
             ]);
         }
+
+        ApplicantQualificationAmendmentGuard::assertQualificationEditable($application, $qualification);
 
         $before = $qualification->consentForm?->toArray();
 
