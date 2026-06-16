@@ -545,37 +545,10 @@ const evidenceRows = computed(() => [
 const documentsCount = computed(() => props.qualification.documents?.length ?? 0)
 const subjectResultsCount = computed(() => props.qualification.subject_results?.length ?? 0)
 
-function initialVerificationState(): string {
-  const s = (props.qualification.verification_state ?? '').toString().trim()
-  return s === '' ? 'awaiting_assignment' : s
-}
-
 const workflowOpen = ref(false)
-
-const assignmentOpen = ref(
-  !!props.qualification.assigned_verifier_id
-    || (
-      props.can.assign === true
-      && ['awaiting_assignment', 'assigned_to_level1', 'under_level1_review'].includes(initialVerificationState())
-    ),
-)
-
-const decisionOpen = ref(
-  (props.qualification?.reviewer_notes ?? '').toString().trim().length > 0
-    || ['approved_for_certificate', 'rejected', 'certificate_issued'].includes(initialVerificationState()),
-)
-
-function initialAutoVerificationOpen(): boolean {
-  const status = (props.qualification.auto_verification?.status ?? '').toString()
-  if (['matched', 'ambiguous', 'possible_match'].includes(status)) return true
-  if (initialVerificationState() === 'auto_verified_pending_level2') return true
-  if (props.qualification.learner_record) return true
-  if (props.qualification.recheck_auto_verification_enabled) return true
-  if (props.qualification.auto_assign_level1_enabled) return true
-  return false
-}
-
-const autoVerificationOpen = ref(initialAutoVerificationOpen())
+const assignmentOpen = ref(false)
+const decisionOpen = ref(false)
+const autoVerificationOpen = ref(false)
 
 const workflowCurrentStageLabel = computed(() => {
   if (workflowActiveStep.value === -1) return 'With applicant for amendment'
@@ -796,7 +769,7 @@ const autoVerificationCollapsedSummary = computed(() => {
                 :title="isAutoVerifiedPendingL2 && lockMissingForActions ? 'Lock for review before taking Level 2 actions.' : ''"
                 @click="sendBackOpen = true"
               >
-                Send back
+                Send back to Applicant
               </button>
 
               <button
