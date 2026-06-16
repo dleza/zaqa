@@ -17,7 +17,6 @@ import {
   FileStack,
   Globe2,
   LayoutList,
-  Link2,
   Pencil,
   Shield,
   RotateCcw,
@@ -25,6 +24,7 @@ import {
   Timer,
   UserMinus,
   UserRound,
+  X,
 } from 'lucide-vue-next'
 
 const props = defineProps<{
@@ -61,7 +61,34 @@ const approveOpen = ref(false)
 const rejectOpen = ref(false)
 const sendBackHistoryOpen = ref(false)
 const copiedRef = ref(false)
-const copiedPageUrl = ref(false)
+const dismissedTitlePrompt = ref(false)
+const dismissedInstitutionPrompt = ref(false)
+
+function catalogPromptDismissalKey(suffix: string) {
+  return `zaqa:qualification:${props.qualification.id}:dismissed:${suffix}`
+}
+
+onMounted(() => {
+  dismissedTitlePrompt.value = localStorage.getItem(catalogPromptDismissalKey('new-title-prompt')) === '1'
+  dismissedInstitutionPrompt.value = localStorage.getItem(catalogPromptDismissalKey('new-institution-prompt')) === '1'
+})
+
+function dismissTitlePrompt() {
+  dismissedTitlePrompt.value = true
+  localStorage.setItem(catalogPromptDismissalKey('new-title-prompt'), '1')
+}
+
+function dismissInstitutionPrompt() {
+  dismissedInstitutionPrompt.value = true
+  localStorage.setItem(catalogPromptDismissalKey('new-institution-prompt'), '1')
+}
+
+const showNewTitlePrompt = computed(
+  () => Boolean(props.qualification.title_catalog?.show_new_title_prompt) && !dismissedTitlePrompt.value,
+)
+const showNewInstitutionPrompt = computed(
+  () => Boolean(props.qualification.institution_catalog?.show_new_institution_prompt) && !dismissedInstitutionPrompt.value,
+)
 
 const assignForm = useForm({ assigned_to_user_id: props.qualification.assigned_verifier_id ?? '', comment: '' })
 const revokeForm = useForm({ comment: '' })
@@ -277,19 +304,6 @@ async function copyVerificationRef() {
     copiedRef.value = true
     window.setTimeout(() => {
       copiedRef.value = false
-    }, 2000)
-  } catch {
-    // ignore
-  }
-}
-
-async function copyPageUrl() {
-  if (typeof navigator?.clipboard?.writeText !== 'function') return
-  try {
-    await navigator.clipboard.writeText(window.location.href)
-    copiedPageUrl.value = true
-    window.setTimeout(() => {
-      copiedPageUrl.value = false
     }, 2000)
   } catch {
     // ignore
@@ -714,14 +728,6 @@ const autoVerificationCollapsedSummary = computed(() => {
                 <LayoutList class="h-4 w-4 shrink-0 opacity-90" aria-hidden="true" />
                 Verification pool
               </Link>
-              <button
-                type="button"
-                class="inline-flex items-center gap-2 rounded-xl border border-white/20 bg-black/25 px-3.5 py-2 text-sm font-medium text-white/95 transition hover:bg-black/35"
-                @click="copyPageUrl"
-              >
-                <Link2 class="h-4 w-4 shrink-0 opacity-90" aria-hidden="true" />
-                {{ copiedPageUrl ? 'Link copied' : 'Copy page link' }}
-              </button>
 
               <button
                 v-if="sendBackTimeline.length > 0"
@@ -729,7 +735,7 @@ const autoVerificationCollapsedSummary = computed(() => {
                 class="inline-flex items-center gap-2 rounded-xl border border-amber-300/40 bg-amber-500/15 px-3.5 py-2 text-sm font-semibold text-white transition hover:bg-amber-500/25"
                 @click="sendBackHistoryOpen = true"
               >
-                Returned to applicant ({{ sendBackTimeline.length }})
+                Return history ({{ sendBackTimeline.length }})
               </button>
 
               <Link
@@ -892,6 +898,52 @@ const autoVerificationCollapsedSummary = computed(() => {
                   <dd class="mt-1 break-words text-sm font-semibold text-text-primary">{{ fact.value }}</dd>
                 </div>
               </dl>
+
+              <div v-if="showNewTitlePrompt || showNewInstitutionPrompt" class="mt-4 space-y-3">
+                <div
+                  v-if="showNewTitlePrompt"
+                  class="relative rounded-xl border border-amber-300/80 bg-amber-50 py-3 pl-4 pr-11 text-sm text-amber-950"
+                  role="status"
+                >
+                  <button
+                    type="button"
+                    class="absolute right-2 top-2 rounded-lg p-1.5 text-amber-900/70 transition hover:bg-amber-100 hover:text-amber-950"
+                    aria-label="Dismiss new qualification title notice"
+                    @click="dismissTitlePrompt"
+                  >
+                    <X class="h-4 w-4" aria-hidden="true" />
+                  </button>
+                  <div class="font-semibold">New qualification title</div>
+                  <p class="mt-1">
+                    The applicant entered a title that is not in the master catalog
+                    <span v-if="qualification.title_catalog?.resolved_title"> (“{{ qualification.title_catalog.resolved_title }}”)</span>.
+                    If you approve and issue the certificate, this title will be added to
+                    <strong>Qualification Titles</strong> for future applicants, and a learner record will be created when missing.
+                  </p>
+                </div>
+
+                <div
+                  v-if="showNewInstitutionPrompt"
+                  class="relative rounded-xl border border-amber-300/80 bg-amber-50 py-3 pl-4 pr-11 text-sm text-amber-950"
+                  role="status"
+                >
+                  <button
+                    type="button"
+                    class="absolute right-2 top-2 rounded-lg p-1.5 text-amber-900/70 transition hover:bg-amber-100 hover:text-amber-950"
+                    aria-label="Dismiss new awarding institution notice"
+                    @click="dismissInstitutionPrompt"
+                  >
+                    <X class="h-4 w-4" aria-hidden="true" />
+                  </button>
+                  <div class="font-semibold">New awarding institution</div>
+                  <p class="mt-1">
+                    The applicant entered an awarding institution that is not in the master catalog
+                    <span v-if="qualification.institution_catalog?.resolved_name"> (“{{ qualification.institution_catalog.resolved_name }}”)</span>.
+                    If you approve and issue the certificate, this institution will be added to
+                    <strong>Awarding Institutions</strong> for future applicants to select.
+                  </p>
+                </div>
+              </div>
 
               <details
                 v-if="qualification.certificate_template?.requires_subjects"
@@ -1191,34 +1243,6 @@ const autoVerificationCollapsedSummary = computed(() => {
             </div>
 
             <div class="mt-4 space-y-3">
-              <div
-                v-if="qualification.title_catalog?.show_new_title_prompt"
-                class="rounded-xl border border-amber-300/80 bg-amber-50 px-4 py-3 text-sm text-amber-950"
-                role="status"
-              >
-                <div class="font-semibold">New qualification title</div>
-                <p class="mt-1">
-                  The applicant entered a title that is not in the master catalog
-                  <span v-if="qualification.title_catalog?.resolved_title"> (“{{ qualification.title_catalog.resolved_title }}”)</span>.
-                  If you approve and issue the certificate, this title will be added to
-                  <strong>Qualification Titles</strong> for future applicants, and a learner record will be created when missing.
-                </p>
-              </div>
-
-              <div
-                v-if="qualification.institution_catalog?.show_new_institution_prompt"
-                class="rounded-xl border border-amber-300/80 bg-amber-50 px-4 py-3 text-sm text-amber-950"
-                role="status"
-              >
-                <div class="font-semibold">New awarding institution</div>
-                <p class="mt-1">
-                  The applicant entered an awarding institution that is not in the master catalog
-                  <span v-if="qualification.institution_catalog?.resolved_name"> (“{{ qualification.institution_catalog.resolved_name }}”)</span>.
-                  If you approve and issue the certificate, this institution will be added to
-                  <strong>Awarding Institutions</strong> for future applicants to select.
-                </p>
-              </div>
-
               <details class="group rounded-xl border border-border/70 bg-surface-muted/25">
                 <summary class="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 [&::-webkit-details-marker]:hidden">
                   <div>

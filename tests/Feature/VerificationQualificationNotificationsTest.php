@@ -117,6 +117,9 @@ class VerificationQualificationNotificationsTest extends TestCase
         $reviews = $this->app->make(QualificationLevel1ReviewService::class);
         $reviews->completeLevel1($qualification, $level1, 'All documents match. Recommend approval.', null);
 
+        $qualification->refresh();
+        $this->assertSame($level2->id, $qualification->level2_review_owner_id);
+
         $this->assertDatabaseHas('notifications', [
             'notifiable_type' => User::class,
             'notifiable_id' => $level2->id,

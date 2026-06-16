@@ -48,16 +48,25 @@ class QualificationLevel1ReviewService
                 ]);
             }
 
+            $assignedBy = QualificationAssignment::query()
+                ->with('assignedBy')
+                ->where('qualification_id', $qualification->id)
+                ->whereNotNull('assigned_by_user_id')
+                ->orderByDesc('assigned_at')
+                ->first();
+
             $before = [
                 'verification_state' => $qualification->verification_state?->value ?? null,
                 'reviewer_notes' => $qualification->reviewer_notes,
                 'reviewed_at' => optional($qualification->reviewed_at)?->toIso8601String(),
+                'level2_review_owner_id' => $qualification->level2_review_owner_id,
             ];
 
             $qualification->forceFill([
                 'verification_state' => VerificationState::UnderLevel2Review,
                 'reviewer_notes' => $findings,
                 'reviewed_at' => now(),
+                'level2_review_owner_id' => $assignedBy?->assigned_by_user_id,
             ])->save();
 
             $attachmentDocumentId = null;
@@ -77,6 +86,7 @@ class QualificationLevel1ReviewService
                 'verification_state' => $qualification->verification_state?->value ?? null,
                 'reviewer_notes' => $qualification->reviewer_notes,
                 'reviewed_at' => optional($qualification->reviewed_at)?->toIso8601String(),
+                'level2_review_owner_id' => $qualification->level2_review_owner_id,
             ];
 
             $this->audit->record(
@@ -96,15 +106,8 @@ class QualificationLevel1ReviewService
                 actor: $actor,
             );
 
-            $assignedBy = QualificationAssignment::query()
-                ->with('assignedBy')
-                ->where('qualification_id', $qualification->id)
-                ->whereNotNull('assigned_by_user_id')
-                ->orderByDesc('assigned_at')
-                ->first()?->assignedBy;
-
-            if ($assignedBy) {
-                event(new QualificationLevel1Completed($qualification, $actor, $assignedBy, $findings));
+            if ($assignedBy?->assignedBy) {
+                event(new QualificationLevel1Completed($qualification, $actor, $assignedBy->assignedBy, $findings));
             }
 
             return $qualification;

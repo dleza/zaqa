@@ -3,6 +3,8 @@
 namespace Tests\Feature;
 
 use App\Domain\Applications\QualificationCaptureService;
+use App\Domain\Verification\AssignmentService;
+use App\Domain\Verification\QualificationLevel1ReviewService;
 use App\Enums\ApplicationStatus;
 use App\Enums\DocumentType;
 use App\Enums\VerificationState;
@@ -759,6 +761,66 @@ class VerificationQualificationAccessTest extends TestCase
                 ->has('qualifications.data', 1)
                 ->where('qualifications.data.0.id', $qOwned->id)
                 ->where('qualifications.data.0.service_deadline_at', $qOwned->service_deadline_at?->toIso8601String()));
+    }
+
+    public function test_level2_assigner_sees_qualification_on_assigned_to_me_after_level1_completes(): void
+    {
+        $application = $this->makeSubmittedApplication();
+        $qualification = Qualification::query()->create([
+            'application_id' => $application->id,
+            'awarding_institution_name' => 'Test',
+            'qualification_holder_name' => 'Jane',
+            'country_name_other' => 'Zambia',
+            'nrc_passport_number' => '555555/55/5',
+            'title_of_qualification' => 'Diploma',
+            'award_date' => now()->subYear()->toDateString(),
+            'qualification_type' => 'L6',
+            'qualification_type_id' => null,
+            'is_foreign_qualification' => false,
+            'transcript_required' => false,
+        ]);
+
+        $level2 = User::factory()->activated()->create(['applicant_type' => null]);
+        $level2->givePermissionTo([
+            'verification.assign',
+            'verification.level2.review',
+            'verification.pool.view',
+            'dashboard.view',
+        ]);
+
+        $level1 = User::factory()->activated()->create(['applicant_type' => null]);
+        $level1->givePermissionTo('verification.level1.process');
+
+        /** @var AssignmentService $assignments */
+        $assignments = $this->app->make(AssignmentService::class);
+        $assignments->assign($qualification, $level2, $level1, 'Please review.');
+
+        /** @var QualificationLevel1ReviewService $reviews */
+        $reviews = $this->app->make(QualificationLevel1ReviewService::class);
+        $reviews->completeLevel1($qualification, $level1, 'All documents match. Recommend approval.', null);
+
+        $qualification->refresh();
+        $this->assertSame(VerificationState::UnderLevel2Review, $qualification->verification_state);
+        $this->assertSame($level2->id, $qualification->level2_review_owner_id);
+
+        $otherLevel2 = User::factory()->activated()->create(['applicant_type' => null]);
+        $otherLevel2->givePermissionTo([
+            'verification.level2.review',
+            'verification.pool.view',
+            'dashboard.view',
+        ]);
+
+        $this->actingAs($otherLevel2)
+            ->get(route('admin.verification.assigned_to_me'))
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page->has('qualifications.data', 0));
+
+        $this->actingAs($level2)
+            ->get(route('admin.verification.assigned_to_me'))
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page
+                ->has('qualifications.data', 1)
+                ->where('qualifications.data.0.id', $qualification->id));
     }
 
     public function test_assigned_to_me_forbidden_without_level1_or_level2_process(): void
