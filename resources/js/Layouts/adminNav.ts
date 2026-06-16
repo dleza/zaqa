@@ -153,6 +153,19 @@ export const adminNavSections: AdminNavSection[] = [
     ],
   },
   {
+    label: 'My reports',
+    requiredAnyPermissions: ['verification.level1.process'],
+    items: [
+      {
+        label: 'My performance',
+        href: '/admin/reports/my-performance',
+        icon: BarChart3,
+        activeStartsWith: '/admin/reports/my-performance',
+        requiredAnyPermissions: ['verification.level1.process'],
+      },
+    ],
+  },
+  {
     label: 'Reports',
     requiredAnyPermissions: ['reports.view', 'sms.logs.view'],
     items: [

@@ -460,6 +460,10 @@ Route::middleware('auth')->group(function () {
             ->middleware('can:admin.applications.view')
             ->name('applications.track.suggest');
 
+        Route::get('/reports/my-performance', [\App\Http\Controllers\Admin\Reports\Level1OfficerReportController::class, 'index'])
+            ->middleware('can:verification.level1.process')
+            ->name('reports.my_performance');
+
         Route::prefix('reports')->name('reports.')->middleware('can:reports.view')->group(function () {
             Route::get('/applications', [ApplicationsReportController::class, 'index'])->name('applications');
             Route::get('/applications/export', [ApplicationsReportController::class, 'export'])->name('applications.export');

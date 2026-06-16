@@ -169,8 +169,140 @@ class AdminDashboardTest extends TestCase
         $chartKeys = collect($props['charts'])->pluck('key')->all();
         $this->assertContains('verification_pool_submissions_week', $chartKeys);
         $this->assertContains('verification_l1_completed_week', $chartKeys);
+        $this->assertContains('verification_l1_assigned_by_state', $chartKeys);
+        $this->assertNotContains('applications_submitted_week', $chartKeys);
+        $this->assertNotContains('applications_by_status', $chartKeys);
         $this->assertNotContains('finance_revenue_week', $chartKeys);
         $this->assertNotContains('audit_events_week', $chartKeys);
+
+        $kpiKeys = collect($props['kpis'])->pluck('key')->all();
+        $this->assertContains('l1_total_assigned_30d', $kpiKeys);
+        $this->assertContains('l1_total_processed_30d', $kpiKeys);
+        $this->assertNotContains('applications_total', $kpiKeys);
+        $this->assertNotContains('applications_submitted_today', $kpiKeys);
+        $this->assertNotContains('verification_overdue', $kpiKeys);
+        $this->assertNotContains('l1_total_assigned_ever', $kpiKeys);
+        $this->assertSame('level1_assigned', $props['meta']['dashboard_scope']);
+    }
+
+    public function test_level_one_dashboard_counts_only_qualifications_assigned_to_officer(): void
+    {
+        Carbon::setTestNow(Carbon::parse('2026-06-16 10:00:00', config('app.timezone')));
+        $today = now()->toDateString();
+
+        $l1 = User::factory()->activated()->create(['applicant_type' => null]);
+        $l1->assignRole('Verification Officer Level 1');
+        $otherL1 = User::factory()->activated()->create(['applicant_type' => null]);
+        $otherL1->assignRole('Verification Officer Level 1');
+        $applicant = User::factory()->activated()->create(['applicant_type' => 'individual']);
+
+        $appToday = Application::query()->create([
+            'uuid' => (string) Str::uuid(),
+            'application_number' => 'ZAQA-L1-TODAY',
+            'applicant_user_id' => $applicant->id,
+            'applicant_type' => 'individual',
+            'service_type' => 'verification',
+            'qualification_category' => 'diploma',
+            'current_status' => ApplicationStatus::Submitted,
+            'verification_state' => VerificationState::AssignedToLevel1,
+            'is_foreign' => false,
+            'metadata' => [],
+            'submitted_at' => now(),
+            'service_deadline_at' => now()->addDays(10),
+        ]);
+
+        $qualToday = \App\Models\Qualification::query()->create([
+            'application_id' => $appToday->id,
+            'verification_reference_number' => 'ZAQA-Q-L1-TODAY',
+            'assigned_verifier_id' => $l1->id,
+            'awarding_institution_name' => 'Test Institution',
+            'qualification_holder_name' => 'Jane Holder',
+            'country_name_other' => 'Zambia',
+            'nrc_passport_number' => '111111/11/1',
+            'title_of_qualification' => 'Diploma in Testing',
+            'award_date' => now()->subYear()->toDateString(),
+            'qualification_type' => 'L6',
+            'verification_state' => VerificationState::AssignedToLevel1,
+            'is_foreign_qualification' => false,
+            'transcript_required' => false,
+        ]);
+
+        \App\Models\QualificationAssignment::query()->create([
+            'qualification_id' => $qualToday->id,
+            'assigned_by_user_id' => $otherL1->id,
+            'assigned_to_user_id' => $l1->id,
+            'assigned_at' => now()->subDay(),
+        ]);
+
+        $appOther = Application::query()->create([
+            'uuid' => (string) Str::uuid(),
+            'application_number' => 'ZAQA-L1-OTHER',
+            'applicant_user_id' => $applicant->id,
+            'applicant_type' => 'individual',
+            'service_type' => 'verification',
+            'qualification_category' => 'diploma',
+            'current_status' => ApplicationStatus::Submitted,
+            'verification_state' => VerificationState::AssignedToLevel1,
+            'is_foreign' => false,
+            'metadata' => [],
+            'submitted_at' => now(),
+            'service_deadline_at' => now()->addDays(10),
+        ]);
+
+        \App\Models\Qualification::query()->create([
+            'application_id' => $appOther->id,
+            'verification_reference_number' => 'ZAQA-Q-L1-OTHER',
+            'assigned_verifier_id' => $otherL1->id,
+            'awarding_institution_name' => 'Other Institution',
+            'qualification_holder_name' => 'John Holder',
+            'country_name_other' => 'Zambia',
+            'nrc_passport_number' => '222222/22/2',
+            'title_of_qualification' => 'Other Diploma',
+            'award_date' => now()->subYear()->toDateString(),
+            'qualification_type' => 'L6',
+            'verification_state' => VerificationState::AssignedToLevel1,
+            'is_foreign_qualification' => false,
+            'transcript_required' => false,
+        ]);
+
+        $props = $this->inertiaProps($this->actingAs($l1)->get('/admin/dashboard'));
+
+        $totalAssigned = collect($props['kpis'])->firstWhere('key', 'l1_total_assigned_30d');
+        $this->assertNotNull($totalAssigned);
+        $this->assertSame(1, (int) $totalAssigned['value']);
+        $this->assertSame('/admin/reports/my-performance?range=last30', $totalAssigned['href']);
+
+        $submittedToday = collect($props['kpis'])->firstWhere('key', 'l1_assigned_submitted_today');
+        $this->assertNotNull($submittedToday);
+        $this->assertSame(1, (int) $submittedToday['value']);
+        $this->assertStringContainsString($today, (string) $submittedToday['href']);
+
+        $recent = collect($props['queues'])->firstWhere('key', 'recent_submissions');
+        $this->assertNotNull($recent);
+        $this->assertCount(1, $recent['items']);
+        $this->assertSame('/admin/verification/qualifications/'.$qualToday->id, $recent['items'][0]['href']);
+    }
+
+    public function test_level_one_officer_can_open_my_performance_report(): void
+    {
+        Carbon::setTestNow(Carbon::parse('2026-06-16 10:00:00', config('app.timezone')));
+
+        $l1 = User::factory()->activated()->create(['applicant_type' => null, 'name' => 'Demo L1']);
+        $l1->assignRole('Verification Officer Level 1');
+
+        $this->actingAs($l1)
+            ->get('/admin/reports/my-performance?range=last30')
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page
+                ->component('Admin/Reports/Level1Performance')
+                ->where('dashboard.summary.assigned', 0)
+                ->where('dashboard.summary.processed', 0)
+            );
+
+        $l2 = User::factory()->activated()->create(['applicant_type' => null]);
+        $l2->assignRole('Verification Officer Level 2');
+
+        $this->actingAs($l2)->get('/admin/reports/my-performance')->assertForbidden();
     }
 
     public function test_auditor_receives_audit_data_not_finance_or_applications_kpis(): void

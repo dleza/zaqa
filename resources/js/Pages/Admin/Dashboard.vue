@@ -48,6 +48,7 @@ const props = defineProps<{
     primary_role: string
     current_date_formatted: string
     timezone: string
+    dashboard_scope?: 'level1_assigned' | 'default'
   }
   kpis: Array<{
     key: string
@@ -173,7 +174,14 @@ function quickIcon(name: string) {
         </div>
         <div class="flex shrink-0 flex-wrap gap-2">
           <Link
-            v-if="quick_actions.some((a) => a.href === '/admin/verification/pool')"
+            v-if="meta.dashboard_scope === 'level1_assigned'"
+            href="/admin/verification/assigned-to-me"
+            class="rounded-xl border border-white/30 bg-[#F18230] px-4 py-2.5 text-sm font-semibold text-white shadow-md transition hover:bg-[#e07828]"
+          >
+            Assigned to me
+          </Link>
+          <Link
+            v-else-if="quick_actions.some((a) => a.href === '/admin/verification/pool')"
             href="/admin/verification/pool"
             class="rounded-xl border border-white/30 bg-[#F18230] px-4 py-2.5 text-sm font-semibold text-white shadow-md transition hover:bg-[#e07828]"
           >

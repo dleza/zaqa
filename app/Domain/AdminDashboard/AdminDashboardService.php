@@ -2,6 +2,7 @@
 
 namespace App\Domain\AdminDashboard;
 
+use App\Domain\Reports\Level1OfficerReportService;
 use App\Domain\Verification\VerificationQualificationAccess;
 use App\Enums\ApplicationStatus;
 use App\Enums\DocumentType;
@@ -14,6 +15,7 @@ use App\Models\AuditLog;
 use App\Models\Invoice;
 use App\Models\Payment;
 use App\Models\Qualification;
+use App\Models\QualificationAssignment;
 use App\Models\QualificationDocument;
 use App\Models\SmsBalanceAccount;
 use App\Models\SmsLog;
@@ -103,21 +105,59 @@ class AdminDashboardService
 
         // ——— System / applications (broad) ———
         if ($user->can('admin.applications.view')) {
-            $kpis[] = [
-                'key' => 'applications_total',
-                'label' => 'Total applications',
-                'value' => Application::query()->count(),
-                'icon' => 'files',
-                'hint' => 'All time',
-            ];
+            if ($this->isLevel1ScopedDashboard($user)) {
+                $reportService = app(Level1OfficerReportService::class);
+                $from30 = $now->copy()->subDays(30)->startOfDay();
+                $toNow = $now->copy()->endOfDay();
 
-            $kpis[] = [
-                'key' => 'applications_submitted_today',
-                'label' => 'Submitted today',
-                'value' => Application::query()->whereDate('submitted_at', $today)->count(),
-                'icon' => 'inbox',
-                'hint' => $now->timezoneName,
-            ];
+                $kpis[] = [
+                    'key' => 'l1_total_assigned_30d',
+                    'label' => 'Assigned to me (30 days)',
+                    'value' => $reportService->countAssigned($user, $from30, $toNow),
+                    'icon' => 'user-check',
+                    'hint' => 'Last 30 days',
+                    'href' => '/admin/reports/my-performance?range=last30',
+                ];
+
+                $kpis[] = [
+                    'key' => 'l1_total_processed_30d',
+                    'label' => 'Processed (30 days)',
+                    'value' => $reportService->countProcessed($user, $from30, $toNow),
+                    'icon' => 'check-circle',
+                    'hint' => 'Level 1 reviews completed',
+                    'href' => '/admin/reports/my-performance?range=last30',
+                ];
+
+                $everAssigned = $this->qualificationsEverAssignedToQuery($user);
+
+                $kpis[] = [
+                    'key' => 'l1_assigned_submitted_today',
+                    'label' => 'Submitted today',
+                    'value' => (clone $everAssigned)
+                        ->whereHas('application', fn ($q) => $q->whereDate('submitted_at', $today))
+                        ->distinct()
+                        ->count('qualifications.id'),
+                    'icon' => 'inbox',
+                    'hint' => $now->timezoneName,
+                    'href' => '/admin/verification/assigned-to-me?submitted_from='.$today.'&submitted_to='.$today,
+                ];
+            } else {
+                $kpis[] = [
+                    'key' => 'applications_total',
+                    'label' => 'Total applications',
+                    'value' => Application::query()->count(),
+                    'icon' => 'files',
+                    'hint' => 'All time',
+                ];
+
+                $kpis[] = [
+                    'key' => 'applications_submitted_today',
+                    'label' => 'Submitted today',
+                    'value' => Application::query()->whereDate('submitted_at', $today)->count(),
+                    'icon' => 'inbox',
+                    'hint' => $now->timezoneName,
+                ];
+            }
         }
 
         if ($user->can('verification.pool.view')) {
@@ -136,36 +176,27 @@ class AdminDashboardService
 
             $kpis[] = [
                 'key' => 'pending_verification',
-                'label' => 'Pending verification',
+                'label' => $this->isLevel1ScopedDashboard($user) ? 'Active assigned tasks' : 'Pending verification',
                 'value' => $pendingVerification,
                 'icon' => 'shield',
-                'hint' => 'In verification pool',
-                'href' => '/admin/verification/pool',
+                'hint' => $this->isLevel1ScopedDashboard($user) ? 'Qualifications currently assigned to you' : 'In verification pool',
+                'href' => $this->isLevel1ScopedDashboard($user) ? '/admin/verification/assigned-to-me' : '/admin/verification/pool',
             ];
 
-            if (VerificationQualificationAccess::mustRestrictToAssignedQualifications($user)) {
-                $overduePool = Qualification::query()
-                    ->where('assigned_verifier_id', $user->id)
-                    ->whereHas('application', function ($q) use ($now) {
-                        $q->whereIn('current_status', $this->poolStatuses())
-                            ->whereNotNull('service_deadline_at')
-                            ->where('service_deadline_at', '<', $now);
-                    })
-                    ->count();
-            } else {
+            if (! $this->isLevel1ScopedDashboard($user)) {
                 $overduePool = $this->poolQuery()
                     ->whereNotNull('service_deadline_at')
                     ->where('service_deadline_at', '<', $now)
                     ->count();
-            }
 
-            $kpis[] = [
-                'key' => 'verification_overdue',
-                'label' => 'Overdue (pool)',
-                'value' => $overduePool,
-                'icon' => 'timer',
-                'hint' => 'Past service deadline',
-            ];
+                $kpis[] = [
+                    'key' => 'verification_overdue',
+                    'label' => 'Overdue (pool)',
+                    'value' => $overduePool,
+                    'icon' => 'timer',
+                    'hint' => 'Past service deadline',
+                ];
+            }
 
             $awaiting = Application::query()
                 ->whereIn('current_status', $this->poolStatuses())
@@ -184,12 +215,16 @@ class AdminDashboardService
 
             $queues[] = [
                 'key' => 'recent_submissions',
-                'title' => VerificationQualificationAccess::mustRestrictToAssignedQualifications($user)
-                    ? 'Applications with your assigned qualifications'
-                    : 'Recent submissions',
-                'items' => VerificationQualificationAccess::mustRestrictToAssignedQualifications($user)
-                    ? $this->recentAssignedQualificationApplicationsQueue($user, 8)
-                    : $this->recentApplicationsQueue(8),
+                'title' => $this->isLevel1ScopedDashboard($user)
+                    ? 'Your recent assigned qualifications'
+                    : (VerificationQualificationAccess::mustRestrictToAssignedQualifications($user)
+                        ? 'Applications with your assigned qualifications'
+                        : 'Recent submissions'),
+                'items' => $this->isLevel1ScopedDashboard($user)
+                    ? $this->recentAssignedQualificationsQueue($user, 8)
+                    : (VerificationQualificationAccess::mustRestrictToAssignedQualifications($user)
+                        ? $this->recentAssignedQualificationApplicationsQueue($user, 8)
+                        : $this->recentApplicationsQueue(8)),
             ];
         }
 
@@ -354,12 +389,13 @@ class AdminDashboardService
                 'label' => 'Sent-back (assigned)',
                 'value' => $sentBackMine,
                 'icon' => 'undo',
+                'href' => '/admin/verification/awaiting-applicant-resubmission',
             ];
 
-            $completedToday = AuditLog::query()
-                ->where('actor_user_id', $user->id)
-                ->where('action_name', 'level1_completed')
-                ->whereDate('created_at', $today)
+            $completedToday = Qualification::query()
+                ->where('assigned_verifier_id', $user->id)
+                ->whereNotNull('reviewed_at')
+                ->whereDate('reviewed_at', $today)
                 ->count();
 
             $kpis[] = [
@@ -367,12 +403,15 @@ class AdminDashboardService
                 'label' => 'Reviews completed today',
                 'value' => $completedToday,
                 'icon' => 'check-circle',
+                'href' => '/admin/verification/assigned-to-me',
             ];
 
             $queues[] = [
                 'key' => 'l1_recent_assigned',
                 'title' => 'Recently assigned to you',
-                'items' => $this->assignedToUserQueue($user, 6),
+                'items' => $this->isLevel1ScopedDashboard($user)
+                    ? $this->assignedToUserQualificationsQueue($user, 6)
+                    : $this->assignedToUserQueue($user, 6),
             ];
         }
 
@@ -448,7 +487,7 @@ class AdminDashboardService
         // ——— Charts (permission gated) ———
         $w = $this->weekWindow();
 
-        if ($user->can('admin.applications.view')) {
+        if ($user->can('admin.applications.view') && ! $this->isLevel1ScopedDashboard($user)) {
             $series = [];
             foreach ($w['dates'] as $date) {
                 $series[] = Application::query()->whereDate('submitted_at', $date)->count();
@@ -535,10 +574,31 @@ class AdminDashboardService
             ];
         }
 
+        if ($this->isLevel1ScopedDashboard($user)) {
+            $stateRows = $this->qualificationsEverAssignedToQuery($user)
+                ->selectRaw('verification_state as s, COUNT(*) as c')
+                ->groupBy('verification_state')
+                ->pluck('c', 's')
+                ->all();
+
+            $charts[] = [
+                'key' => 'verification_l1_assigned_by_state',
+                'title' => 'Your assigned qualifications by status',
+                'type' => 'doughnut',
+                'labels' => array_map(fn ($k) => str_replace('_', ' ', (string) $k), array_keys($stateRows)),
+                'values' => array_values($stateRows),
+            ];
+        }
+
         if ($user->can('verification.pool.view')) {
             $poolSeries = [];
             foreach ($w['dates'] as $date) {
-                if (VerificationQualificationAccess::mustRestrictToAssignedQualifications($user)) {
+                if ($this->isLevel1ScopedDashboard($user)) {
+                    $poolSeries[] = $this->qualificationsEverAssignedToQuery($user)
+                        ->whereHas('application', fn ($q) => $q->whereDate('submitted_at', $date))
+                        ->distinct()
+                        ->count('qualifications.id');
+                } elseif (VerificationQualificationAccess::mustRestrictToAssignedQualifications($user)) {
                     $poolSeries[] = Qualification::query()
                         ->where('assigned_verifier_id', $user->id)
                         ->whereHas('application', fn ($q) => $q->whereDate('submitted_at', $date)->whereIn('current_status', $this->poolStatuses()))
@@ -549,9 +609,11 @@ class AdminDashboardService
             }
             $charts[] = [
                 'key' => 'verification_pool_submissions_week',
-                'title' => VerificationQualificationAccess::mustRestrictToAssignedQualifications($user)
-                    ? 'Your pool qualifications by submission day (week)'
-                    : 'Pool applications by submission day (week)',
+                'title' => $this->isLevel1ScopedDashboard($user)
+                    ? 'Your assigned qualifications by submission day (week)'
+                    : (VerificationQualificationAccess::mustRestrictToAssignedQualifications($user)
+                        ? 'Your pool qualifications by submission day (week)'
+                        : 'Pool applications by submission day (week)'),
                 'type' => 'line',
                 'labels' => $w['labels'],
                 'values' => $poolSeries,
@@ -632,6 +694,7 @@ class AdminDashboardService
                 'primary_role' => (string) $primaryRole,
                 'current_date_formatted' => $now->translatedFormat('l, j F Y'),
                 'timezone' => (string) config('app.timezone'),
+                'dashboard_scope' => $this->isLevel1ScopedDashboard($user) ? 'level1_assigned' : 'default',
             ],
             'kpis' => array_values($kpis),
             'charts' => array_values($charts),
@@ -644,6 +707,9 @@ class AdminDashboardService
 
     private function resolveSubtitle(User $user): string
     {
+        if ($this->isLevel1ScopedDashboard($user)) {
+            return 'Here are your assigned qualification tasks and what needs your attention today.';
+        }
         if ($user->can('verification.pool.view') || $user->can('verification.level1.process')) {
             return 'Here is what needs your attention today.';
         }
@@ -669,10 +735,15 @@ class AdminDashboardService
             $actions[] = ['label' => $label, 'href' => $href, 'icon' => $icon, 'permission' => $permission];
         };
 
-        $push('Applications pool', '/admin/verification/pool', 'layers', 'verification.pool.view');
-        $push('Assigned to me', '/admin/verification/assigned-to-me', 'user-check', 'verification.level1.process');
-        $push('Application outcomes', '/admin/applications', 'clipboard', 'admin.applications.view');
-        $push('Track application', '/admin/applications/track', 'search', 'admin.applications.view');
+        if ($this->isLevel1ScopedDashboard($user)) {
+            $push('Assigned to me', '/admin/verification/assigned-to-me', 'user-check', 'verification.level1.process');
+            $push('My performance', '/admin/reports/my-performance', 'activity', 'verification.level1.process');
+        } else {
+            $push('Applications pool', '/admin/verification/pool', 'layers', 'verification.pool.view');
+            $push('Assigned to me', '/admin/verification/assigned-to-me', 'user-check', 'verification.level1.process');
+            $push('Application outcomes', '/admin/applications', 'clipboard', 'admin.applications.view');
+            $push('Track application', '/admin/applications/track', 'search', 'admin.applications.view');
+        }
         $push('Finance dashboard', '/admin/finance', 'banknote', 'finance.dashboard.view');
         $push('Payment proofs', '/admin/finance/payment-proofs', 'banknote', 'finance.payment_proofs.view');
         $push('Processed payments', '/admin/finance/payments', 'banknote', 'finance.payments.view');
@@ -760,6 +831,78 @@ class AdminDashboardService
                 'href' => '/admin/settings/sms/balance',
             ];
         }
+    }
+
+    private function isLevel1ScopedDashboard(User $user): bool
+    {
+        return VerificationQualificationAccess::mustRestrictToAssignedQualifications($user);
+    }
+
+    /**
+     * Qualifications this Level 1 officer has ever been assigned (current or historical).
+     *
+     * @return Builder<Qualification>
+     */
+    private function qualificationsEverAssignedToQuery(User $user): Builder
+    {
+        $assignmentQualificationIds = QualificationAssignment::query()
+            ->where('assigned_to_user_id', $user->id)
+            ->select('qualification_id');
+
+        return Qualification::query()->where(function (Builder $q) use ($user, $assignmentQualificationIds) {
+            $q->where('qualifications.assigned_verifier_id', $user->id)
+                ->orWhereIn('qualifications.id', $assignmentQualificationIds);
+        });
+    }
+
+    /**
+     * @return list<array{title: string, subtitle: string, href: string|null}>
+     */
+    private function recentAssignedQualificationsQueue(User $user, int $limit): array
+    {
+        $rows = $this->qualificationsEverAssignedToQuery($user)
+            ->join('applications', 'applications.id', '=', 'qualifications.application_id')
+            ->whereNotNull('applications.submitted_at')
+            ->with('application:id,application_number,submitted_at')
+            ->orderByDesc('applications.submitted_at')
+            ->limit($limit)
+            ->get(['qualifications.id', 'qualifications.application_id', 'qualifications.verification_state', 'qualifications.title_of_qualification']);
+
+        $out = [];
+        foreach ($rows as $row) {
+            $out[] = [
+                'title' => $row->application?->application_number ?? ('Qualification #'.$row->id),
+                'subtitle' => 'Submitted '.optional($row->application?->submitted_at)->toDateTimeString(),
+                'href' => '/admin/verification/qualifications/'.$row->id,
+            ];
+        }
+
+        return $out;
+    }
+
+    /**
+     * @return list<array{title: string, subtitle: string, href: string|null}>
+     */
+    private function assignedToUserQualificationsQueue(User $user, int $limit): array
+    {
+        $rows = Qualification::query()
+            ->where('assigned_verifier_id', $user->id)
+            ->whereHas('application', fn ($q) => $q->whereIn('current_status', $this->poolStatuses()))
+            ->with('application:id,application_number,current_status')
+            ->orderByDesc('updated_at')
+            ->limit($limit)
+            ->get(['id', 'application_id', 'verification_state', 'updated_at']);
+
+        $out = [];
+        foreach ($rows as $row) {
+            $out[] = [
+                'title' => $row->application?->application_number ?? ('Qualification #'.$row->id),
+                'subtitle' => 'Status: '.($row->verification_state?->value ?? '—'),
+                'href' => '/admin/verification/qualifications/'.$row->id,
+            ];
+        }
+
+        return $out;
     }
 
     /**
