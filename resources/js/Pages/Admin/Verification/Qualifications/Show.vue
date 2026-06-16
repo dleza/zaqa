@@ -2,6 +2,7 @@
 import AdminLayout from '@/Layouts/AdminLayout.vue'
 import { Link, router, useForm } from '@inertiajs/vue3'
 import AdminActionModal from '@/Components/AdminActionModal.vue'
+import CollapsiblePanel from '@/Components/CollapsiblePanel.vue'
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import {
   ArrowRight,
@@ -543,6 +544,87 @@ const evidenceRows = computed(() => [
 
 const documentsCount = computed(() => props.qualification.documents?.length ?? 0)
 const subjectResultsCount = computed(() => props.qualification.subject_results?.length ?? 0)
+
+function initialVerificationState(): string {
+  const s = (props.qualification.verification_state ?? '').toString().trim()
+  return s === '' ? 'awaiting_assignment' : s
+}
+
+const workflowOpen = ref(false)
+
+const assignmentOpen = ref(
+  !!props.qualification.assigned_verifier_id
+    || (
+      props.can.assign === true
+      && ['awaiting_assignment', 'assigned_to_level1', 'under_level1_review'].includes(initialVerificationState())
+    ),
+)
+
+const decisionOpen = ref(
+  (props.qualification?.reviewer_notes ?? '').toString().trim().length > 0
+    || ['approved_for_certificate', 'rejected', 'certificate_issued'].includes(initialVerificationState()),
+)
+
+function initialAutoVerificationOpen(): boolean {
+  const status = (props.qualification.auto_verification?.status ?? '').toString()
+  if (['matched', 'ambiguous', 'possible_match'].includes(status)) return true
+  if (initialVerificationState() === 'auto_verified_pending_level2') return true
+  if (props.qualification.learner_record) return true
+  if (props.qualification.recheck_auto_verification_enabled) return true
+  if (props.qualification.auto_assign_level1_enabled) return true
+  return false
+}
+
+const autoVerificationOpen = ref(initialAutoVerificationOpen())
+
+const workflowCurrentStageLabel = computed(() => {
+  if (workflowActiveStep.value === -1) return 'With applicant for amendment'
+  const step = workflowSteps.value[workflowActiveStep.value]
+  if (!step) return stateDisplay.value
+  return `${step.label} / ${step.sub}`
+})
+
+const workflowCollapsedSummary = computed(() => `Current stage: ${workflowCurrentStageLabel.value}`)
+
+const assignmentCollapsedSummary = computed(() => {
+  const owner = ownerLine.value.name ?? 'Not assigned'
+  return `Level 1 owner: ${owner} • Status: ${stateDisplay.value}`
+})
+
+const decisionCollapsedSummary = computed(() => {
+  if (hasLevel1Findings.value) {
+    return level1ReviewedAt.value
+      ? `Level 1 recommendation submitted ${formatDateTime(level1ReviewedAt.value)}`
+      : 'Level 1 recommendation submitted'
+  }
+  if (state.value === 'rejected') return 'Level 2 decision: Rejected'
+  if (['approved_for_certificate', 'certificate_issued'].includes(state.value)) {
+    return 'Level 2 decision: Approved for certificate'
+  }
+  if (state.value === 'under_level2_review' || state.value === 'auto_verified_pending_level2') {
+    return 'Ready for Level 2 decision'
+  }
+  return 'Waiting for Level 1 recommendation'
+})
+
+const catalogWarningCount = computed(() => {
+  let count = 0
+  if (props.qualification.title_catalog?.show_new_title_prompt) count += 1
+  if (props.qualification.institution_catalog?.show_new_institution_prompt) count += 1
+  return count
+})
+
+const autoVerificationCollapsedSummary = computed(() => {
+  const parts: string[] = []
+  parts.push(`Match status: ${autoStatus.value || '—'}`)
+  parts.push(`Confidence: ${autoConfidence.value != null ? `${autoConfidence.value}%` : '—'}`)
+  parts.push(`Source: ${props.qualification.auto_verification?.source || 'ZAQA learner achievement records'}`)
+  if (autoRecommendation.value) parts.push(autoRecommendation.value)
+  if (catalogWarningCount.value > 0) {
+    parts.push(`${catalogWarningCount.value} catalog warning${catalogWarningCount.value === 1 ? '' : 's'}`)
+  }
+  return parts.join(' • ')
+})
 </script>
 
 <template>
@@ -891,18 +973,20 @@ const subjectResultsCount = computed(() => props.qualification.subject_results?.
               </details>
           </section>
 
-          <section class="rounded-2xl border border-border/70 bg-surface p-5 shadow-sm">
-            <div class="flex items-start justify-between gap-3">
-              <div>
-                <h2 class="text-base font-bold tracking-tight text-text-primary">Decision summary</h2>
-                <p class="mt-1 text-sm text-text-muted">Key reviewer inputs first, with supporting detail below when needed.</p>
-              </div>
+          <CollapsiblePanel
+            v-model:open="decisionOpen"
+            title="Decision summary"
+            subtitle="Key reviewer inputs first, with supporting detail below when needed."
+            :collapsed-summary="decisionCollapsedSummary"
+            content-class="px-5 pb-5 pt-4"
+          >
+            <template #icon>
               <span class="flex h-10 w-10 items-center justify-center rounded-xl bg-sky-500/15 text-sky-700">
                 <CornerDownLeft class="h-5 w-5" aria-hidden="true" />
               </span>
-            </div>
+            </template>
 
-            <div class="mt-4 grid gap-4 xl:grid-cols-[1.15fr_0.85fr]">
+            <div class="grid gap-4 xl:grid-cols-[1.15fr_0.85fr]">
               <div class="rounded-xl border border-border/70 bg-surface-muted/30 px-4 py-4">
                 <div class="flex flex-wrap items-center gap-2">
                   <span
@@ -995,20 +1079,22 @@ const subjectResultsCount = computed(() => props.qualification.subject_results?.
                 </div>
               </div>
             </div>
-          </section>
+          </CollapsiblePanel>
 
-          <section class="rounded-2xl border border-border/70 bg-surface p-5 shadow-sm">
-            <div class="flex items-start justify-between gap-3">
-              <div>
-                <h2 class="text-base font-bold tracking-tight text-text-primary">Auto-verification result</h2>
-                <p class="mt-1 text-sm text-text-muted">Internal match against ZAQA learner achievement records only. Review the match outcome first. Expand the lower sections only when deeper evidence is needed.</p>
-              </div>
+          <CollapsiblePanel
+            v-model:open="autoVerificationOpen"
+            title="Auto-verification result"
+            subtitle="Internal match against ZAQA learner achievement records only. Review the match outcome first. Expand the lower sections only when deeper evidence is needed."
+            :collapsed-summary="autoVerificationCollapsedSummary"
+            content-class="px-5 pb-5 pt-4"
+          >
+            <template #icon>
               <span class="flex h-10 w-10 items-center justify-center rounded-xl bg-brand/10 text-brand">
                 <Sparkles class="h-5 w-5" aria-hidden="true" />
               </span>
-            </div>
+            </template>
 
-            <div v-if="isAutoVerifiedPendingL2" class="mt-4 rounded-xl border border-border/70 bg-surface-muted/30 px-4 py-4">
+            <div v-if="isAutoVerifiedPendingL2" class="rounded-xl border border-border/70 bg-surface-muted/30 px-4 py-4">
               <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <div>
                   <div class="text-[11px] font-bold uppercase tracking-wider text-text-muted">Level 2 review lock</div>
@@ -1315,7 +1401,7 @@ const subjectResultsCount = computed(() => props.qualification.subject_results?.
                 </div>
               </details>
             </div>
-          </section>
+          </CollapsiblePanel>
 
           <details class="group rounded-2xl border border-border/70 bg-surface shadow-sm">
             <summary class="flex cursor-pointer list-none items-center justify-between gap-3 px-5 py-4 [&::-webkit-details-marker]:hidden">
@@ -1362,105 +1448,6 @@ const subjectResultsCount = computed(() => props.qualification.subject_results?.
         </div>
 
         <aside class="space-y-4 lg:col-span-4">
-          <section class="rounded-2xl border border-border/70 bg-surface p-5 shadow-sm">
-            <h2 class="text-sm font-bold tracking-tight text-text-primary">Two-level workflow</h2>
-            <p class="mt-1 text-xs leading-relaxed text-text-muted">
-              Level 2 assigns and oversees; Level 1 performs desk review on this task.
-            </p>
-            <ol class="mt-4 space-y-0">
-              <li
-                v-for="(step, idx) in workflowSteps"
-                :key="step.key"
-                class="relative flex gap-3 pb-4 last:pb-0"
-              >
-                <div
-                  v-if="idx < workflowSteps.length - 1"
-                  class="absolute left-[15px] top-8 h-[calc(100%-0.25rem)] w-px bg-border"
-                  aria-hidden="true"
-                />
-                <div
-                  class="relative z-[1] flex h-8 w-8 shrink-0 items-center justify-center rounded-full border-2 text-xs font-bold"
-                  :class="
-                    workflowActiveStep === idx
-                      ? 'border-brand bg-brand text-white shadow-sm'
-                      : workflowActiveStep > idx
-                        ? 'border-success/40 bg-success/10 text-success'
-                        : 'border-border bg-surface-muted text-text-muted'
-                  "
-                >
-                  {{ idx + 1 }}
-                </div>
-                <div class="min-w-0 pt-0.5">
-                  <div class="text-sm font-semibold text-text-primary">{{ step.label }}</div>
-                  <div class="text-xs text-text-muted">{{ step.sub }}</div>
-                </div>
-              </li>
-            </ol>
-            <div
-              v-if="workflowActiveStep === -1"
-              class="mt-4 rounded-lg border border-amber-300/50 bg-amber-50 px-3 py-2 text-xs font-medium text-amber-950"
-            >
-              Task is with the applicant for amendment.
-            </div>
-          </section>
-
-          <section class="rounded-2xl border border-border/70 bg-surface p-5 shadow-sm">
-            <div class="flex items-center gap-2 text-sm font-bold text-text-primary">
-              <UserRound class="h-4 w-4 text-brand" aria-hidden="true" />
-              Assignment
-            </div>
-            <p class="mt-1 text-xs text-text-muted">Current task owner, status, and assignment history.</p>
-
-            <div class="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-1">
-              <div class="rounded-xl border border-border/70 bg-surface-muted/35 px-4 py-3">
-                <div class="text-[11px] font-bold uppercase tracking-wider text-text-muted">Level 1 owner</div>
-                <div v-if="ownerLine.name" class="mt-1 text-sm font-semibold text-text-primary">{{ ownerLine.name }}</div>
-                <div v-else class="mt-1 text-sm font-medium italic text-text-muted">Not assigned</div>
-                <div v-if="qualification.assigned_at" class="mt-1 text-[11px] text-text-muted">
-                  Assigned {{ formatTimelineAt(qualification.assigned_at) }}
-                </div>
-              </div>
-
-              <div class="rounded-xl border border-border/70 bg-surface-muted/35 px-4 py-3">
-                <div class="text-[11px] font-bold uppercase tracking-wider text-text-muted">Task status</div>
-                <div class="mt-1 inline-flex items-center rounded-full border border-border/70 bg-surface px-2.5 py-1 text-[11px] font-semibold text-text-primary">
-                  {{ stateDisplay }}
-                </div>
-                <p v-if="qualification.returned_to_applicant_at" class="mt-2 text-[11px] leading-relaxed text-amber-900">
-                  With applicant since {{ formatTimelineAt(qualification.returned_to_applicant_at) }}
-                </p>
-              </div>
-            </div>
-
-            <details v-if="qualification.assignments?.length" class="group mt-4 rounded-xl border border-border/70 bg-surface-muted/25">
-              <summary class="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 [&::-webkit-details-marker]:hidden">
-                <div>
-                  <div class="text-sm font-semibold text-text-primary">Assignment history</div>
-                  <div class="mt-1 text-xs text-text-muted">Expand to review previous assignment moves.</div>
-                </div>
-                <div class="flex items-center gap-2">
-                  <span class="inline-flex items-center rounded-full border border-border/70 bg-surface px-2.5 py-0.5 text-[11px] font-semibold text-text-primary">
-                    {{ qualification.assignments.length }}
-                  </span>
-                  <ChevronDown class="h-4 w-4 text-text-muted transition group-open:rotate-180" aria-hidden="true" />
-                </div>
-              </summary>
-              <div class="border-t border-border/60 px-4 py-4">
-                <ul class="space-y-3">
-                  <li
-                    v-for="a in qualification.assignments"
-                    :key="a.id"
-                    class="rounded-xl border border-border/60 bg-surface px-3 py-2.5 text-sm"
-                  >
-                    <div class="text-[11px] font-medium text-text-muted">{{ formatTimelineAt(a.assigned_at) }}</div>
-                    <div class="mt-0.5 font-medium text-text-primary">{{ a.assigned_by }} → {{ a.assigned_to }}</div>
-                    <div v-if="a.comment" class="mt-1.5 border-t border-border/50 pt-1.5 text-xs text-text-muted">{{ a.comment }}</div>
-                  </li>
-                </ul>
-              </div>
-            </details>
-          </section>
-
           <section class="rounded-2xl border border-border/70 bg-surface p-5 shadow-sm">
             <div class="flex items-start justify-between gap-4">
               <div>
@@ -1533,6 +1520,113 @@ const subjectResultsCount = computed(() => props.qualification.subject_results?.
               Service target window is closed for this qualification; countdown and progress are not shown.
             </p>
           </section>
+
+          <CollapsiblePanel
+            v-model:open="assignmentOpen"
+            title="Assignment"
+            subtitle="Current task owner, status, and assignment history."
+            :collapsed-summary="assignmentCollapsedSummary"
+            title-size="sm"
+            content-class="px-5 pb-5 pt-4"
+          >
+            <template #icon>
+              <UserRound class="h-4 w-4 text-brand" aria-hidden="true" />
+            </template>
+
+            <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-1">
+              <div class="rounded-xl border border-border/70 bg-surface-muted/35 px-4 py-3">
+                <div class="text-[11px] font-bold uppercase tracking-wider text-text-muted">Level 1 owner</div>
+                <div v-if="ownerLine.name" class="mt-1 text-sm font-semibold text-text-primary">{{ ownerLine.name }}</div>
+                <div v-else class="mt-1 text-sm font-medium italic text-text-muted">Not assigned</div>
+                <div v-if="qualification.assigned_at" class="mt-1 text-[11px] text-text-muted">
+                  Assigned {{ formatTimelineAt(qualification.assigned_at) }}
+                </div>
+              </div>
+
+              <div class="rounded-xl border border-border/70 bg-surface-muted/35 px-4 py-3">
+                <div class="text-[11px] font-bold uppercase tracking-wider text-text-muted">Task status</div>
+                <div class="mt-1 inline-flex items-center rounded-full border border-border/70 bg-surface px-2.5 py-1 text-[11px] font-semibold text-text-primary">
+                  {{ stateDisplay }}
+                </div>
+                <p v-if="qualification.returned_to_applicant_at" class="mt-2 text-[11px] leading-relaxed text-amber-900">
+                  With applicant since {{ formatTimelineAt(qualification.returned_to_applicant_at) }}
+                </p>
+              </div>
+            </div>
+
+            <details v-if="qualification.assignments?.length" class="group mt-4 rounded-xl border border-border/70 bg-surface-muted/25">
+              <summary class="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 [&::-webkit-details-marker]:hidden">
+                <div>
+                  <div class="text-sm font-semibold text-text-primary">Assignment history</div>
+                  <div class="mt-1 text-xs text-text-muted">Expand to review previous assignment moves.</div>
+                </div>
+                <div class="flex items-center gap-2">
+                  <span class="inline-flex items-center rounded-full border border-border/70 bg-surface px-2.5 py-0.5 text-[11px] font-semibold text-text-primary">
+                    {{ qualification.assignments.length }}
+                  </span>
+                  <ChevronDown class="h-4 w-4 text-text-muted transition group-open:rotate-180" aria-hidden="true" />
+                </div>
+              </summary>
+              <div class="border-t border-border/60 px-4 py-4">
+                <ul class="space-y-3">
+                  <li
+                    v-for="a in qualification.assignments"
+                    :key="a.id"
+                    class="rounded-xl border border-border/60 bg-surface px-3 py-2.5 text-sm"
+                  >
+                    <div class="text-[11px] font-medium text-text-muted">{{ formatTimelineAt(a.assigned_at) }}</div>
+                    <div class="mt-0.5 font-medium text-text-primary">{{ a.assigned_by }} → {{ a.assigned_to }}</div>
+                    <div v-if="a.comment" class="mt-1.5 border-t border-border/50 pt-1.5 text-xs text-text-muted">{{ a.comment }}</div>
+                  </li>
+                </ul>
+              </div>
+            </details>
+          </CollapsiblePanel>
+
+          <CollapsiblePanel
+            v-model:open="workflowOpen"
+            title="Two-level workflow"
+            subtitle="Level 2 assigns and oversees; Level 1 performs desk review on this task."
+            :collapsed-summary="workflowCollapsedSummary"
+            title-size="sm"
+            content-class="px-5 pb-5 pt-4"
+          >
+            <ol class="space-y-0">
+              <li
+                v-for="(step, idx) in workflowSteps"
+                :key="step.key"
+                class="relative flex gap-3 pb-4 last:pb-0"
+              >
+                <div
+                  v-if="idx < workflowSteps.length - 1"
+                  class="absolute left-[15px] top-8 h-[calc(100%-0.25rem)] w-px bg-border"
+                  aria-hidden="true"
+                />
+                <div
+                  class="relative z-[1] flex h-8 w-8 shrink-0 items-center justify-center rounded-full border-2 text-xs font-bold"
+                  :class="
+                    workflowActiveStep === idx
+                      ? 'border-brand bg-brand text-white shadow-sm'
+                      : workflowActiveStep > idx
+                        ? 'border-success/40 bg-success/10 text-success'
+                        : 'border-border bg-surface-muted text-text-muted'
+                  "
+                >
+                  {{ idx + 1 }}
+                </div>
+                <div class="min-w-0 pt-0.5">
+                  <div class="text-sm font-semibold text-text-primary">{{ step.label }}</div>
+                  <div class="text-xs text-text-muted">{{ step.sub }}</div>
+                </div>
+              </li>
+            </ol>
+            <div
+              v-if="workflowActiveStep === -1"
+              class="mt-4 rounded-lg border border-amber-300/50 bg-amber-50 px-3 py-2 text-xs font-medium text-amber-950"
+            >
+              Task is with the applicant for amendment.
+            </div>
+          </CollapsiblePanel>
         </aside>
       </div>
       </div>
