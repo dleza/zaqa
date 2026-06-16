@@ -5,6 +5,7 @@ namespace App\Domain\Verification;
 use App\Domain\Audit\AuditLogService;
 use App\Enums\LearnerRecordSourceType;
 use App\Enums\QualificationTitleSource;
+use App\Models\AwardingInstitution;
 use App\Models\LearnerRecord;
 use App\Models\Qualification;
 use App\Models\QualificationCertificate;
@@ -17,17 +18,20 @@ class VerifiedQualificationIngestionService
 {
     public function __construct(
         private readonly QualificationTitleCatalogStatus $catalogStatus,
+        private readonly AwardingInstitutionCatalogStatus $institutionCatalogStatus,
         private readonly AuditLogService $audit,
     ) {}
 
     /**
-     * After certificate issue: promote title to catalog and ensure a learner record exists.
+     * After certificate issue: promote institution and title to catalogs and ensure a learner record exists.
      *
      * @return array{
      *     learner_record_id: int|null,
      *     learner_record_created: bool,
      *     qualification_title_id: int|null,
      *     qualification_title_created: bool,
+     *     awarding_institution_id: int|null,
+     *     awarding_institution_created: bool,
      * }
      */
     public function ingestFromIssuedCertificate(
@@ -39,11 +43,28 @@ class VerifiedQualificationIngestionService
             $qualification->refresh();
             $qualification->loadMissing('awardingInstitution');
 
+            $hadInstitutionId = (bool) $qualification->awarding_institution_id;
+
+            $institutionPromotion = $this->promoteInstitutionToCatalog($qualification);
+            if ($institutionPromotion['awarding_institution_id'] && ! $qualification->awarding_institution_id) {
+                $qualification->forceFill([
+                    'awarding_institution_id' => $institutionPromotion['awarding_institution_id'],
+                    'awarding_institution_name' => $institutionPromotion['awarding_institution_name'],
+                    'awarding_institution_name_other' => null,
+                ]);
+                $qualification->loadMissing('awardingInstitution');
+            }
+
             $titleText = $this->catalogStatus->resolveTitleText($qualification);
             $titlePromotion = $this->promoteTitleToCatalog($qualification, $titleText);
             $learnerRecordResult = $this->ensureLearnerRecord($qualification, $certificate, $titleText);
 
             $qualificationUpdates = [];
+            if ($institutionPromotion['awarding_institution_id'] && ! $hadInstitutionId) {
+                $qualificationUpdates['awarding_institution_id'] = $institutionPromotion['awarding_institution_id'];
+                $qualificationUpdates['awarding_institution_name'] = $institutionPromotion['awarding_institution_name'];
+                $qualificationUpdates['awarding_institution_name_other'] = null;
+            }
             if ($titleText !== '' && trim((string) ($qualification->verified_qualification_title ?? '')) === '') {
                 $qualificationUpdates['verified_qualification_title'] = $titleText;
             }
@@ -66,7 +87,7 @@ class VerifiedQualificationIngestionService
                     eventType: 'verification.qualification_ingested',
                     module: 'Verification',
                     actionName: 'verified_qualification_ingested',
-                    message: 'Verified qualification data ingested into learner records and title catalog.',
+                    message: 'Verified qualification data ingested into learner records, title catalog, and awarding institutions.',
                     entityType: Qualification::class,
                     entityId: $qualification->id,
                     beforeState: $before,
@@ -75,6 +96,7 @@ class VerifiedQualificationIngestionService
                         'certificate_id' => $certificate->id,
                         'learner_record_created' => $learnerRecordResult['learner_record_created'],
                         'qualification_title_created' => $titlePromotion['qualification_title_created'],
+                        'awarding_institution_created' => $institutionPromotion['awarding_institution_created'],
                     ],
                     actor: $actor,
                 );
@@ -85,8 +107,65 @@ class VerifiedQualificationIngestionService
                 'learner_record_created' => $learnerRecordResult['learner_record_created'],
                 'qualification_title_id' => $titlePromotion['qualification_title_id'],
                 'qualification_title_created' => $titlePromotion['qualification_title_created'],
+                'awarding_institution_id' => $institutionPromotion['awarding_institution_id'],
+                'awarding_institution_created' => $institutionPromotion['awarding_institution_created'],
             ];
         });
+    }
+
+    /**
+     * @return array{
+     *     awarding_institution_id: int|null,
+     *     awarding_institution_created: bool,
+     *     awarding_institution_name: string|null,
+     * }
+     */
+    private function promoteInstitutionToCatalog(Qualification $qualification): array
+    {
+        if ($qualification->awarding_institution_id) {
+            return [
+                'awarding_institution_id' => (int) $qualification->awarding_institution_id,
+                'awarding_institution_created' => false,
+                'awarding_institution_name' => $qualification->awardingInstitution?->name
+                    ?? $qualification->awarding_institution_name,
+            ];
+        }
+
+        $name = $this->institutionCatalogStatus->resolveInstitutionName($qualification);
+        if ($name === '' || ! $qualification->country_id) {
+            return [
+                'awarding_institution_id' => null,
+                'awarding_institution_created' => false,
+                'awarding_institution_name' => null,
+            ];
+        }
+
+        $normalized = AwardingInstitutionCatalogStatus::normalizeName($name);
+        $existing = AwardingInstitution::query()
+            ->where('country_id', (int) $qualification->country_id)
+            ->whereRaw('LOWER(TRIM(name)) = ?', [$normalized])
+            ->first();
+
+        if ($existing instanceof AwardingInstitution) {
+            return [
+                'awarding_institution_id' => (int) $existing->id,
+                'awarding_institution_created' => false,
+                'awarding_institution_name' => $existing->name,
+            ];
+        }
+
+        $created = AwardingInstitution::query()->create([
+            'country_id' => (int) $qualification->country_id,
+            'name' => $name,
+            'is_active' => true,
+            'sort_order' => 0,
+        ]);
+
+        return [
+            'awarding_institution_id' => (int) $created->id,
+            'awarding_institution_created' => true,
+            'awarding_institution_name' => $created->name,
+        ];
     }
 
     /**

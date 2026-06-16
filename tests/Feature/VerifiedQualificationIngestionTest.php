@@ -178,6 +178,102 @@ class VerifiedQualificationIngestionTest extends TestCase
         );
     }
 
+    public function test_certificate_issue_promotes_other_awarding_institution(): void
+    {
+        Storage::fake('local');
+        Mail::fake();
+        $this->mockPdf();
+
+        [$qualification] = $this->approvedQualification([
+            'awarding_institution_id' => null,
+            'awarding_institution_name' => 'Custom New College',
+            'awarding_institution_name_other' => 'Custom New College',
+            'title_of_qualification' => 'Diploma in Testing',
+            'names_as_on_qualification_document' => 'Mary C. Mwansa',
+            'certificate_number' => 'CERT-INST-005',
+        ]);
+
+        $this->assertSame(0, AwardingInstitution::query()->where('name', 'Custom New College')->count());
+
+        $this->actingAs($this->certificateAdmin())->post(
+            route('admin.verification.qualifications.issue_certificate', $qualification),
+        )->assertRedirect();
+
+        $qualification->refresh();
+        $this->assertNotNull($qualification->awarding_institution_id);
+        $this->assertNull($qualification->awarding_institution_name_other);
+        $this->assertSame('Custom New College', $qualification->awarding_institution_name);
+
+        $this->assertDatabaseHas('awarding_institutions', [
+            'id' => $qualification->awarding_institution_id,
+            'name' => 'Custom New College',
+            'country_id' => $qualification->country_id,
+            'is_active' => true,
+        ]);
+
+        $this->assertDatabaseHas('learner_records', [
+            'id' => $qualification->learner_record_id,
+            'awarding_institution_id' => $qualification->awarding_institution_id,
+            'institution_name_raw' => null,
+        ]);
+    }
+
+    public function test_certificate_issue_links_existing_awarding_institution_by_name(): void
+    {
+        Storage::fake('local');
+        Mail::fake();
+        $this->mockPdf();
+
+        [$qualification] = $this->approvedQualification([
+            'awarding_institution_id' => null,
+            'awarding_institution_name' => 'known college',
+            'awarding_institution_name_other' => 'known college',
+            'certificate_number' => 'CERT-INST-006',
+        ]);
+
+        $existing = AwardingInstitution::query()->create([
+            'country_id' => $qualification->country_id,
+            'name' => 'Known College',
+            'is_active' => true,
+            'sort_order' => 1,
+        ]);
+
+        $beforeCount = AwardingInstitution::query()->count();
+
+        $this->actingAs($this->certificateAdmin())->post(
+            route('admin.verification.qualifications.issue_certificate', $qualification),
+        )->assertRedirect();
+
+        $qualification->refresh();
+        $this->assertSame($existing->id, $qualification->awarding_institution_id);
+        $this->assertSame($beforeCount, AwardingInstitution::query()->count());
+    }
+
+    public function test_manual_review_page_shows_new_institution_prompt_for_other_institution(): void
+    {
+        [$qualification] = $this->approvedQualification([
+            'verification_state' => VerificationState::UnderLevel2Review,
+            'awarding_institution_id' => null,
+            'awarding_institution_name' => 'Test Postgraduate Institution',
+            'awarding_institution_name_other' => 'Test Postgraduate Institution',
+            'title_of_qualification' => 'Diploma in Testing',
+            'names_as_on_qualification_document' => 'Mary C. Mwansa',
+            'certificate_number' => 'CERT-PROMPT-INST-007',
+        ]);
+
+        $reviewer = User::factory()->activated()->create(['applicant_type' => null]);
+        $reviewer->givePermissionTo(['dashboard.view', 'verification.pool.view', 'verification.level2.review']);
+
+        $this->actingAs($reviewer)->get(
+            route('admin.verification.qualifications.show', $qualification),
+        )->assertOk()->assertInertia(fn ($page) => $page
+            ->component('Admin/Verification/Qualifications/Show')
+            ->where('qualification.institution_catalog.show_new_institution_prompt', true)
+            ->where('qualification.institution_catalog.is_applicant_other', true)
+            ->where('qualification.institution_catalog.resolved_name', 'Test Postgraduate Institution')
+        );
+    }
+
     public function test_legacy_qualification_submission_without_title_source_still_works(): void
     {
         $user = User::factory()->activated()->create(['applicant_type' => 'individual']);

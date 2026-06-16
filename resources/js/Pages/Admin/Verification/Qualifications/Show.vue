@@ -1146,6 +1146,20 @@ const subjectResultsCount = computed(() => props.qualification.subject_results?.
                 </p>
               </div>
 
+              <div
+                v-if="qualification.institution_catalog?.show_new_institution_prompt"
+                class="rounded-xl border border-amber-300/80 bg-amber-50 px-4 py-3 text-sm text-amber-950"
+                role="status"
+              >
+                <div class="font-semibold">New awarding institution</div>
+                <p class="mt-1">
+                  The applicant entered an awarding institution that is not in the master catalog
+                  <span v-if="qualification.institution_catalog?.resolved_name"> (“{{ qualification.institution_catalog.resolved_name }}”)</span>.
+                  If you approve and issue the certificate, this institution will be added to
+                  <strong>Awarding Institutions</strong> for future applicants to select.
+                </p>
+              </div>
+
               <details class="group rounded-xl border border-border/70 bg-surface-muted/25">
                 <summary class="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 [&::-webkit-details-marker]:hidden">
                   <div>
