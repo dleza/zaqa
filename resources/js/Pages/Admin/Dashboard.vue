@@ -29,6 +29,7 @@ import {
   Search,
   Shield,
   ShieldCheck,
+  Sparkles,
   Timer,
   TrendingUp,
   Undo2,
@@ -48,7 +49,14 @@ const props = defineProps<{
     primary_role: string
     current_date_formatted: string
     timezone: string
-    dashboard_scope?: 'level1_assigned' | 'default'
+    dashboard_scope?: 'level1_assigned' | 'level2_qualifications' | 'default'
+    date_range?: {
+      selected: number
+      from: string
+      to: string
+      label: string
+      options: Array<{ label: string; value: number }>
+    }
   }
   kpis: Array<{
     key: string
@@ -70,6 +78,7 @@ const props = defineProps<{
   queues: Array<{
     key: string
     title: string
+    subtitle?: string | null
     items: Array<{ title: string; subtitle: string; href: string | null }>
   }>
   quick_actions: Array<{ label: string; href: string; icon: string; permission: string }>
@@ -112,6 +121,7 @@ const kpiIcons: Record<string, Component> = {
   'building-2': Building2,
   activity: Activity,
   'message-square': MessageSquare,
+  sparkles: Sparkles,
 }
 
 function kpiIcon(name: string | undefined) {
@@ -150,6 +160,13 @@ const quickIconMap: Record<string, Component> = {
 function quickIcon(name: string) {
   return quickIconMap[name] ?? LayoutDashboard
 }
+
+const dateRange = computed(() => props.meta.date_range)
+const isLevel2Scope = computed(() => props.meta.dashboard_scope === 'level2_qualifications')
+
+function dashboardUrl(rangeDays: number) {
+  return `/admin/dashboard?range=${rangeDays}`
+}
 </script>
 
 <template>
@@ -181,6 +198,13 @@ function quickIcon(name: string) {
             Assigned to me
           </Link>
           <Link
+            v-else-if="meta.dashboard_scope === 'level2_qualifications'"
+            href="/admin/verification/assigned-to-me"
+            class="rounded-xl border border-white/30 bg-[#F18230] px-4 py-2.5 text-sm font-semibold text-white shadow-md transition hover:bg-[#e07828]"
+          >
+            My Level 2 tasks
+          </Link>
+          <Link
             v-else-if="quick_actions.some((a) => a.href === '/admin/verification/pool')"
             href="/admin/verification/pool"
             class="rounded-xl border border-white/30 bg-[#F18230] px-4 py-2.5 text-sm font-semibold text-white shadow-md transition hover:bg-[#e07828]"
@@ -195,6 +219,32 @@ function quickIcon(name: string) {
             Finance queue
           </Link>
         </div>
+      </div>
+    </div>
+
+    <div v-if="dateRange" class="mt-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+      <div>
+        <h2 class="text-sm font-semibold uppercase tracking-wider text-text-muted">Dashboard overview</h2>
+        <p class="mt-1 text-xs text-text-muted">
+          Dashboard shows recent activity.
+          <Link href="/admin/reports/applications" class="font-semibold text-[#0076BD] underline-offset-2 hover:underline">Reports</Link>
+          for custom date ranges.
+        </p>
+      </div>
+      <div class="inline-flex rounded-xl border border-border bg-surface p-1 shadow-sm" role="group" aria-label="Dashboard date range">
+        <Link
+          v-for="opt in dateRange.options"
+          :key="opt.value"
+          :href="dashboardUrl(opt.value)"
+          class="rounded-lg px-4 py-2 text-sm font-semibold transition"
+          :class="
+            dateRange.selected === opt.value
+              ? 'bg-[#0076BD] text-white shadow-sm'
+              : 'text-text-muted hover:bg-surface-muted hover:text-text-primary'
+          "
+        >
+          {{ opt.label }}
+        </Link>
       </div>
     </div>
 
@@ -237,8 +287,14 @@ function quickIcon(name: string) {
 
     <!-- KPIs -->
     <div v-if="kpis.length" class="mt-8">
-      <h2 class="text-sm font-semibold uppercase tracking-wider text-text-muted">Key metrics</h2>
-      <div class="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
+      <h2 class="text-sm font-semibold uppercase tracking-wider text-text-muted">
+        Key metrics
+        <span v-if="dateRange" class="font-normal normal-case text-text-muted">· {{ dateRange.label }}</span>
+      </h2>
+      <div
+        class="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3"
+        :class="isLevel2Scope ? '2xl:grid-cols-4' : '2xl:grid-cols-4'"
+      >
         <template v-for="card in kpis" :key="card.key">
           <Link
             v-if="card.href"
@@ -302,6 +358,7 @@ function quickIcon(name: string) {
         <div v-for="q in queues" :key="q.key" class="rounded-2xl border border-border bg-surface shadow-sm">
           <div class="border-b border-border px-5 py-4">
             <h3 class="text-sm font-semibold text-text-primary">{{ q.title }}</h3>
+            <p v-if="q.subtitle" class="mt-1 text-xs text-text-muted">{{ q.subtitle }}</p>
           </div>
           <div v-if="!q.items.length" class="px-5 py-8 text-center text-sm text-text-muted">Nothing in this queue right now.</div>
           <ul v-else class="divide-y divide-border/70">

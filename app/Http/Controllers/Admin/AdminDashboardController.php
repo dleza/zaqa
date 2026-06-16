@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Domain\AdminDashboard\AdminDashboardService;
+use App\Domain\AdminDashboard\DashboardDateRange;
 use App\Http\Controllers\Controller;
 use App\Models\User;
 use Illuminate\Http\Request;
@@ -16,6 +17,6 @@ class AdminDashboardController extends Controller
         /** @var User $user */
         $user = $request->user();
 
-        return Inertia::render('Admin/Dashboard', $dashboard->build($user));
+        return Inertia::render('Admin/Dashboard', $dashboard->build($user, DashboardDateRange::fromRequest($request)));
     }
 }

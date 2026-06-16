@@ -8,10 +8,26 @@ import type { Component } from 'vue'
 import { formatMoneyFromCents } from '@/utils/money'
 
 const props = defineProps<{
-  meta: { current_date_formatted: string; timezone: string }
-  kpis: Array<{ key: string; label: string; value: number; href?: string | null; icon?: string; value_format?: 'cents' | null }>
+  meta: {
+    current_date_formatted: string
+    timezone: string
+    date_range?: {
+      selected: number
+      from: string
+      to: string
+      label: string
+      options: Array<{ label: string; value: number }>
+    }
+  }
+  kpis: Array<{ key: string; label: string; value: number; href?: string | null; icon?: string; value_format?: 'cents' | null; hint?: string }>
   charts: Array<{ key: string; title: string; type: 'line' | 'bar' | 'doughnut'; labels: string[]; values: number[]; value_format?: 'cents' | null }>
 }>()
+
+const dateRange = computed(() => props.meta.date_range)
+
+function financeDashboardUrl(rangeDays: number) {
+  return `/admin/finance?range=${rangeDays}`
+}
 
 const iconMap: Record<string, Component> = {
   banknote: Banknote,
@@ -49,6 +65,29 @@ const kpiRows = computed(() => props.kpis ?? [])
       <div class="flex flex-wrap items-center gap-2">
         <Link href="/admin/finance/payment-proofs" class="zaqa-btn zaqa-btn-secondary px-4 py-2 text-sm">Payment proofs</Link>
         <Link href="/admin/finance/payments" class="zaqa-btn zaqa-btn-secondary px-4 py-2 text-sm">Processed payments</Link>
+      </div>
+    </div>
+
+    <div v-if="dateRange" class="mt-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+      <p class="text-xs text-text-muted">
+        Dashboard shows recent activity.
+        <Link href="/admin/reports/payments" class="font-semibold text-[#0076BD] underline-offset-2 hover:underline">Reports</Link>
+        for custom date ranges.
+      </p>
+      <div class="inline-flex rounded-xl border border-border bg-surface p-1 shadow-sm" role="group" aria-label="Finance dashboard date range">
+        <Link
+          v-for="opt in dateRange.options"
+          :key="opt.value"
+          :href="financeDashboardUrl(opt.value)"
+          class="rounded-lg px-4 py-2 text-sm font-semibold transition"
+          :class="
+            dateRange.selected === opt.value
+              ? 'bg-[#0076BD] text-white shadow-sm'
+              : 'text-text-muted hover:bg-surface-muted hover:text-text-primary'
+          "
+        >
+          {{ opt.label }}
+        </Link>
       </div>
     </div>
 

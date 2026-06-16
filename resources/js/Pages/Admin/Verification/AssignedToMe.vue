@@ -102,9 +102,7 @@ watch([q, overdue, overdueDays, submittedFrom, submittedTo, qualificationQ, list
         <p class="mt-1 text-sm text-text-muted">
           {{ pageDescription }}
         </p>
-        <p v-if="variant === 'assigned'" class="mt-2 text-xs text-text-muted">
-          Need the parent file? Use <span class="font-medium text-text-primary">Application</span> on a row to open the linked application (read-only context).
-        </p>
+
       </div>
       <div class="flex items-center gap-2">
         <Link href="/admin/verification/pool" class="zaqa-btn zaqa-btn-secondary px-4 py-2 text-sm">Back to pool</Link>
