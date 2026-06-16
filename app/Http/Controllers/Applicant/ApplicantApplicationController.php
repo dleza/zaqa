@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Applicant;
 
 use App\Domain\Applications\ApplicationDraftService;
 use App\Domain\Documents\ApplicantDocumentService;
+use App\Domain\Finance\InvoicePdfService;
 use App\Domain\Finance\PaymentReceiptPdfService;
 use App\Domain\Payments\ApplicationPaymentSatisfaction;
 use App\Domain\Applications\ApplicationSubmissionReadinessService;
@@ -905,16 +906,7 @@ class ApplicantApplicationController extends Controller
             'service_deadline_at' => optional($application->service_deadline_at)?->toIso8601String(),
             'paid_at' => optional($application->paid_at)?->toIso8601String(),
             'invoice' => $application->invoice
-                ? [
-                    'id' => $application->invoice->id,
-                    'invoice_number' => $application->invoice->invoice_number,
-                    'currency' => $application->invoice->currency,
-                    'amount_cents' => $application->invoice->amount_cents,
-                    'status' => $application->invoice->status?->value ?? (string) $application->invoice->status,
-                    'issued_at' => optional($application->invoice->issued_at)?->toIso8601String(),
-                    'paid_at' => optional($application->invoice->paid_at)?->toIso8601String(),
-                    'download_url' => route('applicant.invoices.download', $application->invoice),
-                ]
+                ? $this->invoicePayloadForApplicant($application->invoice)
                 : null,
             'supplementary_invoice' => $openSupplementary
                 ? [
@@ -1050,6 +1042,32 @@ class ApplicantApplicationController extends Controller
             'qualifications' => $qualifications,
 
             'wizard_declarations' => $this->wizardDeclarationsPayload($application),
+        ];
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function invoicePayloadForApplicant(Invoice $invoice): array
+    {
+        $invoice->loadMissing('application.qualifications');
+
+        $lineItems = app(InvoicePdfService::class)
+            ->lineItems($invoice)
+            ->values()
+            ->all();
+
+        return [
+            'id' => $invoice->id,
+            'invoice_number' => $invoice->invoice_number,
+            'currency' => $invoice->currency,
+            'amount_cents' => $invoice->amount_cents,
+            'status' => $invoice->status?->value ?? (string) $invoice->status,
+            'fee_label_snapshot' => $invoice->fee_label_snapshot,
+            'issued_at' => optional($invoice->issued_at)?->toIso8601String(),
+            'paid_at' => optional($invoice->paid_at)?->toIso8601String(),
+            'download_url' => route('applicant.invoices.download', $invoice),
+            'line_items' => $lineItems,
         ];
     }
 

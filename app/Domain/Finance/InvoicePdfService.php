@@ -104,7 +104,7 @@ class InvoicePdfService
     /**
      * @return Collection<int, array{description: string, quantity: int, amount_cents: int, total_cents: int}>
      */
-    private function lineItems(Invoice $invoice): Collection
+    public function lineItems(Invoice $invoice): Collection
     {
         $metadata = is_array($invoice->metadata) ? $invoice->metadata : [];
         $breakdown = is_array($metadata['breakdown'] ?? null) ? $metadata['breakdown'] : [];

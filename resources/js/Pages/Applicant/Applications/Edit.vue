@@ -658,6 +658,38 @@ async function submitApplication() {
 
 const payment = computed(() => props.application?.payment ?? null)
 const invoice = computed(() => props.application?.invoice ?? null)
+
+type InvoiceLineItem = {
+  description: string
+  quantity: number
+  amount_cents: number
+  total_cents: number
+}
+
+const invoiceLineItems = computed<InvoiceLineItem[]>(() => {
+  const items = invoice.value?.line_items
+  if (Array.isArray(items) && items.length > 0) {
+    return items.map((row: any) => ({
+      description: (row.description ?? '').toString(),
+      quantity: Number(row.quantity ?? 1) || 1,
+      amount_cents: Number(row.amount_cents ?? 0),
+      total_cents: Number(row.total_cents ?? row.amount_cents ?? 0),
+    }))
+  }
+  if (!invoice.value) return []
+  return [
+    {
+      description: 'Application verification fee',
+      quantity: 1,
+      amount_cents: Number(invoice.value.amount_cents ?? 0),
+      total_cents: Number(invoice.value.amount_cents ?? 0),
+    },
+  ]
+})
+
+const invoiceBreakdownTotalCents = computed(() =>
+  invoiceLineItems.value.reduce((sum, row) => sum + Number(row.total_cents ?? 0), 0),
+)
 const invoiceSettled = computed(() => props.application?.payment_satisfied === true)
 
 const applicationPaymentSatisfied = computed(() => props.application?.payment_satisfied === true)
@@ -1992,116 +2024,157 @@ onBeforeUnmount(() => {
 	          </div>
 
 	          <!-- Invoice summary -->
-	          <div class="mt-4 rounded-2xl bg-surface p-4 shadow-sm ring-1 ring-black/[0.04] sm:p-5">
-	            <div class="grid gap-4 sm:grid-cols-2 sm:items-start">
-	              <div class="order-3 min-w-0 sm:order-1">
-	                <div class="text-[11px] font-semibold uppercase tracking-wider text-text-muted">Invoice</div>
-	                <div class="mt-1 truncate text-base font-semibold text-text-primary">
-	                  {{ invoice?.invoice_number ?? (paymentInvoiceReady ? 'Preparing invoice…' : '—') }}
+	          <div class="mt-3 rounded-xl border border-border bg-surface p-3 shadow-sm ring-1 ring-black/[0.04] sm:p-4">
+	            <div class="flex flex-col gap-2.5 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between sm:gap-x-4 sm:gap-y-2">
+	              <div class="flex min-w-0 flex-1 flex-col gap-1.5 text-xs sm:flex-row sm:flex-wrap sm:items-baseline sm:gap-x-4 sm:gap-y-1">
+	                <div class="min-w-0">
+	                  <span class="text-text-muted">Invoice:</span>
+	                  <span class="ml-1 font-semibold text-text-primary">
+	                    {{ invoice?.invoice_number ?? (paymentInvoiceReady ? 'Preparing…' : '—') }}
+	                  </span>
+	                </div>
+	                <div class="min-w-0">
+	                  <span class="text-text-muted">Application:</span>
+	                  <span class="ml-1 font-mono font-semibold text-text-primary">{{ application.application_number }}</span>
 	                </div>
 	              </div>
-	              <div class="order-1 text-left sm:order-2 sm:text-right">
-	                <div class="text-[11px] font-semibold uppercase tracking-wider text-text-muted">Amount due</div>
-	                <div class="mt-1 text-2xl font-semibold tracking-tight text-text-primary sm:text-3xl">
-	                  {{ ((invoice?.amount_cents ?? (invoice ? 0 : invoiceTotalPreview.amountCents)) / 100).toFixed(2) }}
-	                  <span class="text-sm font-semibold text-text-muted">{{ invoice?.currency ?? invoiceTotalPreview.currency }}</span>
-	                </div>
-	              </div>
-
-	              <div class="order-4 min-w-0 sm:order-3">
-	                <div class="text-[11px] font-semibold uppercase tracking-wider text-text-muted">Application reference</div>
-	                <div class="mt-1 truncate font-mono text-sm font-semibold text-text-primary">
-	                  {{ application.application_number }}
-	                </div>
-	                <div v-if="invoice?.fee_label_snapshot" class="mt-1 text-xs text-text-muted">{{ invoice.fee_label_snapshot }}</div>
-	              </div>
-
-	              <div class="order-2 flex items-end justify-between gap-3 sm:order-4 sm:flex-col sm:items-end sm:justify-end">
-	                <div class="text-[11px] font-semibold uppercase tracking-wider text-text-muted sm:text-right">Status</div>
-	                <span class="zaqa-badge" :class="paymentStatusBadgeClass(payment?.status)">
-	                  <component :is="(payment?.status ?? '') === 'confirmed' ? CheckCircle2 : AlertCircle" class="h-4 w-4" aria-hidden="true" />
+	              <div class="flex flex-wrap items-center gap-2 sm:shrink-0 sm:justify-end">
+	                <span class="zaqa-badge text-xs" :class="paymentStatusBadgeClass(payment?.status)">
+	                  <component :is="(payment?.status ?? '') === 'confirmed' ? CheckCircle2 : AlertCircle" class="h-3.5 w-3.5" aria-hidden="true" />
 	                  {{ paymentStatusLabel(payment?.status) }}
 	                </span>
+	                <a
+	                  v-if="invoice?.download_url"
+	                  :href="invoice.download_url"
+	                  class="zaqa-btn zaqa-btn-secondary inline-flex items-center gap-1.5 px-3 py-1.5 text-xs"
+	                >
+	                  Download invoice
+	                </a>
+	                <a
+	                  v-if="payment?.receipt_download_url"
+	                  :href="payment.receipt_download_url"
+	                  class="zaqa-btn zaqa-btn-secondary inline-flex items-center gap-1.5 px-3 py-1.5 text-xs"
+	                >
+	                  Download receipt
+	                </a>
 	              </div>
 	            </div>
 
-	            <div v-if="invoice?.download_url || payment?.receipt_download_url" class="mt-4 flex flex-wrap gap-2">
-	              <a v-if="invoice?.download_url" :href="invoice.download_url" class="zaqa-btn zaqa-btn-secondary inline-flex items-center gap-2 px-4 py-2 text-sm">
-	                Download invoice
-	              </a>
-	              <a
-	                v-if="payment?.receipt_download_url"
-	                :href="payment.receipt_download_url"
-	                class="zaqa-btn zaqa-btn-secondary inline-flex items-center gap-2 px-4 py-2 text-sm"
-	              >
-	                Download receipt
-	              </a>
+	            <div
+	              v-if="invoice && invoiceLineItems.length > 0"
+	              class="mt-3 border-t border-border/50 pt-3"
+	            >
+	              <div class="text-[10px] font-semibold uppercase tracking-wider text-text-muted">Fee breakdown</div>
+	              <div class="mt-1.5 -mx-0.5 overflow-x-auto px-0.5">
+	                <table class="w-full min-w-[280px] border-collapse text-[11px] sm:text-xs">
+	                  <thead>
+	                    <tr class="border-b border-border/40 text-[9px] font-semibold uppercase tracking-wider text-text-muted sm:text-[10px]">
+	                      <th class="pb-1.5 pr-2 text-left font-semibold">Item</th>
+	                      <th class="pb-1.5 pr-2 text-right font-semibold whitespace-nowrap">Qty</th>
+	                      <th class="hidden pb-1.5 pr-2 text-right font-semibold whitespace-nowrap sm:table-cell">Amount</th>
+	                      <th class="pb-1.5 text-right font-semibold whitespace-nowrap">Total</th>
+	                    </tr>
+	                  </thead>
+	                  <tbody>
+	                    <tr
+	                      v-for="(row, idx) in invoiceLineItems"
+	                      :key="`${row.description}-${idx}`"
+	                      class="border-b border-border/25 last:border-b-0"
+	                    >
+	                      <td class="py-1.5 pr-2 align-top font-medium leading-snug text-text-primary">
+	                        {{ row.description }}
+	                      </td>
+	                      <td class="py-1.5 pr-2 text-right align-top tabular-nums text-text-muted whitespace-nowrap">
+	                        {{ row.quantity }}
+	                      </td>
+	                      <td class="hidden py-1.5 pr-2 text-right align-top tabular-nums text-text-muted whitespace-nowrap sm:table-cell">
+	                        {{ formatMoneyCents(row.amount_cents) }}
+	                      </td>
+	                      <td class="py-1.5 text-right align-top tabular-nums text-text-primary whitespace-nowrap">
+	                        {{ formatMoneyCents(row.total_cents) }}
+	                      </td>
+	                    </tr>
+	                  </tbody>
+	                  <tfoot>
+	                    <tr class="border-t border-border/50">
+	                      <td class="hidden pt-2 pr-2 text-right text-[11px] font-semibold text-text-primary sm:table-cell" colspan="3">Total</td>
+	                      <td class="pt-2 pr-2 text-right text-[11px] font-semibold text-text-primary sm:hidden" colspan="2">Total</td>
+	                      <td class="pt-2 text-right text-sm font-semibold tabular-nums text-text-primary whitespace-nowrap">
+	                        {{ formatMoneyCents(Number(invoice.amount_cents ?? invoiceBreakdownTotalCents)) }}
+	                      </td>
+	                    </tr>
+	                  </tfoot>
+	                </table>
+	              </div>
 	            </div>
 
 	            <div
 	              v-if="application?.supplementary_invoice"
-	              class="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-950"
-            >
-              <div class="font-semibold text-text-primary">Supplementary invoice (top-up)</div>
-              <div class="mt-1 font-mono text-xs">{{ application.supplementary_invoice.invoice_number }}</div>
-              <div class="mt-1 text-sm">
-                Balance due:
-                <span class="font-semibold">{{ formatMoneyCents(Number(application.supplementary_invoice.amount_cents ?? 0)) }}</span>
-              </div>
-              <p v-if="application.supplementary_invoice.amendment_reason" class="mt-2 text-xs leading-relaxed opacity-90">
-                {{ application.supplementary_invoice.amendment_reason }}
-              </p>
-              <a
-                v-if="application.supplementary_invoice.download_url"
-                :href="application.supplementary_invoice.download_url"
-                class="zaqa-btn zaqa-btn-secondary mt-3 inline-flex items-center gap-2 px-3 py-1.5 text-xs font-semibold"
-              >
-                Download supplementary invoice
-              </a>
-            </div>
-            <div v-else class="mt-3 rounded-lg border border-border bg-surface-muted px-3 py-2 text-xs text-text-muted">
-              You can edit your application until payment is confirmed.
-            </div>
+	              class="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-2 text-xs text-amber-950"
+	            >
+	              <div class="font-semibold text-text-primary">Supplementary invoice (top-up)</div>
+	              <div class="mt-0.5 font-mono text-[11px]">{{ application.supplementary_invoice.invoice_number }}</div>
+	              <div class="mt-0.5">
+	                Balance due:
+	                <span class="font-semibold">{{ formatMoneyCents(Number(application.supplementary_invoice.amount_cents ?? 0)) }}</span>
+	              </div>
+	              <p v-if="application.supplementary_invoice.amendment_reason" class="mt-1.5 text-[11px] leading-relaxed opacity-90">
+	                {{ application.supplementary_invoice.amendment_reason }}
+	              </p>
+	              <a
+	                v-if="application.supplementary_invoice.download_url"
+	                :href="application.supplementary_invoice.download_url"
+	                class="zaqa-btn zaqa-btn-secondary mt-2 inline-flex items-center gap-1.5 px-2.5 py-1 text-[11px] font-semibold"
+	              >
+	                Download supplementary invoice
+	              </a>
+	            </div>
+	            <p
+	              v-else-if="invoice"
+	              class="mt-2 border-t border-border/30 pt-2 text-[11px] leading-snug text-text-muted"
+	            >
+	              You can edit your application until payment is confirmed.
+	            </p>
 
-            <div v-if="!invoice && !applicationLocked" class="mt-4 flex flex-col gap-3 border-t border-border/60 pt-4 sm:flex-row sm:items-end sm:justify-between">
-              <div class="text-sm text-text-muted">
-                <span v-if="paymentInvoiceMissingSteps.length > 0">
-                  Complete the previous steps to unlock payment.
-                </span>
-                <span v-else-if="prepareInvoiceForm.processing">
-                  Preparing your invoice…
-                </span>
-                <span v-else-if="invoicePreparation.auto_failed">
-                  We could not prepare your invoice. Please retry.
-                </span>
-                <span v-else>
-                  Preparing your invoice…
-                </span>
-              </div>
-              <div class="flex flex-col gap-2 sm:flex-row sm:items-center">
-                <button
-                  v-if="paymentInvoiceMissingSteps.length > 0"
-                  type="button"
-                  class="zaqa-btn zaqa-btn-secondary shrink-0"
-                  @click="requestStepChange(paymentInvoiceMissingSteps[0])"
-                >
-                  Go to {{ steps.find((s) => s.key === paymentInvoiceMissingSteps[0])?.label ?? 'previous step' }}
-                </button>
-                <button
-                  v-else-if="invoicePreparation.auto_failed"
-                  type="button"
-                  class="zaqa-btn zaqa-btn-secondary shrink-0"
-                  :disabled="prepareInvoiceForm.processing"
-                  @click="prepareInvoice(false)"
-                >
-                  Retry invoice preparation
-                </button>
-              </div>
-            </div>
-          </div>
+	            <div v-if="!invoice && !applicationLocked" class="mt-3 flex flex-col gap-2 border-t border-border/50 pt-3 sm:flex-row sm:items-center sm:justify-between">
+	              <div class="text-xs text-text-muted">
+	                <span v-if="paymentInvoiceMissingSteps.length > 0">
+	                  Complete the previous steps to unlock payment.
+	                </span>
+	                <span v-else-if="prepareInvoiceForm.processing">
+	                  Preparing your invoice…
+	                </span>
+	                <span v-else-if="invoicePreparation.auto_failed">
+	                  We could not prepare your invoice. Please retry.
+	                </span>
+	                <span v-else>
+	                  Preparing your invoice…
+	                </span>
+	              </div>
+	              <div class="flex flex-col gap-2 sm:flex-row sm:items-center">
+	                <button
+	                  v-if="paymentInvoiceMissingSteps.length > 0"
+	                  type="button"
+	                  class="zaqa-btn zaqa-btn-secondary shrink-0 px-3 py-1.5 text-xs"
+	                  @click="requestStepChange(paymentInvoiceMissingSteps[0])"
+	                >
+	                  Go to {{ steps.find((s) => s.key === paymentInvoiceMissingSteps[0])?.label ?? 'previous step' }}
+	                </button>
+	                <button
+	                  v-else-if="invoicePreparation.auto_failed"
+	                  type="button"
+	                  class="zaqa-btn zaqa-btn-secondary shrink-0 px-3 py-1.5 text-xs"
+	                  :disabled="prepareInvoiceForm.processing"
+	                  @click="prepareInvoice(false)"
+	                >
+	                  Retry invoice preparation
+	                </button>
+	              </div>
+	            </div>
+	          </div>
 
 	          <!-- Payment tabs -->
-	          <div class="mt-4">
+	          <div class="mt-3">
             <!-- Confirmed state (read-only) -->
 	            <div v-if="invoiceSettled" class="rounded-2xl border border-success/20 bg-success/10 p-4 sm:p-5">
               <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
