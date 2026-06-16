@@ -13,6 +13,7 @@ use App\Domain\Verification\AwardingInstitutionCatalogStatus;
 use App\Domain\Verification\QualificationTitleCatalogStatus;
 use App\Domain\Verification\QualificationAutoAssignmentService;
 use App\Domain\Verification\QualificationAutoVerificationRecheckService;
+use App\Domain\Verification\QualificationDecisionReopenService;
 use App\Domain\Verification\QualificationDecisionService;
 use App\Domain\Verification\QualificationLevel1ReviewService;
 use App\Domain\Verification\QualificationLevel2ReviewLockService;
@@ -27,6 +28,7 @@ use App\Http\Requests\Admin\Verification\IssueQualificationCertificateRequest;
 use App\Http\Requests\Admin\Verification\QualificationDecisionApproveRequest;
 use App\Http\Requests\Admin\Verification\QualificationDecisionRejectRequest;
 use App\Http\Requests\Admin\Verification\QualificationLevel1CompleteRequest;
+use App\Http\Requests\Admin\Verification\ReopenLevel2DecisionRequest;
 use App\Http\Requests\Admin\Verification\RevokeQualificationAssignmentRequest;
 use App\Http\Requests\Admin\Verification\SendBackRequest;
 use App\Models\ApplicationComment;
@@ -68,6 +70,8 @@ class AdminVerificationQualificationController extends Controller
             'assignments.assignedBy',
             'assignments.assignedTo',
             'certificates',
+            'certificates.revokedBy',
+            'certificates.issuedBy',
             'learnerRecord.awardingInstitution',
             'learnerRecordMatchAttempts.learnerRecord',
             'level2ReviewLockedBy',
@@ -88,18 +92,33 @@ class AdminVerificationQualificationController extends Controller
             ->orderByDesc('id')
             ->first();
 
+        $applicationClosed = $applicationVerificationState === VerificationState::Closed;
+
         $canIssueCveq = (bool) $request->user()?->can('verification.certificate.issue')
             && $paymentSatisfied
-            && $qualification->verification_state === VerificationState::ApprovedForCertificate
             && ! $applicationBlockedForCertificateIssue
-            && ! $activeCveq;
+            && ! $activeCveq
+            && (
+                $qualification->verification_state === VerificationState::ApprovedForCertificate
+                || (
+                    $qualification->verification_state === VerificationState::CertificateIssued
+                    && ! $activeCveq
+                )
+            );
+
+        $canIssueRejectionCertificate = (bool) $request->user()?->can('verification.certificate.issue')
+            && $paymentSatisfied
+            && ! $applicationClosed
+            && ! $activeCveq
+            && $qualification->verification_state === VerificationState::Rejected;
 
         $canReissueCveq = (bool) $request->user()?->hasRole('Super Admin')
             && (bool) $request->user()?->can('verification.certificate.issue')
             && $paymentSatisfied
             && $qualification->verification_state === VerificationState::CertificateIssued
             && ! $applicationBlockedForCertificateIssue
-            && $activeCveq instanceof QualificationCertificate;
+            && $activeCveq instanceof QualificationCertificate
+            && $activeCveq->isVerificationCertificate();
 
         $level1Users = User::query()
             ->whereNull('applicant_type', 'and', false)
@@ -132,6 +151,31 @@ class AdminVerificationQualificationController extends Controller
             ? 'No linked awarding institution for this qualification.'
             : null;
         $certificateTemplate = $certificateService->describeTemplate($qualification);
+        $canRevokeCertificate = (bool) $request->user()?->can('certificates.revoke');
+        $canReopenLevel2Decision = (bool) $request->user()?->can('verification.decision.reopen')
+            && app(QualificationDecisionReopenService::class)->canReopen($qualification);
+
+        $decisionReopenEvents = $applicationModel
+            ? ApplicationLifecycleEvent::query()
+                ->where('application_id', $applicationModel->id)
+                ->where('event_code', 'like', 'verification.level2_decision_reopened.q'.$qualification->id.'.%')
+                ->orderByDesc('occurred_at')
+                ->limit(5)
+                ->get()
+                ->map(fn (ApplicationLifecycleEvent $event) => [
+                    'occurred_at' => optional($event->occurred_at)?->toIso8601String(),
+                    'actor_name' => $event->actor_name_snapshot,
+                    'reason' => $event->comment,
+                    'intended_action' => is_array($event->metadata) ? ($event->metadata['intended_action'] ?? null) : null,
+                    'previous_qualification_state' => is_array($event->metadata) ? ($event->metadata['previous_qualification_state'] ?? null) : null,
+                ])
+                ->values()
+                ->all()
+            : [];
+        $certificateHistory = $this->buildCertificateHistoryPayload(
+            $qualification->certificates->sortByDesc('id')->values(),
+            $canRevokeCertificate,
+        );
         $titleCatalog = app(QualificationTitleCatalogStatus::class)->forQualification($qualification);
         $institutionCatalog = app(AwardingInstitutionCatalogStatus::class)->forQualification($qualification);
         $qualificationServiceStartedAt = $qualification->service_started_at
@@ -181,8 +225,19 @@ class AdminVerificationQualificationController extends Controller
                     ]
                     : null,
                 'issue_certificate_url' => route('admin.verification.qualifications.issue_certificate', ['qualification' => $qualification]),
+                'issue_rejection_certificate_url' => route('admin.verification.qualifications.issue_rejection_certificate', ['qualification' => $qualification]),
                 'can_issue_cveq_certificate' => $canIssueCveq,
+                'can_issue_rejection_certificate' => $canIssueRejectionCertificate,
                 'can_reissue_cveq_certificate' => $canReissueCveq,
+                'can_reopen_level2_decision' => $canReopenLevel2Decision,
+                'reopen_level2_decision_url' => route('admin.verification.qualifications.reopen_level2_decision', ['qualification' => $qualification]),
+                'decision_reopen_history' => $decisionReopenEvents,
+                'reopen_intended_actions' => [
+                    ['value' => QualificationDecisionReopenService::INTENDED_RECONSIDER_APPROVAL, 'label' => 'Reconsider for approval'],
+                    ['value' => QualificationDecisionReopenService::INTENDED_RECONSIDER_REJECTION, 'label' => 'Reconsider for rejection'],
+                    ['value' => QualificationDecisionReopenService::INTENDED_FURTHER_REVIEW, 'label' => 'Reopen for further review'],
+                ],
+                'certificate_history' => $certificateHistory,
                 'certificate_template' => $certificateTemplate,
                 'qualification_type' => $qualification->qualificationTypeMaster?->name,
                 'title' => $qualification->title_of_qualification,
@@ -318,10 +373,29 @@ class AdminVerificationQualificationController extends Controller
                 'reject' => (bool) $request->user()?->can('verification.decide.reject'),
                 'edit_qualification' => (bool) ($request->user()?->can('verification.level1.process') || $request->user()?->can('verification.level2.review')),
                 'issue_certificate' => (bool) $request->user()?->can('verification.certificate.issue'),
+                'revoke_certificate' => $canRevokeCertificate,
+                'reopen_decision' => (bool) $request->user()?->can('verification.decision.reopen'),
                 'is_super_admin' => (bool) $request->user()?->hasRole('Super Admin'),
                 'view_learner_records' => $canViewLearnerRecords,
             ],
         ]);
+    }
+
+    public function reopenLevel2Decision(
+        ReopenLevel2DecisionRequest $request,
+        Qualification $qualification,
+        QualificationDecisionReopenService $reopen,
+    ): RedirectResponse {
+        VerificationQualificationAccess::ensureQualificationAccessible($request->user(), $qualification);
+
+        $reopen->reopen(
+            $qualification,
+            $request->user(),
+            (string) $request->validated('reason'),
+            (string) $request->validated('intended_action'),
+        );
+
+        return back()->with('success', 'Level 2 decision reopened. You may now record a new approval or rejection.');
     }
 
     public function issueCertificate(
@@ -338,6 +412,18 @@ class AdminVerificationQualificationController extends Controller
         );
 
         return back()->with('success', 'Certificate issued successfully.');
+    }
+
+    public function issueRejectionCertificate(
+        IssueQualificationCertificateRequest $request,
+        Qualification $qualification,
+        QualificationCertificateService $certificates,
+    ): RedirectResponse {
+        VerificationQualificationAccess::ensureQualificationAccessible($request->user(), $qualification);
+
+        $certificates->issueRejection($qualification, $request->user());
+
+        return back()->with('success', 'Rejection notice issued successfully.');
     }
 
     public function downloadCertificate(
@@ -559,6 +645,7 @@ class AdminVerificationQualificationController extends Controller
         QualificationDecisionRejectRequest $request,
         Qualification $qualification,
         QualificationDecisionService $decisions,
+        QualificationCertificateService $certificates,
     ): RedirectResponse {
         VerificationQualificationAccess::ensureQualificationAccessible($request->user(), $qualification);
 
@@ -567,6 +654,21 @@ class AdminVerificationQualificationController extends Controller
             $request->user(),
             (string) $request->validated('reason'),
         );
+
+        if ($request->boolean('generate_rejection_notice') && $request->user()?->can('verification.certificate.issue')) {
+            try {
+                $certificates->issueRejection($qualification->fresh(), $request->user());
+
+                return back()->with('success', 'Qualification rejected and rejection notice issued.');
+            } catch (\Throwable $exception) {
+                report($exception);
+
+                return back()->with(
+                    'success',
+                    'Qualification rejected. The rejection notice could not be generated automatically — issue it manually from the certificate panel.',
+                );
+            }
+        }
 
         return back()->with('success', 'Qualification rejected.');
     }
@@ -1010,6 +1112,65 @@ class AdminVerificationQualificationController extends Controller
         }
 
         return null;
+    }
+
+    /**
+     * @param  \Illuminate\Support\Collection<int, QualificationCertificate>  $certificates
+     * @return array{
+     *     active: array<string, mixed>|null,
+     *     revoked: array<int, array<string, mixed>>,
+     *     superseded: array<int, array<string, mixed>>
+     * }
+     */
+    private function buildCertificateHistoryPayload($certificates, bool $canRevoke): array
+    {
+        $active = null;
+        $revoked = [];
+        $superseded = [];
+
+        foreach ($certificates as $cert) {
+            $row = $this->formatCertificateHistoryRow($cert, $canRevoke);
+
+            if ($cert->status === QualificationCertificate::STATUS_ISSUED) {
+                $active = $row;
+            } elseif ($cert->status === QualificationCertificate::STATUS_REVOKED) {
+                $revoked[] = $row;
+            } elseif ($cert->status === QualificationCertificate::STATUS_REISSUED) {
+                $superseded[] = $row;
+            }
+        }
+
+        return [
+            'active' => $active,
+            'revoked' => $revoked,
+            'superseded' => $superseded,
+        ];
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function formatCertificateHistoryRow(QualificationCertificate $cert, bool $canRevoke): array
+    {
+        $verificationUrl = rtrim((string) config('certificates.verify_url_base'), '/').'/'.$cert->verification_token;
+
+        return [
+            'id' => $cert->id,
+            'certificate_number' => $cert->certificate_number,
+            'certificate_type' => $cert->certificate_type ?: QualificationCertificate::TYPE_VERIFICATION,
+            'certificate_type_label' => $cert->isRejectionCertificate() ? 'Rejection' : 'Verification',
+            'status' => $cert->status,
+            'issued_at' => optional($cert->issued_at)?->toIso8601String(),
+            'revoked_at' => optional($cert->revoked_at)?->toIso8601String(),
+            'revoked_by_name' => $cert->revokedBy?->name,
+            'revocation_reason' => $cert->revocation_reason,
+            'issued_by_name' => $cert->issuedBy?->name,
+            'verification_url' => $verificationUrl,
+            'admin_download_url' => route('admin.certificates.download', ['qualificationCertificate' => $cert]),
+            'revoke_url' => $canRevoke && $cert->status === QualificationCertificate::STATUS_ISSUED
+                ? route('admin.certificates.revoke', ['qualificationCertificate' => $cert])
+                : null,
+        ];
     }
 
     private function qualificationHasAutoVerificationInput(Qualification $qualification): bool

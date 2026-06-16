@@ -15,6 +15,7 @@ class QualificationDecisionRejectRequest extends FormRequest
     {
         return [
             'reason' => ['required', 'string', 'min:3', 'max:10000'],
+            'generate_rejection_notice' => ['sometimes', 'boolean'],
         ];
     }
 }

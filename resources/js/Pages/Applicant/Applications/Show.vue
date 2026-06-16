@@ -607,6 +607,38 @@ function invoiceStatusLabel(status: unknown): string {
                           </a>
                         </div>
                       </div>
+                      <div
+                        v-else-if="q.rejection_notice"
+                        class="rounded-2xl border border-rose-300/60 bg-rose-50/95 p-4 sm:p-5"
+                      >
+                        <div class="flex flex-wrap items-start justify-between gap-3">
+                          <div>
+                            <div class="text-[10px] font-bold uppercase tracking-wider text-rose-900">
+                              ZAQA rejection notice
+                            </div>
+                            <p class="mt-1 font-mono text-sm font-semibold text-rose-950">
+                              {{ q.rejection_notice.certificate_number }}
+                            </p>
+                            <p v-if="q.rejection_notice.issued_at" class="mt-1 text-xs text-rose-800">
+                              Issued {{ formatCveqIssuedAt(q.rejection_notice.issued_at) }}
+                            </p>
+                          </div>
+                          <a
+                            v-if="q.rejection_notice.download_url"
+                            :href="q.rejection_notice.download_url"
+                            class="zaqa-btn zaqa-btn-secondary inline-flex shrink-0 items-center gap-2 px-4 py-2 text-sm font-semibold"
+                          >
+                            <FileDown class="h-4 w-4" aria-hidden="true" />
+                            Download rejection notice
+                          </a>
+                        </div>
+                      </div>
+                      <div
+                        v-else-if="q.rejection_notice_recalled"
+                        class="rounded-2xl border border-amber-300/60 bg-amber-50/95 p-4 text-sm text-amber-950"
+                      >
+                        A previous rejection notice was recalled. Please refer to the latest decision on this qualification.
+                      </div>
                       <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
                         <div class="rounded-2xl border border-border/80 bg-surface-muted/40 p-4">
                           <div class="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-text-muted">

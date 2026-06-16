@@ -799,21 +799,39 @@ class ApplicantApplicationController extends Controller
                     $missing[] = 'foreign_consent';
                 }
 
-                $activeCveq = $q->certificates
+                $activeIssuedCertificate = $q->certificates
                     ->where('status', QualificationCertificate::STATUS_ISSUED)
                     ->sortByDesc('id')
                     ->first();
 
                 $cveqCertificate = null;
-                if ($activeCveq) {
-                    $cveqCertificate = [
-                        'certificate_number' => $activeCveq->certificate_number,
-                        'issued_at' => optional($activeCveq->issued_at)?->toIso8601String(),
-                        'download_url' => route('applicant.applications.qualifications.certificate.download', [
-                            'application' => $application,
-                            'qualification' => $q,
-                        ]),
-                    ];
+                $rejectionNotice = null;
+                $rejectionNoticeRecalled = false;
+
+                if ($activeIssuedCertificate instanceof QualificationCertificate) {
+                    if ($activeIssuedCertificate->isVerificationCertificate()) {
+                        $cveqCertificate = [
+                            'certificate_number' => $activeIssuedCertificate->certificate_number,
+                            'issued_at' => optional($activeIssuedCertificate->issued_at)?->toIso8601String(),
+                            'download_url' => route('applicant.applications.qualifications.certificate.download', [
+                                'application' => $application,
+                                'qualification' => $q,
+                            ]),
+                        ];
+                    } elseif ($activeIssuedCertificate->isRejectionCertificate()) {
+                        $rejectionNotice = [
+                            'certificate_number' => $activeIssuedCertificate->certificate_number,
+                            'issued_at' => optional($activeIssuedCertificate->issued_at)?->toIso8601String(),
+                            'download_url' => route('applicant.applications.qualifications.rejection_notice.download', [
+                                'application' => $application,
+                                'qualification' => $q,
+                            ]),
+                        ];
+                    }
+                } elseif ($q->certificates
+                    ->where('status', QualificationCertificate::STATUS_REVOKED)
+                    ->contains(fn (QualificationCertificate $cert) => $cert->isRejectionCertificate())) {
+                    $rejectionNoticeRecalled = true;
                 }
 
                 return [
@@ -902,6 +920,8 @@ class ApplicantApplicationController extends Controller
                     'amendment_comments_count' => count($commentHistory),
                     'amendment_comment_history' => $commentHistory,
                     'cveq_certificate' => $cveqCertificate,
+                    'rejection_notice' => $rejectionNotice,
+                    'rejection_notice_recalled' => $rejectionNoticeRecalled,
                 ];
             })
             ->all();

@@ -37,6 +37,8 @@ class CertificateVerificationController extends Controller
             ])->toResponse(request())->setStatusCode(404);
         }
 
+        $isRejection = $certificate->isRejectionCertificate();
+
         $replacement = null;
         if ($certificate->status === QualificationCertificate::STATUS_REISSUED) {
             $replacement = QualificationCertificate::query()
@@ -44,6 +46,15 @@ class CertificateVerificationController extends Controller
                 ->where('status', QualificationCertificate::STATUS_ISSUED)
                 ->latest('id')
                 ->first();
+        }
+
+        $hasNewerActiveCertificate = false;
+        if ($certificate->status === QualificationCertificate::STATUS_REVOKED) {
+            $hasNewerActiveCertificate = QualificationCertificate::query()
+                ->where('qualification_id', $certificate->qualification_id)
+                ->where('status', QualificationCertificate::STATUS_ISSUED)
+                ->where('id', '>', $certificate->id)
+                ->exists();
         }
 
         $institutionName = $certificate->qualification?->awardingInstitution?->name
@@ -70,18 +81,14 @@ class CertificateVerificationController extends Controller
             'verification' => [
                 'found' => true,
                 'status' => $certificate->status,
-                'status_label' => match ($certificate->status) {
-                    QualificationCertificate::STATUS_ISSUED => 'Valid certificate',
-                    QualificationCertificate::STATUS_REISSUED => 'Superseded certificate',
-                    QualificationCertificate::STATUS_REVOKED => 'Revoked certificate',
-                    default => 'Certificate record',
-                },
-                'message' => match ($certificate->status) {
-                    QualificationCertificate::STATUS_ISSUED => 'This certificate is valid and was issued by ZAQA.',
-                    QualificationCertificate::STATUS_REISSUED => 'This certificate has been superseded by a newer reissued certificate.',
-                    QualificationCertificate::STATUS_REVOKED => 'This certificate is no longer valid because it has been revoked.',
-                    default => 'Certificate status available.',
-                },
+                'certificate_type' => $certificate->certificate_type ?: QualificationCertificate::TYPE_VERIFICATION,
+                'status_label' => $this->resolveStatusLabel($certificate, $isRejection),
+                'message' => $this->resolveMessage($certificate, $isRejection),
+                'revoked_at' => optional($certificate->revoked_at)?->toIso8601String(),
+                'revocation_public_note' => $certificate->status === QualificationCertificate::STATUS_REVOKED
+                    ? ($certificate->revocation_public_note ?: null)
+                    : null,
+                'has_newer_active_certificate' => $hasNewerActiveCertificate,
                 'verified_at' => now()->toIso8601String(),
                 'verification_reference' => $certificate->verification_token,
                 'certificate' => [
@@ -104,6 +111,44 @@ class CertificateVerificationController extends Controller
                 ],
             ],
         ]);
+    }
+
+    private function resolveStatusLabel(QualificationCertificate $certificate, bool $isRejection): string
+    {
+        if ($certificate->status === QualificationCertificate::STATUS_REVOKED) {
+            return $isRejection ? 'Rejection certificate recalled' : 'Revoked certificate';
+        }
+
+        if ($certificate->status === QualificationCertificate::STATUS_REISSUED) {
+            return 'Superseded certificate';
+        }
+
+        if ($certificate->status === QualificationCertificate::STATUS_ISSUED) {
+            return $isRejection ? 'Rejection notice issued' : 'Valid certificate';
+        }
+
+        return 'Certificate record';
+    }
+
+    private function resolveMessage(QualificationCertificate $certificate, bool $isRejection): string
+    {
+        if ($certificate->status === QualificationCertificate::STATUS_REVOKED) {
+            return $isRejection
+                ? 'This rejection certificate has been recalled by the Zambia Qualifications Authority and is no longer valid.'
+                : 'This certificate has been recalled by the Zambia Qualifications Authority and is no longer valid.';
+        }
+
+        if ($certificate->status === QualificationCertificate::STATUS_REISSUED) {
+            return 'This certificate has been superseded by a newer reissued certificate.';
+        }
+
+        if ($certificate->status === QualificationCertificate::STATUS_ISSUED) {
+            return $isRejection
+                ? 'This QR code confirms that ZAQA issued a rejection notice for the qualification shown below.'
+                : 'This certificate is valid and was issued by ZAQA.';
+        }
+
+        return 'Certificate status available.';
     }
 
     /**

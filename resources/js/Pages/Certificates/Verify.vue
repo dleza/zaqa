@@ -25,10 +25,14 @@ type SubjectResult = {
 type CertificateVerificationPayload = {
   found: boolean
   status: string
+  certificate_type?: string
   status_label: string
   message: string
   verified_at?: string | null
   verification_reference?: string | null
+  revoked_at?: string | null
+  revocation_public_note?: string | null
+  has_newer_active_certificate?: boolean
   certificate: null | {
     certificate_number: string | null
     zaqa_reference_number: string | null
@@ -54,6 +58,20 @@ const props = defineProps<{
 
 const statusTheme = computed(() => {
   const status = props.verification.status
+  const isRejection = props.verification.certificate_type === 'rejection'
+
+  if (status === 'issued' && isRejection) {
+    return {
+      heroTitle: 'Rejection Notice Verified',
+      heroText: 'This QR code confirms that ZAQA issued a rejection notice for the qualification shown below.',
+      panelClass: 'border-rose-200/70 bg-gradient-to-br from-rose-50 via-white to-orange-50/60',
+      iconWrapClass: 'bg-rose-700 text-white shadow-[0_18px_40px_-20px_rgba(190,18,60,0.75)]',
+      badgeClass: 'bg-rose-700 text-white ring-1 ring-rose-200',
+      securityClass: 'border-rose-200/70 bg-rose-50/90',
+      icon: FileCheck2,
+      registryOutcome: 'QR code recognized. This record confirms an issued rejection notice.',
+    }
+  }
 
   if (status === 'issued') {
     return {
@@ -64,6 +82,7 @@ const statusTheme = computed(() => {
       badgeClass: 'bg-emerald-600 text-white ring-1 ring-emerald-200',
       securityClass: 'border-emerald-200/70 bg-emerald-50/80',
       icon: ShieldCheck,
+      registryOutcome: 'QR validation successful',
     }
   }
 
@@ -76,18 +95,22 @@ const statusTheme = computed(() => {
       badgeClass: 'bg-amber-500 text-white ring-1 ring-amber-200',
       securityClass: 'border-amber-200/70 bg-amber-50/90',
       icon: AlertTriangle,
+      registryOutcome: 'QR code recognized, but this certificate has been superseded.',
     }
   }
 
   if (status === 'revoked') {
     return {
-      heroTitle: 'Certificate Revoked',
-      heroText: 'This certificate is no longer valid in the ZAQA registry.',
+      heroTitle: isRejection ? 'Rejection Certificate Recalled' : 'Certificate Recalled',
+      heroText: isRejection
+        ? 'This rejection certificate has been recalled by the Zambia Qualifications Authority and is no longer valid.'
+        : 'This certificate has been recalled by the Zambia Qualifications Authority and is no longer valid.',
       panelClass: 'border-rose-300/60 bg-gradient-to-br from-rose-50 via-white to-red-50',
       iconWrapClass: 'bg-rose-600 text-white shadow-[0_18px_40px_-20px_rgba(225,29,72,0.8)]',
       badgeClass: 'bg-rose-600 text-white ring-1 ring-rose-200',
       securityClass: 'border-rose-200/70 bg-rose-50/90',
       icon: Ban,
+      registryOutcome: 'QR code recognized, but this certificate is no longer valid.',
     }
   }
 
@@ -99,8 +122,11 @@ const statusTheme = computed(() => {
     badgeClass: 'bg-slate-700 text-white ring-1 ring-slate-200',
     securityClass: 'border-slate-200/80 bg-slate-50/80',
     icon: FileCheck2,
+    registryOutcome: 'No matching active certificate record.',
   }
 })
+
+const registryOutcomeLabel = computed(() => statusTheme.value.registryOutcome ?? 'QR validation successful')
 
 const hasSubjectResults = computed(() => (props.verification.certificate?.subject_results?.length ?? 0) > 0)
 
@@ -297,6 +323,15 @@ function printVerification() {
                         {{ formatDate(verification.certificate.issued_at) }}
                       </dd>
                     </div>
+                    <div
+                      v-if="verification.status === 'revoked' && verification.revoked_at"
+                      class="rounded-2xl bg-rose-50/80 p-4 ring-1 ring-rose-200/70"
+                    >
+                      <dt class="text-[11px] font-semibold uppercase tracking-[0.16em] text-rose-800">Recalled on</dt>
+                      <dd class="mt-1.5 text-sm font-semibold text-rose-950">
+                        {{ formatDate(verification.revoked_at, true) }}
+                      </dd>
+                    </div>
                     <div class="rounded-2xl bg-surface-muted/45 p-4">
                       <dt class="text-[11px] font-semibold uppercase tracking-[0.16em] text-text-muted">Award date</dt>
                       <dd class="mt-1.5 text-sm font-semibold text-text-primary">
@@ -318,9 +353,11 @@ function printVerification() {
                       <dt class="text-[11px] font-semibold uppercase tracking-[0.16em] text-text-muted">Certificate type</dt>
                       <dd class="mt-1.5 text-sm font-semibold text-text-primary">
                         {{
-                          verification.certificate.template_key === 'school_subjects'
-                            ? 'School certificate with subject results'
-                            : 'Standard ZAQA verification certificate'
+                          verification.certificate_type === 'rejection'
+                            ? 'Rejection notice'
+                            : verification.certificate?.template_key === 'school_subjects'
+                              ? 'School certificate with subject results'
+                              : 'Standard ZAQA verification certificate'
                         }}
                       </dd>
                     </div>
@@ -382,7 +419,7 @@ function printVerification() {
                   <div class="mt-4 space-y-3">
                     <div class="rounded-2xl border border-border/70 bg-white p-4">
                       <div class="text-[11px] font-semibold uppercase tracking-[0.16em] text-text-muted">Registry outcome</div>
-                      <div class="mt-1.5 text-sm font-semibold text-text-primary">QR validation successful</div>
+                      <div class="mt-1.5 text-sm font-semibold text-text-primary">{{ registryOutcomeLabel }}</div>
                     </div>
                     <div class="rounded-2xl border border-border/70 bg-white p-4">
                       <div class="text-[11px] font-semibold uppercase tracking-[0.16em] text-text-muted">Official source</div>
@@ -403,6 +440,22 @@ function printVerification() {
                       </p>
                     </div>
                   </div>
+                </section>
+
+                <section
+                  v-if="verification.status === 'revoked'"
+                  class="rounded-[1.5rem] border border-rose-300/50 bg-rose-50/90 p-5"
+                >
+                  <div class="text-[11px] font-semibold uppercase tracking-[0.16em] text-rose-900">Revocation notice</div>
+                  <p class="mt-2 text-sm leading-6 text-rose-950">
+                    {{
+                      verification.revocation_public_note ||
+                      'This certificate has been recalled by the Zambia Qualifications Authority and is no longer valid.'
+                    }}
+                  </p>
+                  <p v-if="verification.has_newer_active_certificate" class="mt-3 text-sm text-rose-900/90">
+                    A newer certificate may have been issued. Please contact ZAQA for confirmation.
+                  </p>
                 </section>
 
                 <section

@@ -5,13 +5,13 @@
  * Placeholders use :name syntax.
  */
 return [
-    'application_submitted' => 'ZAQA: Application :application_number submitted. Check email for reference numbers.',
+    'application_submitted' => 'ZAQA: Application :application_number submitted. Check portal for qualification for updates.',
 
-    'application_resubmitted' => 'ZAQA: Application :application_number resubmitted. Check email for reference numbers.',
+    'application_resubmitted' => 'ZAQA: Application :application_number resubmitted. Check portal for qualification for updates.',
 
-    'payment_approved' => 'ZAQA: Payment confirmed for :application_number. Continue in the portal.',
+    'payment_approved' => 'ZAQA: Payment confirmed for :application_number. Review application in the portal.',
 
-    'payment_rejected' => 'ZAQA: Payment proof rejected for :application_number. Login for details.',
+    'payment_rejected' => 'ZAQA: Payment proof rejected for :application_number. Login for more details.',
 
     'application_sent_back' => 'ZAQA: Application :application_number sent back. Login to view comments.',
 

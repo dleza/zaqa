@@ -6,6 +6,7 @@ import CollapsiblePanel from '@/Components/CollapsiblePanel.vue'
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import {
   ArrowRight,
+  Ban,
   Building2,
   ChevronDown,
   ClipboardCheck,
@@ -48,6 +49,8 @@ const props = defineProps<{
     reject?: boolean
     edit_qualification?: boolean
     issue_certificate?: boolean
+    revoke_certificate?: boolean
+    reopen_decision?: boolean
     is_super_admin?: boolean
     view_learner_records?: boolean
   }
@@ -55,10 +58,13 @@ const props = defineProps<{
 
 const assignOpen = ref(false)
 const revokeOpen = ref(false)
+const revokeCertificateOpen = ref(false)
+const revokeCertificateTarget = ref<{ certificate_number: string; revoke_url: string } | null>(null)
 const sendBackOpen = ref(false)
 const level1CompleteOpen = ref(false)
 const approveOpen = ref(false)
 const rejectOpen = ref(false)
+const reopenDecisionOpen = ref(false)
 const sendBackHistoryOpen = ref(false)
 const copiedRef = ref(false)
 const dismissedTitlePrompt = ref(false)
@@ -92,12 +98,26 @@ const showNewInstitutionPrompt = computed(
 
 const assignForm = useForm({ assigned_to_user_id: props.qualification.assigned_verifier_id ?? '', comment: '' })
 const revokeForm = useForm({ comment: '' })
+const revokeCertificateForm = useForm({
+  revocation_reason: '',
+  revocation_public_note: '',
+  confirm: false,
+})
 const sendBackForm = useForm({ comment: '' })
 const level1CompleteForm = useForm<{ findings: string; attachment: File | null }>({ findings: '', attachment: null })
 const level1AttachmentInput = ref<HTMLInputElement | null>(null)
 const issueCveqForm = useForm<{ reissue: boolean }>({ reissue: false })
+const issueRejectionForm = useForm({})
 const approveForm = useForm<{ comment: string; issue_certificate: boolean }>({ comment: '', issue_certificate: false })
-const rejectForm = useForm<{ reason: string }>({ reason: '' })
+const rejectForm = useForm<{ reason: string; generate_rejection_notice: boolean }>({
+  reason: '',
+  generate_rejection_notice: false,
+})
+const reopenDecisionForm = useForm<{ reason: string; intended_action: string; confirm: boolean }>({
+  reason: '',
+  intended_action: '',
+  confirm: false,
+})
 const recheckAutoVerificationForm = useForm({})
 const autoAssignLevel1Form = useForm({})
 
@@ -113,10 +133,30 @@ function submitIssueCveq() {
   issueCveqForm.post(props.qualification.issue_certificate_url, { preserveScroll: true })
 }
 
+function reopenIntendedActionLabel(value: string | null | undefined) {
+  const match = (props.qualification.reopen_intended_actions ?? []).find((item: { value: string; label: string }) => item.value === value)
+  return match?.label ?? value ?? '—'
+}
+
+function submitReopenDecision() {
+  if (!props.qualification.reopen_level2_decision_url) return
+  reopenDecisionForm.post(props.qualification.reopen_level2_decision_url, {
+    preserveScroll: true,
+    onSuccess: () => {
+      reopenDecisionOpen.value = false
+      reopenDecisionForm.reset()
+    },
+  })
+}
+
+function submitIssueRejection() {
+  issueRejectionForm.post(props.qualification.issue_rejection_certificate_url, { preserveScroll: true })
+}
+
 function submitReissueCveq() {
   if (
     !confirm(
-      'Reissue creates a new CVEQ PDF and marks the previous certificate as superseded. Continue?',
+      'Technical reissue creates a new CVEQ PDF and marks the previous certificate as superseded. Continue?',
     )
   ) {
     return
@@ -126,6 +166,25 @@ function submitReissueCveq() {
     { reissue: true },
     { preserveScroll: true },
   )
+}
+
+function openRevokeCertificate(row: { certificate_number: string; revoke_url: string | null }) {
+  if (!row.revoke_url) return
+  revokeCertificateTarget.value = { certificate_number: row.certificate_number, revoke_url: row.revoke_url }
+  revokeCertificateForm.reset()
+  revokeCertificateOpen.value = true
+}
+
+function submitRevokeCertificate() {
+  if (!revokeCertificateTarget.value) return
+  revokeCertificateForm.post(revokeCertificateTarget.value.revoke_url, {
+    preserveScroll: true,
+    onSuccess: () => {
+      revokeCertificateOpen.value = false
+      revokeCertificateTarget.value = null
+      revokeCertificateForm.reset()
+    },
+  })
 }
 
 const isForeign = computed(() => !!props.qualification.is_foreign)
@@ -842,6 +901,27 @@ const autoVerificationCollapsedSummary = computed(() => {
               </button>
 
               <button
+                v-if="qualification.can_reopen_level2_decision && can.reopen_decision"
+                type="button"
+                class="inline-flex items-center gap-2 rounded-xl border border-amber-300/40 bg-amber-500/15 px-3.5 py-2 text-sm font-semibold text-white transition hover:bg-amber-500/25"
+                :disabled="reopenDecisionForm.processing"
+                @click="reopenDecisionOpen = true"
+              >
+                <RotateCcw class="h-4 w-4 shrink-0 opacity-90" aria-hidden="true" />
+                Reopen Level 2 decision
+              </button>
+
+              <button
+                v-if="qualification.can_issue_rejection_certificate && can.issue_certificate"
+                type="button"
+                class="inline-flex items-center gap-2 rounded-xl border border-rose-300/40 bg-rose-600/20 px-3.5 py-2 text-sm font-semibold text-white transition hover:bg-rose-600/30"
+                :disabled="issueRejectionForm.processing"
+                @click="submitIssueRejection"
+              >
+                Issue rejection certificate
+              </button>
+
+              <button
                 v-if="qualification.can_issue_cveq_certificate && can.issue_certificate"
                 type="button"
                 class="inline-flex items-center gap-2 rounded-xl border border-emerald-300/40 bg-emerald-500/15 px-3.5 py-2 text-sm font-semibold text-white transition hover:bg-emerald-500/25"
@@ -868,7 +948,7 @@ const autoVerificationCollapsedSummary = computed(() => {
                 class="inline-flex items-center gap-2 rounded-xl border border-amber-300/40 bg-amber-500/15 px-3.5 py-2 text-sm font-semibold text-white transition hover:bg-amber-500/25"
                 @click="submitReissueCveq"
               >
-                Reissue certificate
+                Technical reissue
               </button>
             </div>
           </div>
@@ -1060,18 +1140,43 @@ const autoVerificationCollapsedSummary = computed(() => {
                 v-if="
                   can.issue_certificate &&
                     (qualification.can_issue_cveq_certificate ||
-                      qualification.cveq_certificate ||
+                      qualification.can_issue_rejection_certificate ||
+                      qualification.can_reopen_level2_decision ||
+                      qualification.certificate_history?.active ||
+                      (qualification.certificate_history?.revoked?.length ?? 0) > 0 ||
+                      (qualification.certificate_history?.superseded?.length ?? 0) > 0 ||
+                      (qualification.decision_reopen_history?.length ?? 0) > 0 ||
                       qualification.can_reissue_cveq_certificate)
                 "
                 class="rounded-xl border border-border/70 bg-surface-muted/30 px-4 py-4"
               >
-                <div class="text-[11px] font-bold uppercase tracking-wider text-text-muted">Certificate readiness</div>
+                <div class="text-[11px] font-bold uppercase tracking-wider text-text-muted">Certificate history</div>
                 <div class="mt-2 text-sm font-semibold text-text-primary">
-                  {{ qualification.can_issue_cveq_certificate ? 'Eligible to issue certificate' : 'Certificate not ready yet' }}
+                  {{ qualification.can_issue_cveq_certificate ? 'Eligible to issue certificate' : 'Certificate records' }}
                 </div>
                 <p class="mt-2 text-xs leading-relaxed text-text-muted">
-                  Issue the Certificate of Verification and Evaluation of Qualification once approval and payment conditions are satisfied.
+                  Issue verification or rejection notices once approval/rejection and payment conditions are satisfied. Revoked certificates remain in history.
                 </p>
+                <div
+                  v-if="(qualification.decision_reopen_history?.length ?? 0) > 0"
+                  class="mt-4 rounded-xl border border-amber-200/80 bg-amber-50/60 px-3 py-3 text-xs text-amber-950"
+                >
+                  <div class="font-semibold">Decision reopened after revocation</div>
+                  <ul class="mt-2 space-y-2">
+                    <li
+                      v-for="(event, index) in qualification.decision_reopen_history"
+                      :key="`${event.occurred_at}-${index}`"
+                      class="rounded-lg border border-amber-200/60 bg-white/70 px-3 py-2"
+                    >
+                      <div class="font-medium">{{ reopenIntendedActionLabel(event.intended_action) }}</div>
+                      <div v-if="event.reason" class="mt-1 whitespace-pre-wrap text-amber-900/90">{{ event.reason }}</div>
+                      <div class="mt-1 text-[11px] text-amber-800/80">
+                        <span v-if="event.actor_name">{{ event.actor_name }} · </span>
+                        <span v-if="event.occurred_at">{{ new Date(event.occurred_at).toLocaleString() }}</span>
+                      </div>
+                    </li>
+                  </ul>
+                </div>
                 <p v-if="qualification.application?.payment_satisfied === false" class="mt-3 text-xs font-medium text-amber-900">
                   Payment is not satisfied — certificate issuance is blocked until fees are covered.
                 </p>
@@ -1092,15 +1197,136 @@ const autoVerificationCollapsedSummary = computed(() => {
                     {{ qualification.certificate_template.warning }}
                   </p>
                 </div>
+
                 <div
-                  v-if="qualification.cveq_certificate?.certificate_number"
-                  class="mt-3 rounded-xl border border-border/70 bg-surface px-3 py-3 text-xs text-text-muted"
+                  v-if="qualification.certificate_history?.active"
+                  class="mt-4 rounded-xl border px-3 py-3 text-xs"
+                  :class="
+                    qualification.certificate_history.active.certificate_type === 'rejection'
+                      ? 'border-rose-200/80 bg-rose-50/60'
+                      : 'border-emerald-200/80 bg-emerald-50/60'
+                  "
                 >
-                  <span class="font-semibold text-text-primary">Active certificate:</span>
-                  {{ qualification.cveq_certificate.certificate_number }}
-                  <span v-if="qualification.cveq_certificate.issued_at" class="ml-1">
-                    · Issued {{ formatTimelineAt(qualification.cveq_certificate.issued_at) }}
-                  </span>
+                  <div
+                    class="font-semibold"
+                    :class="
+                      qualification.certificate_history.active.certificate_type === 'rejection'
+                        ? 'text-rose-950'
+                        : 'text-emerald-950'
+                    "
+                  >
+                    Active
+                    {{
+                      qualification.certificate_history.active.certificate_type === 'rejection'
+                        ? 'rejection certificate'
+                        : 'verification certificate'
+                    }}
+                  </div>
+                  <div class="mt-1 text-text-muted">
+                    {{ qualification.certificate_history.active.certificate_type_label }}
+                    · {{ qualification.certificate_history.active.certificate_number }}
+                  </div>
+                  <div v-if="qualification.certificate_history.active.issued_at" class="mt-1 text-text-muted">
+                    Issued {{ formatTimelineAt(qualification.certificate_history.active.issued_at) }}
+                  </div>
+                  <div class="mt-3 flex flex-wrap gap-2">
+                    <a
+                      :href="qualification.certificate_history.active.admin_download_url"
+                      target="_blank"
+                      rel="noopener"
+                      class="zaqa-btn zaqa-btn-secondary h-8 px-3 py-1.5 text-xs"
+                    >
+                      Download
+                    </a>
+                    <a
+                      v-if="qualification.certificate_history.active.verification_url"
+                      :href="qualification.certificate_history.active.verification_url"
+                      target="_blank"
+                      rel="noopener"
+                      class="zaqa-btn zaqa-btn-secondary h-8 px-3 py-1.5 text-xs"
+                    >
+                      Verify page
+                    </a>
+                    <button
+                      v-if="qualification.certificate_history.active.revoke_url && can.revoke_certificate"
+                      type="button"
+                      class="zaqa-btn zaqa-btn-danger h-8 px-3 py-1.5 text-xs"
+                      @click="openRevokeCertificate(qualification.certificate_history.active)"
+                    >
+                      Revoke certificate
+                    </button>
+                  </div>
+                </div>
+
+                <div v-if="(qualification.certificate_history?.revoked?.length ?? 0) > 0" class="mt-4 space-y-3">
+                  <div
+                    v-for="cert in qualification.certificate_history.revoked"
+                    :key="cert.id"
+                    class="rounded-xl border border-rose-200/80 bg-rose-50/50 px-3 py-3 text-xs"
+                  >
+                    <div class="font-semibold text-rose-950">
+                      Revoked {{ cert.certificate_type === 'rejection' ? 'rejection' : 'verification' }} certificate
+                    </div>
+                    <div class="mt-1 text-text-muted">{{ cert.certificate_type_label }} · {{ cert.certificate_number }}</div>
+                    <div class="mt-1 text-text-muted">
+                      Issued {{ formatTimelineAt(cert.issued_at) }}
+                      <span v-if="cert.revoked_at"> · Revoked {{ formatTimelineAt(cert.revoked_at) }}</span>
+                      <span v-if="cert.revoked_by_name"> by {{ cert.revoked_by_name }}</span>
+                    </div>
+                    <div v-if="cert.revocation_reason" class="mt-2 text-text-secondary">
+                      <span class="font-semibold text-text-primary">Internal reason:</span> {{ cert.revocation_reason }}
+                    </div>
+                    <div class="mt-3 flex flex-wrap gap-2">
+                      <a
+                        :href="cert.admin_download_url"
+                        target="_blank"
+                        rel="noopener"
+                        class="zaqa-btn zaqa-btn-secondary h-8 px-3 py-1.5 text-xs"
+                      >
+                        Download original PDF
+                      </a>
+                      <a
+                        v-if="cert.verification_url"
+                        :href="cert.verification_url"
+                        target="_blank"
+                        rel="noopener"
+                        class="zaqa-btn zaqa-btn-secondary h-8 px-3 py-1.5 text-xs"
+                      >
+                        Verify page
+                      </a>
+                    </div>
+                  </div>
+                </div>
+
+                <div v-if="(qualification.certificate_history?.superseded?.length ?? 0) > 0" class="mt-4 space-y-3">
+                  <div
+                    v-for="cert in qualification.certificate_history.superseded"
+                    :key="cert.id"
+                    class="rounded-xl border border-amber-200/80 bg-amber-50/50 px-3 py-3 text-xs"
+                  >
+                    <div class="font-semibold text-amber-950">Superseded certificate</div>
+                    <div class="mt-2 font-mono text-sm font-semibold text-text-primary">{{ cert.certificate_number }}</div>
+                    <div class="mt-1 text-text-muted">Issued {{ formatTimelineAt(cert.issued_at) }}</div>
+                    <div class="mt-3 flex flex-wrap gap-2">
+                      <a
+                        :href="cert.admin_download_url"
+                        target="_blank"
+                        rel="noopener"
+                        class="zaqa-btn zaqa-btn-secondary h-8 px-3 py-1.5 text-xs"
+                      >
+                        Download
+                      </a>
+                      <a
+                        v-if="cert.verification_url"
+                        :href="cert.verification_url"
+                        target="_blank"
+                        rel="noopener"
+                        class="zaqa-btn zaqa-btn-secondary h-8 px-3 py-1.5 text-xs"
+                      >
+                        Verify page
+                      </a>
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
@@ -1701,6 +1927,55 @@ const autoVerificationCollapsedSummary = computed(() => {
     </AdminActionModal>
 
     <AdminActionModal
+      v-model="revokeCertificateOpen"
+      title="Revoke certificate"
+      :description="
+        revokeCertificateTarget
+          ? `Revoke CVEQ ${revokeCertificateTarget.certificate_number}. The certificate will remain in history but will no longer verify as valid publicly.`
+          : ''
+      "
+    >
+      <div class="space-y-4">
+        <div>
+          <label class="text-sm font-semibold text-text-primary">Internal reason (required)</label>
+          <textarea
+            v-model="revokeCertificateForm.revocation_reason"
+            class="zaqa-input mt-2 h-auto min-h-[6rem] py-3"
+            placeholder="Why is this certificate being revoked?"
+          />
+          <div v-if="revokeCertificateForm.errors.revocation_reason" class="mt-1 text-xs text-danger">
+            {{ revokeCertificateForm.errors.revocation_reason }}
+          </div>
+        </div>
+        <div>
+          <label class="text-sm font-semibold text-text-primary">Public note (optional)</label>
+          <textarea
+            v-model="revokeCertificateForm.revocation_public_note"
+            class="zaqa-input mt-2 h-auto min-h-[4rem] py-3"
+            placeholder="Shown on the public verification page if provided."
+          />
+        </div>
+        <label class="flex items-start gap-2 text-sm text-text-secondary">
+          <input v-model="revokeCertificateForm.confirm" type="checkbox" class="mt-1 rounded border-border" />
+          <span>I understand this certificate will no longer verify as valid publicly.</span>
+        </label>
+        <div v-if="revokeCertificateForm.errors.confirm" class="text-xs text-danger">{{ revokeCertificateForm.errors.confirm }}</div>
+        <div v-if="revokeCertificateForm.errors.certificate" class="mt-1 text-xs text-danger">{{ revokeCertificateForm.errors.certificate }}</div>
+      </div>
+      <template #footer>
+        <button type="button" class="zaqa-btn zaqa-btn-secondary px-4 py-2 text-sm" @click="revokeCertificateOpen = false">Cancel</button>
+        <button
+          type="button"
+          class="zaqa-btn border border-rose-400/40 bg-rose-600 px-4 py-2 text-sm font-semibold text-white hover:bg-rose-700"
+          :disabled="revokeCertificateForm.processing"
+          @click="submitRevokeCertificate"
+        >
+          Revoke certificate
+        </button>
+      </template>
+    </AdminActionModal>
+
+    <AdminActionModal
       v-model="sendBackOpen"
       title="Send qualification back to applicant"
       description="Only this qualification is returned for amendment. The applicant will receive your comment and can update this item without reopening the whole application."
@@ -1914,6 +2189,14 @@ const autoVerificationCollapsedSummary = computed(() => {
         <div v-if="rejectForm.errors.reason" class="mt-1 text-xs text-danger">{{ rejectForm.errors.reason }}</div>
         <div v-if="(rejectForm.errors as any).qualification" class="mt-1 text-xs text-danger">{{ (rejectForm.errors as any).qualification }}</div>
         <div v-if="(rejectForm.errors as any).lock" class="mt-1 text-xs text-danger">{{ (rejectForm.errors as any).lock }}</div>
+        <label v-if="can.issue_certificate" class="mt-4 flex items-start gap-3 text-sm text-text-primary">
+          <input
+            v-model="rejectForm.generate_rejection_notice"
+            type="checkbox"
+            class="mt-1 rounded border-border text-accent focus:ring-accent"
+          />
+          <span>Generate rejection notice after rejection</span>
+        </label>
       </div>
       <template #footer>
         <button
@@ -1944,6 +2227,75 @@ const autoVerificationCollapsedSummary = computed(() => {
           "
         >
           Reject
+        </button>
+      </template>
+    </AdminActionModal>
+
+    <AdminActionModal
+      v-model="reopenDecisionOpen"
+      title="Reopen Level 2 decision"
+      description="This returns the qualification to Level 2 review so a new final decision can be recorded. Revoked certificates remain in history."
+    >
+      <div class="space-y-4">
+        <div>
+          <label class="text-sm font-semibold text-text-primary">Reason for reopening</label>
+          <textarea
+            v-model="reopenDecisionForm.reason"
+            class="zaqa-input mt-2 h-auto min-h-[8rem] py-3"
+            placeholder="Explain why the Level 2 decision must be reconsidered."
+          />
+          <div v-if="reopenDecisionForm.errors.reason" class="mt-1 text-xs text-danger">{{ reopenDecisionForm.errors.reason }}</div>
+        </div>
+        <div>
+          <label class="text-sm font-semibold text-text-primary">Intended review action</label>
+          <select v-model="reopenDecisionForm.intended_action" class="zaqa-input mt-2">
+            <option value="" disabled>Select intended action</option>
+            <option
+              v-for="option in qualification.reopen_intended_actions ?? []"
+              :key="option.value"
+              :value="option.value"
+            >
+              {{ option.label }}
+            </option>
+          </select>
+          <div v-if="reopenDecisionForm.errors.intended_action" class="mt-1 text-xs text-danger">
+            {{ reopenDecisionForm.errors.intended_action }}
+          </div>
+        </div>
+        <label class="flex items-start gap-3 text-sm text-text-primary">
+          <input
+            v-model="reopenDecisionForm.confirm"
+            type="checkbox"
+            class="mt-1 rounded border-border text-accent focus:ring-accent"
+          />
+          <span>I understand this will reopen the Level 2 decision and allow a new final decision to be recorded.</span>
+        </label>
+        <div v-if="reopenDecisionForm.errors.confirm" class="text-xs text-danger">{{ reopenDecisionForm.errors.confirm }}</div>
+        <div v-if="(reopenDecisionForm.errors as any).qualification" class="text-xs text-danger">
+          {{ (reopenDecisionForm.errors as any).qualification }}
+        </div>
+      </div>
+      <template #footer>
+        <button
+          type="button"
+          class="zaqa-btn zaqa-btn-secondary px-4 py-2 text-sm"
+          @click="
+            () => {
+              reopenDecisionOpen = false
+              reopenDecisionForm.clearErrors()
+              reopenDecisionForm.reset()
+            }
+          "
+        >
+          Cancel
+        </button>
+        <button
+          type="button"
+          class="zaqa-btn zaqa-btn-primary px-4 py-2 text-sm"
+          :disabled="reopenDecisionForm.processing"
+          @click="submitReopenDecision"
+        >
+          Reopen decision
         </button>
       </template>
     </AdminActionModal>

@@ -150,6 +150,8 @@ Route::middleware('auth')->group(function () {
         Route::get('/applications/{application}/qualifications/{qualification}/amend', [ApplicantApplicationController::class, 'amendQualification'])->name('applications.qualifications.amend');
         Route::get('/applications/{application}/qualifications/{qualification}/certificate', [ApplicantQualificationCertificateController::class, 'download'])
             ->name('applications.qualifications.certificate.download');
+        Route::get('/applications/{application}/qualifications/{qualification}/rejection-notice', [ApplicantQualificationCertificateController::class, 'downloadRejectionNotice'])
+            ->name('applications.qualifications.rejection_notice.download');
         Route::patch('/applications/{application}', [ApplicantApplicationController::class, 'update'])->name('applications.update');
         Route::patch('/applications/{application}/wizard-declarations', [ApplicantApplicationController::class, 'saveWizardDeclarations'])->name('applications.wizard_declarations.update');
         Route::delete('/applications/{application}', [ApplicantApplicationController::class, 'destroy'])->name('applications.destroy');
@@ -492,6 +494,9 @@ Route::middleware('auth')->group(function () {
         Route::get('/certificates/{qualificationCertificate}/download', [AdminCertificatesController::class, 'download'])
             ->middleware('can:admin.certificates.view')
             ->name('certificates.download');
+        Route::post('/certificates/{qualificationCertificate}/revoke', [AdminCertificatesController::class, 'revoke'])
+            ->middleware('can:certificates.revoke')
+            ->name('certificates.revoke');
 
         Route::prefix('verification')->name('verification.')->group(function () {
             Route::get('/pool', [AdminVerificationPoolController::class, 'index'])
@@ -628,6 +633,12 @@ Route::middleware('auth')->group(function () {
             Route::post('/qualifications/{qualification}/issue-certificate', [AdminVerificationQualificationController::class, 'issueCertificate'])
                 ->middleware('can:verification.certificate.issue')
                 ->name('qualifications.issue_certificate');
+            Route::post('/qualifications/{qualification}/issue-rejection-certificate', [AdminVerificationQualificationController::class, 'issueRejectionCertificate'])
+                ->middleware('can:verification.certificate.issue')
+                ->name('qualifications.issue_rejection_certificate');
+            Route::post('/qualifications/{qualification}/reopen-level2-decision', [AdminVerificationQualificationController::class, 'reopenLevel2Decision'])
+                ->middleware('can:verification.decision.reopen')
+                ->name('qualifications.reopen_level2_decision');
             Route::post('/qualifications/{qualification}/level2-lock', [AdminVerificationQualificationController::class, 'lockForLevel2Review'])
                 ->middleware('can:verification.level2.review')
                 ->name('qualifications.level2_lock');

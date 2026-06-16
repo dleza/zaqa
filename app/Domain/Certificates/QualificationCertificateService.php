@@ -13,6 +13,7 @@ use App\Enums\DocumentSignatureType;
 use App\Enums\VerificationState;
 use App\Mail\QualificationCertificateIssuedMail;
 use App\Models\Application;
+use App\Models\ApplicationComment;
 use App\Models\Qualification;
 use App\Models\QualificationCertificate;
 use App\Models\QualificationSubjectResult;
@@ -78,10 +79,7 @@ class QualificationCertificateService
             throw ValidationException::withMessages(['qualification' => 'Application not found for this qualification.']);
         }
 
-        $existingActive = QualificationCertificate::query()
-            ->where('qualification_id', $qualification->id)
-            ->where('status', QualificationCertificate::STATUS_ISSUED)
-            ->first();
+        $existingActive = $this->findActiveCertificate($qualification);
 
         if ($existingActive && ! $reissue) {
             throw ValidationException::withMessages([
@@ -89,9 +87,25 @@ class QualificationCertificateService
             ]);
         }
 
-        $this->assertEligible($qualification, $application, $reissue);
+        $this->assertEligible($qualification, $application, $reissue, $existingActive);
 
-        return DB::transaction(function () use ($qualification, $application, $issuer, $reissue, $existingActive) {
+        $isPostRevocationIssue = ! $reissue
+            && ! $existingActive
+            && $qualification->verification_state === VerificationState::CertificateIssued;
+
+        $revokedPredecessor = ($isPostRevocationIssue || (! $reissue && ! $existingActive))
+            ? QualificationCertificate::query()
+                ->where('qualification_id', $qualification->id)
+                ->where('status', QualificationCertificate::STATUS_REVOKED)
+                ->orderByDesc('id')
+                ->first()
+            : null;
+
+        if (! $reissue && ! $existingActive && $revokedPredecessor && $qualification->verification_state === VerificationState::ApprovedForCertificate) {
+            $isPostRevocationIssue = true;
+        }
+
+        return DB::transaction(function () use ($qualification, $application, $issuer, $reissue, $existingActive, $isPostRevocationIssue, $revokedPredecessor) {
             if ($existingActive && $reissue) {
                 $existingActive->forceFill([
                     'status' => QualificationCertificate::STATUS_REISSUED,
@@ -102,7 +116,11 @@ class QualificationCertificateService
                 ])->save();
             }
 
-            $certificateNumber = $this->allocateCertificateNumber();
+            $replacesCertificateId = $reissue
+                ? $existingActive?->id
+                : ($revokedPredecessor?->id);
+
+            $certificateNumber = $this->allocateCertificateNumber(QualificationCertificate::TYPE_VERIFICATION);
             $token = $this->allocateVerificationToken();
             $verifyUrl = config('certificates.verify_url_base').'/'.$token;
             $issuedAt = now();
@@ -133,11 +151,20 @@ class QualificationCertificateService
                 'issued_at' => $issuedAt,
                 'recipient_email' => $recipientEmail,
                 'status' => QualificationCertificate::STATUS_ISSUED,
+                'certificate_type' => QualificationCertificate::TYPE_VERIFICATION,
+                'replaces_certificate_id' => $replacesCertificateId,
                 'metadata' => array_merge([
                     'reissue' => $reissue,
-                    'previous_certificate_id' => $existingActive?->id,
+                    'post_revocation_issue' => $isPostRevocationIssue,
+                    'previous_certificate_id' => $existingActive?->id ?? $revokedPredecessor?->id,
                 ], $renderContext['metadata']),
             ]);
+
+            if ($existingActive && $reissue) {
+                $existingActive->forceFill([
+                    'superseded_by_certificate_id' => $record->id,
+                ])->save();
+            }
 
             $qualification->forceFill([
                 'verification_state' => VerificationState::CertificateIssued,
@@ -187,10 +214,16 @@ class QualificationCertificateService
             }
 
             $this->audit->record(
-                eventType: 'certificates.qualification_issued',
+                eventType: $isPostRevocationIssue
+                    ? 'certificates.qualification_issued_after_revocation'
+                    : 'certificates.qualification_issued',
                 module: 'Certificates',
-                actionName: 'qualification_certificate_issued',
-                message: 'Qualification certificate (CVEQ) issued.',
+                actionName: $isPostRevocationIssue
+                    ? 'qualification_certificate_issued_after_revocation'
+                    : 'qualification_certificate_issued',
+                message: $isPostRevocationIssue
+                    ? 'Qualification certificate (CVEQ) issued after prior revocation.'
+                    : 'Qualification certificate (CVEQ) issued.',
                 entityType: QualificationCertificate::class,
                 entityId: $record->id,
                 beforeState: null,
@@ -199,7 +232,10 @@ class QualificationCertificateService
                     'qualification_id' => $qualification->id,
                     'application_id' => $application->id,
                     'certificate_number' => $certificateNumber,
+                    'certificate_type' => QualificationCertificate::TYPE_VERIFICATION,
                     'reissue' => $reissue,
+                    'post_revocation_issue' => $isPostRevocationIssue,
+                    'replaced_certificate_id' => $replacesCertificateId,
                 ],
                 actor: $issuer,
             );
@@ -211,8 +247,153 @@ class QualificationCertificateService
         });
     }
 
-    public function assertEligible(Qualification $qualification, Application $application, bool $reissue = false): void
+    /**
+     * Issue a formal rejection notice PDF for a rejected qualification.
+     *
+     * @return array{certificate: QualificationCertificate, download_path: string}
+     */
+    public function issueRejection(Qualification $qualification, User $issuer): array
     {
+        $qualification->loadMissing([
+            'application.applicant',
+            'application',
+            'awardingInstitution',
+            'country',
+        ]);
+
+        $application = $qualification->application;
+        if (! $application instanceof Application) {
+            throw ValidationException::withMessages(['qualification' => 'Application not found for this qualification.']);
+        }
+
+        $existingActive = $this->findActiveCertificate($qualification);
+
+        if ($existingActive) {
+            throw ValidationException::withMessages([
+                'qualification' => 'A certificate has already been issued for this qualification.',
+            ]);
+        }
+
+        $this->assertRejectionEligible($qualification, $application);
+
+        $revokedPredecessor = QualificationCertificate::query()
+            ->where('qualification_id', $qualification->id)
+            ->where('status', QualificationCertificate::STATUS_REVOKED)
+            ->where('certificate_type', QualificationCertificate::TYPE_REJECTION)
+            ->orderByDesc('id')
+            ->first();
+
+        $isPostRevocationIssue = $revokedPredecessor instanceof QualificationCertificate;
+
+        return DB::transaction(function () use ($qualification, $application, $issuer, $isPostRevocationIssue, $revokedPredecessor) {
+            $certificateNumber = $this->allocateCertificateNumber(QualificationCertificate::TYPE_REJECTION);
+            $token = $this->allocateVerificationToken();
+            $verifyUrl = config('certificates.verify_url_base').'/'.$token;
+            $issuedAt = now();
+
+            $year = $issuedAt->year;
+            $relativePath = "qualification-certificates/rejection/{$year}/{$qualification->id}/{$token}.pdf";
+
+            $renderContext = $this->buildRejectionRenderContext($qualification, $application, [
+                'certificate_number' => $certificateNumber,
+                'verification_url' => $verifyUrl,
+                'issued_at' => $issuedAt,
+            ]);
+            $pdfBinary = $this->renderPdf($renderContext['view'], $renderContext['data']);
+
+            Storage::disk('local')->put($relativePath, $pdfBinary);
+
+            $applicant = $application->applicant;
+            $recipientEmail = $applicant?->email;
+
+            $record = QualificationCertificate::query()->create([
+                'qualification_id' => $qualification->id,
+                'application_id' => $application->id,
+                'certificate_number' => $certificateNumber,
+                'zaqa_reference_number' => $qualification->verification_reference_number,
+                'verification_token' => $token,
+                'file_path' => $relativePath,
+                'issued_by_user_id' => $issuer->id,
+                'issued_at' => $issuedAt,
+                'recipient_email' => $recipientEmail,
+                'status' => QualificationCertificate::STATUS_ISSUED,
+                'certificate_type' => QualificationCertificate::TYPE_REJECTION,
+                'replaces_certificate_id' => $revokedPredecessor?->id,
+                'metadata' => array_merge([
+                    'post_revocation_issue' => $isPostRevocationIssue,
+                    'previous_certificate_id' => $revokedPredecessor?->id,
+                ], $renderContext['metadata']),
+            ]);
+
+            $this->audit->record(
+                eventType: $isPostRevocationIssue
+                    ? 'certificates.rejection_issued_after_revocation'
+                    : 'certificates.rejection_issued',
+                module: 'Certificates',
+                actionName: $isPostRevocationIssue
+                    ? 'rejection_certificate_issued_after_revocation'
+                    : 'rejection_certificate_issued',
+                message: $isPostRevocationIssue
+                    ? 'Rejection notice issued after prior revocation.'
+                    : 'Rejection notice issued.',
+                entityType: QualificationCertificate::class,
+                entityId: $record->id,
+                beforeState: null,
+                afterState: $record->toArray(),
+                metadata: [
+                    'qualification_id' => $qualification->id,
+                    'application_id' => $application->id,
+                    'certificate_number' => $certificateNumber,
+                    'certificate_type' => QualificationCertificate::TYPE_REJECTION,
+                    'post_revocation_issue' => $isPostRevocationIssue,
+                    'replaced_certificate_id' => $revokedPredecessor?->id,
+                ],
+                actor: $issuer,
+            );
+
+            return [
+                'certificate' => $record,
+                'download_path' => $relativePath,
+            ];
+        });
+    }
+
+    public function findActiveCertificate(Qualification $qualification): ?QualificationCertificate
+    {
+        return QualificationCertificate::query()
+            ->where('qualification_id', $qualification->id)
+            ->where('status', QualificationCertificate::STATUS_ISSUED)
+            ->orderByDesc('id')
+            ->first();
+    }
+
+    public function assertRejectionEligible(Qualification $qualification, Application $application): void
+    {
+        if (! $this->payments->isSatisfied($application)) {
+            throw ValidationException::withMessages([
+                'payment' => 'Application payment must be fully satisfied before issuing a rejection notice.',
+            ]);
+        }
+
+        if ($application->verification_state === VerificationState::Closed) {
+            throw ValidationException::withMessages([
+                'application' => 'Rejection notices cannot be issued for closed applications.',
+            ]);
+        }
+
+        if ($qualification->verification_state !== VerificationState::Rejected) {
+            throw ValidationException::withMessages([
+                'qualification' => 'This qualification must be rejected before a rejection notice can be issued.',
+            ]);
+        }
+    }
+
+    public function assertEligible(
+        Qualification $qualification,
+        Application $application,
+        bool $reissue = false,
+        ?QualificationCertificate $existingActive = null,
+    ): void {
         if (! $this->payments->isSatisfied($application)) {
             throw ValidationException::withMessages([
                 'payment' => 'Application payment must be fully satisfied before issuing a certificate.',
@@ -240,11 +421,18 @@ class QualificationCertificateService
             return;
         }
 
-        if ($vs !== VerificationState::ApprovedForCertificate) {
-            throw ValidationException::withMessages([
-                'qualification' => 'This qualification must be approved for certificate before a CVEQ can be issued.',
-            ]);
+        if ($vs === VerificationState::ApprovedForCertificate) {
+            return;
         }
+
+        // Post-revocation replacement: qualification remains certificate_issued but no active issued row.
+        if ($vs === VerificationState::CertificateIssued && ! $existingActive instanceof QualificationCertificate) {
+            return;
+        }
+
+        throw ValidationException::withMessages([
+            'qualification' => 'This qualification must be approved for certificate before a CVEQ can be issued.',
+        ]);
     }
 
     /**
@@ -260,10 +448,13 @@ class QualificationCertificateService
         return Storage::disk('local')->get($path);
     }
 
-    private function allocateCertificateNumber(): string
+    private function allocateCertificateNumber(string $type = QualificationCertificate::TYPE_VERIFICATION): string
     {
         $year = now()->year;
-        $prefix = sprintf('ZAQA-CVEQ-%d-', $year);
+        $prefix = match ($type) {
+            QualificationCertificate::TYPE_REJECTION => sprintf('ZAQA-REJ-%d-', $year),
+            default => sprintf('ZAQA-CVEQ-%d-', $year),
+        };
 
         $last = QualificationCertificate::query()
             ->where('certificate_number', 'like', $prefix.'%')
@@ -286,6 +477,94 @@ class QualificationCertificateService
         } while (QualificationCertificate::query()->where('verification_token', $token)->exists());
 
         return $token;
+    }
+
+    /**
+     * @param  array{certificate_number: string, verification_url: string, issued_at: Carbon}  $issue
+     * @return array{view: string, data: array<string, mixed>, metadata: array<string, mixed>}
+     */
+    private function buildRejectionRenderContext(Qualification $qualification, Application $application, array $issue): array
+    {
+        $holderName = trim((string) ($qualification->qualification_holder_name ?? ''));
+        if ($holderName === '') {
+            $meta = $application->metadata;
+            if (is_array($meta) && isset($meta['verification_subject']['full_name'])) {
+                $holderName = trim((string) $meta['verification_subject']['full_name']);
+            }
+        }
+
+        $institutionName = $qualification->awardingInstitution?->name
+            ?? (string) ($qualification->awarding_institution_name_other ?: $qualification->awarding_institution_name);
+
+        $qualificationTitle = trim((string) ($qualification->verified_qualification_title ?? ''));
+        if ($qualificationTitle === '') {
+            $qualificationTitle = trim((string) ($qualification->title_of_qualification ?? ''));
+        }
+
+        $decisionSummary = $this->resolveApplicantVisibleRejectionReason($qualification);
+        $decisionIsGeneric = $decisionSummary === null;
+        if ($decisionIsGeneric) {
+            $decisionSummary = 'ZAQA has reviewed the submitted qualification and determined that it does not meet the requirements for issuance of a verification certificate.';
+        }
+
+        $logoDataUri = $this->imageDataUriFromPath(resource_path('images/zaqa_logo_clean.png'));
+        $watermarkEnabled = (bool) config('certificates.watermark_enabled', true);
+        $coatOfArmsWatermarkDataUri = $watermarkEnabled ? $this->buildCoatOfArmsWatermarkDataUri($qualification) : null;
+
+        $issuedAt = $issue['issued_at']->timezone(config('app.timezone'));
+        $issuedForFooter = $issuedAt->format('h:i A').' ('.$issuedAt->getTimezone()->getName().') on '.$issuedAt->format('d M Y');
+
+        $viewData = [
+            'application' => $application,
+            'certificate_number' => $issue['certificate_number'],
+            'verification_url' => $issue['verification_url'],
+            'issued_at' => $issue['issued_at'],
+            'issued_at_formatted' => $issuedAt->format('d M Y'),
+            'holder_name' => $holderName !== '' ? $holderName : '—',
+            'holder_id' => trim((string) ($qualification->nrc_passport_number ?? '')) ?: '—',
+            'application_number' => (string) $application->application_number,
+            'zaqa_reference' => (string) ($qualification->verification_reference_number ?? ''),
+            'qualification_title' => $qualificationTitle !== '' ? $qualificationTitle : '—',
+            'awarding_institution' => $institutionName !== '' ? $institutionName : '—',
+            'decision_summary' => $decisionSummary,
+            'decision_is_generic' => $decisionIsGeneric,
+            'director_name' => config('certificates.director_general_name'),
+            'director_title' => config('certificates.director_general_title'),
+            'signature_data_uri' => app(DocumentSignatureService::class)->dataUriForType(DocumentSignatureType::Certificate),
+            'logo_data_uri' => $logoDataUri,
+            'coat_of_arms_watermark_data_uri' => $coatOfArmsWatermarkDataUri,
+            'qr_data_uri' => $this->buildQrDataUri($issue['verification_url']),
+            'issued_for_footer' => $issuedForFooter,
+        ];
+
+        return [
+            'view' => 'pdf.rejection-certificate',
+            'data' => $viewData,
+            'metadata' => [
+                'certificate_type' => QualificationCertificate::TYPE_REJECTION,
+                'template_version' => self::TEMPLATE_VERSION,
+                'decision_is_generic' => $decisionIsGeneric,
+                'verification_base_url' => config('certificates.verify_url_base'),
+            ],
+        ];
+    }
+
+    private function resolveApplicantVisibleRejectionReason(Qualification $qualification): ?string
+    {
+        $reason = ApplicationComment::query()
+            ->where('qualification_id', $qualification->id)
+            ->where('type', 'decision_reason')
+            ->where('visibility', 'applicant_visible')
+            ->orderByDesc('id')
+            ->value('body');
+
+        if (! is_string($reason)) {
+            return null;
+        }
+
+        $reason = trim($reason);
+
+        return $reason !== '' ? $reason : null;
     }
 
     /**

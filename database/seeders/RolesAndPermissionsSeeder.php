@@ -71,6 +71,8 @@ class RolesAndPermissionsSeeder extends Seeder
         'verification.decide.approve',
         'verification.decide.reject',
         'verification.certificate.issue',
+        'certificates.revoke',
+        'verification.decision.reopen',
         'verification.overdue.view',
 
         // Settings / reference data modules
@@ -183,8 +185,10 @@ class RolesAndPermissionsSeeder extends Seeder
             'verification.level2.review',
             'verification.decide.approve',
             'verification.decide.reject',
-            'verification.certificate.issue',
-            'verification.overdue.view',
+        'verification.certificate.issue',
+        'certificates.revoke',
+        'verification.decision.reopen',
+        'verification.overdue.view',
         ])->get());
 
         $auditor = Role::query()->firstOrCreate(['name' => 'Auditor', 'guard_name' => 'web']);

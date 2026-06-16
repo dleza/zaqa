@@ -1824,6 +1824,32 @@ onBeforeUnmount(() => {
                           Download PDF
                         </a>
                       </div>
+                      <div
+                        v-else-if="q.rejection_notice"
+                        class="mt-4 rounded-xl border border-rose-300/50 bg-rose-50/90 px-4 py-3 text-left"
+                      >
+                        <div class="text-xs font-bold uppercase tracking-wider text-rose-900">ZAQA rejection notice</div>
+                        <p class="mt-1 text-sm text-rose-950">
+                          <span class="font-mono font-semibold">{{ q.rejection_notice.certificate_number }}</span>
+                          <span v-if="q.rejection_notice.issued_at" class="text-xs text-rose-800">
+                            · Issued {{ formatCveqIssuedAt(q.rejection_notice.issued_at) }}
+                          </span>
+                        </p>
+                        <a
+                          v-if="q.rejection_notice.download_url"
+                          :href="q.rejection_notice.download_url"
+                          class="zaqa-btn zaqa-btn-secondary mt-3 inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold"
+                        >
+                          <FileDown class="h-4 w-4 shrink-0" aria-hidden="true" />
+                          Download rejection notice
+                        </a>
+                      </div>
+                      <div
+                        v-else-if="q.rejection_notice_recalled"
+                        class="mt-4 rounded-xl border border-amber-300/50 bg-amber-50/90 px-4 py-3 text-sm text-amber-950"
+                      >
+                        A previous rejection notice was recalled. Please refer to the latest decision on this qualification.
+                      </div>
                     </div>
                     <div class="flex shrink-0 flex-wrap gap-2">
                       <button
