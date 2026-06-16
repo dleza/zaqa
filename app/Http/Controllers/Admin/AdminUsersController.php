@@ -136,7 +136,9 @@ class AdminUsersController extends Controller
             'can' => [
                 'edit' => (bool) $request->user()?->can('admin.users.edit'),
                 'disable' => (bool) $request->user()?->can('admin.users.disable'),
+                'resend_login_email' => $this->canResendLoginEmail($request, $user),
             ],
+            'resend_login_email_url' => route('admin.users.resend_login_email', $user),
         ]);
     }
 
@@ -284,6 +286,58 @@ class AdminUsersController extends Controller
         return back()->with('success', 'User unblocked.');
     }
 
+    public function resendLoginEmail(Request $request, User $user, OutboundMailService $mail, AuditLogService $audit): RedirectResponse
+    {
+        if ($user->applicant_type !== null) {
+            abort(404);
+        }
+
+        if (! $request->user()?->can('admin.users.edit')) {
+            abort(403);
+        }
+
+        if ($user->last_login_at !== null) {
+            return back()->withErrors([
+                'resend_login_email' => 'This account has already been used to sign in. Login details cannot be resent.',
+            ]);
+        }
+
+        $email = trim((string) ($user->email ?? ''));
+        if ($email === '') {
+            return back()->withErrors([
+                'resend_login_email' => 'This user does not have an email address on file.',
+            ]);
+        }
+
+        $roles = method_exists($user, 'getRoleNames') ? $user->getRoleNames()->values()->all() : [];
+        $roleName = (string) ($roles[0] ?? 'Staff');
+
+        $generatedPassword = Str::password(14, true, true, false, false);
+        $user->forceFill(['password' => $generatedPassword])->save();
+
+        $this->queueStaffWelcomeEmail($mail, $user, $generatedPassword, $roleName);
+
+        $audit->record(
+            eventType: 'admin.managed_user_login_email_resent',
+            module: 'Admin',
+            actionName: 'managed_user_login_email_resent',
+            message: 'Staff login details email resent by administrator.',
+            entityType: User::class,
+            entityId: (int) $user->id,
+            metadata: [
+                'user_id' => (int) $user->id,
+                'email' => $email,
+                'role' => $roleName,
+            ],
+            actor: $request->user(),
+        );
+
+        return back()
+            ->with('success', 'Login details have been resent to the user.')
+            ->with('generated_password', $generatedPassword)
+            ->with('generated_password_for', $email);
+    }
+
     public function create(Request $request): Response
     {
         return Inertia::render('Admin/Users/Create', [
@@ -337,23 +391,7 @@ class AdminUsersController extends Controller
             return $u;
         });
 
-        $mail->queue(
-            mailable: new AdminStaffAccountCreatedMail(
-                recipientName: $user->name,
-                email: (string) $user->email,
-                plainTextPassword: $generatedPassword,
-                roleName: $role->name,
-                loginUrl: route('login'),
-            ),
-            to: (string) $user->email,
-            logContext: [
-                'user_id' => $user->id,
-                'application_id' => null,
-                'email' => (string) $user->email,
-                'subject' => 'Your ZAQA staff account',
-                'template_key' => 'admin_staff_account_created',
-            ],
-        );
+        $this->queueStaffWelcomeEmail($mail, $user, $generatedPassword, $role->name);
 
         return redirect('/admin/users')
             ->with('success', 'User created. Login details have been emailed to the user.')
@@ -602,5 +640,44 @@ class AdminUsersController extends Controller
             \App\Models\LearnerRecordImport::class => '/admin/learner-records/imports/'.$entityId,
             default => null,
         };
+    }
+
+    private function canResendLoginEmail(Request $request, User $user): bool
+    {
+        if (! $request->user()?->can('admin.users.edit')) {
+            return false;
+        }
+
+        if ($user->last_login_at !== null) {
+            return false;
+        }
+
+        return trim((string) ($user->email ?? '')) !== '';
+    }
+
+    private function queueStaffWelcomeEmail(OutboundMailService $mail, User $user, string $plainTextPassword, string $roleName): void
+    {
+        $email = trim((string) ($user->email ?? ''));
+        if ($email === '') {
+            return;
+        }
+
+        $mail->queue(
+            mailable: new AdminStaffAccountCreatedMail(
+                recipientName: (string) $user->name,
+                email: $email,
+                plainTextPassword: $plainTextPassword,
+                roleName: $roleName,
+                loginUrl: route('login'),
+            ),
+            to: $email,
+            logContext: [
+                'user_id' => $user->id,
+                'application_id' => null,
+                'email' => $email,
+                'subject' => 'Your ZAQA staff account',
+                'template_key' => 'admin_staff_account_created',
+            ],
+        );
     }
 }

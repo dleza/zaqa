@@ -69,6 +69,7 @@ class AdminUsersManagementTest extends TestCase
                 ->where('user.email', 'review.officer@example.test')
                 ->where('user.primary_role', 'Verification Officer Level 2')
                 ->where('can.edit', true)
+                ->where('can.resend_login_email', true)
                 ->has('recent_activity')
                 ->has('stats.cards')
                 ->has('access_areas')
@@ -232,5 +233,75 @@ class AdminUsersManagementTest extends TestCase
             'email' => 'nope@example.test',
             'role' => 'Auditor',
         ])->assertForbidden();
+    }
+
+    public function test_super_admin_can_resend_login_email_when_user_never_logged_in(): void
+    {
+        Mail::fake();
+
+        $admin = User::factory()->activated()->create(['applicant_type' => null]);
+        $admin->assignRole('Super Admin');
+
+        $managedUser = User::factory()->activated()->create([
+            'applicant_type' => null,
+            'email' => 'never.logged.in@example.test',
+            'last_login_at' => null,
+        ]);
+        $managedUser->assignRole('Finance Officer');
+
+        $oldPasswordHash = $managedUser->password;
+
+        $this->actingAs($admin)
+            ->from("/admin/users/{$managedUser->id}")
+            ->post("/admin/users/{$managedUser->id}/resend-login-email")
+            ->assertRedirect("/admin/users/{$managedUser->id}")
+            ->assertSessionHas('success')
+            ->assertSessionHas('generated_password')
+            ->assertSessionHas('generated_password_for', 'never.logged.in@example.test');
+
+        $managedUser->refresh();
+        $this->assertNotSame($oldPasswordHash, $managedUser->password);
+
+        Mail::assertQueued(AdminStaffAccountCreatedMail::class, function (AdminStaffAccountCreatedMail $mailable): bool {
+            return $mailable->email === 'never.logged.in@example.test'
+                && $mailable->roleName === 'Finance Officer'
+                && $mailable->plainTextPassword !== '';
+        });
+
+        $this->assertDatabaseHas('audit_logs', [
+            'event_type' => 'admin.managed_user_login_email_resent',
+            'entity_type' => User::class,
+            'entity_id' => $managedUser->id,
+        ]);
+    }
+
+    public function test_resend_login_email_blocked_when_user_has_logged_in(): void
+    {
+        Mail::fake();
+
+        $admin = User::factory()->activated()->create(['applicant_type' => null]);
+        $admin->assignRole('Super Admin');
+
+        $managedUser = User::factory()->activated()->create([
+            'applicant_type' => null,
+            'email' => 'already.used@example.test',
+            'last_login_at' => now()->subDay(),
+        ]);
+        $managedUser->assignRole('Auditor');
+
+        $this->actingAs($admin)
+            ->get("/admin/users/{$managedUser->id}")
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('can.resend_login_email', false)
+            );
+
+        $this->actingAs($admin)
+            ->from("/admin/users/{$managedUser->id}")
+            ->post("/admin/users/{$managedUser->id}/resend-login-email")
+            ->assertRedirect("/admin/users/{$managedUser->id}")
+            ->assertSessionHasErrors('resend_login_email');
+
+        Mail::assertNothingQueued();
     }
 }

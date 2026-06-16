@@ -34,11 +34,13 @@ const props = defineProps<{
   level1_memberships: Array<any>
   access_areas: Array<{ key: string; label: string; klass: string }>
   permission_count: number
-  can: { edit: boolean; disable: boolean }
+  can: { edit: boolean; disable: boolean; resend_login_email?: boolean }
+  resend_login_email_url?: string
 }>()
 
 const blockForm = useForm({})
 const unblockForm = useForm({})
+const resendLoginEmailForm = useForm({})
 
 function block() {
   blockForm.post(`/admin/users/${props.user.id}/block`, { preserveScroll: true })
@@ -46,6 +48,12 @@ function block() {
 
 function unblock() {
   unblockForm.post(`/admin/users/${props.user.id}/unblock`, { preserveScroll: true })
+}
+
+function resendLoginEmail() {
+  if (!props.resend_login_email_url) return
+  if (!confirm('Resend login details email to this user? A new temporary password will be generated.')) return
+  resendLoginEmailForm.post(props.resend_login_email_url, { preserveScroll: true })
 }
 
 function labelOrDash(v: any) {
@@ -146,6 +154,16 @@ const statusBadgeClass = computed(() => {
           >
             Edit user
           </Link>
+          <button
+            v-if="can.resend_login_email"
+            type="button"
+            class="inline-flex items-center justify-center gap-2 rounded-xl border border-white/25 bg-white/10 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-white/20 disabled:opacity-60"
+            :disabled="resendLoginEmailForm.processing"
+            @click="resendLoginEmail"
+          >
+            <Mail class="h-4 w-4" aria-hidden="true" />
+            Resend login email
+          </button>
           <button
             v-if="can.disable && user.disabled_at"
             type="button"

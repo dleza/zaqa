@@ -422,6 +422,9 @@ Route::middleware('auth')->group(function () {
         Route::post('/users/{user}/unblock', [AdminUsersController::class, 'unblock'])
             ->middleware('can:admin.users.disable')
             ->name('users.unblock');
+        Route::post('/users/{user}/resend-login-email', [AdminUsersController::class, 'resendLoginEmail'])
+            ->middleware('can:admin.users.edit')
+            ->name('users.resend_login_email');
         Route::get('/applicants', [AdminApplicantsController::class, 'index'])
             ->middleware('can:admin.applicants.view')
             ->name('applicants.index');
