@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Applicant;
 
 use App\Domain\Finance\InvoicePdfService;
 use App\Domain\Finance\PaymentReceiptPdfService;
+use App\Enums\PaymentStatus;
 use App\Http\Controllers\Controller;
 use App\Models\Application;
 use App\Models\Invoice;
@@ -51,44 +52,14 @@ class ApplicantBillingController extends Controller
     public function payments(Request $request): Response
     {
         $user = $request->user();
+        $receiptPdf = app(PaymentReceiptPdfService::class);
 
         $payments = Payment::query()
             ->with(['application', 'invoice', 'proofDocument'])
             ->whereHas('application', fn ($q) => $q->where('applicant_user_id', $user->id))
             ->latest('id')
             ->get()
-            ->map(fn (Payment $p) => [
-                'id' => $p->id,
-                'method' => $p->method?->value ?? (string) $p->method,
-                'status' => $p->status?->value ?? (string) $p->status,
-                'currency' => $p->currency,
-                'amount_cents' => $p->amount_cents,
-                'provider' => $p->provider,
-                'provider_reference' => $p->provider_reference,
-                'created_at' => optional($p->created_at)?->toIso8601String(),
-                'confirmed_at' => optional($p->confirmed_at)?->toIso8601String(),
-                'rejection_reason' => $p->rejection_reason,
-                'application' => $p->application
-                    ? [
-                        'id' => $p->application->id,
-                        'application_number' => $p->application->application_number,
-                    ]
-                    : null,
-                'invoice' => $p->invoice
-                    ? [
-                        'id' => $p->invoice->id,
-                        'invoice_number' => $p->invoice->invoice_number,
-                    ]
-                    : null,
-                'proof_document' => $p->proofDocument
-                    ? [
-                        'id' => $p->proofDocument->id,
-                        'preview_url' => \Illuminate\Support\Facades\URL::temporarySignedRoute('applicant.documents.preview', now()->addMinutes(15), ['document' => $p->proofDocument->id]),
-                        'download_url' => \Illuminate\Support\Facades\URL::temporarySignedRoute('applicant.documents.download', now()->addMinutes(15), ['document' => $p->proofDocument->id]),
-                    ]
-                    : null,
-                'receipt_download_url' => app(PaymentReceiptPdfService::class)->receiptDownloadUrl($p, 'applicant.payments.receipt.download'),
-            ]);
+            ->map(fn (Payment $p) => $this->mapPaymentListRow($p, $receiptPdf, includeProofDocument: true));
 
         $summary = [
             'total_cents' => (int) $payments->sum('amount_cents'),
@@ -99,6 +70,29 @@ class ApplicantBillingController extends Controller
         return Inertia::render('Applicant/Payments', [
             'payments' => $payments,
             'summary' => $summary,
+        ]);
+    }
+
+    public function receipts(Request $request): Response
+    {
+        $user = $request->user();
+        $receiptPdf = app(PaymentReceiptPdfService::class);
+
+        $receipts = Payment::query()
+            ->with(['application', 'invoice'])
+            ->where('status', PaymentStatus::Confirmed)
+            ->whereHas('application', fn ($q) => $q->where('applicant_user_id', $user->id))
+            ->latest('confirmed_at')
+            ->latest('id')
+            ->get()
+            ->map(fn (Payment $p) => $this->mapReceiptListRow($p, $receiptPdf));
+
+        return Inertia::render('Applicant/Receipts', [
+            'receipts' => $receipts,
+            'summary' => [
+                'count' => (int) $receipts->count(),
+                'total_cents' => (int) $receipts->sum('amount_cents'),
+            ],
         ]);
     }
 
@@ -240,6 +234,80 @@ class ApplicantBillingController extends Controller
         if (! $application || (int) $application->applicant_user_id !== $userId) {
             abort(403);
         }
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function mapPaymentListRow(Payment $p, PaymentReceiptPdfService $receiptPdf, bool $includeProofDocument = false): array
+    {
+        $row = [
+            'id' => $p->id,
+            'method' => $p->method?->value ?? (string) $p->method,
+            'status' => $p->status?->value ?? (string) $p->status,
+            'currency' => $p->currency,
+            'amount_cents' => $p->amount_cents,
+            'provider' => $p->provider,
+            'provider_reference' => $p->provider_reference,
+            'created_at' => optional($p->created_at)?->toIso8601String(),
+            'confirmed_at' => optional($p->confirmed_at)?->toIso8601String(),
+            'rejection_reason' => $p->rejection_reason,
+            'application' => $p->application
+                ? [
+                    'id' => $p->application->id,
+                    'application_number' => $p->application->application_number,
+                ]
+                : null,
+            'invoice' => $p->invoice
+                ? [
+                    'id' => $p->invoice->id,
+                    'invoice_number' => $p->invoice->invoice_number,
+                ]
+                : null,
+            'receipt_download_url' => $receiptPdf->receiptDownloadUrl($p, 'applicant.payments.receipt.download'),
+        ];
+
+        if ($includeProofDocument) {
+            $row['proof_document'] = $p->proofDocument
+                ? [
+                    'id' => $p->proofDocument->id,
+                    'preview_url' => URL::temporarySignedRoute('applicant.documents.preview', now()->addMinutes(15), ['document' => $p->proofDocument->id]),
+                    'download_url' => URL::temporarySignedRoute('applicant.documents.download', now()->addMinutes(15), ['document' => $p->proofDocument->id]),
+                ]
+                : null;
+        }
+
+        return $row;
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function mapReceiptListRow(Payment $p, PaymentReceiptPdfService $receiptPdf): array
+    {
+        return [
+            'id' => $p->id,
+            'receipt_number_display' => 'ZQ '.$p->id,
+            'method' => $p->method?->value ?? (string) $p->method,
+            'currency' => $p->currency,
+            'amount_cents' => $p->amount_cents,
+            'provider_reference' => $p->provider_reference,
+            'confirmed_at' => optional($p->confirmed_at)?->toIso8601String(),
+            'application' => $p->application
+                ? [
+                    'id' => $p->application->id,
+                    'application_number' => $p->application->application_number,
+                ]
+                : null,
+            'invoice' => $p->invoice
+                ? [
+                    'id' => $p->invoice->id,
+                    'invoice_number' => $p->invoice->invoice_number,
+                ]
+                : null,
+            'show_url' => route('applicant.payments.show', $p),
+            'receipt_download_url' => $receiptPdf->receiptDownloadUrl($p, 'applicant.payments.receipt.download'),
+        ];
     }
 }
 

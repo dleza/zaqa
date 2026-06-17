@@ -9,6 +9,7 @@ import InputError from '@/Components/InputError.vue'
 import SubjectGradeSelect from '@/Components/SubjectGradeSelect.vue'
 import Swal from 'sweetalert2'
 import { selectGradeValue } from '@/lib/certificateSubjectGrades'
+import { resolveCertificateSubjectId } from '@/lib/resolveCertificateSubjectId'
 import 'sweetalert2/dist/sweetalert2.min.css'
 import { Building2, FileStack, GraduationCap, MapPin, Shield, Sparkles, Trash2 } from 'lucide-vue-next'
 
@@ -278,7 +279,8 @@ async function loadFromQualification(q: any) {
     form.qualification_type_id = q.qualification_type_id ?? ''
     form.transcript_reason = q.transcript_reason ?? ''
     form.subject_results = (q.subject_results ?? []).map((r: any) => ({
-      certificate_subject_id: r.certificate_subject_id != null && r.certificate_subject_id !== '' ? Number(r.certificate_subject_id) : '',
+      certificate_subject_id: resolveCertificateSubjectId(r, props.certificateSubjects ?? []),
+      subject_name: r.subject_name ?? '',
       grade: selectGradeValue(r.grade),
       saved_grade: r.grade ?? '',
     }))
@@ -311,9 +313,13 @@ async function loadFromQualification(q: any) {
     form.awarding_institution_id =
       q.awarding_institution_id != null && q.awarding_institution_id !== ''
         ? q.awarding_institution_id
-        : q.awarding_institution_name_other
+        : q.awarding_institution_name_other || q.awarding_institution_name
           ? 'other'
           : ''
+
+    if (!form.awarding_institution_name_other && q.awarding_institution_name && !q.awarding_institution_id) {
+      form.awarding_institution_name_other = q.awarding_institution_name
+    }
 
     await nextTick()
 
@@ -519,6 +525,88 @@ function stripHolderFields(data: Record<string, unknown>) {
   return o
 }
 
+function isPlaceholderText(value: unknown): boolean {
+  const normalized = (value ?? '').toString().trim()
+  if (!normalized) return true
+  return ['—', '-', '–', 'N/A', 'n/a'].includes(normalized)
+}
+
+function sanitizeSubjectResultsForSubmit(
+  rows: Array<{ certificate_subject_id: number | ''; grade: string }>,
+) {
+  return rows.filter(
+    (row) => Number(row.certificate_subject_id) > 0 || (row.grade ?? '').toString().trim() !== '',
+  )
+}
+
+function collectQualificationValidationErrors(): string[] {
+  const errors: string[] = []
+  applyIdentifierToForm()
+
+  if (!form.country_id && !form.country_name_other?.toString().trim()) {
+    errors.push('Select the country of award.')
+  }
+  if (!form.awarding_institution_id) {
+    errors.push('Select an awarding institution or choose “Other”.')
+  } else if (form.awarding_institution_id === 'other' && !form.awarding_institution_name_other?.toString().trim()) {
+    errors.push('Enter the awarding institution name.')
+  }
+  if (!form.qualification_type_id) {
+    errors.push('Select a qualification type.')
+  }
+
+  const title =
+    titleChoice.value === 'other'
+      ? form.applicant_entered_qualification_title?.toString().trim()
+      : form.title_of_qualification?.toString().trim()
+  if (!title) {
+    errors.push('Select or enter a qualification title.')
+  }
+
+  if (isPlaceholderText(form.names_as_on_qualification_document)) {
+    errors.push('Enter the names as they appear on the qualification document.')
+  }
+  if (!form.award_date) {
+    errors.push('Enter the award date.')
+  }
+
+  const cert = form.certificate_number?.toString().trim()
+  const stud = form.student_number?.toString().trim()
+  const exam = form.examination_number?.toString().trim()
+  if (!cert && !stud && !exam) {
+    errors.push('Provide at least one of certificate number, student number, or examination number.')
+  }
+
+  if (needsSubjects.value) {
+    const completeRows = form.subject_results.filter(
+      (row) => Number(row.certificate_subject_id) > 0 && (row.grade ?? '').toString().trim() !== '',
+    )
+    if (completeRows.length < 1) {
+      errors.push('Add at least one subject with a grade.')
+    }
+
+    form.subject_results.forEach((row, idx) => {
+      const hasSubject = Number(row.certificate_subject_id) > 0
+      const hasGrade = (row.grade ?? '').toString().trim() !== ''
+      if ((hasSubject || hasGrade) && !(hasSubject && hasGrade)) {
+        errors.push(`Complete subject and grade for row ${idx + 1}.`)
+      }
+    })
+  }
+
+  return errors
+}
+
+function prepareQualificationPayload(data: Record<string, any>) {
+  const o: Record<string, any> = stripHolderFields({ ...data })
+  o.awarding_institution_name = awardingDisplayName()
+  if (Array.isArray(o.subject_results)) {
+    o.subject_results = sanitizeSubjectResultsForSubmit(o.subject_results)
+  }
+  if (!needsSubjects.value) delete o.subject_results
+  return o
+}
+
 async function promptAfterQualificationAdded(): Promise<'add_another' | 'back_to_step'> {
   const result = await Swal.fire({
     icon: 'success',
@@ -554,8 +642,19 @@ async function handleAfterQualificationSavedSuccess(isAddFlow: boolean): Promise
 
 function submitQualificationAndDocuments() {
   if (locked.value || savingAll.value || form.processing) return
+
+  const validationErrors = collectQualificationValidationErrors()
+  if (validationErrors.length > 0) {
+    void Swal.fire({
+      icon: 'warning',
+      title: 'Complete required fields',
+      html: `<ul class="mt-2 list-disc space-y-1 pl-5 text-left text-sm">${validationErrors.map((e) => `<li>${e}</li>`).join('')}</ul>`,
+    })
+    return
+  }
+
   applyIdentifierToForm()
-  form.awarding_institution_name = awardingDisplayName() || '—'
+  form.awarding_institution_name = awardingDisplayName()
   const isAddFlow = mode.value === 'add'
 
   const afterQualificationSaved = async (page: any) => {
@@ -604,21 +703,14 @@ function submitQualificationAndDocuments() {
   if (mode.value === 'add') {
     form
       .transform((data) => {
-        const o: Record<string, any> = stripHolderFields({ ...data })
-        o.awarding_institution_name = awardingDisplayName() || '—'
+        const o = prepareQualificationPayload({ ...data })
         o.create_new = true
-        if (!needsSubjects.value) delete o.subject_results
         return o
       })
       .post(`/applicant/applications/${props.application.id}/qualifications`, visitOpts)
   } else {
     form
-      .transform((data) => {
-        const o: Record<string, any> = stripHolderFields({ ...data })
-        o.awarding_institution_name = awardingDisplayName() || '—'
-        if (!needsSubjects.value) delete o.subject_results
-        return o
-      })
+      .transform((data) => prepareQualificationPayload({ ...data }))
       .put(`/applicant/applications/${props.application.id}/qualification`, visitOpts)
   }
 }
@@ -857,8 +949,8 @@ const pendingConsentName = computed(() => pendingConsentFile.value?.name ?? '')
                   <div v-for="(row, idx) in form.subject_results" :key="idx" class="grid grid-cols-1 gap-3 sm:grid-cols-7">
                     <div class="sm:col-span-4">
                       <label class="text-xs font-medium">Subject</label>
-                      <select v-model="row.certificate_subject_id" class="zaqa-input" :disabled="locked || certificateSubjects.length === 0">
-                        <option value="">Select subject</option>
+                      <select v-model.number="row.certificate_subject_id" class="zaqa-input" :disabled="locked || certificateSubjects.length === 0">
+                        <option :value="''">Select subject</option>
                         <option v-for="s in certificateSubjects" :key="s.id" :value="s.id">{{ s.name }}</option>
                       </select>
                     </div>

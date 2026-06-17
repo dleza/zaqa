@@ -5,6 +5,7 @@ namespace App\Http\Requests\Applicant;
 use App\Http\Requests\Applicant\Concerns\ValidatesNamesAsOnQualificationDocument;
 use App\Http\Requests\Applicant\Concerns\ValidatesQualificationTitleSelection;
 use App\Http\Requests\Concerns\ValidatesCertificateSubjectGrades;
+use App\Support\Qualifications\CertificateSubjectGrade;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\Validator;
@@ -47,7 +48,11 @@ class UpsertQualificationRequest extends FormRequest
             'qualification_title_source' => ['nullable', 'string', Rule::in(['catalog', 'other'])],
             'applicant_entered_qualification_title' => ['nullable', 'string', 'max:255'],
             'award_date' => ['required', 'date', 'before_or_equal:today'],
-            'qualification_type_id' => ['required', 'integer', 'exists:qualification_types,id'],
+            'qualification_type_id' => [
+                'required',
+                'integer',
+                Rule::exists('qualification_types', 'id')->where(fn ($q) => $q->where('is_active', true)),
+            ],
             'transcript_reason' => ['nullable', 'string', 'max:2000'],
             'notes' => ['nullable', 'string', 'max:5000'],
             'subject_results' => ['nullable', 'array'],
@@ -62,7 +67,58 @@ class UpsertQualificationRequest extends FormRequest
 
     protected function prepareForValidation(): void
     {
+        if ($this->has('names_as_on_qualification_document')) {
+            $this->merge([
+                'names_as_on_qualification_document' => trim((string) $this->input('names_as_on_qualification_document', '')),
+            ]);
+        }
+
+        if ($this->has('awarding_institution_name')) {
+            $this->merge([
+                'awarding_institution_name' => trim((string) $this->input('awarding_institution_name', '')),
+            ]);
+        }
+
+        if ($this->has('awarding_institution_name_other')) {
+            $this->merge([
+                'awarding_institution_name_other' => trim((string) $this->input('awarding_institution_name_other', '')),
+            ]);
+        }
+
         $this->prepareSubjectResultGradesForValidation();
+        $this->dropEmptySubjectResultRows();
+    }
+
+    private function dropEmptySubjectResultRows(): void
+    {
+        $subjectResults = $this->input('subject_results');
+        if (! is_array($subjectResults)) {
+            return;
+        }
+
+        $filtered = array_values(array_filter($subjectResults, function ($row) {
+            if (! is_array($row)) {
+                return false;
+            }
+
+            $subjectId = (int) ($row['certificate_subject_id'] ?? 0);
+            $grade = trim((string) ($row['grade'] ?? ''));
+
+            return $subjectId > 0 || $grade !== '';
+        }));
+
+        $this->merge(['subject_results' => $filtered]);
+    }
+
+    private static function isPlaceholderText(string $value): bool
+    {
+        $normalized = trim($value);
+
+        if ($normalized === '') {
+            return true;
+        }
+
+        return in_array($normalized, ['—', '-', '–', 'N/A', 'n/a'], true);
     }
 
     /**
@@ -85,6 +141,16 @@ class UpsertQualificationRequest extends FormRequest
 
             if ($certificateNumber === '' && $studentNumber === '' && $examinationNumber === '') {
                 $validator->errors()->add('certificate_number', 'Provide at least one of certificate number, student number, or examination number.');
+            }
+
+            $namesOnDocument = trim((string) $this->input('names_as_on_qualification_document', ''));
+            if (self::isPlaceholderText($namesOnDocument)) {
+                $validator->errors()->add('names_as_on_qualification_document', 'Enter the names exactly as they appear on the qualification document.');
+            }
+
+            $institutionDisplayName = trim((string) $this->input('awarding_institution_name', ''));
+            if (self::isPlaceholderText($institutionDisplayName)) {
+                $validator->errors()->add('awarding_institution_id', 'Awarding institution is required (select one or choose “Other”).');
             }
 
             $countryId = $this->input('country_id');
@@ -138,7 +204,9 @@ class UpsertQualificationRequest extends FormRequest
             if ($requiresSubjects) {
                 if (! is_array($subjectResults) || count($subjectResults) < 1) {
                     $validator->errors()->add('subject_results', 'Subject results are required for school certificates.');
-                } elseif (is_array($subjectResults)) {
+                } else {
+                    $this->validateCompleteSubjectResultRows($validator, $subjectResults);
+
                     $ids = collect($subjectResults)
                         ->pluck('certificate_subject_id')
                         ->filter(fn ($id) => (int) $id > 0)
@@ -161,5 +229,42 @@ class UpsertQualificationRequest extends FormRequest
 
             $this->validateQualificationTitleSelection($validator);
         });
+    }
+
+    /**
+     * @param  array<int, mixed>  $subjectResults
+     */
+    private function validateCompleteSubjectResultRows(Validator $validator, array $subjectResults): void
+    {
+        $completeRows = 0;
+
+        foreach ($subjectResults as $index => $row) {
+            if (! is_array($row)) {
+                $validator->errors()->add("subject_results.$index", 'Each subject row must be complete.');
+
+                continue;
+            }
+
+            $subjectId = (int) ($row['certificate_subject_id'] ?? 0);
+            $grade = trim((string) ($row['grade'] ?? ''));
+            $hasSubject = $subjectId > 0;
+            $hasGrade = CertificateSubjectGrade::isAllowed($grade);
+
+            if (! $hasSubject) {
+                $validator->errors()->add("subject_results.$index.certificate_subject_id", 'Select a subject for each row.');
+            }
+
+            if (! $hasGrade) {
+                $validator->errors()->add("subject_results.$index.grade", 'Please select a valid grade for each subject.');
+            }
+
+            if ($hasSubject && $hasGrade) {
+                $completeRows++;
+            }
+        }
+
+        if ($completeRows < 1) {
+            $validator->errors()->add('subject_results', 'Add at least one subject with a grade.');
+        }
     }
 }

@@ -31,4 +31,19 @@ class CertificateSubject extends Model
     {
         return $query->where('is_active', true);
     }
+
+    public static function resolveIdByName(?string $name): ?int
+    {
+        $normalized = strtolower(trim((string) $name));
+        if ($normalized === '') {
+            return null;
+        }
+
+        $id = static::query()
+            ->active()
+            ->whereRaw('LOWER(name) = ?', [$normalized])
+            ->value('id');
+
+        return $id ? (int) $id : null;
+    }
 }

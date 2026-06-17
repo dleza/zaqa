@@ -280,6 +280,80 @@ class ApplicantPaymentsPageTest extends TestCase
         $this->get('/applicant/payments/'.$payB->id)->assertForbidden();
     }
 
+    public function test_receipts_page_only_shows_confirmed_payments(): void
+    {
+        $user = User::factory()->activated()->create(['applicant_type' => ApplicantType::Individual]);
+        ApplicantProfile::create([
+            'user_id' => $user->id,
+            'first_name' => 'John',
+            'surname' => 'Doe',
+            'nrc_number' => '111111/11/1',
+            'passport_number' => null,
+            'email' => $user->email,
+            'phone_primary' => $user->phone_primary,
+        ]);
+        $now = Carbon::now();
+        $app = Application::query()->create([
+            'uuid' => (string) Str::uuid(),
+            'application_number' => 'APP-RECEIPTS',
+            'applicant_user_id' => $user->id,
+            'applicant_type' => 'individual',
+            'service_type' => 'verification',
+            'qualification_category' => 'certificate',
+            'current_status' => 'draft',
+            'verification_state' => 'awaiting_assignment',
+            'is_foreign' => false,
+        ]);
+        $inv = Invoice::query()->create([
+            'application_id' => $app->id,
+            'invoice_number' => 'INV-RECEIPTS',
+            'currency' => 'ZMW',
+            'amount_cents' => 15000,
+            'status' => 'paid',
+            'issued_at' => $now,
+            'paid_at' => $now,
+        ]);
+        $confirmed = Payment::query()->create([
+            'application_id' => $app->id,
+            'invoice_id' => $inv->id,
+            'method' => 'card',
+            'status' => 'confirmed',
+            'currency' => 'ZMW',
+            'amount_cents' => 15000,
+            'provider' => 'test',
+            'provider_reference' => 'TX-OK',
+            'confirmed_at' => $now,
+            'initiated_at' => $now,
+            'last_status_at' => $now,
+        ]);
+        Payment::query()->create([
+            'application_id' => $app->id,
+            'invoice_id' => $inv->id,
+            'method' => 'mobile_money',
+            'status' => 'failed',
+            'currency' => 'ZMW',
+            'amount_cents' => 15000,
+            'provider' => 'test',
+            'provider_reference' => 'TX-FAIL',
+            'failed_at' => $now,
+            'initiated_at' => $now,
+            'last_status_at' => $now,
+        ]);
+
+        $this->actingAs($user);
+
+        $this->get('/applicant/receipts')
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->component('Applicant/Receipts', false)
+                ->has('receipts', 1)
+                ->where('receipts.0.id', $confirmed->id)
+                ->where('receipts.0.receipt_number_display', 'ZQ '.$confirmed->id)
+                ->where('summary.count', 1)
+                ->where('summary.total_cents', 15000)
+            );
+    }
+
     public function test_applicant_can_view_invoice_detail(): void
     {
         $user = User::factory()->activated()->create(['applicant_type' => ApplicantType::Individual]);

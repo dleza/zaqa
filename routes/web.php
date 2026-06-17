@@ -203,6 +203,7 @@ Route::middleware('auth')->group(function () {
         Route::get('/invoices', [ApplicantBillingController::class, 'invoices'])->name('invoices');
         Route::get('/invoices/{invoice}', [ApplicantBillingController::class, 'showInvoice'])->name('invoices.show');
         Route::get('/invoices/{invoice}/download', [ApplicantBillingController::class, 'downloadInvoice'])->name('invoices.download');
+        Route::get('/receipts', [ApplicantBillingController::class, 'receipts'])->name('receipts.index');
         Route::get('/payments', [ApplicantBillingController::class, 'payments'])->name('payments.index');
         Route::get('/payments/{payment}', [ApplicantBillingController::class, 'showPayment'])->name('payments.show');
         Route::get('/payments/{payment}/receipt/download', [ApplicantBillingController::class, 'downloadReceipt'])->name('payments.receipt.download');

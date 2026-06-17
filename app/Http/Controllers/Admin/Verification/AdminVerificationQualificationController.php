@@ -43,6 +43,7 @@ use App\Models\QualificationCertificate;
 use App\Models\QualificationType;
 use App\Models\User;
 use App\Support\Qualifications\CertificateSubjectGrade;
+use App\Support\Qualifications\QualificationAwardingInstitutionFormState;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -524,10 +525,7 @@ class AdminVerificationQualificationController extends Controller
             ->map(fn (CertificateSubject $s) => ['id' => $s->id, 'name' => $s->name])
             ->all();
 
-        $awardingInstitutionId = $qualification->awarding_institution_id;
-        $institutionField = $awardingInstitutionId
-            ? $awardingInstitutionId
-            : (trim((string) ($qualification->awarding_institution_name_other ?? '')) !== '' ? 'other' : '');
+        $institutionForm = QualificationAwardingInstitutionFormState::forForm($qualification);
 
         return Inertia::render('Admin/Verification/Qualifications/Edit', [
             'qualification' => [
@@ -537,9 +535,9 @@ class AdminVerificationQualificationController extends Controller
                 'nrc_passport_number' => $qualification->nrc_passport_number,
                 'country_id' => $qualification->country_id,
                 'country_name_other' => $qualification->country_name_other,
-                'awarding_institution_id' => $institutionField,
-                'awarding_institution_name_other' => $qualification->awarding_institution_name_other,
-                'awarding_institution_name' => $qualification->awarding_institution_name,
+                'awarding_institution_id' => $institutionForm['awarding_institution_id'],
+                'awarding_institution_name_other' => $institutionForm['awarding_institution_name_other'],
+                'awarding_institution_name' => $institutionForm['awarding_institution_name'],
                 'certificate_number' => $qualification->certificate_number,
                 'student_number' => $qualification->student_number,
                 'examination_number' => $qualification->examination_number,
@@ -548,10 +546,17 @@ class AdminVerificationQualificationController extends Controller
                 'qualification_type_id' => $qualification->qualification_type_id,
                 'is_foreign_qualification' => (bool) $qualification->is_foreign_qualification,
                 'transcript_required' => (bool) $qualification->transcript_required,
-                'subject_results' => $qualification->subjectResults->map(fn ($r) => [
-                    'certificate_subject_id' => $r->certificate_subject_id,
-                    'grade' => $r->grade,
-                ])->values()->all(),
+                'subject_results' => $qualification->subjectResults->map(function ($row) {
+                    $subjectId = $row->certificate_subject_id
+                        ? (int) $row->certificate_subject_id
+                        : CertificateSubject::resolveIdByName($row->subject_name);
+
+                    return [
+                        'certificate_subject_id' => $subjectId,
+                        'subject_name' => $row->subject_name,
+                        'grade' => $row->grade,
+                    ];
+                })->values()->all(),
             ],
             'application' => [
                 'id' => $qualification->application_id,

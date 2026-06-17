@@ -33,6 +33,7 @@ use App\Models\Qualification;
 use App\Models\QualificationCertificate;
 use App\Models\QualificationType;
 use App\Support\Qualifications\CertificateSubjectGrade;
+use App\Support\Qualifications\QualificationAwardingInstitutionFormState;
 use App\Models\User;
 use App\Support\CountryIso;
 use Illuminate\Http\RedirectResponse;
@@ -837,12 +838,14 @@ class ApplicantApplicationController extends Controller
                     $rejectionNoticeRecalled = true;
                 }
 
+                $institutionForm = QualificationAwardingInstitutionFormState::forForm($q);
+
                 return [
                     'id' => $q->id,
                     'verification_reference_number' => $q->verification_reference_number,
-                    'awarding_institution_id' => $q->awarding_institution_id,
-                    'awarding_institution_name' => $q->awarding_institution_name,
-                    'awarding_institution_name_other' => $q->awarding_institution_name_other,
+                    'awarding_institution_id' => $institutionForm['awarding_institution_id'],
+                    'awarding_institution_name' => $institutionForm['awarding_institution_name'],
+                    'awarding_institution_name_other' => $institutionForm['awarding_institution_name_other'],
                     'awarding_institution' => $q->awardingInstitution
                         ? [
                             'id' => $q->awardingInstitution->id,

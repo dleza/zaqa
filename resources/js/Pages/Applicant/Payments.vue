@@ -10,6 +10,7 @@ import {
   CreditCard,
   Eye,
   Receipt,
+  ReceiptText,
   TrendingUp,
   Wallet,
 } from 'lucide-vue-next'
@@ -76,18 +77,29 @@ function humanMethod(m: string) {
             <p class="text-xs font-semibold uppercase tracking-[0.18em] text-text-muted">Billing</p>
             <h1 class="mt-2 text-2xl font-semibold tracking-tight text-text-primary sm:text-3xl">Payments</h1>
             <p class="mt-2 max-w-2xl text-sm text-text-muted">
-              Every payment attempt for your verification applications. Use <strong class="text-text-primary">View</strong> for the full
-              record, provider references, and proof documents.
+              Every payment attempt for your verification applications, including pending and unsuccessful ones. Use
+              <strong class="text-text-primary">View</strong> for the full record, or see
+              <Link href="/applicant/receipts" class="zaqa-link font-semibold">Receipts</Link> for confirmed payments only.
             </p>
           </div>
-          <Link
-            href="/applicant/invoices"
-            class="zaqa-btn zaqa-btn-secondary inline-flex items-center gap-2 self-start px-4 py-2.5 text-sm font-semibold"
-          >
-            <Receipt class="h-4 w-4 opacity-80" aria-hidden="true" />
-            Invoices
-            <ArrowRight class="h-4 w-4 opacity-70" aria-hidden="true" />
-          </Link>
+          <div class="flex flex-wrap gap-2 self-start">
+            <Link
+              href="/applicant/receipts"
+              class="zaqa-btn zaqa-btn-secondary inline-flex items-center gap-2 px-4 py-2.5 text-sm font-semibold"
+            >
+              <Receipt class="h-4 w-4 opacity-80" aria-hidden="true" />
+              Receipts
+              <ArrowRight class="h-4 w-4 opacity-70" aria-hidden="true" />
+            </Link>
+            <Link
+              href="/applicant/invoices"
+              class="zaqa-btn zaqa-btn-secondary inline-flex items-center gap-2 px-4 py-2.5 text-sm font-semibold"
+            >
+              <ReceiptText class="h-4 w-4 opacity-80" aria-hidden="true" />
+              Invoices
+              <ArrowRight class="h-4 w-4 opacity-70" aria-hidden="true" />
+            </Link>
+          </div>
         </div>
 
         <div class="grid grid-cols-1 gap-4 sm:grid-cols-3">

@@ -141,6 +141,13 @@ const declarationsForm = useForm({
 })
 
 watch(
+  () => declarationsForm.accept_terms,
+  (accepted) => {
+    declarationsForm.confirm_information_correct = accepted
+  },
+)
+
+watch(
   () => props.application?.wizard_declarations,
   (wd) => {
     declarationsForm.defaults({
@@ -1230,8 +1237,8 @@ function stepIncompleteHtml(step: StepKey): string | null {
   if (step === 'consent') {
     const wd = props.application?.wizard_declarations
     if (wd?.terms_accepted_at && wd?.information_confirmed_at) return null
-    if (!declarationsForm.accept_terms || !declarationsForm.confirm_information_correct) {
-      return '<p class="text-sm text-left">Tick both declaration checkboxes to continue.</p>'
+    if (!declarationsForm.accept_terms) {
+      return '<p class="text-sm text-left">Tick the declaration checkbox to continue.</p>'
     }
     return '<p class="text-sm text-left">Click <strong>Continue to payment</strong> to record your confirmation and proceed.</p>'
   }
@@ -1954,10 +1961,7 @@ onBeforeUnmount(() => {
                   </li>
                   <li class="flex gap-2.5">
                     <span class="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-brand/70" aria-hidden="true" />
-                    <span
-                      >The personal details, identification information, qualifications, and supporting documents provided are
-                      accurate and complete.</span
-                    >
+                    <span>I confirm that the submitted information and documents are accurate and complete.</span>
                   </li>
                   <li class="flex gap-2.5">
                     <span class="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-brand/70" aria-hidden="true" />
@@ -1996,21 +2000,6 @@ onBeforeUnmount(() => {
                     <span class="text-sm leading-relaxed text-text-primary">I consent to the verification terms above.</span>
                   </label>
                   <InputError :message="declarationsForm.errors.accept_terms" />
-
-                  <label
-                    class="flex cursor-pointer items-start gap-3 rounded-xl border border-border bg-surface-muted/30 px-4 py-3.5 transition-colors hover:bg-surface-muted/50"
-                  >
-                    <input
-                      v-model="declarationsForm.confirm_information_correct"
-                      type="checkbox"
-                      class="mt-0.5 h-4 w-4 shrink-0 rounded border-border text-brand focus:ring-brand/30"
-                      :disabled="applicationLocked"
-                    />
-                    <span class="text-sm leading-relaxed text-text-primary"
-                      >I confirm that the submitted information and documents are accurate and complete.</span
-                    >
-                  </label>
-                  <InputError :message="declarationsForm.errors.confirm_information_correct" />
                 </div>
               </div>
 
@@ -2032,8 +2021,7 @@ onBeforeUnmount(() => {
               :next-disabled="
                 applicationLocked ||
                 declarationsForm.processing ||
-                !declarationsForm.accept_terms ||
-                !declarationsForm.confirm_information_correct
+                !declarationsForm.accept_terms
               "
               :on-prev="() => stepNav.prev && requestStepChange(stepNav.prev)"
               :on-next="saveDeclarations"

@@ -5,6 +5,7 @@ import {
   FilePlus,
   Files,
   ReceiptText,
+  Receipt,
   CreditCard,
   UserCircle,
   KeyRound,
@@ -44,6 +45,7 @@ export const applicantNavSections: ApplicantNavSection[] = [
     items: [
       { key: 'invoices', label: 'Invoices', href: '/applicant/invoices', icon: ReceiptText, badgeKey: 'invoices' },
       { key: 'payments', label: 'Payments', href: '/applicant/payments', icon: CreditCard },
+      { key: 'receipts', label: 'Receipts', href: '/applicant/receipts', icon: Receipt },
     ],
   },
 

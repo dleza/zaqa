@@ -7,6 +7,7 @@ import SubjectGradeSelect from '@/Components/SubjectGradeSelect.vue'
 import { Link, router, useForm } from '@inertiajs/vue3'
 import { computed, ref, watch } from 'vue'
 import { selectGradeValue } from '@/lib/certificateSubjectGrades'
+import { resolveCertificateSubjectId } from '@/lib/resolveCertificateSubjectId'
 import { ArrowLeft, Download, Eye, FileEdit, FileText, GraduationCap, History, MapPin, RefreshCw, Trash2 } from 'lucide-vue-next'
 import Swal from 'sweetalert2'
 
@@ -98,7 +99,8 @@ const form = useForm({
   qualification_type_id: props.qualification.qualification_type_id ?? ('' as number | string | ''),
   correction_note: '',
   subject_results: (props.qualification.subject_results ?? []).map((r: any) => ({
-    certificate_subject_id: r.certificate_subject_id != null && r.certificate_subject_id !== '' ? Number(r.certificate_subject_id) : ('' as number | string | ''),
+    certificate_subject_id: resolveCertificateSubjectId(r, props.certificateSubjects ?? []),
+    subject_name: r.subject_name ?? '',
     grade: selectGradeValue(r.grade),
     saved_grade: r.grade ?? '',
   })),
@@ -217,12 +219,12 @@ const subjectGradeOptions = computed(() => props.subjectGradeOptions ?? [])
 
 watch(needsSubjects, (need) => {
   if (need && form.subject_results.length === 0) {
-    form.subject_results.push({ certificate_subject_id: '', grade: '', saved_grade: '' })
+    form.subject_results.push({ certificate_subject_id: '', subject_name: '', grade: '', saved_grade: '' })
   }
 })
 
 function addSubjectRow() {
-  form.subject_results.push({ certificate_subject_id: '', grade: '', saved_grade: '' })
+  form.subject_results.push({ certificate_subject_id: '', subject_name: '', grade: '', saved_grade: '' })
 }
 
 function removeSubjectRow(idx: number) {
@@ -522,10 +524,16 @@ function identityDocumentRow(): DocumentRow | null {
                     >
                       <div class="min-w-0 flex-1">
                         <label class="text-xs font-medium text-text-muted">Subject</label>
-                        <select v-model="row.certificate_subject_id" class="zaqa-input mt-1">
-                          <option value="" disabled>Select subject…</option>
+                        <select v-model.number="row.certificate_subject_id" class="zaqa-input mt-1">
+                          <option :value="''" disabled>Select subject…</option>
                           <option v-for="s in certificateSubjects" :key="s.id" :value="s.id">{{ s.name }}</option>
                         </select>
+                        <p
+                          v-if="row.subject_name && !row.certificate_subject_id"
+                          class="mt-1 text-xs text-amber-800"
+                        >
+                          Applicant saved subject "{{ row.subject_name }}" — please select the matching subject from the list.
+                        </p>
                       </div>
                       <div class="w-full sm:w-40">
                         <label class="text-xs font-medium text-text-muted">Grade</label>
