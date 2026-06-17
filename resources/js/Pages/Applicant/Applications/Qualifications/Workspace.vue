@@ -849,12 +849,7 @@ const pendingConsentName = computed(() => pendingConsentFile.value?.name ?? '')
               </div>
 
               <div v-if="needsSubjects" class="mt-6 border-t border-border pt-6">
-                <div class="flex flex-wrap items-center justify-between gap-2">
-                  <div class="text-sm font-semibold text-text-primary">Subject results</div>
-                  <button type="button" class="zaqa-btn zaqa-btn-secondary px-3 py-2 text-xs" :disabled="locked" @click="addSubjectRow">
-                    Add subject
-                  </button>
-                </div>
+                <div class="text-sm font-semibold text-text-primary">Subject results</div>
                 <p v-if="certificateSubjects.length === 0" class="mt-3 rounded-lg border border-warning/30 bg-warning/10 px-3 py-2 text-xs text-text-primary">
                   No subjects are configured yet. An administrator must add subjects under Admin → System settings → Subjects before you can complete this section.
                 </p>
@@ -883,6 +878,14 @@ const pendingConsentName = computed(() => pendingConsentFile.value?.name ?? '')
                     </div>
                   </div>
                 </div>
+                <button
+                  type="button"
+                  class="zaqa-btn zaqa-btn-secondary mt-3 px-3 py-2 text-xs"
+                  :disabled="locked"
+                  @click="addSubjectRow"
+                >
+                  Add subject
+                </button>
                 <InputError :message="form.errors.subject_results" class="mt-2" />
               </div>
             </section>
