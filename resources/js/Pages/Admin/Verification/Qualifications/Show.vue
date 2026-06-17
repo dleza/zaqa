@@ -170,6 +170,19 @@ function openLevel1CompleteModal() {
   level1CompleteOpen.value = true
 }
 
+function openRejectModal() {
+  rejectForm.clearErrors()
+  rejectForm.generate_rejection_notice = false
+  const review = props.qualification?.level1_review
+  const findings = (review?.findings ?? props.qualification?.reviewer_notes ?? '').toString().trim()
+  if (review?.recommended_for_award === false && findings !== '') {
+    rejectForm.reason = findings
+  } else {
+    rejectForm.reason = ''
+  }
+  rejectOpen.value = true
+}
+
 function clearSendBackToLevel1Attachment() {
   sendBackToLevel1Form.attachment = null
   if (sendBackToLevel1AttachmentInput.value) {
@@ -980,7 +993,7 @@ const autoVerificationCollapsedSummary = computed(() => {
                 class="inline-flex items-center gap-2 rounded-xl border border-rose-300/40 bg-rose-600/20 px-3.5 py-2 text-sm font-semibold text-white transition hover:bg-rose-600/30"
                 :disabled="isAutoVerifiedPendingL2 && lockMissingForActions"
                 :title="isAutoVerifiedPendingL2 && lockMissingForActions ? 'Lock for review before rejecting.' : ''"
-                @click="rejectOpen = true"
+                @click="openRejectModal"
               >
                 Issue Notice of Rejection
               </button>
@@ -2479,6 +2492,12 @@ const autoVerificationCollapsedSummary = computed(() => {
       <div>
         <label class="text-sm font-semibold text-text-primary">Reason</label>
         <textarea v-model="rejectForm.reason" class="zaqa-input mt-2 h-auto min-h-[10rem] py-3" placeholder="Provide a clear rejection reason." />
+        <p
+          v-if="level1Review?.recommended_for_award === false && level1Findings.length > 0"
+          class="mt-2 text-xs text-text-muted"
+        >
+          Pre-filled from Level 1 findings when they did not recommend awarding. You may edit before submitting.
+        </p>
         <div v-if="rejectForm.errors.reason" class="mt-1 text-xs text-danger">{{ rejectForm.errors.reason }}</div>
         <div v-if="(rejectForm.errors as any).qualification" class="mt-1 text-xs text-danger">{{ (rejectForm.errors as any).qualification }}</div>
         <div v-if="(rejectForm.errors as any).lock" class="mt-1 text-xs text-danger">{{ (rejectForm.errors as any).lock }}</div>
