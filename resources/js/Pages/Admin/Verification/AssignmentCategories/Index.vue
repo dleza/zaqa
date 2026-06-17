@@ -39,7 +39,7 @@ function typeLabel(t: string): string {
           Verification
         </div>
         <h1 class="mt-2 text-2xl font-semibold tracking-tight text-text-primary">Assignment Categories</h1>
-        <p class="mt-1 text-sm text-text-muted">Manage category-based Level 1 auto-assignment routing.</p>
+        <p class="mt-1 text-sm text-text-muted">Manage category-based Level 1 and Level 2 auto-assignment routing.</p>
       </div>
       <div class="flex items-center gap-2">
         <Link v-if="can.manage" href="/admin/verification/assignment-categories/create" class="zaqa-btn zaqa-btn-primary px-4 py-2 text-sm">
@@ -89,7 +89,8 @@ function typeLabel(t: string): string {
               <th class="px-5 py-3 text-left">Category</th>
               <th class="px-5 py-3 text-left">Mappings</th>
               <th class="px-5 py-3 text-left">Status</th>
-              <th class="px-5 py-3 text-left">Officers</th>
+              <th class="px-5 py-3 text-left">Level 1</th>
+              <th class="px-5 py-3 text-left">Level 2</th>
               <th class="px-5 py-3 text-left">Last assigned</th>
               <th class="px-5 py-3 text-right">Actions</th>
             </tr>
@@ -117,7 +118,11 @@ function typeLabel(t: string): string {
                   {{ c.is_active ? 'Active' : 'Inactive' }}
                 </span>
               </td>
-              <td class="px-5 py-3 text-text-primary">{{ c.members_count }}</td>
+              <td class="px-5 py-3 text-text-primary">{{ c.level1_members_count ?? 0 }}</td>
+              <td class="px-5 py-3 text-text-primary">
+                <span>{{ c.level2_members_count ?? 0 }}</span>
+                <span v-if="c.missing_level2_officers" class="ml-2 zaqa-badge zaqa-badge-warning text-xs">No L2</span>
+              </td>
               <td class="px-5 py-3 text-text-primary">
                 <div class="text-xs text-text-muted">{{ c.last_assigned_user?.name ?? '—' }}</div>
                 <div class="mt-0.5 text-xs text-text-muted">{{ c.last_assigned_at ? new Date(c.last_assigned_at).toLocaleString() : '' }}</div>

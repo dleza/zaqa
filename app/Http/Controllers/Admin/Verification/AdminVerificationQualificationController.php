@@ -17,6 +17,7 @@ use App\Domain\Verification\QualificationDecisionReopenService;
 use App\Domain\Verification\QualificationDecisionService;
 use App\Domain\Verification\QualificationLevel1ReviewService;
 use App\Domain\Verification\QualificationLevel2ReviewLockService;
+use App\Domain\Verification\QualificationLevel2SendBackToLevel1Service;
 use App\Domain\Verification\QualificationSendBackService;
 use App\Domain\Verification\VerificationQualificationAccess;
 use App\Enums\DocumentType;
@@ -28,6 +29,7 @@ use App\Http\Requests\Admin\Verification\IssueQualificationCertificateRequest;
 use App\Http\Requests\Admin\Verification\QualificationDecisionApproveRequest;
 use App\Http\Requests\Admin\Verification\QualificationDecisionRejectRequest;
 use App\Http\Requests\Admin\Verification\QualificationLevel1CompleteRequest;
+use App\Http\Requests\Admin\Verification\QualificationLevel2SendBackToLevel1Request;
 use App\Http\Requests\Admin\Verification\ReopenLevel2DecisionRequest;
 use App\Http\Requests\Admin\Verification\RevokeQualificationAssignmentRequest;
 use App\Http\Requests\Admin\Verification\SendBackRequest;
@@ -75,6 +77,8 @@ class AdminVerificationQualificationController extends Controller
             'learnerRecord.awardingInstitution',
             'learnerRecordMatchAttempts.learnerRecord',
             'level2ReviewLockedBy',
+            'level1ReviewCompletedBy',
+            'returnedToLevel1By',
             'subjectResults',
         ]);
 
@@ -184,6 +188,22 @@ class AdminVerificationQualificationController extends Controller
         $qualificationServiceDeadlineAt = $qualification->service_deadline_at
             ?? $qualification->application?->service_deadline_at;
 
+        $qualificationTypes = QualificationType::query()
+            ->where('is_active', true)
+            ->orderBy('sort_order')
+            ->get(['id', 'zqf_level_code', 'level_label', 'name']);
+
+        if (
+            $qualification->qualification_type_id
+            && ! $qualificationTypes->contains('id', (int) $qualification->qualification_type_id)
+        ) {
+            $currentType = QualificationType::query()->find($qualification->qualification_type_id);
+            if ($currentType) {
+                $qualificationTypes->push($currentType);
+                $qualificationTypes = $qualificationTypes->sortBy('sort_order')->values();
+            }
+        }
+
         return Inertia::render('Admin/Verification/Qualifications/Show', [
             'qualification' => [
                 'id' => $qualification->id,
@@ -199,6 +219,15 @@ class AdminVerificationQualificationController extends Controller
                 'service_started_at' => optional($qualificationServiceStartedAt)?->toIso8601String(),
                 'service_deadline_at' => optional($qualificationServiceDeadlineAt)?->toIso8601String(),
                 'reviewer_notes' => $qualification->reviewer_notes,
+                'level1_review' => $this->buildLevel1ReviewPayload($qualification),
+                'level1_correction_cycle' => (int) ($qualification->level1_correction_cycle ?? 0),
+                'level1_corrections_received' => (int) ($qualification->level1_correction_cycle ?? 0) > 0
+                    && $qualification->returned_to_level1_at === null
+                    && $qualification->reviewed_at !== null
+                    && in_array($qualification->verification_state, [VerificationState::UnderLevel2Review, VerificationState::AutoVerifiedPendingLevel2], true),
+                'level2_send_back_correction' => $this->buildActiveLevel2SendBackCorrection($qualification),
+                'level2_send_back_history' => $this->buildLevel2SendBackHistory($qualification),
+                'send_back_to_level1_url' => route('admin.verification.qualifications.send_back_to_level1', ['qualification' => $qualification]),
                 'fee_currency' => $qualification->fee_currency,
                 'fee_amount_cents' => $qualification->fee_amount_cents,
                 'application' => [
@@ -240,6 +269,7 @@ class AdminVerificationQualificationController extends Controller
                 'certificate_history' => $certificateHistory,
                 'certificate_template' => $certificateTemplate,
                 'qualification_type' => $qualification->qualificationTypeMaster?->name,
+                'qualification_type_id' => $qualification->qualification_type_id,
                 'title' => $qualification->title_of_qualification,
                 'names_as_on_qualification_document' => $qualification->names_as_on_qualification_document,
                 'applicant_entered_qualification_title' => $qualification->applicant_entered_qualification_title,
@@ -364,11 +394,18 @@ class AdminVerificationQualificationController extends Controller
             'send_back_timeline' => $sendBackTimeline,
             'viewerUserId' => $request->user()?->id,
             'level1Users' => $level1Users,
+            'qualificationTypes' => $qualificationTypes->map(fn (QualificationType $t) => [
+                'id' => $t->id,
+                'zqf_level_code' => $t->zqf_level_code,
+                'level_label' => $t->level_label,
+                'name' => $t->name,
+            ])->values()->all(),
             'can' => [
                 'assign' => (bool) $request->user()?->can('verification.assign'),
                 'send_back' => (bool) $request->user()?->can('verification.send_back'),
                 'level1_process' => (bool) $request->user()?->can('verification.level1.process'),
                 'level2_review' => (bool) $request->user()?->can('verification.level2.review'),
+                'send_back_to_level1' => $this->canSendBackToLevel1($qualification, $request->user()),
                 'approve' => (bool) $request->user()?->can('verification.decide.approve'),
                 'reject' => (bool) $request->user()?->can('verification.decide.reject'),
                 'edit_qualification' => (bool) ($request->user()?->can('verification.level1.process') || $request->user()?->can('verification.level2.review')),
@@ -606,6 +643,27 @@ class AdminVerificationQualificationController extends Controller
             ->with('success', $message);
     }
 
+    public function sendBackToLevel1(
+        QualificationLevel2SendBackToLevel1Request $request,
+        Qualification $qualification,
+        QualificationLevel2SendBackToLevel1Service $sendBack,
+    ): RedirectResponse {
+        VerificationQualificationAccess::ensureQualificationAccessible($request->user(), $qualification);
+
+        if ($qualification->verification_state === VerificationState::AutoVerifiedPendingLevel2) {
+            app(QualificationLevel2ReviewLockService::class)->assertActorHoldsLockOrIsSuperAdmin($qualification, $request->user());
+        }
+
+        $sendBack->sendBackToLevel1(
+            $qualification,
+            $request->user(),
+            (string) $request->validated('comment'),
+            $request->file('attachment'),
+        );
+
+        return back()->with('success', 'Qualification sent back to Level 1 for correction.');
+    }
+
     public function level1Complete(QualificationLevel1CompleteRequest $request, Qualification $qualification, QualificationLevel1ReviewService $reviews): RedirectResponse
     {
         VerificationQualificationAccess::ensureQualificationAccessible($request->user(), $qualification);
@@ -614,7 +672,11 @@ class AdminVerificationQualificationController extends Controller
             $qualification,
             $request->user(),
             (string) $request->validated('findings'),
+            $request->boolean('recommended_for_award'),
+            (int) $request->validated('qualification_type_id'),
+            $request->validated('accreditation_statement'),
             $request->file('attachment'),
+            $request->file('evaluation_report'),
         );
 
         return back()->with('success', 'Level 1 review completed for this qualification.');
@@ -995,6 +1057,170 @@ class AdminVerificationQualificationController extends Controller
                 DocumentType::GeneratedCertificate,
                 DocumentType::Level1ReviewAttachment,
             ], true),
+        ];
+    }
+
+    /**
+     * @return array<string, mixed>|null
+     */
+    private function buildActiveLevel2SendBackCorrection(Qualification $qualification): ?array
+    {
+        if ($qualification->returned_to_level1_at === null) {
+            return null;
+        }
+
+        $vs = $qualification->verification_state;
+        if (! $vs instanceof VerificationState || ! in_array($vs, [VerificationState::AssignedToLevel1, VerificationState::UnderLevel1Review, VerificationState::AwaitingAssignment], true)) {
+            return null;
+        }
+
+        $comment = ApplicationComment::query()
+            ->where('qualification_id', $qualification->id)
+            ->where('type', 'level2_send_back_to_level1')
+            ->orderByDesc('created_at')
+            ->first();
+
+        $documents = $qualification->relationLoaded('documents')
+            ? $qualification->documents
+            : $qualification->documents()->with('uploadedBy')->get();
+
+        $attachment = $documents
+            ->where('document_type', DocumentType::Level2SendBackToLevel1Attachment)
+            ->where('is_current_version', true)
+            ->sortByDesc('id')
+            ->first();
+
+        return [
+            'comment' => $comment?->body,
+            'sent_at' => optional($qualification->returned_to_level1_at)?->toIso8601String(),
+            'sent_by_name' => $qualification->returnedToLevel1By?->name,
+            'correction_cycle' => (int) ($qualification->level1_correction_cycle ?? 0),
+            'attachment' => $attachment ? [
+                'id' => $attachment->id,
+                'original_name' => $attachment->original_name,
+                'preview_url' => route('admin.verification.documents.preview', ['document' => $attachment->id]),
+                'download_url' => route('admin.verification.documents.download', ['document' => $attachment->id]),
+            ] : null,
+        ];
+    }
+
+    /**
+     * @return list<array<string, mixed>>
+     */
+    private function buildLevel2SendBackHistory(Qualification $qualification): array
+    {
+        return ApplicationComment::query()
+            ->where('qualification_id', $qualification->id)
+            ->where('type', 'level2_send_back_to_level1')
+            ->with('author')
+            ->orderByDesc('created_at')
+            ->limit(10)
+            ->get()
+            ->map(fn (ApplicationComment $comment) => [
+                'comment' => $comment->body,
+                'sent_at' => optional($comment->created_at)?->toIso8601String(),
+                'sent_by_name' => $comment->author?->name,
+            ])
+            ->values()
+            ->all();
+    }
+
+    private function canSendBackToLevel1(Qualification $qualification, ?\App\Models\User $user): bool
+    {
+        if (! $user || ! $user->can('verification.level2.review')) {
+            return false;
+        }
+
+        $vs = $qualification->verification_state;
+        $allowed = [VerificationState::UnderLevel2Review, VerificationState::AutoVerifiedPendingLevel2];
+        if (! $vs instanceof VerificationState || ! in_array($vs, $allowed, true)) {
+            return false;
+        }
+
+        if (! $qualification->reviewed_at) {
+            return false;
+        }
+
+        if ($qualification->returned_to_level1_at !== null) {
+            return false;
+        }
+
+        return true;
+    }
+
+    /**
+     * @return array<string, mixed>|null
+     */
+    private function buildLevel1ReviewPayload(Qualification $qualification): ?array
+    {
+        if (! $qualification->reviewed_at) {
+            return null;
+        }
+
+        $documents = $qualification->relationLoaded('documents')
+            ? $qualification->documents
+            : $qualification->documents()->with('uploadedBy')->get();
+
+        $mapDocument = function ($document): array {
+            return [
+                'id' => $document->id,
+                'document_type' => $document->document_type?->value ?? (string) $document->document_type,
+                'original_name' => $document->original_name,
+                'uploaded_by' => $document->uploadedBy?->name,
+                'created_at' => optional($document->created_at)?->toIso8601String(),
+                'preview_url' => route('admin.verification.documents.preview', ['document' => $document->id]),
+                'download_url' => route('admin.verification.documents.download', ['document' => $document->id]),
+            ];
+        };
+
+        $supportingAttachment = $documents
+            ->where('document_type', \App\Enums\DocumentType::Level1ReviewAttachment)
+            ->where('is_current_version', true)
+            ->sortByDesc('id')
+            ->first();
+
+        $evaluationReport = $documents
+            ->where('document_type', \App\Enums\DocumentType::Level1EvaluationReport)
+            ->where('is_current_version', true)
+            ->sortByDesc('id')
+            ->first();
+
+        $recommended = $qualification->level1_recommended_for_award;
+
+        $typeCorrection = AuditLog::query()
+            ->where('entity_type', Qualification::class)
+            ->where('entity_id', $qualification->id)
+            ->where('event_type', 'verification.level1_qualification_type_corrected')
+            ->orderByDesc('created_at')
+            ->first();
+
+        $typeCorrectionPayload = null;
+        if ($typeCorrection) {
+            $metadata = (array) ($typeCorrection->metadata ?? []);
+            $fromLabel = (string) ($metadata['old_qualification_type_label'] ?? '');
+            $toLabel = (string) ($metadata['new_qualification_type_label'] ?? '');
+            if ($fromLabel !== '' && $toLabel !== '') {
+                $typeCorrectionPayload = [
+                    'from_label' => $fromLabel,
+                    'to_label' => $toLabel,
+                    'message' => "Qualification type changed from {$fromLabel} to {$toLabel}",
+                ];
+            }
+        }
+
+        return [
+            'recommended_for_award' => $recommended,
+            'recommendation_label' => $recommended === null
+                ? null
+                : ($recommended ? 'Recommend awarding' : 'Do not recommend awarding'),
+            'findings' => $qualification->reviewer_notes,
+            'accreditation_statement' => $qualification->level1_accreditation_statement,
+            'qualification_type_correction' => $typeCorrectionPayload,
+            'submitted_by_name' => $qualification->level1ReviewCompletedBy?->name
+                ?? $qualification->assignedVerifier?->name,
+            'submitted_at' => optional($qualification->reviewed_at)?->toIso8601String(),
+            'supporting_attachment' => $supportingAttachment ? $mapDocument($supportingAttachment) : null,
+            'evaluation_report' => $evaluationReport ? $mapDocument($evaluationReport) : null,
         ];
     }
 

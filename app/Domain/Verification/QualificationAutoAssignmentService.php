@@ -3,6 +3,7 @@
 namespace App\Domain\Verification;
 
 use App\Domain\Audit\AuditLogService;
+use App\Enums\AssignmentCategoryReviewLevel;
 use App\Enums\VerificationState;
 use App\Models\Qualification;
 use App\Models\User;
@@ -45,7 +46,7 @@ class QualificationAutoAssignmentService
             );
         }
 
-        ['category' => $category, 'ambiguous' => $ambiguous] = $this->resolveCategoryMatch($qualification);
+        ['category' => $category, 'ambiguous' => $ambiguous] = $this->resolveCategoryForQualification($qualification);
 
         if ($ambiguous) {
             return $this->failAndPersist(
@@ -130,6 +131,7 @@ class QualificationAutoAssignmentService
             VerificationAssignmentCategoryUser::query()
                 ->where('verification_assignment_category_id', (int) $category->id)
                 ->where('user_id', (int) $assignee->id)
+                ->where('review_level', AssignmentCategoryReviewLevel::Level1->value)
                 ->lockForUpdate()
                 ->update(['last_assigned_at' => now()]);
         });
@@ -162,7 +164,7 @@ class QualificationAutoAssignmentService
     /**
      * @return array{category: VerificationAssignmentCategory|null, ambiguous: bool}
      */
-    private function resolveCategoryMatch(Qualification $qualification): array
+    public function resolveCategoryForQualification(Qualification $qualification): array
     {
         if ($qualification->is_foreign_qualification) {
             if (! $qualification->country_id) {
@@ -209,6 +211,7 @@ class QualificationAutoAssignmentService
         return VerificationAssignmentCategoryUser::query()
             ->with('user.roles')
             ->where('verification_assignment_category_id', (int) $category->id)
+            ->where('review_level', AssignmentCategoryReviewLevel::Level1->value)
             ->where('is_active', true)
             ->where('is_available', true)
             ->where(function ($q) {

@@ -1992,7 +1992,7 @@ onBeforeUnmount(() => {
                       class="mt-0.5 h-4 w-4 shrink-0 rounded border-border text-brand focus:ring-brand/30"
                       :disabled="applicationLocked"
                     />
-                    <span class="text-sm leading-relaxed text-text-primary">I agree to the consent and verification terms above.</span>
+                    <span class="text-sm leading-relaxed text-text-primary">I consent to the verification terms above.</span>
                   </label>
                   <InputError :message="declarationsForm.errors.accept_terms" />
 

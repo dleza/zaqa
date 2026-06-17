@@ -2,15 +2,14 @@
 
 namespace App\Domain\Verification\Listeners;
 
-use App\Domain\Verification\Events\QualificationLevel1Completed;
-use App\Notifications\Verification\QualificationLevel1CompletedPortalNotification;
+use App\Domain\Verification\Events\QualificationAssignedToLevel2Reviewer;
+use App\Notifications\Verification\QualificationAssignedToLevel2PortalNotification;
 
-class CreateQualificationLevel1CompletedPortalNotification
+class CreateQualificationAssignedToLevel2PortalNotification
 {
-    public function handle(QualificationLevel1Completed $event): void
+    public function handle(QualificationAssignedToLevel2Reviewer $event): void
     {
         $qualification = $event->qualification->loadMissing('application', 'country', 'awardingInstitution', 'qualificationTypeMaster');
-
         $applicationRef = (string) ($qualification->application?->application_number ?? '—');
         $qualificationTitle = (string) ($qualification->title_of_qualification ?? 'Qualification');
         $fallbackType = (string) ($qualification->qualification_type ?? '');
@@ -22,16 +21,14 @@ class CreateQualificationLevel1CompletedPortalNotification
             ?? $qualification->awarding_institution_name;
         $awardingInstitution = trim((string) $awardingInstitution) !== '' ? (string) $awardingInstitution : null;
 
-        $event->assignedBy->notify(new QualificationLevel1CompletedPortalNotification(
+        $event->assignedTo->notify(new QualificationAssignedToLevel2PortalNotification(
             qualificationId: (int) $qualification->id,
             applicationReference: $applicationRef,
             qualificationTitle: $qualificationTitle,
             qualificationType: $qualificationType,
             awardingInstitution: $awardingInstitution,
-            level1ActorName: (string) ($event->level1Actor->name ?? 'Level 1 officer'),
-            findings: (string) $event->findings,
-            recommendedForAward: $event->recommendedForAward,
+            categoryName: (string) ($event->category?->name ?? 'Level 2 review'),
+            assignedByName: (string) ($event->assignedBy->name ?? 'System'),
         ));
     }
 }
-

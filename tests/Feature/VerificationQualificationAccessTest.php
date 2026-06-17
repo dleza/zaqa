@@ -14,6 +14,7 @@ use App\Models\Country;
 use App\Models\Qualification;
 use App\Models\QualificationType;
 use App\Models\User;
+use App\Models\VerificationAssignmentCategoryUser;
 use Database\Seeders\AwardingInstitutionsSeeder;
 use Database\Seeders\BillingCategoriesSeeder;
 use Database\Seeders\CountriesSeeder;
@@ -292,6 +293,8 @@ class VerificationQualificationAccessTest extends TestCase
 
     public function test_level1_complete_stores_optional_attachment(): void
     {
+        $this->seed([\Database\Seeders\BillingCategoriesSeeder::class, \Database\Seeders\QualificationTypesSeeder::class]);
+        $type = \App\Models\QualificationType::query()->where('zqf_level_code', 'L6')->firstOrFail();
         $application = $this->makeSubmittedApplication();
 
         $officer = User::factory()->activated()->create(['applicant_type' => null]);
@@ -305,8 +308,8 @@ class VerificationQualificationAccessTest extends TestCase
             'nrc_passport_number' => '111111/11/1',
             'title_of_qualification' => 'Diploma',
             'award_date' => now()->subYear()->toDateString(),
-            'qualification_type' => 'L6',
-            'qualification_type_id' => null,
+            'qualification_type' => $type->zqf_level_code,
+            'qualification_type_id' => $type->id,
             'is_foreign_qualification' => false,
             'transcript_required' => false,
             'assigned_verifier_id' => $officer->id,
@@ -317,6 +320,8 @@ class VerificationQualificationAccessTest extends TestCase
 
         $this->actingAs($officer)
             ->post(route('admin.verification.qualifications.level1_complete', ['qualification' => $qualification->id]), [
+                'qualification_type_id' => $type->id,
+                'recommended_for_award' => '0',
                 'findings' => 'All checks done; ready for Level 2.',
                 'attachment' => $file,
             ])
@@ -765,27 +770,50 @@ class VerificationQualificationAccessTest extends TestCase
 
     public function test_level2_assigner_sees_qualification_on_assigned_to_me_after_level1_completes(): void
     {
+        $this->seed([\Database\Seeders\BillingCategoriesSeeder::class, \Database\Seeders\QualificationTypesSeeder::class]);
+        $type = \App\Models\QualificationType::query()->where('zqf_level_code', 'L6')->firstOrFail();
         $application = $this->makeSubmittedApplication();
+
+        $zmb = \App\Models\Country::query()->create(['iso_code' => 'ZMB', 'name' => 'Zambia', 'is_active' => true, 'sort_order' => 0]);
+        $inst = \App\Models\AwardingInstitution::query()->create(['country_id' => $zmb->id, 'name' => 'Test Uni', 'is_active' => true, 'sort_order' => 0]);
+        $category = \App\Models\VerificationAssignmentCategory::query()->create([
+            'name' => 'Local Test',
+            'type' => 'local_institution',
+            'is_active' => true,
+        ]);
+        $category->awardingInstitutions()->attach($inst->id);
+
         $qualification = Qualification::query()->create([
             'application_id' => $application->id,
-            'awarding_institution_name' => 'Test',
+            'awarding_institution_id' => $inst->id,
+            'awarding_institution_name' => $inst->name,
             'qualification_holder_name' => 'Jane',
             'country_name_other' => 'Zambia',
             'nrc_passport_number' => '555555/55/5',
             'title_of_qualification' => 'Diploma',
             'award_date' => now()->subYear()->toDateString(),
-            'qualification_type' => 'L6',
-            'qualification_type_id' => null,
+            'qualification_type' => $type->zqf_level_code,
+            'qualification_type_id' => $type->id,
             'is_foreign_qualification' => false,
             'transcript_required' => false,
+            'verification_assignment_category_id' => $category->id,
         ]);
 
         $level2 = User::factory()->activated()->create(['applicant_type' => null]);
+        $level2->assignRole('Verification Officer Level 2');
         $level2->givePermissionTo([
             'verification.assign',
             'verification.level2.review',
             'verification.pool.view',
             'dashboard.view',
+        ]);
+
+        VerificationAssignmentCategoryUser::query()->create([
+            'verification_assignment_category_id' => $category->id,
+            'user_id' => $level2->id,
+            'review_level' => 'level2',
+            'is_active' => true,
+            'is_available' => true,
         ]);
 
         $level1 = User::factory()->activated()->create(['applicant_type' => null]);
@@ -797,7 +825,7 @@ class VerificationQualificationAccessTest extends TestCase
 
         /** @var QualificationLevel1ReviewService $reviews */
         $reviews = $this->app->make(QualificationLevel1ReviewService::class);
-        $reviews->completeLevel1($qualification, $level1, 'All documents match. Recommend approval.', null);
+        $reviews->completeLevel1($qualification, $level1, 'All documents match. Recommend approval.', false, (int) $qualification->qualification_type_id);
 
         $qualification->refresh();
         $this->assertSame(VerificationState::UnderLevel2Review, $qualification->verification_state);

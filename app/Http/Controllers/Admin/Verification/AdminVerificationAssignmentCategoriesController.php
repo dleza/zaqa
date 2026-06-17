@@ -9,6 +9,7 @@ use App\Models\Qualification;
 use App\Models\User;
 use App\Models\VerificationAssignmentCategory;
 use App\Models\VerificationAssignmentCategoryUser;
+use App\Enums\AssignmentCategoryReviewLevel;
 use App\Enums\VerificationState;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -34,7 +35,14 @@ class AdminVerificationAssignmentCategoriesController extends Controller
                 'lastAssignedUser:id,name',
             ])
             ->withCount(['countries', 'awardingInstitutions'])
-            ->withCount(['memberships' => fn ($m) => $m->where('is_active', true)])
+            ->withCount([
+                'memberships as level1_memberships_count' => fn ($m) => $m
+                    ->where('review_level', AssignmentCategoryReviewLevel::Level1->value)
+                    ->where('is_active', true),
+                'memberships as level2_memberships_count' => fn ($m) => $m
+                    ->where('review_level', AssignmentCategoryReviewLevel::Level2->value)
+                    ->where('is_active', true),
+            ])
             ->when($q !== '', fn ($qq) => $qq->where('name', 'like', '%'.$q.'%'))
             ->when(in_array($type, ['foreign_country', 'local_institution'], true), fn ($qq) => $qq->where('type', $type))
             ->when($active === '1', fn ($qq) => $qq->where('is_active', true))
@@ -59,7 +67,9 @@ class AdminVerificationAssignmentCategoriesController extends Controller
                     'is_active' => (bool) $c->is_active,
                     'mapped_count' => $mappedCount,
                     'mapped_sample' => $mapped->take(3)->values()->all(),
-                    'members_count' => (int) ($c->memberships_count ?? 0),
+                    'level1_members_count' => (int) ($c->level1_memberships_count ?? 0),
+                    'level2_members_count' => (int) ($c->level2_memberships_count ?? 0),
+                    'missing_level2_officers' => (int) ($c->level2_memberships_count ?? 0) === 0,
                     'last_assigned_user' => $c->lastAssignedUser ? ['id' => $c->lastAssignedUser->id, 'name' => $c->lastAssignedUser->name] : null,
                     'last_assigned_at' => optional($c->last_assigned_at)->toIso8601String(),
                     'show_url' => route('admin.verification.assignment_categories.show', ['assignmentCategory' => $c->id]),
@@ -172,27 +182,72 @@ class AdminVerificationAssignmentCategoriesController extends Controller
             'memberships.user:id,name,email,is_active',
         ]);
 
-        $activeStates = [
+        $level1Memberships = $assignmentCategory->memberships
+            ->where('review_level', AssignmentCategoryReviewLevel::Level1)
+            ->values();
+        $level2Memberships = $assignmentCategory->memberships
+            ->where('review_level', AssignmentCategoryReviewLevel::Level2)
+            ->values();
+
+        $activeLevel1States = [
             VerificationState::AssignedToLevel1->value,
             VerificationState::UnderLevel1Review->value,
         ];
+        $activeLevel2States = [
+            VerificationState::UnderLevel2Review->value,
+        ];
 
-        $memberIds = $assignmentCategory->memberships->pluck('user_id')->map(fn ($id) => (int) $id)->all();
-        $workloads = $memberIds === []
+        $level1MemberIds = $level1Memberships->pluck('user_id')->map(fn ($id) => (int) $id)->all();
+        $level1Workloads = $level1MemberIds === []
             ? []
             : Qualification::query()
-                ->whereIn('assigned_verifier_id', $memberIds)
-                ->whereIn('verification_state', $activeStates)
+                ->whereIn('assigned_verifier_id', $level1MemberIds)
+                ->whereIn('verification_state', $activeLevel1States)
                 ->selectRaw('assigned_verifier_id, count(*) as c')
                 ->groupBy('assigned_verifier_id')
                 ->pluck('c', 'assigned_verifier_id')
                 ->map(fn ($v) => (int) $v)
                 ->all();
 
+        $level2MemberIds = $level2Memberships->pluck('user_id')->map(fn ($id) => (int) $id)->all();
+        $level2Workloads = $level2MemberIds === []
+            ? []
+            : Qualification::query()
+                ->whereIn('level2_review_owner_id', $level2MemberIds)
+                ->whereIn('verification_state', $activeLevel2States)
+                ->selectRaw('level2_review_owner_id, count(*) as c')
+                ->groupBy('level2_review_owner_id')
+                ->pluck('c', 'level2_review_owner_id')
+                ->map(fn ($v) => (int) $v)
+                ->all();
+
+        $mapMembership = function (VerificationAssignmentCategoryUser $m, array $workloads) {
+            return [
+                'id' => $m->id,
+                'user' => $m->user ? ['id' => $m->user->id, 'name' => $m->user->name, 'email' => $m->user->email, 'is_active' => (bool) $m->user->is_active] : null,
+                'is_active' => (bool) $m->is_active,
+                'is_available' => (bool) $m->is_available,
+                'unavailable_reason' => $m->unavailable_reason,
+                'unavailable_until' => optional($m->unavailable_until)->toIso8601String(),
+                'priority' => $m->priority,
+                'last_assigned_at' => optional($m->last_assigned_at)->toIso8601String(),
+                'workload_active' => $m->user_id ? (int) ($workloads[(string) $m->user_id] ?? 0) : 0,
+            ];
+        };
+
         $level1Users = User::query()
             ->whereNull('applicant_type')
             ->where('is_active', true)
             ->whereHas('roles', fn ($q) => $q->where('name', 'Verification Officer Level 1'))
+            ->orderBy('name')
+            ->get(['id', 'name', 'email'])
+            ->map(fn (User $u) => ['id' => $u->id, 'name' => $u->name, 'email' => $u->email])
+            ->values();
+
+        $level2Users = User::query()
+            ->whereNull('applicant_type')
+            ->where('is_active', true)
+            ->whereHas('roles', fn ($q) => $q->where('name', 'Verification Officer Level 2'))
             ->orderBy('name')
             ->get(['id', 'name', 'email'])
             ->map(fn (User $u) => ['id' => $u->id, 'name' => $u->name, 'email' => $u->email])
@@ -218,28 +273,27 @@ class AdminVerificationAssignmentCategoriesController extends Controller
                 'last_assigned_at' => optional($assignmentCategory->last_assigned_at)->toIso8601String(),
                 'created_at' => optional($assignmentCategory->created_at)->toIso8601String(),
                 'updated_at' => optional($assignmentCategory->updated_at)->toIso8601String(),
+                'level1_members_count' => $level1Memberships->where('is_active', true)->count(),
+                'level2_members_count' => $level2Memberships->where('is_active', true)->count(),
+                'missing_level2_officers' => $level2Memberships->where('is_active', true)->count() === 0,
             ],
-            'memberships' => $assignmentCategory->memberships
+            'level1_memberships' => $level1Memberships
                 ->sortBy(fn (VerificationAssignmentCategoryUser $m) => [$m->is_active ? 0 : 1, $m->user?->name ?? ''])
                 ->values()
-                ->map(fn (VerificationAssignmentCategoryUser $m) => [
-                    'id' => $m->id,
-                    'user' => $m->user ? ['id' => $m->user->id, 'name' => $m->user->name, 'email' => $m->user->email, 'is_active' => (bool) $m->user->is_active] : null,
-                    'is_active' => (bool) $m->is_active,
-                    'is_available' => (bool) $m->is_available,
-                    'unavailable_reason' => $m->unavailable_reason,
-                    'unavailable_until' => optional($m->unavailable_until)->toIso8601String(),
-                    'priority' => $m->priority,
-                    'last_assigned_at' => optional($m->last_assigned_at)->toIso8601String(),
-                    'workload_active' => $m->user_id ? (int) ($workloads[(string) $m->user_id] ?? 0) : 0,
-                ]),
+                ->map(fn (VerificationAssignmentCategoryUser $m) => $mapMembership($m, $level1Workloads)),
+            'level2_memberships' => $level2Memberships
+                ->sortBy(fn (VerificationAssignmentCategoryUser $m) => [$m->is_active ? 0 : 1, $m->user?->name ?? ''])
+                ->values()
+                ->map(fn (VerificationAssignmentCategoryUser $m) => $mapMembership($m, $level2Workloads)),
             'level1_users' => $level1Users,
+            'level2_users' => $level2Users,
             'links' => [
                 'index' => route('admin.verification.assignment_categories.index'),
                 'edit' => route('admin.verification.assignment_categories.edit', ['assignmentCategory' => $assignmentCategory->id]),
                 'deactivate' => route('admin.verification.assignment_categories.deactivate', ['assignmentCategory' => $assignmentCategory->id]),
                 'reactivate' => route('admin.verification.assignment_categories.reactivate', ['assignmentCategory' => $assignmentCategory->id]),
-                'add_member' => route('admin.verification.assignment_categories.members.store', ['assignmentCategory' => $assignmentCategory->id]),
+                'add_level1_member' => route('admin.verification.assignment_categories.members.store', ['assignmentCategory' => $assignmentCategory->id]),
+                'add_level2_member' => route('admin.verification.assignment_categories.members.store', ['assignmentCategory' => $assignmentCategory->id]),
             ],
         ]);
     }
@@ -368,18 +422,28 @@ class AdminVerificationAssignmentCategoriesController extends Controller
 
         $validated = $request->validate([
             'user_id' => ['required', 'integer', 'exists:users,id'],
+            'review_level' => ['required', 'string', Rule::in(['level1', 'level2'])],
             'priority' => ['nullable', 'integer', 'min:0', 'max:1000'],
         ]);
 
+        $reviewLevel = AssignmentCategoryReviewLevel::from((string) $validated['review_level']);
         $user = User::query()->findOrFail((int) $validated['user_id']);
-        if (! $user->hasRole('Verification Officer Level 1')) {
-            return back()->withErrors(['user_id' => 'Only Level 1 officers can be assigned to categories.']);
+
+        if ($reviewLevel === AssignmentCategoryReviewLevel::Level1) {
+            if (! $user->hasRole('Verification Officer Level 1')) {
+                return back()->withErrors(['user_id' => 'Only Level 1 officers can be assigned as Level 1 category members.']);
+            }
+        } else {
+            if (! $user->hasRole('Verification Officer Level 2')) {
+                return back()->withErrors(['user_id' => 'Only Level 2 officers can be assigned as Level 2 category members.']);
+            }
         }
 
         VerificationAssignmentCategoryUser::query()->updateOrCreate(
             [
                 'verification_assignment_category_id' => (int) $assignmentCategory->id,
                 'user_id' => (int) $user->id,
+                'review_level' => $reviewLevel->value,
             ],
             [
                 'is_active' => true,
@@ -390,7 +454,9 @@ class AdminVerificationAssignmentCategoriesController extends Controller
             ],
         );
 
-        return back()->with('success', 'Officer added to category.');
+        return back()->with('success', $reviewLevel === AssignmentCategoryReviewLevel::Level1
+            ? 'Level 1 officer added to category.'
+            : 'Level 2 officer added to category.');
     }
 
     public function updateMember(Request $request, VerificationAssignmentCategory $assignmentCategory, VerificationAssignmentCategoryUser $member): RedirectResponse

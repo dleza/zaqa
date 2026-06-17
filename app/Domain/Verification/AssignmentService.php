@@ -266,4 +266,71 @@ class AssignmentService
             return $qualification;
         });
     }
+
+    /**
+     * Assign Level 2 review ownership after Level 1 completion (category auto-assignment).
+     *
+     * Context keys:
+     * - source: auto|manual
+     * - category_id: int|null
+     * - reason: string|null
+     *
+     * @param  array<string, mixed>  $context
+     */
+    public function assignLevel2ReviewOwnerWithContext(Qualification $qualification, User $assignedBy, User $assignedTo, array $context = []): Qualification
+    {
+        $source = isset($context['source']) && is_string($context['source']) ? trim((string) $context['source']) : '';
+        $categoryId = isset($context['category_id']) && is_numeric($context['category_id']) ? (int) $context['category_id'] : null;
+        $reason = isset($context['reason']) && is_string($context['reason']) ? trim((string) $context['reason']) : null;
+
+        return DB::transaction(function () use ($qualification, $assignedBy, $assignedTo, $source, $categoryId, $reason) {
+            $qualification->refresh();
+            $qualification->loadMissing('application');
+            $application = $qualification->application;
+
+            if ($qualification->verification_state !== VerificationState::UnderLevel2Review) {
+                throw ValidationException::withMessages([
+                    'qualification' => 'Level 2 review owner can only be assigned when the qualification is under Level 2 review.',
+                ]);
+            }
+
+            $before = $qualification->only([
+                'level2_review_owner_id',
+                'verification_assignment_category_id',
+            ]);
+
+            $qualification->forceFill([
+                'level2_review_owner_id' => $assignedTo->id,
+                'verification_assignment_category_id' => $categoryId ?: $qualification->verification_assignment_category_id,
+            ])->save();
+
+            $after = $qualification->only([
+                'level2_review_owner_id',
+                'verification_assignment_category_id',
+            ]);
+
+            $this->audit->record(
+                eventType: 'verification.level2_assigned',
+                module: 'Verification',
+                actionName: 'level2_assigned',
+                message: 'Qualification assigned to Level 2 reviewer.',
+                entityType: Qualification::class,
+                entityId: $qualification->id,
+                beforeState: $before,
+                afterState: $after,
+                metadata: [
+                    'application_id' => $application->id,
+                    'qualification_id' => $qualification->id,
+                    'assigned_to_user_id' => $assignedTo->id,
+                    'assigned_by_user_id' => $assignedBy->id,
+                    'assignment_source' => $source !== '' ? $source : 'auto',
+                    'assignment_category_id' => $after['verification_assignment_category_id'] ?? null,
+                    'reason' => $reason,
+                ],
+                actor: $assignedBy,
+            );
+
+            return $qualification;
+        });
+    }
 }

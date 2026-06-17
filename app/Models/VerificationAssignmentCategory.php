@@ -68,6 +68,16 @@ class VerificationAssignmentCategory extends Model
         return $this->hasMany(VerificationAssignmentCategoryUser::class, 'verification_assignment_category_id');
     }
 
+    public function level1Memberships(): HasMany
+    {
+        return $this->memberships()->where('review_level', 'level1');
+    }
+
+    public function level2Memberships(): HasMany
+    {
+        return $this->memberships()->where('review_level', 'level2');
+    }
+
     public function isForeignCountryType(): bool
     {
         return (string) $this->type === 'foreign_country';

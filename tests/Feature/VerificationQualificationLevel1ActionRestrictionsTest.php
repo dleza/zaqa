@@ -9,6 +9,8 @@ use App\Enums\VerificationState;
 use App\Models\Application;
 use App\Models\Qualification;
 use App\Models\User;
+use Database\Seeders\BillingCategoriesSeeder;
+use Database\Seeders\QualificationTypesSeeder;
 use Database\Seeders\RolesAndPermissionsSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
@@ -45,6 +47,9 @@ class VerificationQualificationLevel1ActionRestrictionsTest extends TestCase
 
     private function makeQualification(Application $application): Qualification
     {
+        $this->seed([BillingCategoriesSeeder::class, QualificationTypesSeeder::class]);
+        $type = \App\Models\QualificationType::query()->where('zqf_level_code', 'L6')->firstOrFail();
+
         return Qualification::query()->create([
             'application_id' => $application->id,
             'awarding_institution_name' => 'Test',
@@ -53,8 +58,8 @@ class VerificationQualificationLevel1ActionRestrictionsTest extends TestCase
             'nrc_passport_number' => '111111/11/1',
             'title_of_qualification' => 'Diploma',
             'award_date' => now()->subYear()->toDateString(),
-            'qualification_type' => 'L6',
-            'qualification_type_id' => null,
+            'qualification_type' => $type->zqf_level_code,
+            'qualification_type_id' => $type->id,
             'is_foreign_qualification' => false,
             'transcript_required' => false,
         ]);
@@ -84,7 +89,7 @@ class VerificationQualificationLevel1ActionRestrictionsTest extends TestCase
 
         /** @var QualificationLevel1ReviewService $reviews */
         $reviews = $this->app->make(QualificationLevel1ReviewService::class);
-        $reviews->completeLevel1($qualification, $level1, 'All documents match. Recommend approval.', null);
+        $reviews->completeLevel1($qualification, $level1, 'All documents match. Recommend approval.', false, (int) $qualification->qualification_type_id);
 
         $qualification->refresh();
         $this->assertSame(VerificationState::UnderLevel2Review, $qualification->verification_state);

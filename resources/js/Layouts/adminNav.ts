@@ -77,7 +77,7 @@ export const adminNavSections: AdminNavSection[] = [
     ],
   },
   {
-    label: 'Applications',
+    label: 'Verified Qualifications',
     requiredAnyPermissions: ['admin.applications.view'],
     items: [
       {
@@ -105,7 +105,7 @@ export const adminNavSections: AdminNavSection[] = [
     ],
   },
   {
-    label: 'Verification',
+    label: 'Pending Verification',
     requiredAnyPermissions: ['verification.pool.view', 'verification.level1.process'],
     items: [
       {

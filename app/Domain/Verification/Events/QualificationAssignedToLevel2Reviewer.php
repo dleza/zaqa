@@ -4,14 +4,15 @@ namespace App\Domain\Verification\Events;
 
 use App\Models\Qualification;
 use App\Models\User;
+use App\Models\VerificationAssignmentCategory;
 
-class QualificationLevel1Completed
+class QualificationAssignedToLevel2Reviewer
 {
     public function __construct(
         public readonly Qualification $qualification,
-        public readonly User $level1Actor,
         public readonly User $assignedBy,
-        public readonly string $findings,
-        public readonly bool $recommendedForAward = false,
-    ) {}
+        public readonly User $assignedTo,
+        public readonly ?VerificationAssignmentCategory $category = null,
+    ) {
+    }
 }

@@ -10,6 +10,7 @@ use App\Enums\VerificationState;
 use App\Models\Application;
 use App\Models\Qualification;
 use App\Models\User;
+use App\Models\VerificationAssignmentCategoryUser;
 use App\Notifications\Verification\QualificationAssignedPortalNotification;
 use Database\Seeders\RolesAndPermissionsSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -48,6 +49,9 @@ class VerificationQualificationNotificationsTest extends TestCase
 
     private function makeQualification(Application $application): Qualification
     {
+        $this->seed([\Database\Seeders\BillingCategoriesSeeder::class, \Database\Seeders\QualificationTypesSeeder::class]);
+        $type = \App\Models\QualificationType::query()->where('zqf_level_code', 'L6')->firstOrFail();
+
         return Qualification::query()->create([
             'application_id' => $application->id,
             'awarding_institution_name' => 'Test',
@@ -56,8 +60,8 @@ class VerificationQualificationNotificationsTest extends TestCase
             'nrc_passport_number' => '111111/11/1',
             'title_of_qualification' => 'Diploma',
             'award_date' => now()->subYear()->toDateString(),
-            'qualification_type' => 'L6',
-            'qualification_type_id' => null,
+            'qualification_type' => $type->zqf_level_code,
+            'qualification_type_id' => $type->id,
             'is_foreign_qualification' => false,
             'transcript_required' => false,
         ]);
@@ -101,11 +105,33 @@ class VerificationQualificationNotificationsTest extends TestCase
         $application = $this->makeSubmittedApplication();
         $qualification = $this->makeQualification($application);
 
+        $zmb = \App\Models\Country::query()->create(['iso_code' => 'ZMB', 'name' => 'Zambia', 'is_active' => true, 'sort_order' => 0]);
+        $inst = \App\Models\AwardingInstitution::query()->create(['country_id' => $zmb->id, 'name' => 'Test Uni', 'is_active' => true, 'sort_order' => 0]);
+        $category = \App\Models\VerificationAssignmentCategory::query()->create([
+            'name' => 'Local Test',
+            'type' => 'local_institution',
+            'is_active' => true,
+        ]);
+        $category->awardingInstitutions()->attach($inst->id);
+        $qualification->forceFill([
+            'awarding_institution_id' => $inst->id,
+            'verification_assignment_category_id' => $category->id,
+        ])->save();
+
         $level2 = User::factory()->activated()->create([
             'applicant_type' => null,
             'email' => 'level2@example.test',
         ]);
+        $level2->assignRole('Verification Officer Level 2');
         $level2->givePermissionTo('verification.assign');
+
+        VerificationAssignmentCategoryUser::query()->create([
+            'verification_assignment_category_id' => $category->id,
+            'user_id' => $level2->id,
+            'review_level' => 'level2',
+            'is_active' => true,
+            'is_available' => true,
+        ]);
 
         $level1 = User::factory()->activated()->create(['applicant_type' => null]);
 
@@ -115,7 +141,7 @@ class VerificationQualificationNotificationsTest extends TestCase
 
         /** @var QualificationLevel1ReviewService $reviews */
         $reviews = $this->app->make(QualificationLevel1ReviewService::class);
-        $reviews->completeLevel1($qualification, $level1, 'All documents match. Recommend approval.', null);
+        $reviews->completeLevel1($qualification, $level1, 'All documents match. Recommend approval.', false, (int) $qualification->qualification_type_id);
 
         $qualification->refresh();
         $this->assertSame($level2->id, $qualification->level2_review_owner_id);
@@ -127,7 +153,14 @@ class VerificationQualificationNotificationsTest extends TestCase
             'read_at' => null,
         ]);
 
+        $this->assertDatabaseHas('notifications', [
+            'notifiable_type' => User::class,
+            'notifiable_id' => $level2->id,
+            'type' => 'verification.qualification_assigned_level2',
+        ]);
+
         Mail::assertQueued(\App\Mail\Verification\QualificationLevel1CompletedMail::class);
+        Mail::assertQueued(\App\Mail\Verification\QualificationAssignedToLevel2ReviewerMail::class);
     }
 
     public function test_reassignment_optionally_notifies_previous_assignee(): void

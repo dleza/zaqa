@@ -32,6 +32,7 @@ const props = defineProps<{
   qualification: any
   viewerUserId: number | null
   level1Users: Array<{ id: number; name: string; email: string }>
+  qualificationTypes?: Array<{ id: number; zqf_level_code: string; level_label: string; name: string }>
   send_back_timeline?: Array<{
     kind: string
     at: string | null
@@ -43,6 +44,7 @@ const props = defineProps<{
   can: {
     assign: boolean
     send_back: boolean
+    send_back_to_level1?: boolean
     level1_process: boolean
     level2_review?: boolean
     approve?: boolean
@@ -61,6 +63,7 @@ const revokeOpen = ref(false)
 const revokeCertificateOpen = ref(false)
 const revokeCertificateTarget = ref<{ certificate_number: string; revoke_url: string } | null>(null)
 const sendBackOpen = ref(false)
+const sendBackToLevel1Open = ref(false)
 const level1CompleteOpen = ref(false)
 const approveOpen = ref(false)
 const rejectOpen = ref(false)
@@ -104,8 +107,28 @@ const revokeCertificateForm = useForm({
   confirm: false,
 })
 const sendBackForm = useForm({ comment: '' })
-const level1CompleteForm = useForm<{ findings: string; attachment: File | null }>({ findings: '', attachment: null })
+const sendBackToLevel1Form = useForm<{ comment: string; attachment: File | null }>({
+  comment: '',
+  attachment: null,
+})
+const sendBackToLevel1AttachmentInput = ref<HTMLInputElement | null>(null)
+const level1CompleteForm = useForm<{
+  qualification_type_id: number | string
+  recommended_for_award: '' | '1' | '0'
+  findings: string
+  accreditation_statement: string
+  evaluation_report: File | null
+  attachment: File | null
+}>({
+  qualification_type_id: props.qualification.qualification_type_id ?? '',
+  recommended_for_award: '',
+  findings: '',
+  accreditation_statement: '',
+  evaluation_report: null,
+  attachment: null,
+})
 const level1AttachmentInput = ref<HTMLInputElement | null>(null)
+const level1EvaluationReportInput = ref<HTMLInputElement | null>(null)
 const issueCveqForm = useForm<{ reissue: boolean }>({ reissue: false })
 const issueRejectionForm = useForm({})
 const approveForm = useForm<{ comment: string; issue_certificate: boolean }>({ comment: '', issue_certificate: false })
@@ -121,12 +144,42 @@ const reopenDecisionForm = useForm<{ reason: string; intended_action: string; co
 const recheckAutoVerificationForm = useForm({})
 const autoAssignLevel1Form = useForm({})
 
-function clearLevel1Attachment() {
+function clearLevel1CompleteFiles() {
   level1CompleteForm.attachment = null
+  level1CompleteForm.evaluation_report = null
   if (level1AttachmentInput.value) {
     level1AttachmentInput.value.value = ''
   }
+  if (level1EvaluationReportInput.value) {
+    level1EvaluationReportInput.value.value = ''
+  }
 }
+
+function openLevel1CompleteModal() {
+  const review = props.qualification.level1_review
+  level1CompleteForm.qualification_type_id = props.qualification.qualification_type_id ?? ''
+  if (review?.recommended_for_award === true) {
+    level1CompleteForm.recommended_for_award = '1'
+  } else if (review?.recommended_for_award === false) {
+    level1CompleteForm.recommended_for_award = '0'
+  } else {
+    level1CompleteForm.recommended_for_award = ''
+  }
+  level1CompleteForm.findings = (review?.findings ?? props.qualification.reviewer_notes ?? '').toString()
+  level1CompleteForm.accreditation_statement = (review?.accreditation_statement ?? '').toString()
+  level1CompleteOpen.value = true
+}
+
+function clearSendBackToLevel1Attachment() {
+  sendBackToLevel1Form.attachment = null
+  if (sendBackToLevel1AttachmentInput.value) {
+    sendBackToLevel1AttachmentInput.value.value = ''
+  }
+}
+
+const isLevel1AccreditationRequired = computed(
+  () => level1CompleteForm.recommended_for_award === '1',
+)
 
 function submitIssueCveq() {
   issueCveqForm.reissue = false
@@ -247,6 +300,17 @@ const canShowSendBack = computed(() => {
     state.value,
   )
 })
+
+const canShowSendBackToLevel1 = computed(() => {
+  if (!props.can.send_back_to_level1) return false
+  if (lockBlocksActions.value) return false
+  return ['under_level2_review', 'auto_verified_pending_level2'].includes(state.value)
+})
+
+const level2SendBackCorrection = computed(() => props.qualification?.level2_send_back_correction ?? null)
+const level2SendBackHistory = computed(() => props.qualification?.level2_send_back_history ?? [])
+const showLevel2CorrectionBanner = computed(() => level2SendBackCorrection.value !== null && level2SendBackCorrection.value !== undefined)
+const level1CorrectionsReceived = computed(() => Boolean(props.qualification?.level1_corrections_received))
 
 const canShowLevel1Complete = computed(() => {
   if (!props.can.level1_process) return false
@@ -396,19 +460,21 @@ function formatDuration(ms: number | null): string {
 }
 
 const documentTypeLabels: Record<string, string> = {
-  level1_review_attachment: 'Level 1 review attachment',
+  level1_review_attachment: 'Level 1 supporting attachment',
+  level1_evaluation_report: 'Level 1 evaluation report',
 }
 function documentTypeLabel(raw: string) {
   return documentTypeLabels[raw] ?? raw.replace(/_/g, ' ')
 }
 
-const level1Findings = computed(() => (props.qualification?.reviewer_notes ?? '').toString().trim())
-const level1ReviewedAt = computed(() => parseIso(props.qualification?.reviewed_at))
+const level1Review = computed(() => props.qualification?.level1_review ?? null)
+const qualificationTypes = computed(() => props.qualificationTypes ?? [])
+const level1Findings = computed(() => (level1Review.value?.findings ?? props.qualification?.reviewer_notes ?? '').toString().trim())
+const level1ReviewedAt = computed(() => parseIso(level1Review.value?.submitted_at ?? props.qualification?.reviewed_at))
+const hasLevel1Submission = computed(() => level1Review.value !== null && level1Review.value !== undefined)
 const hasLevel1Findings = computed(() => level1Findings.value.length > 0)
-const level1Attachment = computed(() => {
-  const docs = (props.qualification?.documents ?? []) as any[]
-  return docs.find((d) => d.document_type === 'level1_review_attachment' && d.is_current_version) ?? null
-})
+const level1Attachment = computed(() => level1Review.value?.supporting_attachment ?? null)
+const level1EvaluationReport = computed(() => level1Review.value?.evaluation_report ?? null)
 
 const nowMs = ref<number>(Date.now())
 let slaTick: number | null = null
@@ -638,10 +704,11 @@ const assignmentCollapsedSummary = computed(() => {
 })
 
 const decisionCollapsedSummary = computed(() => {
-  if (hasLevel1Findings.value) {
+  if (hasLevel1Submission.value) {
+    const label = level1Review.value?.recommendation_label ?? 'Level 1 review submitted'
     return level1ReviewedAt.value
-      ? `Level 1 recommendation submitted ${formatDateTime(level1ReviewedAt.value)}`
-      : 'Level 1 recommendation submitted'
+      ? `${label} · ${formatDateTime(level1ReviewedAt.value)}`
+      : label
   }
   if (state.value === 'rejected') return 'Level 2 decision: Rejected'
   if (['approved_for_certificate', 'certificate_issued'].includes(state.value)) {
@@ -827,6 +894,17 @@ const autoVerificationCollapsedSummary = computed(() => {
               </button>
 
               <button
+                v-if="canShowSendBackToLevel1"
+                type="button"
+                class="inline-flex items-center gap-2 rounded-xl border border-violet-300/40 bg-violet-500/15 px-3.5 py-2 text-sm font-semibold text-white transition hover:bg-violet-500/25"
+                :disabled="isAutoVerifiedPendingL2 && lockMissingForActions"
+                :title="isAutoVerifiedPendingL2 && lockMissingForActions ? 'Lock for review before taking Level 2 actions.' : ''"
+                @click="sendBackToLevel1Open = true"
+              >
+                Send back to Level 1
+              </button>
+
+              <button
                 v-if="canShowSendBack"
                 type="button"
                 class="inline-flex items-center gap-2 rounded-xl border border-amber-300/40 bg-amber-500/15 px-3.5 py-2 text-sm font-semibold text-white transition hover:bg-amber-500/25"
@@ -873,7 +951,7 @@ const autoVerificationCollapsedSummary = computed(() => {
                 v-if="canShowLevel1Complete"
                 type="button"
                 class="inline-flex items-center gap-2 rounded-xl border border-sky-300/40 bg-sky-500/15 px-3.5 py-2 text-sm font-semibold text-white transition hover:bg-sky-500/25"
-                @click="level1CompleteOpen = true"
+                @click="openLevel1CompleteModal"
               >
                 Mark Level 1 complete
               </button>
@@ -954,6 +1032,33 @@ const autoVerificationCollapsedSummary = computed(() => {
           </div>
         </div>
       </section>
+
+      <div
+        v-if="showLevel2CorrectionBanner"
+        class="rounded-2xl border border-violet-300/70 bg-violet-50 px-5 py-4 text-violet-950 shadow-sm"
+        role="status"
+      >
+        <div class="text-sm font-bold">Returned by Level 2 for correction</div>
+        <div v-if="level2SendBackCorrection?.sent_by_name || level2SendBackCorrection?.sent_at" class="mt-1 text-xs text-violet-900/80">
+          <span v-if="level2SendBackCorrection?.sent_by_name">From {{ level2SendBackCorrection.sent_by_name }}</span>
+          <span v-if="level2SendBackCorrection?.sent_at"> · {{ formatDateTime(parseIso(level2SendBackCorrection.sent_at)) }}</span>
+        </div>
+        <div v-if="level2SendBackCorrection?.comment" class="mt-3">
+          <div class="text-[11px] font-bold uppercase tracking-wider text-violet-900/70">Level 2 comment</div>
+          <div class="mt-1 whitespace-pre-wrap text-sm leading-relaxed">{{ level2SendBackCorrection.comment }}</div>
+        </div>
+        <div v-if="level2SendBackCorrection?.attachment" class="mt-3 rounded-xl border border-violet-200/80 bg-white/70 px-3 py-3">
+          <div class="text-[11px] font-bold uppercase tracking-wider text-violet-900/70">Supporting attachment</div>
+          <div class="mt-1 text-sm font-semibold">{{ level2SendBackCorrection.attachment.original_name }}</div>
+          <div class="mt-2 flex flex-wrap gap-2">
+            <a :href="level2SendBackCorrection.attachment.preview_url" class="zaqa-btn zaqa-btn-secondary h-9 px-3 py-2 text-xs">Preview</a>
+            <a :href="level2SendBackCorrection.attachment.download_url" class="zaqa-btn zaqa-btn-secondary h-9 px-3 py-2 text-xs">Download</a>
+          </div>
+        </div>
+        <p class="mt-3 text-sm text-violet-900/90">
+          Please update your Level 1 review submission and mark the review complete again.
+        </p>
+      </div>
 
       <div class="grid gap-6 lg:grid-cols-12 lg:items-start">
         <div class="space-y-5 lg:col-span-8">
@@ -1095,6 +1200,12 @@ const autoVerificationCollapsedSummary = computed(() => {
               <div class="rounded-xl border border-border/70 bg-surface-muted/30 px-4 py-4">
                 <div class="flex flex-wrap items-center gap-2">
                   <span
+                    v-if="level1CorrectionsReceived"
+                    class="inline-flex items-center rounded-full border border-violet-300/40 bg-violet-500/15 px-2.5 py-0.5 text-[11px] font-semibold text-violet-900"
+                  >
+                    Level 1 corrections received
+                  </span>
+                  <span
                     class="inline-flex items-center rounded-full border px-2.5 py-0.5 text-[11px] font-semibold"
                     :class="
                       state === 'under_level2_review' || workflowActiveStep >= 2
@@ -1112,27 +1223,82 @@ const autoVerificationCollapsedSummary = computed(() => {
                   </span>
                 </div>
 
-                <div v-if="hasLevel1Findings" class="mt-3">
-                  <div class="text-[11px] font-bold uppercase tracking-wider text-text-muted">Level 1 recommendation</div>
-                  <div class="mt-2 whitespace-pre-wrap text-sm leading-relaxed text-text-primary">
-                    {{ qualification.reviewer_notes }}
+                <div v-if="hasLevel1Submission" class="mt-3 space-y-4">
+                  <div>
+                    <div class="text-[11px] font-bold uppercase tracking-wider text-text-muted">Level 1 review submission</div>
+                  </div>
+                  <div>
+                    <div class="text-[11px] font-bold uppercase tracking-wider text-text-muted">Recommendation</div>
+                    <div class="mt-1 text-sm font-semibold text-text-primary">
+                      {{ level1Review?.recommendation_label ?? '—' }}
+                    </div>
+                  </div>
+                  <div v-if="level1Review?.qualification_type_correction">
+                    <div class="text-[11px] font-bold uppercase tracking-wider text-text-muted">Level 1 correction</div>
+                    <div class="mt-1 text-sm text-text-primary">
+                      {{ level1Review.qualification_type_correction.message }}
+                    </div>
+                  </div>
+                  <div v-if="hasLevel1Findings">
+                    <div class="text-[11px] font-bold uppercase tracking-wider text-text-muted">Findings</div>
+                    <div class="mt-2 whitespace-pre-wrap text-sm leading-relaxed text-text-primary">
+                      {{ level1Findings }}
+                    </div>
+                  </div>
+                  <div v-if="level1Review?.accreditation_statement">
+                    <div class="text-[11px] font-bold uppercase tracking-wider text-text-muted">Accreditation statement</div>
+                    <div class="mt-2 whitespace-pre-wrap text-sm leading-relaxed text-text-primary">
+                      {{ level1Review.accreditation_statement }}
+                    </div>
+                  </div>
+                  <div v-if="level1EvaluationReport" class="rounded-xl border border-border/70 bg-surface px-3 py-3">
+                    <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                      <div class="min-w-0">
+                        <div class="text-[11px] font-bold uppercase tracking-wider text-text-muted">Evaluation report</div>
+                        <div class="mt-1 truncate text-sm font-semibold text-text-primary">{{ level1EvaluationReport.original_name }}</div>
+                        <div v-if="level1EvaluationReport.created_at" class="mt-0.5 text-xs text-text-muted">
+                          Uploaded {{ formatDateTime(parseIso(level1EvaluationReport.created_at)) }}
+                        </div>
+                      </div>
+                      <div class="flex flex-wrap gap-2">
+                        <a :href="level1EvaluationReport.preview_url" class="zaqa-btn zaqa-btn-secondary h-9 px-3 py-2 text-xs">Preview</a>
+                        <a :href="level1EvaluationReport.download_url" class="zaqa-btn zaqa-btn-secondary h-9 px-3 py-2 text-xs">Download</a>
+                      </div>
+                    </div>
+                  </div>
+                  <div v-if="level1Attachment" class="rounded-xl border border-border/70 bg-surface px-3 py-3">
+                    <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                      <div class="min-w-0">
+                        <div class="text-[11px] font-bold uppercase tracking-wider text-text-muted">Supporting attachment</div>
+                        <div class="mt-1 truncate text-sm font-semibold text-text-primary">{{ level1Attachment.original_name }}</div>
+                      </div>
+                      <div class="flex flex-wrap gap-2">
+                        <a :href="level1Attachment.preview_url" class="zaqa-btn zaqa-btn-secondary h-9 px-3 py-2 text-xs">Preview</a>
+                        <a :href="level1Attachment.download_url" class="zaqa-btn zaqa-btn-secondary h-9 px-3 py-2 text-xs">Download</a>
+                      </div>
+                    </div>
+                  </div>
+                  <div v-if="level2SendBackHistory.length > 0" class="rounded-xl border border-border/70 bg-surface px-3 py-3">
+                    <div class="text-[11px] font-bold uppercase tracking-wider text-text-muted">Level 2 send-back history</div>
+                    <ol class="mt-2 space-y-2">
+                      <li v-for="(row, idx) in level2SendBackHistory" :key="`l2sb-${row.sent_at}-${idx}`" class="text-sm">
+                        <div class="text-xs text-text-muted">
+                          <span v-if="row.sent_by_name" class="font-semibold text-text-primary">{{ row.sent_by_name }}</span>
+                          <span v-if="row.sent_at"> · {{ formatDateTime(parseIso(row.sent_at)) }}</span>
+                        </div>
+                        <div v-if="row.comment" class="mt-1 whitespace-pre-wrap text-text-primary">{{ row.comment }}</div>
+                      </li>
+                    </ol>
+                  </div>
+                  <div class="text-xs text-text-muted">
+                    <span v-if="level1Review?.submitted_by_name">
+                      Submitted by <span class="font-semibold text-text-primary">{{ level1Review.submitted_by_name }}</span>
+                    </span>
+                    <span v-if="level1ReviewedAt"> · {{ formatDateTime(level1ReviewedAt) }}</span>
                   </div>
                 </div>
                 <div v-else class="mt-3 text-sm text-text-muted">
                   No Level 1 recommendation submitted yet.
-                </div>
-
-                <div v-if="level1Attachment" class="mt-4 rounded-xl border border-border/70 bg-surface px-3 py-3">
-                  <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                    <div class="min-w-0">
-                      <div class="text-[11px] font-bold uppercase tracking-wider text-text-muted">Attachment</div>
-                      <div class="mt-1 truncate text-sm font-semibold text-text-primary">{{ level1Attachment.original_name }}</div>
-                    </div>
-                    <div class="flex flex-wrap gap-2">
-                      <a :href="level1Attachment.preview_url" class="zaqa-btn zaqa-btn-secondary h-9 px-3 py-2 text-xs">Preview</a>
-                      <a :href="level1Attachment.download_url" class="zaqa-btn zaqa-btn-secondary h-9 px-3 py-2 text-xs">Download</a>
-                    </div>
-                  </div>
                 </div>
               </div>
 
@@ -2004,6 +2170,72 @@ const autoVerificationCollapsedSummary = computed(() => {
     </AdminActionModal>
 
     <AdminActionModal
+      v-model="sendBackToLevel1Open"
+      title="Send back to Level 1"
+      description="This will return the qualification to Level 1 for correction. It will not be sent to the applicant."
+    >
+      <div class="space-y-4">
+        <div>
+          <label class="text-sm font-semibold text-text-primary">Correction comment <span class="text-danger">*</span></label>
+          <textarea
+            v-model="sendBackToLevel1Form.comment"
+            class="zaqa-input mt-2 h-auto min-h-[8rem] py-3"
+            placeholder="Explain what Level 1 needs to correct before Level 2 review can continue."
+          />
+          <div v-if="sendBackToLevel1Form.errors.comment" class="mt-1 text-xs text-danger">{{ sendBackToLevel1Form.errors.comment }}</div>
+        </div>
+        <div>
+          <label class="text-sm font-semibold text-text-primary">Optional attachment</label>
+          <input
+            ref="sendBackToLevel1AttachmentInput"
+            type="file"
+            class="zaqa-input mt-2"
+            accept=".pdf,.doc,.docx,.jpg,.jpeg,.png,.gif,.webp"
+            @change="(e) => {
+              const t = e.target as HTMLInputElement
+              sendBackToLevel1Form.attachment = t.files?.[0] ?? null
+            }"
+          />
+          <div v-if="sendBackToLevel1Form.errors.attachment" class="mt-1 text-xs text-danger">{{ sendBackToLevel1Form.errors.attachment }}</div>
+        </div>
+      </div>
+      <template #footer>
+        <button
+          type="button"
+          class="zaqa-btn zaqa-btn-secondary px-4 py-2 text-sm"
+          @click="
+            () => {
+              sendBackToLevel1Open = false
+              sendBackToLevel1Form.clearErrors()
+              sendBackToLevel1Form.reset()
+              clearSendBackToLevel1Attachment()
+            }
+          "
+        >
+          Cancel
+        </button>
+        <button
+          type="button"
+          class="zaqa-btn zaqa-btn-primary px-4 py-2 text-sm"
+          :disabled="sendBackToLevel1Form.processing"
+          @click="
+            sendBackToLevel1Form.post(qualification.send_back_to_level1_url, {
+              preserveScroll: true,
+              forceFormData: true,
+              onSuccess: () => {
+                sendBackToLevel1Open = false
+                sendBackToLevel1Form.reset()
+                clearSendBackToLevel1Attachment()
+              },
+            })
+          "
+        >
+          Send back
+        </button>
+      </template>
+    </AdminActionModal>
+
+    <AdminActionModal
       v-model="sendBackHistoryOpen"
       title="Return & resubmission history"
       description="This qualification was returned to the applicant at least once. Officer feedback is retained even after resubmission."
@@ -2055,28 +2287,82 @@ const autoVerificationCollapsedSummary = computed(() => {
       </template>
     </AdminActionModal>
 
-    <AdminActionModal v-model="level1CompleteOpen" title="Mark Level 1 review complete" description="Your findings stay with this qualification and move the task to Level 2 review.">
-      <div>
-        <label class="text-sm font-semibold text-text-primary">Findings</label>
-        <textarea v-model="level1CompleteForm.findings" class="zaqa-input mt-2 h-auto min-h-[10rem] py-3" placeholder="Summarize checks, issues, and recommendation." />
-        <div v-if="level1CompleteForm.errors.findings" class="mt-1 text-xs text-danger">{{ level1CompleteForm.errors.findings }}</div>
-      </div>
-      <div class="mt-4">
-        <label class="text-sm font-semibold text-text-primary">Attachment (optional)</label>
-        <p class="mt-1 text-xs text-text-secondary">Upload a supporting file (PDF, Word, or image) for Level 2 — max 10&nbsp;MB.</p>
-        <input
-          ref="level1AttachmentInput"
-          type="file"
-          class="zaqa-input mt-2"
-          accept=".pdf,.doc,.docx,image/jpeg,image/png,image/gif,image/webp"
-          @change="
-            (e) => {
-              const t = e.target as HTMLInputElement
-              level1CompleteForm.attachment = t.files?.[0] ?? null
-            }
-          "
-        />
-        <div v-if="level1CompleteForm.errors.attachment" class="mt-1 text-xs text-danger">{{ level1CompleteForm.errors.attachment }}</div>
+    <AdminActionModal v-model="level1CompleteOpen" title="Mark Level 1 review complete" description="Your submission stays with this qualification and moves the task to Level 2 review.">
+      <div class="space-y-4">
+        <div>
+          <label class="text-sm font-semibold text-text-primary">Qualification type <span class="text-danger">*</span></label>
+          <select v-model="level1CompleteForm.qualification_type_id" class="zaqa-input mt-2">
+            <option value="" disabled>Select qualification type…</option>
+            <option v-for="type in qualificationTypes" :key="type.id" :value="type.id">
+              {{ type.name }}
+            </option>
+          </select>
+          <div v-if="level1CompleteForm.errors.qualification_type_id" class="mt-1 text-xs text-danger">{{ level1CompleteForm.errors.qualification_type_id }}</div>
+        </div>
+        <div>
+          <label class="text-sm font-semibold text-text-primary">Recommendation <span class="text-danger">*</span></label>
+          <select v-model="level1CompleteForm.recommended_for_award" class="zaqa-input mt-2">
+            <option value="" disabled>Select recommendation…</option>
+            <option value="1">Recommend awarding</option>
+            <option value="0">Do not recommend awarding</option>
+          </select>
+          <div v-if="level1CompleteForm.errors.recommended_for_award" class="mt-1 text-xs text-danger">{{ level1CompleteForm.errors.recommended_for_award }}</div>
+        </div>
+        <div>
+          <label class="text-sm font-semibold text-text-primary">Findings <span class="text-danger">*</span></label>
+          <textarea v-model="level1CompleteForm.findings" class="zaqa-input mt-2 h-auto min-h-[8rem] py-3" placeholder="Summarize checks, issues, and supporting observations." />
+          <div v-if="level1CompleteForm.errors.findings" class="mt-1 text-xs text-danger">{{ level1CompleteForm.errors.findings }}</div>
+        </div>
+        <div>
+          <label class="text-sm font-semibold text-text-primary">
+            Accreditation statement
+            <span v-if="isLevel1AccreditationRequired" class="text-danger">*</span>
+          </label>
+          <p class="mt-1 text-xs text-text-secondary">
+            {{ isLevel1AccreditationRequired ? 'Required when recommending award. This may appear on the certificate if approved.' : 'Required only when recommending award.' }}
+          </p>
+          <textarea
+            v-model="level1CompleteForm.accreditation_statement"
+            class="zaqa-input mt-2 h-auto min-h-[6rem] py-3"
+            placeholder="Enter the accreditation statement to appear on the certificate if approved."
+            maxlength="2000"
+          />
+          <div v-if="level1CompleteForm.errors.accreditation_statement" class="mt-1 text-xs text-danger">{{ level1CompleteForm.errors.accreditation_statement }}</div>
+        </div>
+        <div>
+          <label class="text-sm font-semibold text-text-primary">Evaluation report attachment</label>
+          <p class="mt-1 text-xs text-text-secondary">Upload the Level 1 evaluation report (PDF, Word, or image) — max 10&nbsp;MB.</p>
+          <input
+            ref="level1EvaluationReportInput"
+            type="file"
+            class="zaqa-input mt-2"
+            accept=".pdf,.doc,.docx,image/jpeg,image/png,image/gif,image/webp"
+            @change="
+              (e) => {
+                const t = e.target as HTMLInputElement
+                level1CompleteForm.evaluation_report = t.files?.[0] ?? null
+              }
+            "
+          />
+          <div v-if="level1CompleteForm.errors.evaluation_report" class="mt-1 text-xs text-danger">{{ level1CompleteForm.errors.evaluation_report }}</div>
+        </div>
+        <div>
+          <label class="text-sm font-semibold text-text-primary">Supporting attachment (optional)</label>
+          <p class="mt-1 text-xs text-text-secondary">Additional supporting file for Level 2 — max 10&nbsp;MB.</p>
+          <input
+            ref="level1AttachmentInput"
+            type="file"
+            class="zaqa-input mt-2"
+            accept=".pdf,.doc,.docx,image/jpeg,image/png,image/gif,image/webp"
+            @change="
+              (e) => {
+                const t = e.target as HTMLInputElement
+                level1CompleteForm.attachment = t.files?.[0] ?? null
+              }
+            "
+          />
+          <div v-if="level1CompleteForm.errors.attachment" class="mt-1 text-xs text-danger">{{ level1CompleteForm.errors.attachment }}</div>
+        </div>
       </div>
       <template #footer>
         <button
@@ -2087,7 +2373,7 @@ const autoVerificationCollapsedSummary = computed(() => {
               level1CompleteOpen = false
               level1CompleteForm.clearErrors()
               level1CompleteForm.reset()
-              clearLevel1Attachment()
+              clearLevel1CompleteFiles()
             }
           "
         >
@@ -2104,7 +2390,7 @@ const autoVerificationCollapsedSummary = computed(() => {
               onSuccess: () => {
                 level1CompleteOpen = false
                 level1CompleteForm.reset()
-                clearLevel1Attachment()
+                clearLevel1CompleteFiles()
               },
             })
           "

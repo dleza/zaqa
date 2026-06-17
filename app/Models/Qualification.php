@@ -67,6 +67,14 @@ class Qualification extends Model
         'level2_review_locked_by',
         'level2_review_locked_at',
         'reviewer_notes',
+        'level1_recommended_for_award',
+        'level1_accreditation_statement',
+        'level1_review_completed_by_user_id',
+        'returned_to_level1_at',
+        'returned_to_level1_by_user_id',
+        'returned_to_level1_to_user_id',
+        'level2_return_target_user_id',
+        'level1_correction_cycle',
         'fee_currency',
         'fee_amount_cents',
         'transcript_required',
@@ -78,12 +86,14 @@ class Qualification extends Model
     protected $casts = [
         'award_date' => 'date',
         'transcript_required' => 'bool',
+        'level1_recommended_for_award' => 'bool',
         'is_foreign_qualification' => 'bool',
         'auto_assigned_at' => 'datetime',
         'assigned_at' => 'datetime',
         'service_started_at' => 'datetime',
         'service_deadline_at' => 'datetime',
         'reviewed_at' => 'datetime',
+        'returned_to_level1_at' => 'datetime',
         'returned_to_applicant_at' => 'datetime',
         'auto_verification_attempted_at' => 'datetime',
         'institution_pull_lookup_dispatched_at' => 'datetime',
@@ -151,6 +161,11 @@ class Qualification extends Model
         return $this->belongsTo(User::class, 'assigned_verifier_id');
     }
 
+    public function level1ReviewCompletedBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'level1_review_completed_by_user_id');
+    }
+
     public function sendBackBy(): BelongsTo
     {
         return $this->belongsTo(User::class, 'send_back_by_user_id');
@@ -159,6 +174,11 @@ class Qualification extends Model
     public function level2ReviewOwner(): BelongsTo
     {
         return $this->belongsTo(User::class, 'level2_review_owner_id');
+    }
+
+    public function returnedToLevel1By(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'returned_to_level1_by_user_id');
     }
 
     public function level2ReviewLockedBy(): BelongsTo

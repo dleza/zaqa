@@ -259,6 +259,42 @@ If no active category exists (or no eligible Level 1 officer is available):
 - the failure reason is stored for Level 2 / Super Admin visibility
 - the pipeline must not crash
 
+## Level 2 category-based auto-assignment
+After a Level 1 officer completes review and submits the qualification forward, the system attempts **category-based auto-assignment** to Level 2 officers attached to the same assignment category.
+
+### Category officer pools
+Each assignment category supports two officer pools on the shared `verification_assignment_category_user` pivot:
+- `review_level = level1` — used for Level 1 auto-assignment after auto-verification fallback
+- `review_level = level2` — used when Level 1 completes review
+
+Admins manage both pools from **Pending Verification → Assignment Categories**.
+
+### Level 2 fairness
+Level 2 auto-assignment uses the same balancing strategy as Level 1:
+1. fewest active `under_level2_review` tasks owned by the officer
+2. oldest `last_assigned_at` on the category membership
+3. lowest `user_id` tie-break
+
+### Level 2 fallback
+If no eligible Level 2 officer exists for the category (or the qualification has no category):
+- Level 1 completion still succeeds
+- `level2_review_owner_id` remains null
+- the qualification appears in the Level 2 pool / Ready for Level 2 queue
+- an audit entry records that auto-assignment failed and the item was routed to the pool
+
+When auto-assignment succeeds, the assigned Level 2 officer receives portal and email notifications (same pattern as Level 1 assignment notifications, without SMS).
+
+### Level 1 review submission
+When a Level 1 officer marks review complete, the portal captures:
+
+- **Recommendation** — `Recommend awarding` or `Do not recommend awarding` (required)
+- **Findings** — internal review notes (required)
+- **Accreditation statement** — required when recommending award; may appear on the CVEQ certificate `recognition_statement` field when issued
+- **Evaluation report attachment** — optional internal document (`level1_evaluation_report`)
+- **Supporting attachment** — optional additional file (`level1_review_attachment`)
+
+Level 2 officers see the full submission in the qualification **Decision summary** panel after Level 1 completes.
+
 ## Send-back flow
 ### From verification to applicant
 Both Level 1 and Level 2 can send back an application.

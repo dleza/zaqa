@@ -24,19 +24,24 @@ use App\Domain\Identity\Listeners\SendPhoneOtpSms;
 use App\Domain\Verification\Events\ApplicationAssignedToLevel1;
 use App\Domain\Verification\Events\ApplicationLevel1Completed;
 use App\Domain\Verification\Events\ApplicationSentBackToApplicant;
+use App\Domain\Verification\Events\QualificationAssignedToLevel2Reviewer;
 use App\Domain\Verification\Events\QualificationAssignedToVerifier;
 use App\Domain\Verification\Events\QualificationCorrectionsSubmitted;
 use App\Domain\Verification\Events\QualificationLevel1Completed;
 use App\Domain\Verification\Events\QualificationSentBackToApplicant;
+use App\Domain\Verification\Events\QualificationSentBackToLevel1ByLevel2;
+use App\Domain\Verification\Listeners\CreateQualificationAssignedToLevel2PortalNotification;
 use App\Domain\Verification\Listeners\CreateQualificationAssignmentPortalNotification;
 use App\Domain\Verification\Listeners\CreateQualificationCorrectionsSubmittedPortalNotification;
 use App\Domain\Verification\Listeners\CreateQualificationLevel1CompletedPortalNotification;
 use App\Domain\Verification\Listeners\CreateQualificationSendBackApplicantPortalNotification;
 use App\Domain\Verification\Listeners\SendAssignmentNotification;
 use App\Domain\Verification\Listeners\SendLevel1CompletedNotification;
+use App\Domain\Verification\Listeners\SendQualificationAssignedToLevel2Notification;
 use App\Domain\Verification\Listeners\SendQualificationCorrectionsSubmittedNotification;
 use App\Domain\Verification\Listeners\SendQualificationLevel1CompletedNotification;
 use App\Domain\Verification\Listeners\SendQualificationSendBackNotification;
+use App\Domain\Verification\Listeners\SendQualificationSentBackToLevel1Notification;
 use App\Domain\Verification\Listeners\SendSendBackNotification;
 use Illuminate\Auth\Events\Failed;
 use Illuminate\Auth\Events\Login;
@@ -76,6 +81,13 @@ class EventServiceProvider extends ServiceProvider
         QualificationAssignedToVerifier::class => [
             SendAssignmentNotification::class,
             CreateQualificationAssignmentPortalNotification::class,
+        ],
+        QualificationAssignedToLevel2Reviewer::class => [
+            SendQualificationAssignedToLevel2Notification::class,
+            CreateQualificationAssignedToLevel2PortalNotification::class,
+        ],
+        QualificationSentBackToLevel1ByLevel2::class => [
+            SendQualificationSentBackToLevel1Notification::class,
         ],
         QualificationSentBackToApplicant::class => [
             SendQualificationSendBackNotification::class,

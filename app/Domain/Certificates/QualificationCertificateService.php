@@ -658,7 +658,7 @@ class QualificationCertificateService
             'awarding_institution' => $institutionName !== '' ? $institutionName : '—',
             'award_date' => optional($qualification->award_date)?->format('d/m/Y') ?? '—',
             'framework_line' => $frameworkLine,
-            'recognition_statement' => config('certificates.recognition_act_clause'),
+            'recognition_statement' => $this->resolveAccreditationStatementForCertificate($qualification),
             'director_name' => config('certificates.director_general_name'),
             'director_title' => config('certificates.director_general_title'),
             ...$this->certificateSignatureViewData(),
@@ -734,6 +734,18 @@ class QualificationCertificateService
             ->build();
 
         return $result->getDataUri();
+    }
+
+    private function resolveAccreditationStatementForCertificate(Qualification $qualification): string
+    {
+        if ($qualification->level1_recommended_for_award === true) {
+            $statement = trim((string) ($qualification->level1_accreditation_statement ?? ''));
+            if ($statement !== '') {
+                return $statement;
+            }
+        }
+
+        return (string) config('certificates.recognition_act_clause');
     }
 
     private function resolveTemplateKey(Qualification $qualification): string

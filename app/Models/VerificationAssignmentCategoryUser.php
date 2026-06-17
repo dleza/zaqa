@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Enums\AssignmentCategoryReviewLevel;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
@@ -12,6 +13,7 @@ class VerificationAssignmentCategoryUser extends Model
     protected $fillable = [
         'verification_assignment_category_id',
         'user_id',
+        'review_level',
         'is_active',
         'is_available',
         'unavailable_reason',
@@ -21,6 +23,7 @@ class VerificationAssignmentCategoryUser extends Model
     ];
 
     protected $casts = [
+        'review_level' => AssignmentCategoryReviewLevel::class,
         'is_active' => 'bool',
         'is_available' => 'bool',
         'unavailable_until' => 'datetime',

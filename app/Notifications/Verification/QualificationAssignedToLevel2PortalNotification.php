@@ -5,7 +5,7 @@ namespace App\Notifications\Verification;
 use Illuminate\Bus\Queueable;
 use Illuminate\Notifications\Notification;
 
-class QualificationLevel1CompletedPortalNotification extends Notification
+class QualificationAssignedToLevel2PortalNotification extends Notification
 {
     use Queueable;
 
@@ -15,9 +15,8 @@ class QualificationLevel1CompletedPortalNotification extends Notification
         public readonly string $qualificationTitle,
         public readonly ?string $qualificationType,
         public readonly ?string $awardingInstitution,
-        public readonly string $level1ActorName,
-        public readonly string $findings,
-        public readonly bool $recommendedForAward = false,
+        public readonly string $categoryName,
+        public readonly string $assignedByName,
     ) {}
 
     /**
@@ -30,7 +29,7 @@ class QualificationLevel1CompletedPortalNotification extends Notification
 
     public function databaseType(object $notifiable): string
     {
-        return 'verification.qualification_level1_completed';
+        return 'verification.qualification_assigned_level2';
     }
 
     /**
@@ -38,29 +37,17 @@ class QualificationLevel1CompletedPortalNotification extends Notification
      */
     public function toArray(object $notifiable): array
     {
-        $excerpt = trim(preg_replace('/\\s+/', ' ', $this->findings) ?? '');
-        if (mb_strlen($excerpt) > 280) {
-            $excerpt = mb_substr($excerpt, 0, 277).'…';
-        }
-
-        $recommendation = $this->recommendedForAward
-            ? 'recommended awarding'
-            : 'did not recommend awarding';
-
         return [
-            'title' => 'Level 1 review completed',
-            'message' => "Level 1 completed review and {$recommendation} for qualification {$this->qualificationTitle}.",
+            'title' => 'Level 2 review task assigned',
+            'message' => "You have been assigned a Level 2 review for application {$this->applicationReference}.",
             'link_url' => "/admin/verification/qualifications/{$this->qualificationId}",
             'application_reference' => $this->applicationReference,
             'qualification_id' => $this->qualificationId,
             'qualification_title' => $this->qualificationTitle,
             'qualification_type' => $this->qualificationType,
             'awarding_institution' => $this->awardingInstitution,
-            'level1_actor_name' => $this->level1ActorName,
-            'findings_excerpt' => $excerpt,
-            'findings' => $this->findings,
-            'recommended_for_award' => $this->recommendedForAward,
+            'assignment_category' => $this->categoryName,
+            'assigned_by_name' => $this->assignedByName,
         ];
     }
 }
-

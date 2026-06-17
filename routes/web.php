@@ -621,6 +621,9 @@ Route::middleware('auth')->group(function () {
             Route::post('/qualifications/{qualification}/send-back', [AdminVerificationQualificationController::class, 'sendBack'])
                 ->middleware('can:verification.send_back')
                 ->name('qualifications.send_back');
+            Route::post('/qualifications/{qualification}/send-back-to-level1', [AdminVerificationQualificationController::class, 'sendBackToLevel1'])
+                ->middleware('can:verification.level2.review')
+                ->name('qualifications.send_back_to_level1');
             Route::post('/qualifications/{qualification}/level1-complete', [AdminVerificationQualificationController::class, 'level1Complete'])
                 ->middleware('can:verification.level1.process')
                 ->name('qualifications.level1_complete');

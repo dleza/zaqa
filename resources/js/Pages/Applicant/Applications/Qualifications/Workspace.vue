@@ -807,7 +807,7 @@ const pendingConsentName = computed(() => pendingConsentFile.value?.name ?? '')
                 </div>
                 <div class="sm:col-span-2">
                   <label class="text-sm font-medium text-text-primary">
-                    Qualification Holder Names as on qualification document
+                    Name of Qualification Holder as it appears on qualification document
                     <span class="text-danger" aria-hidden="true">*</span>
                   </label>
                   <input
