@@ -184,7 +184,9 @@ class ApplicantApplicationFlowTest extends TestCase
 
         $qualification->refresh();
         $this->assertNotNull($qualification->verification_reference_number);
-        $this->assertStringStartsWith('ZAQA-Q-', $qualification->verification_reference_number);
+        $this->assertMatchesRegularExpression('/^\d{4}-\d{6}-\d{2}$/', $qualification->verification_reference_number);
+        $this->assertStringStartsWith($application->application_number.'-', $qualification->verification_reference_number);
+        $this->assertMatchesRegularExpression('/^\d{4}-\d{6}$/', $application->application_number);
         $this->assertNotNull($qualification->auto_verification_attempted_at);
         $this->assertSame('awaiting_assignment', $qualification->verification_state?->value);
         $this->assertNotNull($qualification->service_started_at);

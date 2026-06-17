@@ -83,7 +83,11 @@ class ApplicationsPoolService
                             ->orWhere('title_of_qualification', 'like', '%'.$q.'%')
                             ->orWhere('certificate_number', 'like', '%'.$q.'%')
                             ->orWhere('student_number', 'like', '%'.$q.'%')
-                            ->orWhere('examination_number', 'like', '%'.$q.'%');
+                            ->orWhere('examination_number', 'like', '%'.$q.'%')
+                            ->orWhere('verification_reference_number', 'like', '%'.$q.'%');
+                    })
+                    ->orWhereHas('qualifications', function ($qq) use ($q) {
+                        $qq->where('verification_reference_number', 'like', '%'.$q.'%');
                     });
             });
         }

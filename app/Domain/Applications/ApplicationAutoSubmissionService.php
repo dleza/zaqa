@@ -16,10 +16,7 @@ use App\Models\ApplicationStatusHistory;
 use App\Models\Payment;
 use App\Models\Qualification;
 use App\Models\User;
-use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Str;
-use RuntimeException;
 
 /**
  * Payment confirmation is now the submission trigger.
@@ -34,6 +31,7 @@ class ApplicationAutoSubmissionService
         private readonly ApplicationLifecycleService $lifecycle,
         private readonly ApplicationPaymentSatisfaction $paymentSatisfaction,
         private readonly QualificationSlaService $qualificationSla,
+        private readonly ReferenceNumberService $referenceNumbers,
     ) {}
 
     public function submitAfterPaymentSatisfied(Application $application, ?Payment $payment = null, ?User $actor = null): Application
@@ -92,7 +90,7 @@ class ApplicationAutoSubmissionService
                 ],
             ]);
 
-            $this->assignVerificationReferenceNumbers($application);
+            $this->referenceNumbers->assignQualificationVerificationReferences($application);
 
             $application->loadMissing('qualifications');
             foreach ($application->qualifications as $qualification) {
@@ -162,58 +160,5 @@ class ApplicationAutoSubmissionService
 
             return $application;
         });
-    }
-
-    /**
-     * Each qualification verification item gets a stable pool-wide reference at submission time.
-     * Existing numbers are kept so correspondence stays consistent; new rows get a new code.
-     */
-    private function assignVerificationReferenceNumbers(Application $application): void
-    {
-        $application->loadMissing('qualifications');
-
-        foreach ($application->qualifications->sortBy('id')->values() as $qualification) {
-            /** @var Qualification $qualification */
-            $existing = trim((string) ($qualification->verification_reference_number ?? ''));
-            if ($existing !== '') {
-                continue;
-            }
-
-            $qualification->verification_reference_number = $this->generateUniqueVerificationReferenceNumber();
-            try {
-                $qualification->save();
-            } catch (QueryException $e) {
-                if ($this->isUniqueConstraintViolation($e)) {
-                    $qualification->verification_reference_number = $this->generateUniqueVerificationReferenceNumber();
-                    $qualification->save();
-                } else {
-                    throw $e;
-                }
-            }
-        }
-    }
-
-    private function generateUniqueVerificationReferenceNumber(): string
-    {
-        $attempts = 0;
-
-        while ($attempts < 12) {
-            $attempts++;
-            $candidate = 'ZAQA-Q-'.now()->format('Y').'-'.strtoupper(Str::random(10));
-
-            if (! Qualification::query()->where('verification_reference_number', $candidate)->exists()) {
-                return $candidate;
-            }
-        }
-
-        throw new RuntimeException('Unable to generate a unique qualification verification reference number.');
-    }
-
-    private function isUniqueConstraintViolation(QueryException $e): bool
-    {
-        $sqlState = $e->errorInfo[0] ?? null;
-        $driverCode = $e->errorInfo[1] ?? null;
-
-        return $sqlState === '23000' && in_array((int) $driverCode, [1062, 19], true);
     }
 }

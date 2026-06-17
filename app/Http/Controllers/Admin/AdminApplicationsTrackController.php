@@ -145,7 +145,9 @@ class AdminApplicationsTrackController extends Controller
             ->with(['applicant', 'qualification'])
             ->where(function ($q) use ($like) {
                 $q->where('applications.application_number', 'like', $like)
-                    ->orWhereHas('qualification', fn ($qq) => $qq->where('nrc_passport_number', 'like', $like))
+                    ->orWhereHas('qualification', fn ($qq) => $qq->where('nrc_passport_number', 'like', $like)
+                        ->orWhere('verification_reference_number', 'like', $like))
+                    ->orWhereHas('qualifications', fn ($qq) => $qq->where('verification_reference_number', 'like', $like))
                     ->orWhereRaw('JSON_UNQUOTE(JSON_EXTRACT(applications.metadata, "$.verification_subject.nrc_number")) like ?', [$like])
                     ->orWhereRaw('JSON_UNQUOTE(JSON_EXTRACT(applications.metadata, "$.verification_subject.passport_number")) like ?', [$like]);
             })

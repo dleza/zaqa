@@ -22,6 +22,7 @@ class ApplicationDraftService
     public function __construct(
         private readonly AuditLogService $audit,
         private readonly ApplicationLifecycleService $lifecycle,
+        private readonly ReferenceNumberService $referenceNumbers,
     )
     {
     }
@@ -316,7 +317,7 @@ class ApplicationDraftService
         while ($attempts < 5) {
             $attempts++;
 
-            $attributes['application_number'] = $this->generateApplicationNumber();
+            $attributes['application_number'] = $this->referenceNumbers->generateApplicationNumber();
 
             try {
                 /** @var Application $created */
@@ -332,11 +333,6 @@ class ApplicationDraftService
         }
 
         throw $lastException ?? new RuntimeException('Unable to generate a unique application number.');
-    }
-
-    private function generateApplicationNumber(): string
-    {
-        return 'ZAQA-'.now()->format('Y').'-'.strtoupper(Str::random(10));
     }
 
     private function isUniqueConstraintViolation(QueryException $e): bool
