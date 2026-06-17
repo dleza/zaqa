@@ -13,6 +13,7 @@ use App\Enums\VerificationState;
 use App\Models\Application;
 use App\Models\AwardingInstitution;
 use App\Models\CertificateSubject;
+use App\Support\Qualifications\CertificateSubjectGrade;
 use App\Models\Country;
 use App\Models\Qualification;
 use App\Models\QualificationTitle;
@@ -734,10 +735,17 @@ class QualificationCaptureService
                 ]);
             }
 
+            $normalizedGrade = CertificateSubjectGrade::normalize($row['grade'] ?? null);
+            if ($normalizedGrade === null) {
+                throw ValidationException::withMessages([
+                    'subject_results' => 'Please select a valid grade.',
+                ]);
+            }
+
             $qualification->subjectResults()->create([
                 'certificate_subject_id' => $catalog->id,
                 'subject_name' => $catalog->name,
-                'grade' => trim((string) ($row['grade'] ?? '')),
+                'grade' => $normalizedGrade,
                 'display_order' => $index,
             ]);
         }

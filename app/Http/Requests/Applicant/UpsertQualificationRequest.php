@@ -4,6 +4,7 @@ namespace App\Http\Requests\Applicant;
 
 use App\Http\Requests\Applicant\Concerns\ValidatesNamesAsOnQualificationDocument;
 use App\Http\Requests\Applicant\Concerns\ValidatesQualificationTitleSelection;
+use App\Http\Requests\Concerns\ValidatesCertificateSubjectGrades;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\Validator;
@@ -12,6 +13,7 @@ class UpsertQualificationRequest extends FormRequest
 {
     use ValidatesNamesAsOnQualificationDocument;
     use ValidatesQualificationTitleSelection;
+    use ValidatesCertificateSubjectGrades;
     public function authorize(): bool
     {
         $application = $this->route('application');
@@ -54,8 +56,13 @@ class UpsertQualificationRequest extends FormRequest
                 'integer',
                 Rule::exists('certificate_subjects', 'id')->where(fn ($q) => $q->where('is_active', true)),
             ],
-            'subject_results.*.grade' => ['required_with:subject_results', 'string', 'max:50'],
+            'subject_results.*.grade' => $this->certificateSubjectGradeRules(requiredWithSubjectResults: true),
         ];
+    }
+
+    protected function prepareForValidation(): void
+    {
+        $this->prepareSubjectResultGradesForValidation();
     }
 
     /**
@@ -63,7 +70,10 @@ class UpsertQualificationRequest extends FormRequest
      */
     public function messages(): array
     {
-        return $this->namesAsOnQualificationDocumentMessages();
+        return array_merge(
+            $this->namesAsOnQualificationDocumentMessages(),
+            $this->certificateSubjectGradeMessages(),
+        );
     }
 
     public function withValidator(Validator $validator): void

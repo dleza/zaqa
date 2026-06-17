@@ -42,6 +42,7 @@ use App\Models\Qualification;
 use App\Models\QualificationCertificate;
 use App\Models\QualificationType;
 use App\Models\User;
+use App\Support\Qualifications\CertificateSubjectGrade;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -491,13 +492,6 @@ class AdminVerificationQualificationController extends Controller
             403
         );
 
-        $user = $request->user();
-        if ($user && VerificationQualificationAccess::mustRestrictToAssignedQualifications($user)) {
-            $vs = $qualification->verification_state;
-            $allowed = [VerificationState::AssignedToLevel1, VerificationState::UnderLevel1Review];
-            abort_unless($vs instanceof VerificationState && in_array($vs, $allowed, true), 403);
-        }
-
         $qualification->load([
             'subjectResults',
             'country',
@@ -572,6 +566,7 @@ class AdminVerificationQualificationController extends Controller
                 'requires_subject_results' => (bool) $t->requires_subject_results,
             ])->values()->all(),
             'certificateSubjects' => $certificateSubjects,
+            'subjectGradeOptions' => CertificateSubjectGrade::allowed(),
             'documents' => $this->qualificationEditDocumentsPayload($qualification),
             'expected_document_types' => $this->qualificationEditExpectedDocumentTypes($qualification),
             'identity_document' => $this->qualificationEditIdentityPayload($qualification),

@@ -3,8 +3,10 @@ import AdminLayout from '@/Layouts/AdminLayout.vue'
 import AdminActionModal from '@/Components/AdminActionModal.vue'
 import InstitutionCombobox from '@/Components/InstitutionCombobox.vue'
 import InputError from '@/Components/InputError.vue'
+import SubjectGradeSelect from '@/Components/SubjectGradeSelect.vue'
 import { Link, router, useForm } from '@inertiajs/vue3'
 import { computed, ref, watch } from 'vue'
+import { selectGradeValue } from '@/lib/certificateSubjectGrades'
 import { ArrowLeft, Download, Eye, FileEdit, FileText, GraduationCap, History, MapPin, RefreshCw, Trash2 } from 'lucide-vue-next'
 import Swal from 'sweetalert2'
 
@@ -50,6 +52,7 @@ const props = defineProps<{
     requires_subject_results: boolean
   }>
   certificateSubjects: Array<{ id: number; name: string }>
+  subjectGradeOptions?: string[]
   documents: DocumentRow[]
   expected_document_types: string[]
   identity_document: {
@@ -96,7 +99,8 @@ const form = useForm({
   correction_note: '',
   subject_results: (props.qualification.subject_results ?? []).map((r: any) => ({
     certificate_subject_id: r.certificate_subject_id != null && r.certificate_subject_id !== '' ? Number(r.certificate_subject_id) : ('' as number | string | ''),
-    grade: r.grade ?? '',
+    grade: selectGradeValue(r.grade),
+    saved_grade: r.grade ?? '',
   })),
 })
 
@@ -209,15 +213,16 @@ const selectedQualificationType = computed(() => {
 })
 
 const needsSubjects = computed(() => !!selectedQualificationType.value?.requires_subject_results)
+const subjectGradeOptions = computed(() => props.subjectGradeOptions ?? [])
 
 watch(needsSubjects, (need) => {
   if (need && form.subject_results.length === 0) {
-    form.subject_results.push({ certificate_subject_id: '', grade: '' })
+    form.subject_results.push({ certificate_subject_id: '', grade: '', saved_grade: '' })
   }
 })
 
 function addSubjectRow() {
-  form.subject_results.push({ certificate_subject_id: '', grade: '' })
+  form.subject_results.push({ certificate_subject_id: '', grade: '', saved_grade: '' })
 }
 
 function removeSubjectRow(idx: number) {
@@ -524,7 +529,12 @@ function identityDocumentRow(): DocumentRow | null {
                       </div>
                       <div class="w-full sm:w-40">
                         <label class="text-xs font-medium text-text-muted">Grade</label>
-                        <input v-model="row.grade" class="zaqa-input mt-1" />
+                        <SubjectGradeSelect
+                          v-model="row.grade"
+                          :saved-grade="row.saved_grade"
+                          :grade-options="subjectGradeOptions"
+                          input-class="zaqa-input mt-1"
+                        />
                       </div>
                       <button type="button" class="zaqa-btn zaqa-btn-secondary px-3 py-2 text-xs sm:mb-0" @click="removeSubjectRow(idx)">Remove</button>
                     </div>

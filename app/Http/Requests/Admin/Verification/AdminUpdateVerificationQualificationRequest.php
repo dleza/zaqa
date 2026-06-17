@@ -3,6 +3,7 @@
 namespace App\Http\Requests\Admin\Verification;
 
 use App\Domain\Verification\VerificationQualificationAccess;
+use App\Http\Requests\Concerns\ValidatesCertificateSubjectGrades;
 use App\Models\AwardingInstitution;
 use App\Models\Qualification;
 use App\Models\QualificationType;
@@ -12,6 +13,8 @@ use Illuminate\Validation\Validator;
 
 class AdminUpdateVerificationQualificationRequest extends FormRequest
 {
+    use ValidatesCertificateSubjectGrades;
+
     public function authorize(): bool
     {
         $qualification = $this->route('qualification');
@@ -53,8 +56,21 @@ class AdminUpdateVerificationQualificationRequest extends FormRequest
                 'integer',
                 Rule::exists('certificate_subjects', 'id')->where(fn ($q) => $q->where('is_active', true)),
             ],
-            'subject_results.*.grade' => ['required_with:subject_results', 'string', 'max:50'],
+            'subject_results.*.grade' => $this->certificateSubjectGradeRules(requiredWithSubjectResults: true),
         ];
+    }
+
+    protected function prepareForValidation(): void
+    {
+        $this->prepareSubjectResultGradesForValidation();
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    public function messages(): array
+    {
+        return $this->certificateSubjectGradeMessages();
     }
 
     public function withValidator(Validator $validator): void

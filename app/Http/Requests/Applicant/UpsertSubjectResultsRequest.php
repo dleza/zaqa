@@ -2,11 +2,14 @@
 
 namespace App\Http\Requests\Applicant;
 
+use App\Http\Requests\Concerns\ValidatesCertificateSubjectGrades;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
 class UpsertSubjectResultsRequest extends FormRequest
 {
+    use ValidatesCertificateSubjectGrades;
+
     public function authorize(): bool
     {
         $application = $this->route('application');
@@ -27,8 +30,20 @@ class UpsertSubjectResultsRequest extends FormRequest
                 'integer',
                 Rule::exists('certificate_subjects', 'id')->where(fn ($q) => $q->where('is_active', true)),
             ],
-            'subject_results.*.grade' => ['required', 'string', 'max:50'],
+            'subject_results.*.grade' => $this->certificateSubjectGradeRules(),
         ];
     }
-}
 
+    protected function prepareForValidation(): void
+    {
+        $this->prepareSubjectResultGradesForValidation();
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    public function messages(): array
+    {
+        return $this->certificateSubjectGradeMessages();
+    }
+}

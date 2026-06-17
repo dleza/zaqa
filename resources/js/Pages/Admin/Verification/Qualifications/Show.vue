@@ -131,10 +131,10 @@ const level1AttachmentInput = ref<HTMLInputElement | null>(null)
 const level1EvaluationReportInput = ref<HTMLInputElement | null>(null)
 const issueCveqForm = useForm<{ reissue: boolean }>({ reissue: false })
 const issueRejectionForm = useForm({})
-const approveForm = useForm<{ comment: string; issue_certificate: boolean }>({ comment: '', issue_certificate: false })
+const approveForm = useForm<{ comment: string; issue_certificate: boolean }>({ comment: '', issue_certificate: true })
 const rejectForm = useForm<{ reason: string; generate_rejection_notice: boolean }>({
   reason: '',
-  generate_rejection_notice: false,
+  generate_rejection_notice: true,
 })
 const reopenDecisionForm = useForm<{ reason: string; intended_action: string; confirm: boolean }>({
   reason: '',
@@ -172,7 +172,6 @@ function openLevel1CompleteModal() {
 
 function openRejectModal() {
   rejectForm.clearErrors()
-  rejectForm.generate_rejection_notice = false
   const review = props.qualification?.level1_review
   const findings = (review?.findings ?? props.qualification?.reviewer_notes ?? '').toString().trim()
   if (review?.recommended_for_award === false && findings !== '') {
@@ -332,7 +331,11 @@ const canShowLevel1Complete = computed(() => {
 })
 
 /** Level 2 / Super Admin: remove Level 1 assignee and return task to the assignment pool. */
-const canEditQualificationDetails = computed(() => props.can.edit_qualification === true && restrictedLevel1CanAct.value)
+const canEditQualificationDetails = computed(() => {
+  if (!props.can.edit_qualification) return false
+  if (!isRestrictedLevel1.value) return true
+  return isViewerAssignedLevel1.value
+})
 
 const canShowApprove = computed(() => props.can.approve === true && ['under_level2_review', 'auto_verified_pending_level2'].includes(state.value))
 const canShowReject = computed(() => props.can.reject === true && ['under_level2_review', 'auto_verified_pending_level2'].includes(state.value))
@@ -703,6 +706,11 @@ const evidenceRows = computed(() => [
 
 const documentsCount = computed(() => props.qualification.documents?.length ?? 0)
 const subjectResultsCount = computed(() => props.qualification.subject_results?.length ?? 0)
+const showSubjectResultsSection = computed(
+  () =>
+    !!props.qualification.certificate_template?.requires_subjects ||
+    subjectResultsCount.value > 0,
+)
 
 const workflowOpen = ref(false)
 const assignmentOpen = ref(false)
@@ -1150,23 +1158,22 @@ const autoVerificationCollapsedSummary = computed(() => {
                 </div>
               </div>
 
-              <details
-                v-if="qualification.certificate_template?.requires_subjects"
-                class="group mt-4 rounded-xl border border-border/70 bg-surface-muted/25"
+              <div
+                v-if="showSubjectResultsSection"
+                class="mt-4 rounded-xl border border-border/70 bg-surface-muted/25"
               >
-                <summary class="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 [&::-webkit-details-marker]:hidden">
+                <div class="flex flex-wrap items-start justify-between gap-3 border-b border-border/60 px-4 py-3">
                   <div>
                     <div class="text-sm font-semibold text-text-primary">Subject results</div>
-                    <div class="mt-1 text-xs text-text-muted">Expand to review captured subjects for this school-level qualification.</div>
+                    <div class="mt-1 text-xs text-text-muted">
+                      Subjects and grades captured by the applicant for this school-level qualification.
+                    </div>
                   </div>
-                  <div class="flex items-center gap-2">
-                    <span class="inline-flex items-center rounded-full border border-border/70 bg-surface px-2.5 py-0.5 text-[11px] font-semibold text-text-primary">
-                      {{ subjectResultsCount }} subject{{ subjectResultsCount === 1 ? '' : 's' }}
-                    </span>
-                    <ChevronDown class="h-4 w-4 text-text-muted transition group-open:rotate-180" aria-hidden="true" />
-                  </div>
-                </summary>
-                <div class="border-t border-border/60 px-4 py-4">
+                  <span class="inline-flex items-center rounded-full border border-border/70 bg-surface px-2.5 py-0.5 text-[11px] font-semibold text-text-primary">
+                    {{ subjectResultsCount }} subject{{ subjectResultsCount === 1 ? '' : 's' }}
+                  </span>
+                </div>
+                <div class="px-4 py-4">
                   <div
                     v-if="qualification.subject_results?.length"
                     class="overflow-hidden rounded-xl border border-border/70"
@@ -1200,7 +1207,7 @@ const autoVerificationCollapsedSummary = computed(() => {
                     No subject results have been captured for this qualification yet.
                   </div>
                 </div>
-              </details>
+              </div>
           </section>
 
           <CollapsiblePanel
@@ -2432,18 +2439,10 @@ const autoVerificationCollapsedSummary = computed(() => {
           <div v-if="approveForm.errors.comment" class="mt-1 text-xs text-danger">{{ approveForm.errors.comment }}</div>
         </div>
 
-        <div v-if="can.issue_certificate" class="rounded-xl border border-border/70 bg-surface-muted/40 px-4 py-3">
-          <label class="flex items-start gap-2 text-sm font-semibold text-text-primary">
-            <input
-              v-model="approveForm.issue_certificate"
-              type="checkbox"
-              class="mt-0.5"
-              :disabled="qualification.application?.payment_satisfied === false"
-            />
-            Generate certificate of Recognition
-          </label>
+        <div v-if="can.issue_certificate" class="rounded-xl border border-border/70 bg-surface-muted/40 px-4 py-3 text-sm text-text-primary">
+          <p class="font-semibold">Certificate of Recognition</p>
           <p class="mt-1 text-xs text-text-muted">
-            Payment must be satisfied. This will email the applicant and mark the qualification as certificate issued.
+            A certificate of recognition will be generated automatically when you approve. Payment must be satisfied.
           </p>
           <p v-if="qualification.application?.payment_satisfied === false" class="mt-2 text-xs font-medium text-amber-900">
             Payment is not satisfied — certificate issuance is blocked until fees are covered.
@@ -2464,6 +2463,7 @@ const autoVerificationCollapsedSummary = computed(() => {
               approveOpen = false
               approveForm.clearErrors()
               approveForm.reset()
+              approveForm.issue_certificate = true
             }
           "
         >
@@ -2474,13 +2474,17 @@ const autoVerificationCollapsedSummary = computed(() => {
           class="zaqa-btn zaqa-btn-primary px-4 py-2 text-sm"
           :disabled="approveForm.processing"
           @click="
-            approveForm.post(`/admin/verification/qualifications/${qualification.id}/approve`, {
-              preserveScroll: true,
-              onSuccess: () => {
-                approveOpen = false
-                approveForm.reset()
-              },
-            })
+            () => {
+              approveForm.issue_certificate = true
+              approveForm.post(`/admin/verification/qualifications/${qualification.id}/approve`, {
+                preserveScroll: true,
+                onSuccess: () => {
+                  approveOpen = false
+                  approveForm.reset()
+                  approveForm.issue_certificate = true
+                },
+              })
+            }
           "
         >
           Approve
@@ -2501,14 +2505,9 @@ const autoVerificationCollapsedSummary = computed(() => {
         <div v-if="rejectForm.errors.reason" class="mt-1 text-xs text-danger">{{ rejectForm.errors.reason }}</div>
         <div v-if="(rejectForm.errors as any).qualification" class="mt-1 text-xs text-danger">{{ (rejectForm.errors as any).qualification }}</div>
         <div v-if="(rejectForm.errors as any).lock" class="mt-1 text-xs text-danger">{{ (rejectForm.errors as any).lock }}</div>
-        <label v-if="can.issue_certificate" class="mt-4 flex items-start gap-3 text-sm text-text-primary">
-          <input
-            v-model="rejectForm.generate_rejection_notice"
-            type="checkbox"
-            class="mt-1 rounded border-border text-accent focus:ring-accent"
-          />
-          <span>Generate rejection notice after rejection</span>
-        </label>
+        <p v-if="can.issue_certificate" class="mt-4 text-xs text-text-muted">
+          A rejection notice will be generated automatically when you reject this qualification.
+        </p>
       </div>
       <template #footer>
         <button
@@ -2519,6 +2518,7 @@ const autoVerificationCollapsedSummary = computed(() => {
               rejectOpen = false
               rejectForm.clearErrors()
               rejectForm.reset()
+              rejectForm.generate_rejection_notice = true
             }
           "
         >
@@ -2529,13 +2529,17 @@ const autoVerificationCollapsedSummary = computed(() => {
           class="zaqa-btn zaqa-btn-primary px-4 py-2 text-sm"
           :disabled="rejectForm.processing"
           @click="
-            rejectForm.post(`/admin/verification/qualifications/${qualification.id}/reject`, {
-              preserveScroll: true,
-              onSuccess: () => {
-                rejectOpen = false
-                rejectForm.reset()
-              },
-            })
+            () => {
+              rejectForm.generate_rejection_notice = true
+              rejectForm.post(`/admin/verification/qualifications/${qualification.id}/reject`, {
+                preserveScroll: true,
+                onSuccess: () => {
+                  rejectOpen = false
+                  rejectForm.reset()
+                  rejectForm.generate_rejection_notice = true
+                },
+              })
+            }
           "
         >
           Reject

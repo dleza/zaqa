@@ -255,6 +255,77 @@ class AutoVerifiedQualificationReviewPagePayloadTest extends TestCase
         );
     }
 
+    public function test_level1_officer_sees_subject_results_on_review_page(): void
+    {
+        $this->seed(BillingCategoriesSeeder::class);
+        $this->seed(QualificationTypesSeeder::class);
+        $this->seed(FeeStructuresSeeder::class);
+        $this->seed(RolesAndPermissionsSeeder::class);
+
+        $level1 = User::factory()->activated()->create(['applicant_type' => null]);
+        $level1->assignRole('Verification Officer Level 1');
+
+        $type = QualificationType::query()->where('zqf_level_code', 'L2B')->firstOrFail();
+
+        $application = Application::query()->create([
+            'uuid' => (string) Str::uuid(),
+            'application_number' => 'ZAQA-VER-'.rand(1000, 9999),
+            'applicant_user_id' => $level1->id,
+            'applicant_type' => 'individual',
+            'service_type' => 'verification',
+            'qualification_category' => 'certificate',
+            'current_status' => 'submitted',
+            'verification_state' => VerificationState::UnderLevel1Review,
+            'is_foreign' => false,
+            'metadata' => ['verification_subject' => ['full_name' => 'Jane Doe']],
+            'submitted_at' => now(),
+        ]);
+
+        $qualification = Qualification::query()->create([
+            'application_id' => $application->id,
+            'awarding_institution_name' => 'Test School',
+            'qualification_holder_name' => 'Jane Doe',
+            'nrc_passport_number' => '111111/11/1',
+            'title_of_qualification' => $type->name,
+            'award_date' => '2024-01-10',
+            'qualification_type' => $type->zqf_level_code,
+            'qualification_type_id' => $type->id,
+            'is_foreign_qualification' => false,
+            'verification_state' => VerificationState::UnderLevel1Review,
+            'assigned_verifier_id' => $level1->id,
+        ]);
+
+        QualificationSubjectResult::query()->create([
+            'qualification_id' => $qualification->id,
+            'subject_name' => 'Mathematics',
+            'grade' => '1',
+            'display_order' => 1,
+        ]);
+
+        $this->actingAs($level1)
+            ->get("/admin/verification/qualifications/{$qualification->id}")
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page
+                ->component('Admin/Verification/Qualifications/Show')
+                ->where('qualification.certificate_template.requires_subjects', true)
+                ->has('qualification.subject_results', 1)
+                ->where('qualification.subject_results.0.subject_name', 'Mathematics')
+                ->where('qualification.subject_results.0.grade', '1')
+            );
+
+        $qualification->forceFill([
+            'verification_state' => VerificationState::UnderLevel2Review,
+        ])->save();
+
+        $this->actingAs($level1)
+            ->get("/admin/verification/qualifications/{$qualification->id}/edit")
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page
+                ->component('Admin/Verification/Qualifications/Edit')
+                ->has('qualification.subject_results', 1)
+            );
+    }
+
     public function test_review_page_exposes_qualification_sla_with_application_fallback(): void
     {
         $this->seed(BillingCategoriesSeeder::class);

@@ -10,6 +10,7 @@ import WizardFooterBar from '@/Components/WizardFooterBar.vue'
 import DocumentManager from '@/Components/DocumentManager.vue'
 import ActionModal from '@/Components/ActionModal.vue'
 import Swal from 'sweetalert2'
+import { isAllowedCertificateSubjectGrade } from '@/lib/certificateSubjectGrades'
 import {
   AlertCircle,
   CheckCircle2,
@@ -171,7 +172,7 @@ function qualificationSubjectsSatisfied(q: any): boolean {
   }>
   if (rows.length === 0) return false
   return rows.every((r) => {
-    const gradeOk = (r.grade ?? '').toString().trim() !== ''
+    const gradeOk = isAllowedCertificateSubjectGrade(r.grade)
     const catalogId = Number(r.certificate_subject_id ?? 0)
     const subjectOk =
       catalogId > 0 || (r.subject_name ?? '').toString().trim() !== ''

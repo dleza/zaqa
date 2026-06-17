@@ -32,6 +32,7 @@ use App\Models\Invoice;
 use App\Models\Qualification;
 use App\Models\QualificationCertificate;
 use App\Models\QualificationType;
+use App\Support\Qualifications\CertificateSubjectGrade;
 use App\Models\User;
 use App\Support\CountryIso;
 use Illuminate\Http\RedirectResponse;
@@ -579,6 +580,7 @@ class ApplicantApplicationController extends Controller
             ],
             'bankTransfer' => $this->bankTransferConfigPayload(),
             'certificateSubjects' => $certificateSubjects,
+            'subjectGradeOptions' => CertificateSubjectGrade::allowed(),
             'serviceTypes' => array_map(
                 fn (ServiceType $type) => ['value' => $type->value, 'label' => ucfirst($type->value)],
                 ServiceType::cases(),
@@ -666,6 +668,7 @@ class ApplicantApplicationController extends Controller
             'countries' => $this->countryOptions(),
             'qualificationTypes' => $qualificationTypes,
             'certificateSubjects' => $certificateSubjects,
+            'subjectGradeOptions' => CertificateSubjectGrade::allowed(),
         ]);
     }
 

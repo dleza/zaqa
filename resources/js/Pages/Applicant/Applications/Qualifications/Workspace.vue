@@ -6,7 +6,9 @@ import QualificationAmendmentBanner from '@/Components/QualificationAmendmentBan
 import InstitutionCombobox from '@/Components/InstitutionCombobox.vue'
 import QualificationTitleCombobox from '@/Components/QualificationTitleCombobox.vue'
 import InputError from '@/Components/InputError.vue'
+import SubjectGradeSelect from '@/Components/SubjectGradeSelect.vue'
 import Swal from 'sweetalert2'
+import { selectGradeValue } from '@/lib/certificateSubjectGrades'
 import 'sweetalert2/dist/sweetalert2.min.css'
 import { Building2, FileStack, GraduationCap, MapPin, Shield, Sparkles, Trash2 } from 'lucide-vue-next'
 
@@ -19,6 +21,7 @@ const props = defineProps<{
   qualificationTypes: Array<any>
   /** Active rows from `certificate_subjects` (admin-managed). */
   certificateSubjects: Array<{ id: number; name: string }>
+  subjectGradeOptions?: string[]
 }>()
 
 const mode = computed<'add' | 'edit'>(() => (props.qualificationId ? 'edit' : 'add'))
@@ -93,7 +96,7 @@ function blankQualificationForm() {
     award_date: '',
     qualification_type_id: '' as number | string | '',
     transcript_reason: '',
-    subject_results: [] as Array<{ certificate_subject_id: number | ''; grade: string }>,
+    subject_results: [] as Array<{ certificate_subject_id: number | ''; grade: string; saved_grade?: string }>,
   }
 }
 
@@ -250,8 +253,10 @@ const institutionConsentUrl = computed(() => {
   return institutionMeta.value?.consent_form_url ?? null
 })
 
+const subjectGradeOptions = computed(() => props.subjectGradeOptions ?? [])
+
 function addSubjectRow() {
-  form.subject_results.push({ certificate_subject_id: '', grade: '' })
+  form.subject_results.push({ certificate_subject_id: '', grade: '', saved_grade: '' })
 }
 
 function removeSubjectRow(idx: number) {
@@ -274,7 +279,8 @@ async function loadFromQualification(q: any) {
     form.transcript_reason = q.transcript_reason ?? ''
     form.subject_results = (q.subject_results ?? []).map((r: any) => ({
       certificate_subject_id: r.certificate_subject_id != null && r.certificate_subject_id !== '' ? Number(r.certificate_subject_id) : '',
-      grade: r.grade ?? '',
+      grade: selectGradeValue(r.grade),
+      saved_grade: r.grade ?? '',
     }))
 
     const resolvedSource = (q.qualification_title_source ?? '').toString()
@@ -863,7 +869,12 @@ const pendingConsentName = computed(() => pendingConsentFile.value?.name ?? '')
                     </div>
                     <div class="sm:col-span-2">
                       <label class="text-xs font-medium">Grade</label>
-                      <input v-model="row.grade" class="zaqa-input" :disabled="locked" />
+                      <SubjectGradeSelect
+                        v-model="row.grade"
+                        :saved-grade="row.saved_grade"
+                        :grade-options="subjectGradeOptions"
+                        :disabled="locked"
+                      />
                     </div>
                     <div class="sm:col-span-1 flex items-end">
                       <button type="button" class="zaqa-btn zaqa-btn-ghost w-full text-xs" :disabled="locked" @click="removeSubjectRow(idx)">
