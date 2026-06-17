@@ -228,7 +228,7 @@ class FinancePaymentOperationsTest extends TestCase
         $this->assertSame(PaymentStatus::Confirmed, $payment->status);
     }
 
-    public function test_finance_payment_detail_includes_navigation_links_to_applicant_and_qualification(): void
+    public function test_finance_payment_detail_includes_navigation_links_to_applicant_but_not_verification_qualification(): void
     {
         [$applicant, $application, $invoice, $qualification] = $this->makePaymentReadyApplication();
         $payment = $this->createPaymentForInvoice($application, $invoice, PaymentStatus::Failed, [
@@ -244,15 +244,15 @@ class FinancePaymentOperationsTest extends TestCase
             ->assertInertia(fn (Assert $page) => $page
                 ->component('Admin/Finance/Payments/Show')
                 ->where('can.view_applicant', true)
-                ->where('can.view_qualifications', true)
+                ->where('can.view_qualifications', false)
                 ->where('navigation.applicant.href', route('admin.applicants.show', ['user' => $applicant->id]))
                 ->has('navigation.qualifications', 1)
                 ->where('navigation.qualifications.0.id', $qualification->id)
-                ->where('navigation.qualifications.0.href', route('admin.verification.qualifications.show', ['qualification' => $qualification->id]))
+                ->where('navigation.qualifications.0.href', null)
             );
 
         $this->actingAs($finance)->get("/admin/applicants/{$applicant->id}")->assertOk();
-        $this->actingAs($finance)->get("/admin/verification/qualifications/{$qualification->id}")->assertOk();
+        $this->actingAs($finance)->get("/admin/verification/qualifications/{$qualification->id}")->assertForbidden();
     }
 
     public function test_finance_can_correct_failed_payment_to_confirmed_and_update_transaction_id(): void

@@ -15,10 +15,12 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class ApplicationsReportController extends Controller
 {
+    use AuthorizesAdminReports;
     use HandlesReportExport;
 
     public function index(Request $request, ApplicationsReportService $service): Response
     {
+        $this->authorizeVerificationReportView();
         $dr = ReportDateRange::fromRequest($request);
         $status = $request->query('status') !== '' ? (string) $request->query('status') : null;
         $applicantType = $request->query('applicant_type') !== '' ? (string) $request->query('applicant_type') : null;
@@ -59,6 +61,7 @@ class ApplicationsReportController extends Controller
 
     public function export(Request $request, ApplicationsReportService $service): StreamedResponse|\Illuminate\Http\Response
     {
+        $this->authorizeVerificationReportDownload();
         $dr = ReportDateRange::fromRequest($request);
         $status = $request->query('status') !== '' ? (string) $request->query('status') : null;
         $applicantType = $request->query('applicant_type') !== '' ? (string) $request->query('applicant_type') : null;

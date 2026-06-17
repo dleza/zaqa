@@ -71,7 +71,7 @@ const kpiRows = computed(() => props.kpis ?? [])
     <div v-if="dateRange" class="mt-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
       <p class="text-xs text-text-muted">
         Dashboard shows recent activity.
-        <Link href="/admin/reports/payments" class="font-semibold text-[#0076BD] underline-offset-2 hover:underline">Reports</Link>
+        <Link href="/admin/reports" class="font-semibold text-[#0076BD] underline-offset-2 hover:underline">Reports</Link>
         for custom date ranges.
       </p>
       <div class="inline-flex rounded-xl border border-border bg-surface p-1 shadow-sm" role="group" aria-label="Finance dashboard date range">

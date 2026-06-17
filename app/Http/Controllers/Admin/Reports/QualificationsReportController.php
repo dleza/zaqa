@@ -14,10 +14,12 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class QualificationsReportController extends Controller
 {
+    use AuthorizesAdminReports;
     use HandlesReportExport;
 
     public function index(Request $request, QualificationVerificationReportService $service): Response
     {
+        $this->authorizeVerificationReportView();
         $dr = ReportDateRange::fromRequest($request);
         $verificationState = $request->query('verification_state') !== '' ? (string) $request->query('verification_state') : null;
         $qualificationTypeId = $request->query('qualification_type_id') ? (int) $request->query('qualification_type_id') : null;
@@ -56,6 +58,7 @@ class QualificationsReportController extends Controller
 
     public function export(Request $request, QualificationVerificationReportService $service): StreamedResponse|\Illuminate\Http\Response
     {
+        $this->authorizeVerificationReportDownload();
         $dr = ReportDateRange::fromRequest($request);
         $verificationState = $request->query('verification_state') !== '' ? (string) $request->query('verification_state') : null;
         $qualificationTypeId = $request->query('qualification_type_id') ? (int) $request->query('qualification_type_id') : null;

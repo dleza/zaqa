@@ -13,10 +13,12 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class AwardingInstitutionsReportController extends Controller
 {
+    use AuthorizesAdminReports;
     use HandlesReportExport;
 
     public function index(Request $request, AwardingInstitutionsReportService $service): Response
     {
+        $this->authorizeVerificationReportView();
         $dr = ReportDateRange::fromRequest($request);
         $institutionId = $request->query('awarding_institution_id') ? (int) $request->query('awarding_institution_id') : null;
         $foreignOnly = $request->query('foreign_qualification');
@@ -51,6 +53,7 @@ class AwardingInstitutionsReportController extends Controller
 
     public function export(Request $request, AwardingInstitutionsReportService $service): StreamedResponse|\Illuminate\Http\Response
     {
+        $this->authorizeVerificationReportDownload();
         $dr = ReportDateRange::fromRequest($request);
         $institutionId = $request->query('awarding_institution_id') ? (int) $request->query('awarding_institution_id') : null;
         $foreignOnly = $request->query('foreign_qualification');

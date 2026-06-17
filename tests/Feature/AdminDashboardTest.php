@@ -156,7 +156,15 @@ class AdminDashboardTest extends TestCase
         $kpiKeys = collect($props['kpis'])->pluck('key')->all();
         $this->assertContains('invoices_issued', $kpiKeys);
         $this->assertContains('payments_confirmed', $kpiKeys);
+        $this->assertContains('revenue_period', $kpiKeys);
+        $this->assertContains('revenue_local_qualifications', $kpiKeys);
+        $this->assertContains('revenue_foreign_qualifications', $kpiKeys);
+        $this->assertContains('receipts_documents_period', $kpiKeys);
         $this->assertNotContains('applications_total', $kpiKeys);
+        $this->assertNotContains('pending_verification', $kpiKeys);
+        $this->assertNotContains('verification_overdue', $kpiKeys);
+        $this->assertSame('finance', $props['meta']['dashboard_scope']);
+        $this->assertNotEmpty($props['finance_breakdowns']['revenue_by_fee_structure'] ?? []);
         $this->assertSame(30, (int) $props['meta']['date_range']['selected']);
     }
 
@@ -457,41 +465,55 @@ class AdminDashboardTest extends TestCase
 
         $kpiKeys = collect($props['kpis'])->pluck('key')->all();
         $this->assertContains('l2_total_qualifications', $kpiKeys);
-        $this->assertContains('l2_pending', $kpiKeys);
         $this->assertContains('l2_processed', $kpiKeys);
-        $this->assertContains('l2_assigned_to_me', $kpiKeys);
-        $this->assertContains('l2_ready_for_review', $kpiKeys);
-        $this->assertContains('l2_unassigned', $kpiKeys);
+        $this->assertContains('l2_with_level1', $kpiKeys);
+        $this->assertContains('l2_with_level2', $kpiKeys);
+        $this->assertContains('l2_unassigned_level1', $kpiKeys);
+        $this->assertContains('l2_unassigned_level2', $kpiKeys);
         $this->assertContains('l2_auto_verified_awaiting', $kpiKeys);
-        $this->assertContains('l2_overdue_qualifications', $kpiKeys);
+        $this->assertContains('l2_assigned_to_me', $kpiKeys);
+        $this->assertContains('l2_overdue_local', $kpiKeys);
+        $this->assertContains('l2_overdue_foreign', $kpiKeys);
+        $this->assertNotContains('l2_pending', $kpiKeys);
+        $this->assertNotContains('l2_ready_for_review', $kpiKeys);
+        $this->assertNotContains('l2_unassigned', $kpiKeys);
+        $this->assertNotContains('l2_overdue_qualifications', $kpiKeys);
         $this->assertNotContains('applications_total', $kpiKeys);
         $this->assertNotContains('pending_verification', $kpiKeys);
         $this->assertNotContains('verification_overdue', $kpiKeys);
         $this->assertNotContains('l2_level1_queue', $kpiKeys);
         $this->assertSame('level2_qualifications', $props['meta']['dashboard_scope']);
+        $this->assertNotNull($props['meta']['l2_metrics_explainer']);
 
         $total = collect($props['kpis'])->firstWhere('key', 'l2_total_qualifications');
         $this->assertSame('Total qualifications', $total['label']);
         $this->assertSame(3, (int) $total['value']);
+        $this->assertStringContainsString('entered workflow', $total['hint']);
 
         $assigned = collect($props['kpis'])->firstWhere('key', 'l2_assigned_to_me');
         $this->assertSame(1, (int) $assigned['value']);
+        $this->assertSame('user_specific', $assigned['metric_scope'] ?? null);
 
-        $ready = collect($props['kpis'])->firstWhere('key', 'l2_ready_for_review');
-        $this->assertSame('Ready for Level 2', $ready['label']);
-        $this->assertSame(2, (int) $ready['value']);
+        $withLevel1 = collect($props['kpis'])->firstWhere('key', 'l2_with_level1');
+        $this->assertSame(1, (int) $withLevel1['value']);
+        $this->assertStringContainsString('Current queue', $withLevel1['hint']);
 
-        $pending = collect($props['kpis'])->firstWhere('key', 'l2_pending');
-        $this->assertSame(2, (int) $pending['value']);
+        $withLevel2 = collect($props['kpis'])->firstWhere('key', 'l2_with_level2');
+        $this->assertSame(1, (int) $withLevel2['value']);
 
-        $unassigned = collect($props['kpis'])->firstWhere('key', 'l2_unassigned');
-        $this->assertGreaterThanOrEqual(1, (int) $unassigned['value']);
+        $unassignedL2 = collect($props['kpis'])->firstWhere('key', 'l2_unassigned_level2');
+        $this->assertSame(1, (int) $unassignedL2['value']);
 
-        $overdue = collect($props['kpis'])->firstWhere('key', 'l2_overdue_qualifications');
-        $this->assertSame(3, (int) $overdue['value']);
+        $overdueLocal = collect($props['kpis'])->firstWhere('key', 'l2_overdue_local');
+        $this->assertSame(3, (int) $overdueLocal['value']);
+
+        $overdueForeign = collect($props['kpis'])->firstWhere('key', 'l2_overdue_foreign');
+        $this->assertSame(0, (int) $overdueForeign['value']);
 
         $chartKeys = collect($props['charts'])->pluck('key')->all();
         $this->assertContains('verification_l2_workflow_by_state', $chartKeys);
+        $workflowChart = collect($props['charts'])->firstWhere('key', 'verification_l2_workflow_by_state');
+        $this->assertSame('Current qualifications by workflow stage', $workflowChart['title']);
         $this->assertNotContains('applications_submitted_week', $chartKeys);
 
         $kpiKeysFinance = collect($props['kpis'])->pluck('key')->all();
@@ -681,7 +703,7 @@ class AdminDashboardTest extends TestCase
         $this->assertSame(1, (int) $processed['value']);
     }
 
-    public function test_level_two_pending_count_respects_date_range(): void
+    public function test_level_two_total_qualifications_respects_date_range(): void
     {
         Carbon::setTestNow(Carbon::parse('2026-06-16 10:00:00', config('app.timezone')));
 
@@ -748,10 +770,12 @@ class AdminDashboardTest extends TestCase
         ]);
 
         $props30 = $this->inertiaProps($this->actingAs($l2)->get('/admin/dashboard?range=30'));
-        $this->assertSame(2, (int) collect($props30['kpis'])->firstWhere('key', 'l2_pending')['value']);
+        $this->assertSame(2, (int) collect($props30['kpis'])->firstWhere('key', 'l2_total_qualifications')['value']);
+        $this->assertSame(2, (int) collect($props30['kpis'])->firstWhere('key', 'l2_unassigned_level2')['value']);
 
         $props7 = $this->inertiaProps($this->actingAs($l2)->get('/admin/dashboard?range=7'));
-        $this->assertSame(1, (int) collect($props7['kpis'])->firstWhere('key', 'l2_pending')['value']);
+        $this->assertSame(1, (int) collect($props7['kpis'])->firstWhere('key', 'l2_total_qualifications')['value']);
+        $this->assertSame(2, (int) collect($props7['kpis'])->firstWhere('key', 'l2_unassigned_level2')['value']);
     }
 
     public function test_level_two_unassigned_counts_only_level2_reviewable_without_owner_or_lock(): void
@@ -823,7 +847,7 @@ class AdminDashboardTest extends TestCase
         ]);
 
         $props = $this->inertiaProps($this->actingAs($l2)->get('/admin/dashboard'));
-        $unassigned = collect($props['kpis'])->firstWhere('key', 'l2_unassigned');
+        $unassigned = collect($props['kpis'])->firstWhere('key', 'l2_unassigned_level2');
         $this->assertSame(2, (int) $unassigned['value']);
     }
 }

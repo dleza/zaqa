@@ -7,6 +7,7 @@ use App\Enums\ApplicationStatus;
 use App\Http\Controllers\Admin\Reports\HandlesReportExport;
 use App\Http\Controllers\Controller;
 use App\Models\Application;
+use App\Support\Reports\ReportAuthorization;
 use App\Models\ApplicationLifecycleEvent;
 use App\Models\ApplicationStatusHistory;
 use App\Models\QualificationAssignment;
@@ -24,6 +25,7 @@ class AdminSlaReportController extends Controller
 
     public function index(Request $request): Response
     {
+        ReportAuthorization::abortUnlessSlaView($request->user());
         $slaMetrics = app(SlaTurnaroundReportService::class);
         $dr = ReportDateRange::fromRequest($request);
         $from = $dr['from'];
@@ -237,6 +239,7 @@ class AdminSlaReportController extends Controller
      */
     public function export(Request $request): StreamedResponse|\Illuminate\Http\Response
     {
+        ReportAuthorization::abortUnlessSlaDownload($request->user());
         $slaMetrics = app(SlaTurnaroundReportService::class);
         $format = strtolower((string) $request->query('format', 'csv'));
         $dr = ReportDateRange::fromRequest($request);

@@ -36,6 +36,22 @@ export type AdminNavSection = {
   requiredAnyPermissions?: string[]
 }
 
+const reportsSectionPermissions = [
+  'reports.view',
+  'finance.reports.view',
+  'reports.finance.view',
+  'reports.verification.view',
+  'reports.certificates.view',
+  'reports.sla.view',
+  'verification.level1.process',
+  'sms.logs.view',
+]
+
+const financeReportPermissions = ['finance.reports.view', 'reports.finance.view']
+const verificationReportPermissions = ['reports.view', 'reports.verification.view']
+const certificateReportPermissions = ['reports.view', 'reports.certificates.view']
+const slaReportPermissions = ['reports.view', 'reports.sla.view']
+
 export const adminNavSections: AdminNavSection[] = [
   {
     label: '',
@@ -153,70 +169,72 @@ export const adminNavSections: AdminNavSection[] = [
     ],
   },
   {
-    label: 'My reports',
-    requiredAnyPermissions: ['verification.level1.process'],
+    label: 'Reports',
+    requiredAnyPermissions: reportsSectionPermissions,
     items: [
       {
-        label: 'My performance',
-        href: '/admin/reports/my-performance',
+        label: 'Reports overview',
+        href: '/admin/reports',
         icon: BarChart3,
-        activeStartsWith: '/admin/reports/my-performance',
-        requiredAnyPermissions: ['verification.level1.process'],
+        activeStartsWith: '/admin/reports',
+        activeExact: true,
+        requiredAnyPermissions: reportsSectionPermissions,
       },
-    ],
-  },
-  {
-    label: 'Reports',
-    requiredAnyPermissions: ['reports.view', 'sms.logs.view'],
-    items: [
+      {
+        label: 'Finance reports',
+        href: '/admin/reports/payments',
+        icon: BarChart3,
+        activeStartsWith: '/admin/reports/payments',
+        requiredAnyPermissions: financeReportPermissions,
+      },
       {
         label: 'Applications overview',
         href: '/admin/reports/applications',
         icon: BarChart3,
         activeStartsWith: '/admin/reports/applications',
-        requiredAnyPermissions: ['reports.view'],
+        requiredAnyPermissions: verificationReportPermissions,
       },
       {
         label: 'Qualification verification',
         href: '/admin/reports/qualifications',
         icon: BarChart3,
         activeStartsWith: '/admin/reports/qualifications',
-        requiredAnyPermissions: ['reports.view'],
-      },
-      {
-        label: 'Payments & revenue',
-        href: '/admin/reports/payments',
-        icon: BarChart3,
-        activeStartsWith: '/admin/reports/payments',
-        requiredAnyPermissions: ['reports.view'],
+        requiredAnyPermissions: verificationReportPermissions,
       },
       {
         label: 'Verifier performance',
         href: '/admin/reports/verifiers',
         icon: BarChart3,
         activeStartsWith: '/admin/reports/verifiers',
-        requiredAnyPermissions: ['reports.view'],
-      },
-      {
-        label: 'Turnaround & SLA',
-        href: '/admin/reports/sla',
-        icon: BarChart3,
-        activeStartsWith: '/admin/reports/sla',
-        requiredAnyPermissions: ['reports.view'],
+        requiredAnyPermissions: verificationReportPermissions,
       },
       {
         label: 'Awarding institutions',
         href: '/admin/reports/awarding-institutions',
         icon: BarChart3,
         activeStartsWith: '/admin/reports/awarding-institutions',
-        requiredAnyPermissions: ['reports.view'],
+        requiredAnyPermissions: verificationReportPermissions,
+      },
+      {
+        label: 'Turnaround & SLA',
+        href: '/admin/reports/sla',
+        icon: BarChart3,
+        activeStartsWith: '/admin/reports/sla',
+        requiredAnyPermissions: slaReportPermissions,
       },
       {
         label: 'Certificates issued',
         href: '/admin/reports/certificates',
         icon: BarChart3,
         activeStartsWith: '/admin/reports/certificates',
-        requiredAnyPermissions: ['reports.view'],
+        requiredAnyPermissions: certificateReportPermissions,
+      },
+      {
+        label: 'My performance',
+        href: '/admin/reports/my-performance',
+        icon: BarChart3,
+        activeStartsWith: '/admin/reports/my-performance',
+        requiredAnyPermissions: ['verification.level1.process'],
       },
       {
         label: 'SMS logs',

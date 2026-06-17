@@ -467,13 +467,14 @@ Route::middleware('auth')->group(function () {
             ->middleware('can:verification.level1.process')
             ->name('reports.my_performance');
 
-        Route::prefix('reports')->name('reports.')->middleware('can:reports.view')->group(function () {
+        Route::prefix('reports')->name('reports.')->group(function () {
+            Route::get('/', [\App\Http\Controllers\Admin\Reports\ReportsIndexController::class, 'index'])
+                ->name('index');
+
             Route::get('/applications', [ApplicationsReportController::class, 'index'])->name('applications');
             Route::get('/applications/export', [ApplicationsReportController::class, 'export'])->name('applications.export');
             Route::get('/qualifications', [QualificationsReportController::class, 'index'])->name('qualifications');
             Route::get('/qualifications/export', [QualificationsReportController::class, 'export'])->name('qualifications.export');
-            Route::get('/payments', [PaymentsReportController::class, 'index'])->name('payments');
-            Route::get('/payments/export', [PaymentsReportController::class, 'export'])->name('payments.export');
             Route::get('/verifiers', [VerifiersReportController::class, 'index'])->name('verifiers');
             Route::get('/verifiers/export', [VerifiersReportController::class, 'export'])->name('verifiers.export');
             Route::get('/sla', [AdminSlaReportController::class, 'index'])->name('sla');
@@ -482,6 +483,11 @@ Route::middleware('auth')->group(function () {
             Route::get('/awarding-institutions/export', [AwardingInstitutionsReportController::class, 'export'])->name('awarding_institutions.export');
             Route::get('/certificates', [CertificatesReportController::class, 'index'])->name('certificates');
             Route::get('/certificates/export', [CertificatesReportController::class, 'export'])->name('certificates.export');
+
+            Route::get('/payments', [PaymentsReportController::class, 'index'])
+                ->name('payments');
+            Route::get('/payments/export', [PaymentsReportController::class, 'export'])
+                ->name('payments.export');
         });
         Route::get('/certificates', [AdminCertificatesController::class, 'index'])
             ->middleware('can:admin.certificates.view')

@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Admin\Reports;
 use App\Domain\Reports\PaymentsRevenueReportService;
 use App\Enums\InvoiceStatus;
 use App\Http\Controllers\Controller;
+use App\Support\Reports\ReportAuthorization;
 use App\Support\Reports\ReportDateRange;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -18,6 +19,7 @@ class PaymentsReportController extends Controller
 
     public function index(Request $request, PaymentsRevenueReportService $service): Response
     {
+        $this->authorizePaymentsReportView();
         $dr = ReportDateRange::fromRequest($request);
         $invoiceStatus = $request->query('invoice_status') !== '' ? (string) $request->query('invoice_status') : null;
 
@@ -54,6 +56,7 @@ class PaymentsReportController extends Controller
 
     public function export(Request $request, PaymentsRevenueReportService $service): StreamedResponse|\Illuminate\Http\Response
     {
+        $this->authorizePaymentsReportExport();
         $dr = ReportDateRange::fromRequest($request);
         $invoiceStatus = $request->query('invoice_status') !== '' ? (string) $request->query('invoice_status') : null;
         $format = strtolower((string) $request->query('format', 'csv'));
@@ -89,5 +92,15 @@ class PaymentsReportController extends Controller
         }
 
         return $this->exportCsv($rows, $stub.'.csv');
+    }
+
+    private function authorizePaymentsReportView(): void
+    {
+        ReportAuthorization::abortUnlessFinanceView(auth()->user());
+    }
+
+    private function authorizePaymentsReportExport(): void
+    {
+        ReportAuthorization::abortUnlessFinanceDownload(auth()->user());
     }
 }

@@ -39,6 +39,7 @@ class RolesAndPermissionsSeeder extends Seeder
         'finance.payments.correct',
         'finance.receipts.view',
         'finance.reports.view',
+        'finance.reports.download',
 
         'admin.verification.view',
         'admin.certificates.view',
@@ -59,8 +60,15 @@ class RolesAndPermissionsSeeder extends Seeder
         'institution_api.docs.view',
 
         // Reports
-        'reports.sla.view',
         'reports.view',
+        'reports.finance.view',
+        'reports.finance.download',
+        'reports.verification.view',
+        'reports.verification.download',
+        'reports.certificates.view',
+        'reports.certificates.download',
+        'reports.sla.view',
+        'reports.sla.download',
 
         // Verification module (granular)
         'verification.pool.view',
@@ -159,7 +167,9 @@ class RolesAndPermissionsSeeder extends Seeder
             'finance.payments.correct',
             'finance.receipts.view',
             'finance.reports.view',
-            'verification.pool.view',
+            'finance.reports.download',
+            'reports.finance.view',
+            'reports.finance.download',
         ])->get());
 
         $ver1 = Role::query()->firstOrCreate(['name' => 'Verification Officer Level 1', 'guard_name' => 'web']);
@@ -179,6 +189,12 @@ class RolesAndPermissionsSeeder extends Seeder
             'admin.verification.view',
             'admin.certificates.view',
             'reports.view',
+            'reports.verification.view',
+            'reports.verification.download',
+            'reports.certificates.view',
+            'reports.certificates.download',
+            'reports.sla.view',
+            'reports.sla.download',
             'verification.pool.view',
             'verification.assign',
             'verification.send_back',

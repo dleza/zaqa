@@ -13,10 +13,12 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class VerifiersReportController extends Controller
 {
+    use AuthorizesAdminReports;
     use HandlesReportExport;
 
     public function index(Request $request, VerifierPerformanceReportService $service): Response
     {
+        $this->authorizeVerificationReportView();
         $dr = ReportDateRange::fromRequest($request);
         $verifierId = $request->query('verifier_id') ? (int) $request->query('verifier_id') : null;
 
@@ -36,6 +38,7 @@ class VerifiersReportController extends Controller
 
     public function export(Request $request, VerifierPerformanceReportService $service): StreamedResponse|\Illuminate\Http\Response
     {
+        $this->authorizeVerificationReportDownload();
         $dr = ReportDateRange::fromRequest($request);
         $verifierId = $request->query('verifier_id') ? (int) $request->query('verifier_id') : null;
         $format = strtolower((string) $request->query('format', 'csv'));

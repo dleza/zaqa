@@ -15,10 +15,12 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class CertificatesReportController extends Controller
 {
+    use AuthorizesAdminReports;
     use HandlesReportExport;
 
     public function index(Request $request, CertificatesIssuedReportService $service): Response
     {
+        $this->authorizeCertificatesReportView();
         $dr = ReportDateRange::fromRequest($request);
         $qtId = $request->query('qualification_type_id') ? (int) $request->query('qualification_type_id') : null;
         $aiId = $request->query('awarding_institution_id') ? (int) $request->query('awarding_institution_id') : null;
@@ -55,6 +57,7 @@ class CertificatesReportController extends Controller
 
     public function export(Request $request, CertificatesIssuedReportService $service): StreamedResponse|\Illuminate\Http\Response
     {
+        $this->authorizeCertificatesReportDownload();
         $dr = ReportDateRange::fromRequest($request);
         $qtId = $request->query('qualification_type_id') ? (int) $request->query('qualification_type_id') : null;
         $aiId = $request->query('awarding_institution_id') ? (int) $request->query('awarding_institution_id') : null;

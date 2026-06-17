@@ -78,7 +78,35 @@ class AdminReportsAuthorizationTest extends TestCase
     public function test_payments_report_export_respects_filters_without_mutating_data(): void
     {
         $user = User::factory()->activated()->create(['applicant_type' => null]);
+        $user->givePermissionTo(['dashboard.view', 'finance.reports.view', 'finance.reports.download']);
+
+        $this->actingAs($user)
+            ->get('/admin/reports/payments/export?range=last30&format=csv')
+            ->assertOk();
+    }
+
+    public function test_reports_view_permission_alone_does_not_grant_finance_report_access(): void
+    {
+        $user = User::factory()->activated()->create(['applicant_type' => null]);
         $user->givePermissionTo(['dashboard.view', 'reports.view']);
+
+        $this->actingAs($user)
+            ->get('/admin/reports/applications?range=last30')
+            ->assertOk();
+
+        $this->actingAs($user)
+            ->get('/admin/reports/payments?range=last30')
+            ->assertForbidden();
+    }
+
+    public function test_finance_officer_can_access_payments_report_with_finance_permission_only(): void
+    {
+        $user = User::factory()->activated()->create(['applicant_type' => null]);
+        $user->assignRole('Finance Officer');
+
+        $this->actingAs($user)
+            ->get('/admin/reports/payments?range=last30')
+            ->assertOk();
 
         $this->actingAs($user)
             ->get('/admin/reports/payments/export?range=last30&format=csv')
