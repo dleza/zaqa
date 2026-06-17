@@ -469,6 +469,13 @@ function documentTypeLabel(raw: string) {
 
 const level1Review = computed(() => props.qualification?.level1_review ?? null)
 const qualificationTypes = computed(() => props.qualificationTypes ?? [])
+
+function qualificationTypeOptionLabel(type: { level_label?: string; name: string }) {
+  const level = (type.level_label ?? '').trim()
+  const name = (type.name ?? '').trim()
+  if (level !== '' && name !== '') return `${level} — ${name}`
+  return name !== '' ? name : level
+}
 const level1Findings = computed(() => (level1Review.value?.findings ?? props.qualification?.reviewer_notes ?? '').toString().trim())
 const level1ReviewedAt = computed(() => parseIso(level1Review.value?.submitted_at ?? props.qualification?.reviewed_at))
 const hasLevel1Submission = computed(() => level1Review.value !== null && level1Review.value !== undefined)
@@ -964,7 +971,7 @@ const autoVerificationCollapsedSummary = computed(() => {
                 :title="isAutoVerifiedPendingL2 && lockMissingForActions ? 'Lock for review before approving.' : ''"
                 @click="approveOpen = true"
               >
-                Approve
+                Approve Verification Certificate
               </button>
 
               <button
@@ -975,7 +982,7 @@ const autoVerificationCollapsedSummary = computed(() => {
                 :title="isAutoVerifiedPendingL2 && lockMissingForActions ? 'Lock for review before rejecting.' : ''"
                 @click="rejectOpen = true"
               >
-                Reject
+                Issue Notice of Rejection
               </button>
 
               <button
@@ -2294,7 +2301,7 @@ const autoVerificationCollapsedSummary = computed(() => {
           <select v-model="level1CompleteForm.qualification_type_id" class="zaqa-input mt-2">
             <option value="" disabled>Select qualification type…</option>
             <option v-for="type in qualificationTypes" :key="type.id" :value="type.id">
-              {{ type.name }}
+              {{ qualificationTypeOptionLabel(type) }}
             </option>
           </select>
           <div v-if="level1CompleteForm.errors.qualification_type_id" class="mt-1 text-xs text-danger">{{ level1CompleteForm.errors.qualification_type_id }}</div>
