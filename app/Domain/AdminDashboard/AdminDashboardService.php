@@ -3,7 +3,6 @@
 namespace App\Domain\AdminDashboard;
 
 use App\Domain\Finance\FinanceDashboardMetricsService;
-use App\Domain\Reports\Level1OfficerReportService;
 use App\Domain\Verification\QualificationSlaService;
 use App\Domain\Verification\VerificationQualificationAccess;
 use App\Enums\ApplicationStatus;
@@ -112,14 +111,14 @@ class AdminDashboardService
         // ——— System / applications (broad) ———
         if ($user->can('admin.applications.view')) {
             if ($this->isLevel2ScopedDashboard($user)) {
-                $periodLabel = $rangeLabel.' · entered workflow';
+                $periodLabel = $rangeLabel.' · open + processed intake';
                 $processedLabel = $rangeLabel.' · final decisions';
 
                 $kpis[] = [
                     'key' => 'l2_total_qualifications',
                     'label' => 'Total qualifications',
                     'value' => $this->applyWorkflowEntryDateRange(
-                        $this->level2InWorkflowQualificationQuery(),
+                        $this->level2TotalQualificationsQuery(),
                         $from,
                         $to
                     )->count(),
@@ -143,7 +142,7 @@ class AdminDashboardService
                     'label' => 'With Level 1',
                     'value' => $this->level2WithLevel1Query()->count(),
                     'icon' => 'user',
-                    'hint' => 'Current queue · Level 1 review',
+                    'hint' => 'Current queue · assigned to Level 1',
                     'metric_scope' => 'current_queue',
                     'href' => '/admin/verification/pool?verification_state=under_level1_review',
                 ];
@@ -153,27 +152,27 @@ class AdminDashboardService
                     'label' => 'With Level 2',
                     'value' => $this->level2WithLevel2Query()->count(),
                     'icon' => 'scale',
-                    'hint' => 'Current queue · Level 2 review',
+                    'hint' => 'Current queue · assigned to Level 2',
                     'metric_scope' => 'current_queue',
                     'href' => '/admin/verification/pool?verification_state=under_level2_review',
                 ];
 
                 $kpis[] = [
-                    'key' => 'l2_unassigned_level1',
-                    'label' => 'Unassigned Level 1',
-                    'value' => $this->level2UnassignedLevel1Query()->count(),
+                    'key' => 'l2_awaiting_level1_assignment',
+                    'label' => 'Awaiting Level 1 assignment',
+                    'value' => $this->level2AwaitingLevel1AssignmentQuery()->count(),
                     'icon' => 'user-plus',
-                    'hint' => 'Current queue · awaiting Level 1',
+                    'hint' => 'Current queue · waiting for Level 1 officer',
                     'metric_scope' => 'current_queue',
                     'href' => '/admin/verification/pool?verification_state=awaiting_assignment',
                 ];
 
                 $kpis[] = [
-                    'key' => 'l2_unassigned_level2',
-                    'label' => 'Unassigned Level 2',
-                    'value' => $this->level2UnassignedLevel2Query()->count(),
+                    'key' => 'l2_awaiting_level2_assignment',
+                    'label' => 'Awaiting Level 2 assignment',
+                    'value' => $this->level2AwaitingLevel2AssignmentQuery()->count(),
                     'icon' => 'user-plus',
-                    'hint' => 'Current queue · awaiting Level 2',
+                    'hint' => 'Current queue · waiting for Level 2 officer',
                     'metric_scope' => 'current_queue',
                     'href' => '/admin/verification/pool?verification_state=under_level2_review',
                 ];
@@ -183,7 +182,7 @@ class AdminDashboardService
                     'label' => 'Auto-verified awaiting L2',
                     'value' => $this->level2AutoVerifiedAwaitingQuery()->count(),
                     'icon' => 'sparkles',
-                    'hint' => 'Current queue · pending L2 approval',
+                    'hint' => 'Subset · auto-verified pending approval',
                     'metric_scope' => 'current_queue',
                     'href' => '/admin/verification/auto-verified',
                 ];
@@ -218,64 +217,77 @@ class AdminDashboardService
                     'href' => '/admin/verification/pool?overdue=1&foreign=1',
                 ];
             } elseif ($this->isLevel1ScopedDashboard($user)) {
-                $reportService = app(Level1OfficerReportService::class);
-
                 $kpis[] = [
-                    'key' => 'l1_total_assigned_30d',
+                    'key' => 'l1_assigned_to_me',
                     'label' => 'Assigned to me',
-                    'value' => $reportService->countAssigned($user, $from, $to),
+                    'value' => $this->level1AssignedToMeQuery($user)->count(),
                     'icon' => 'user-check',
-                    'hint' => $rangeLabel,
-                    'href' => '/admin/reports/my-performance?range=last'.$range->selected,
-                ];
-
-                $kpis[] = [
-                    'key' => 'l1_total_processed_30d',
-                    'label' => 'Processed',
-                    'value' => $reportService->countProcessed($user, $from, $to),
-                    'icon' => 'check-circle',
-                    'hint' => $rangeLabel.' · Level 1 reviews completed',
-                    'href' => '/admin/reports/my-performance?range=last'.$range->selected,
-                ];
-
-                $pendingAssigned = $this->applyWorkflowEntryDateRange(
-                    Qualification::query()
-                        ->where('assigned_verifier_id', $user->id)
-                        ->whereHas('application', fn ($q) => $q->whereIn('current_status', $this->poolStatuses()))
-                        ->where(function ($q) {
-                            $q->whereNull('verification_state')
-                                ->orWhereNotIn('verification_state', [
-                                    VerificationState::ApprovedForCertificate->value,
-                                    VerificationState::Rejected->value,
-                                    VerificationState::CertificateIssued->value,
-                                    VerificationState::Closed->value,
-                                ]);
-                        }),
-                    $from,
-                    $to
-                );
-
-                $kpis[] = [
-                    'key' => 'l1_pending_assigned',
-                    'label' => 'Pending',
-                    'value' => $pendingAssigned->count(),
-                    'icon' => 'shield',
-                    'hint' => $rangeLabel.' · open assigned tasks',
+                    'hint' => 'Current queue · your Level 1 tasks',
+                    'metric_scope' => 'current_queue',
                     'href' => '/admin/verification/assigned-to-me',
                 ];
 
-                $everAssigned = $this->qualificationsEverAssignedToQuery($user);
+                $kpis[] = [
+                    'key' => 'l1_in_review',
+                    'label' => 'In review',
+                    'value' => $this->level1InReviewQuery($user)->count(),
+                    'icon' => 'shield',
+                    'hint' => 'Current queue · in progress',
+                    'metric_scope' => 'current_queue',
+                    'href' => '/admin/verification/assigned-to-me',
+                ];
 
                 $kpis[] = [
-                    'key' => 'l1_assigned_submitted_today',
-                    'label' => 'Received in period',
-                    'value' => $this->applyWorkflowEntryDateRange(clone $everAssigned, $from, $to)
-                        ->distinct()
-                        ->count('qualifications.id'),
-                    'icon' => 'inbox',
-                    'hint' => $rangeLabel,
-                    'href' => '/admin/verification/assigned-to-me?submitted_from='.$from->toDateString().'&submitted_to='.$to->toDateString(),
+                    'key' => 'l1_completed',
+                    'label' => 'Completed',
+                    'value' => $this->countLevel1CompletedByUser($user, $from, $to),
+                    'icon' => 'check-circle',
+                    'hint' => $rangeLabel.' · completed by you',
+                    'metric_scope' => 'period',
+                    'href' => '/admin/reports/my-performance?range=last'.$range->selected,
                 ];
+
+                $kpis[] = [
+                    'key' => 'l1_returned_by_level2',
+                    'label' => 'Returned by Level 2',
+                    'value' => $this->level1ReturnedByLevel2Query($user)->count(),
+                    'icon' => 'undo',
+                    'hint' => 'Current queue · needs your correction',
+                    'metric_scope' => 'current_queue',
+                    'href' => '/admin/verification/assigned-to-me',
+                ];
+
+                $kpis[] = [
+                    'key' => 'l1_my_overdue',
+                    'label' => 'My overdue',
+                    'value' => $this->level1MyOverdueQuery($user)->count(),
+                    'icon' => 'timer',
+                    'hint' => 'Current overdue · assigned to you',
+                    'metric_scope' => 'overdue',
+                    'href' => '/admin/verification/assigned-to-me',
+                ];
+
+                $kpis[] = [
+                    'key' => 'l1_awaiting_applicant_correction',
+                    'label' => 'Awaiting applicant correction',
+                    'value' => $this->level1AwaitingApplicantCorrectionQuery($user)->count(),
+                    'icon' => 'inbox',
+                    'hint' => 'Current queue · applicant action',
+                    'metric_scope' => 'current_queue',
+                    'href' => '/admin/verification/pool?awaiting_applicant_from_me=1',
+                ];
+
+                if ($user->can('verification.send_back')) {
+                    $kpis[] = [
+                        'key' => 'l1_sent_back_to_applicant',
+                        'label' => 'Sent back to applicant',
+                        'value' => $this->countLevel1SentBackToApplicantByUser($user, $from, $to),
+                        'icon' => 'undo',
+                        'hint' => $rangeLabel.' · correction requests',
+                        'metric_scope' => 'period',
+                        'href' => '/admin/verification/pool?awaiting_applicant_from_me=1',
+                    ];
+                }
             } else {
                 $kpis[] = [
                     'key' => 'applications_total',
@@ -306,7 +318,7 @@ class AdminDashboardService
         }
 
         if ($user->can('verification.pool.view')) {
-            if (! $this->isLevel2ScopedDashboard($user)) {
+            if (! $this->isLevel2ScopedDashboard($user) && ! $this->isLevel1ScopedDashboard($user)) {
                 if (VerificationQualificationAccess::mustRestrictToAssignedQualifications($user)) {
                     $pendingVerification = $this->applyWorkflowEntryDateRange(
                         Qualification::query()
@@ -340,34 +352,32 @@ class AdminDashboardService
 
                 $kpis[] = [
                     'key' => 'pending_verification',
-                    'label' => $this->isLevel1ScopedDashboard($user) ? 'Active assigned tasks' : 'Pending verification',
+                    'label' => 'Pending verification',
                     'value' => $pendingVerification,
                     'icon' => 'shield',
                     'hint' => $rangeLabel,
-                    'href' => $this->isLevel1ScopedDashboard($user) ? '/admin/verification/assigned-to-me' : '/admin/verification/pool',
+                    'href' => '/admin/verification/pool',
                 ];
 
-                if (! $this->isLevel1ScopedDashboard($user)) {
-                    $overduePool = $this->applyWorkflowEntryDateRange(
-                        Qualification::query()->whereHas(
-                            'application',
-                            fn ($q) => $q->whereIn('current_status', $this->poolStatuses())
-                        ),
-                        $from,
-                        $to
-                    );
-                    $this->applyOpenQualificationSlaScope($overduePool);
-                    $this->applyQualificationOverdueFilter($overduePool, $now);
+                $overduePool = $this->applyWorkflowEntryDateRange(
+                    Qualification::query()->whereHas(
+                        'application',
+                        fn ($q) => $q->whereIn('current_status', $this->poolStatuses())
+                    ),
+                    $from,
+                    $to
+                );
+                $this->applyOpenQualificationSlaScope($overduePool);
+                $this->applyQualificationOverdueFilter($overduePool, $now);
 
-                    $kpis[] = [
-                        'key' => 'verification_overdue',
-                        'label' => 'Overdue qualifications',
-                        'value' => $overduePool->count(),
-                        'icon' => 'timer',
-                        'hint' => $rangeLabel.' · past service deadline',
-                        'href' => '/admin/verification/pool?overdue=1',
-                    ];
-                }
+                $kpis[] = [
+                    'key' => 'verification_overdue',
+                    'label' => 'Overdue qualifications',
+                    'value' => $overduePool->count(),
+                    'icon' => 'timer',
+                    'hint' => $rangeLabel.' · past service deadline',
+                    'href' => '/admin/verification/pool?overdue=1',
+                ];
 
                 $awaiting = $this->applyWorkflowEntryDateRange(
                     Qualification::query()
@@ -411,7 +421,8 @@ class AdminDashboardService
             ];
         }
 
-        if ($user->can('admin.finance.view') || $user->can('finance.payment_proofs.view') || $user->can('finance.payments.view')) {
+        if (($user->can('admin.finance.view') || $user->can('finance.payment_proofs.view') || $user->can('finance.payments.view'))
+            && ! $this->isLevel1ScopedDashboard($user)) {
             /** @var FinanceDashboardMetricsService $financeMetrics */
             $financeMetrics = app(FinanceDashboardMetricsService::class);
 
@@ -517,7 +528,7 @@ class AdminDashboardService
             ];
         }
 
-        if ($user->can('admin.certificates.view') && ! $this->isLevel2ScopedDashboard($user)) {
+        if ($user->can('admin.certificates.view') && ! $this->isLevel2ScopedDashboard($user) && ! $this->isLevel1ScopedDashboard($user)) {
             $issued = Application::query()
                 ->where(function ($q) {
                     $q->where('verification_state', VerificationState::CertificateIssued)
@@ -538,7 +549,7 @@ class AdminDashboardService
             ];
         }
 
-        if ($user->can('admin.users.view')) {
+        if ($user->can('admin.users.view') && ! $this->isLevel1ScopedDashboard($user)) {
             $staffActive = User::query()
                 ->whereNull('applicant_type')
                 ->where('is_active', true)
@@ -832,22 +843,33 @@ class AdminDashboardService
         }
 
         if ($this->isLevel1ScopedDashboard($user)) {
-            $stateRows = $this->applyWorkflowEntryDateRange(
-                $this->qualificationsEverAssignedToQuery($user),
-                $from,
-                $to
-            )
-                ->selectRaw('verification_state as s, COUNT(*) as c')
-                ->groupBy('verification_state')
-                ->pluck('c', 's')
-                ->all();
+            $workloadRows = $this->level1CurrentWorkloadChartRows($user);
 
             $charts[] = [
-                'key' => 'verification_l1_assigned_by_state',
-                'title' => 'Your assigned qualifications by status ('.$rangeLabel.')',
+                'key' => 'verification_l1_workload_by_status',
+                'title' => 'My current workload by status',
                 'type' => 'doughnut',
-                'labels' => array_map(fn ($k) => str_replace('_', ' ', (string) $k), array_keys($stateRows)),
-                'values' => array_values($stateRows),
+                'labels' => array_keys($workloadRows),
+                'values' => array_values($workloadRows),
+            ];
+
+            $completionSeries = [];
+            foreach ($w['dates'] as $date) {
+                $completionSeries[] = Qualification::query()
+                    ->where('level1_review_completed_by_user_id', $user->id)
+                    ->whereBetween('reviewed_at', [
+                        Carbon::parse($date)->startOfDay(),
+                        Carbon::parse($date)->endOfDay(),
+                    ])
+                    ->count();
+            }
+
+            $charts[] = [
+                'key' => 'verification_l1_completed_week',
+                'title' => 'My completions by day ('.$rangeLabel.')',
+                'type' => 'bar',
+                'labels' => $w['labels'],
+                'values' => $completionSeries,
             ];
         }
 
@@ -863,7 +885,7 @@ class AdminDashboardService
             ];
         }
 
-        if ($user->can('verification.pool.view')) {
+        if ($user->can('verification.pool.view') && ! $this->isLevel1ScopedDashboard($user)) {
             $poolSeries = [];
             foreach ($w['dates'] as $date) {
                 if ($this->isLevel2ScopedDashboard($user)) {
@@ -872,14 +894,6 @@ class AdminDashboardService
                         Carbon::parse($date)->startOfDay(),
                         Carbon::parse($date)->endOfDay()
                     )->count();
-                } elseif ($this->isLevel1ScopedDashboard($user)) {
-                    $poolSeries[] = $this->applyWorkflowEntryDateRange(
-                        $this->qualificationsEverAssignedToQuery($user),
-                        Carbon::parse($date)->startOfDay(),
-                        Carbon::parse($date)->endOfDay()
-                    )
-                        ->distinct()
-                        ->count('qualifications.id');
                 } elseif (VerificationQualificationAccess::mustRestrictToAssignedQualifications($user)) {
                     $poolSeries[] = $this->applyWorkflowEntryDateRange(
                         Qualification::query()
@@ -900,11 +914,9 @@ class AdminDashboardService
                 'key' => 'verification_pool_submissions_week',
                 'title' => $this->isLevel2ScopedDashboard($user)
                     ? 'Qualifications entering workflow by day ('.$rangeLabel.')'
-                    : ($this->isLevel1ScopedDashboard($user)
-                        ? 'Your assigned qualifications by workflow entry ('.$rangeLabel.')'
-                        : (VerificationQualificationAccess::mustRestrictToAssignedQualifications($user)
-                            ? 'Your pool qualifications by workflow entry ('.$rangeLabel.')'
-                            : 'Qualifications entering workflow by day ('.$rangeLabel.')')),
+                    : (VerificationQualificationAccess::mustRestrictToAssignedQualifications($user)
+                        ? 'Your pool qualifications by workflow entry ('.$rangeLabel.')'
+                        : 'Qualifications entering workflow by day ('.$rangeLabel.')'),
                 'type' => 'line',
                 'labels' => $w['labels'],
                 'values' => $poolSeries,
@@ -977,7 +989,10 @@ class AdminDashboardService
                 'date_range' => $range->toArray(),
                 'workflow_entry_date_field' => 'qualifications.service_started_at, else applications.submitted_at, else qualifications.created_at',
                 'l2_metrics_explainer' => $this->isLevel2ScopedDashboard($user)
-                    ? 'Total qualifications and Processed use the selected date range. Queue cards show current workload by stage.'
+                    ? 'Total counts all qualifications that entered workflow in the selected period, including those already processed. Processed shows final decisions in the period. Queue cards show current live workload.'
+                    : null,
+                'l1_metrics_explainer' => $this->isLevel1ScopedDashboard($user)
+                    ? 'Your dashboard shows your Level 1 workload only. Completed and sent-back counts use the selected period; queue cards show your current assigned work.'
                     : null,
             ],
             'kpis' => array_values($kpis),
@@ -993,10 +1008,10 @@ class AdminDashboardService
     private function resolveSubtitle(User $user): string
     {
         if ($this->isLevel1ScopedDashboard($user)) {
-            return 'Here are your assigned qualification tasks and what needs your attention today.';
+            return 'Your Level 1 workload at a glance — assigned tasks, corrections, and completions for the selected period.';
         }
         if ($this->isLevel2ScopedDashboard($user)) {
-            return 'Total qualifications and processed decisions reflect the selected period; queue cards show live workload by stage.';
+            return 'Total includes open and processed qualifications from the selected period; queue cards show live workload by assignment stage.';
         }
         if ($this->isFinanceScopedDashboard($user)) {
             return 'Here is your finance operations summary for the selected period.';
@@ -1027,8 +1042,12 @@ class AdminDashboardService
         };
 
         if ($this->isLevel1ScopedDashboard($user)) {
-            $push('Assigned to me', '/admin/verification/assigned-to-me', 'user-check', 'verification.level1.process');
-            $push('My performance', '/admin/reports/my-performance', 'activity', 'verification.level1.process');
+            $push('My Level 1 tasks', '/admin/verification/assigned-to-me', 'user-check', 'verification.level1.process');
+            if ($user->can('reports.view')) {
+                $push('My performance', '/admin/reports/my-performance', 'activity', 'reports.view');
+            }
+
+            return;
         } elseif ($this->isLevel2ScopedDashboard($user)) {
             $push('Verification pool', '/admin/verification/pool', 'layers', 'verification.pool.view');
             $push('Assigned to me', '/admin/verification/assigned-to-me', 'user-check', 'verification.level2.review');
@@ -1070,6 +1089,10 @@ class AdminDashboardService
      */
     private function appendSmsDashboardWidgets(User $user, array &$kpis, array &$alerts): void
     {
+        if ($this->isLevel1ScopedDashboard($user)) {
+            return;
+        }
+
         if (! $user->can('sms.balance.view') && ! $user->can('sms.balance.manage')) {
             return;
         }
@@ -1195,7 +1218,7 @@ class AdminDashboardService
     }
 
     /**
-     * Qualifications currently with Level 1 (assignment or review).
+     * Qualifications assigned to a Level 1 officer and under Level 1 review.
      *
      * @return Builder<Qualification>
      */
@@ -1203,38 +1226,30 @@ class AdminDashboardService
     {
         return $this->level2WorkflowQualificationQuery()
             ->whereIn('qualifications.verification_state', [
-                VerificationState::AwaitingAutoVerification->value,
-                VerificationState::AwaitingAssignment->value,
                 VerificationState::AssignedToLevel1->value,
                 VerificationState::UnderLevel1Review->value,
-            ]);
+            ])
+            ->whereNotNull('qualifications.assigned_verifier_id');
     }
 
     /**
-     * Qualifications actively owned or locked at Level 2.
+     * Qualifications actively owned at Level 2 (manual review path).
      *
      * @return Builder<Qualification>
      */
     private function level2WithLevel2Query(): Builder
     {
         return $this->level2WorkflowQualificationQuery()
-            ->where(function (Builder $q) {
-                $q->where(function (Builder $manual) {
-                    $manual->where('qualifications.verification_state', VerificationState::UnderLevel2Review->value)
-                        ->whereNotNull('qualifications.level2_review_owner_id');
-                })->orWhere(function (Builder $auto) {
-                    $auto->where('qualifications.verification_state', VerificationState::AutoVerifiedPendingLevel2->value)
-                        ->whereNotNull('qualifications.level2_review_locked_by');
-                });
-            });
+            ->where('qualifications.verification_state', VerificationState::UnderLevel2Review->value)
+            ->whereNotNull('qualifications.level2_review_owner_id');
     }
 
     /**
-     * Level 1 pool items awaiting verifier assignment or pickup.
+     * Qualifications waiting for Level 1 officer assignment.
      *
      * @return Builder<Qualification>
      */
-    private function level2UnassignedLevel1Query(): Builder
+    private function level2AwaitingLevel1AssignmentQuery(): Builder
     {
         return $this->level2WorkflowQualificationQuery()
             ->where(function (Builder $q) {
@@ -1249,22 +1264,15 @@ class AdminDashboardService
     }
 
     /**
-     * Level 2-reviewable qualifications without an owner or active lock.
+     * Manual Level 2-reviewable qualifications without an owner (excludes auto-verified path).
      *
      * @return Builder<Qualification>
      */
-    private function level2UnassignedLevel2Query(): Builder
+    private function level2AwaitingLevel2AssignmentQuery(): Builder
     {
         return $this->level2WorkflowQualificationQuery()
-            ->where(function (Builder $q) {
-                $q->where(function (Builder $manual) {
-                    $manual->where('qualifications.verification_state', VerificationState::UnderLevel2Review->value)
-                        ->whereNull('qualifications.level2_review_owner_id');
-                })->orWhere(function (Builder $auto) {
-                    $auto->where('qualifications.verification_state', VerificationState::AutoVerifiedPendingLevel2->value)
-                        ->whereNull('qualifications.level2_review_locked_by');
-                });
-            });
+            ->where('qualifications.verification_state', VerificationState::UnderLevel2Review->value)
+            ->whereNull('qualifications.level2_review_owner_id');
     }
 
     /**
@@ -1286,10 +1294,10 @@ class AdminDashboardService
     private function level2CurrentWorkflowStageChartRows(): array
     {
         $rows = [
+            'Awaiting Level 1 assignment' => $this->level2AwaitingLevel1AssignmentQuery()->count(),
             'With Level 1' => $this->level2WithLevel1Query()->count(),
+            'Awaiting Level 2 assignment' => $this->level2AwaitingLevel2AssignmentQuery()->count(),
             'With Level 2' => $this->level2WithLevel2Query()->count(),
-            'Unassigned Level 1' => $this->level2UnassignedLevel1Query()->count(),
-            'Unassigned Level 2' => $this->level2UnassignedLevel2Query()->count(),
             'Auto-verified awaiting L2' => $this->level2AutoVerifiedAwaitingQuery()->count(),
         ];
 
@@ -1322,13 +1330,13 @@ class AdminDashboardService
     }
 
     /**
-     * @deprecated Use level2UnassignedLevel2Query()
+     * @deprecated Use level2AwaitingLevel2AssignmentQuery()
      *
      * @return Builder<Qualification>
      */
     private function level2UnassignedQuery(): Builder
     {
-        return $this->level2UnassignedLevel2Query();
+        return $this->level2AwaitingLevel2AssignmentQuery();
     }
 
     /**
@@ -1338,6 +1346,105 @@ class AdminDashboardService
     {
         return $this->level2WorkflowQualificationQuery()
             ->where('qualifications.verification_state', VerificationState::AutoVerifiedPendingLevel2->value);
+    }
+
+    /**
+     * @return Builder<Qualification>
+     */
+    private function level1AssignedQualificationBaseQuery(User $user): Builder
+    {
+        return Qualification::query()
+            ->where('assigned_verifier_id', $user->id)
+            ->whereHas(
+                'application',
+                fn (Builder $aq) => $aq->whereIn('current_status', $this->poolStatuses())
+            );
+    }
+
+    /**
+     * @return Builder<Qualification>
+     */
+    private function level1AssignedToMeQuery(User $user): Builder
+    {
+        return $this->level1AssignedQualificationBaseQuery($user)
+            ->whereIn('qualifications.verification_state', [
+                VerificationState::AssignedToLevel1->value,
+                VerificationState::UnderLevel1Review->value,
+            ]);
+    }
+
+    /**
+     * @return Builder<Qualification>
+     */
+    private function level1InReviewQuery(User $user): Builder
+    {
+        return $this->level1AssignedQualificationBaseQuery($user)
+            ->where('qualifications.verification_state', VerificationState::UnderLevel1Review->value);
+    }
+
+    /**
+     * @return Builder<Qualification>
+     */
+    private function level1ReturnedByLevel2Query(User $user): Builder
+    {
+        return $this->level1AssignedQualificationBaseQuery($user)
+            ->where('returned_to_level1_to_user_id', $user->id)
+            ->whereNotNull('returned_to_level1_at')
+            ->where('level1_correction_cycle', '>', 0);
+    }
+
+    /**
+     * @return Builder<Qualification>
+     */
+    private function level1MyOverdueQuery(User $user): Builder
+    {
+        $query = $this->level1AssignedQualificationBaseQuery($user);
+        $this->applyOpenQualificationSlaScope($query);
+        $this->applyQualificationOverdueFilter($query, now());
+
+        return $query;
+    }
+
+    /**
+     * @return Builder<Qualification>
+     */
+    private function level1AwaitingApplicantCorrectionQuery(User $user): Builder
+    {
+        return Qualification::query()
+            ->where('send_back_by_user_id', $user->id)
+            ->where('verification_state', VerificationState::ReturnedToApplicant->value);
+    }
+
+    private function countLevel1CompletedByUser(User $user, Carbon $from, Carbon $to): int
+    {
+        return (int) Qualification::query()
+            ->where('level1_review_completed_by_user_id', $user->id)
+            ->whereBetween('reviewed_at', [$from, $to])
+            ->count();
+    }
+
+    private function countLevel1SentBackToApplicantByUser(User $user, Carbon $from, Carbon $to): int
+    {
+        return (int) Qualification::query()
+            ->where('send_back_by_user_id', $user->id)
+            ->whereNotNull('returned_to_applicant_at')
+            ->whereBetween('returned_to_applicant_at', [$from, $to])
+            ->count();
+    }
+
+    /**
+     * @return array<string, int>
+     */
+    private function level1CurrentWorkloadChartRows(User $user): array
+    {
+        $rows = [
+            'Assigned to me' => $this->level1AssignedToMeQuery($user)->count(),
+            'In review' => $this->level1InReviewQuery($user)->count(),
+            'Returned by Level 2' => $this->level1ReturnedByLevel2Query($user)->count(),
+            'Awaiting applicant correction' => $this->level1AwaitingApplicantCorrectionQuery($user)->count(),
+        ];
+
+        return array_filter($rows, fn (int $count) => $count > 0);
     }
 
     private function isLevel1ScopedDashboard(User $user): bool
@@ -1370,6 +1477,19 @@ class AdminDashboardService
             && ! $user->can('verification.level1.process')
             && ! $user->can('verification.level2.review')
             && ! $user->can('admin.applications.view');
+    }
+
+    /**
+     * All qualifications on submitted applications (open and terminal) for period totals.
+     *
+     * @return Builder<Qualification>
+     */
+    private function level2TotalQualificationsQuery(): Builder
+    {
+        return Qualification::query()->whereHas(
+            'application',
+            fn (Builder $aq) => $aq->whereNotNull('submitted_at')
+        );
     }
 
     /**

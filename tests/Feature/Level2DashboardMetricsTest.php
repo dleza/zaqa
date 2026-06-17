@@ -23,9 +23,9 @@ class Level2DashboardMetricsTest extends TestCase
         'l2_total_qualifications',
         'l2_processed',
         'l2_with_level1',
+        'l2_awaiting_level1_assignment',
         'l2_with_level2',
-        'l2_unassigned_level1',
-        'l2_unassigned_level2',
+        'l2_awaiting_level2_assignment',
         'l2_auto_verified_awaiting',
         'l2_assigned_to_me',
         'l2_overdue_local',
@@ -95,11 +95,14 @@ class Level2DashboardMetricsTest extends TestCase
         ], $overrides));
     }
 
+    private function dashboardProps(User $l2, string $query = ''): array
+    {
+        return $this->inertiaProps($this->actingAs($l2)->get('/admin/dashboard'.$query));
+    }
+
     private function dashboardKpis(User $l2, string $query = ''): array
     {
-        $props = $this->inertiaProps($this->actingAs($l2)->get('/admin/dashboard'.$query));
-
-        return $props['kpis'];
+        return $this->dashboardProps($l2, $query)['kpis'];
     }
 
     private function kpiValue(array $kpis, string $key): int
@@ -110,68 +113,44 @@ class Level2DashboardMetricsTest extends TestCase
         return (int) $card['value'];
     }
 
-    public function test_level_two_dashboard_shows_all_required_cards(): void
+    public function test_level_two_dashboard_shows_all_required_cards_with_friendly_labels(): void
     {
         $l2 = $this->makeLevel2Officer();
         $applicant = User::factory()->activated()->create(['applicant_type' => 'individual']);
         $this->makeQualification($this->makeSubmittedApplication($applicant));
 
-        $keys = collect($this->dashboardKpis($l2))->pluck('key')->all();
+        $kpis = $this->dashboardKpis($l2);
+        $keys = collect($kpis)->pluck('key')->all();
 
         foreach (self::L2_KPI_KEYS as $expectedKey) {
             $this->assertContains($expectedKey, $keys);
         }
+
+        $this->assertSame('With Level 1', collect($kpis)->firstWhere('key', 'l2_with_level1')['label']);
+        $this->assertSame('Awaiting Level 1 assignment', collect($kpis)->firstWhere('key', 'l2_awaiting_level1_assignment')['label']);
+        $this->assertSame('With Level 2', collect($kpis)->firstWhere('key', 'l2_with_level2')['label']);
+        $this->assertSame('Awaiting Level 2 assignment', collect($kpis)->firstWhere('key', 'l2_awaiting_level2_assignment')['label']);
     }
 
-    public function test_with_level1_count_matches_current_level1_states(): void
+    public function test_with_level1_counts_only_records_assigned_to_level1(): void
     {
         $l2 = $this->makeLevel2Officer();
-        $applicant = User::factory()->activated()->create(['applicant_type' => 'individual']);
-
-        foreach ([
-            VerificationState::AwaitingAssignment,
-            VerificationState::AssignedToLevel1,
-            VerificationState::UnderLevel1Review,
-        ] as $state) {
-            $this->makeQualification($this->makeSubmittedApplication($applicant), [
-                'verification_state' => $state,
-            ]);
-        }
-
-        $expected = Qualification::query()
-            ->whereIn('verification_state', [
-                VerificationState::AwaitingAutoVerification->value,
-                VerificationState::AwaitingAssignment->value,
-                VerificationState::AssignedToLevel1->value,
-                VerificationState::UnderLevel1Review->value,
-            ])
-            ->count();
-
-        $this->assertSame($expected, $this->kpiValue($this->dashboardKpis($l2), 'l2_with_level1'));
-    }
-
-    public function test_with_level2_count_matches_owned_or_locked_records(): void
-    {
-        $l2 = $this->makeLevel2Officer();
-        $otherL2 = $this->makeLevel2Officer();
+        $level1 = User::factory()->activated()->create(['applicant_type' => null]);
         $applicant = User::factory()->activated()->create(['applicant_type' => 'individual']);
 
         $this->makeQualification($this->makeSubmittedApplication($applicant), [
-            'level2_review_owner_id' => $l2->id,
+            'verification_state' => VerificationState::AssignedToLevel1,
+            'assigned_verifier_id' => $level1->id,
         ]);
         $this->makeQualification($this->makeSubmittedApplication($applicant), [
-            'verification_state' => VerificationState::UnderLevel2Review,
-        ]);
-        $this->makeQualification($this->makeSubmittedApplication($applicant), [
-            'verification_state' => VerificationState::AutoVerifiedPendingLevel2,
-            'level2_review_locked_by' => $otherL2->id,
-            'level2_review_locked_at' => now(),
+            'verification_state' => VerificationState::UnderLevel1Review,
+            'assigned_verifier_id' => $level1->id,
         ]);
 
-        $this->assertSame(2, $this->kpiValue($this->dashboardKpis($l2), 'l2_with_level2'));
+        $this->assertSame(2, $this->kpiValue($this->dashboardKpis($l2), 'l2_with_level1'));
     }
 
-    public function test_unassigned_level1_count_matches_level1_pool(): void
+    public function test_with_level1_does_not_count_awaiting_assignment_records(): void
     {
         $l2 = $this->makeLevel2Officer();
         $applicant = User::factory()->activated()->create(['applicant_type' => 'individual']);
@@ -183,15 +162,65 @@ class Level2DashboardMetricsTest extends TestCase
             'verification_state' => VerificationState::AssignedToLevel1,
             'assigned_verifier_id' => null,
         ]);
-        $this->makeQualification($this->makeSubmittedApplication($applicant), [
-            'verification_state' => VerificationState::AssignedToLevel1,
-            'assigned_verifier_id' => $l2->id,
-        ]);
 
-        $this->assertSame(2, $this->kpiValue($this->dashboardKpis($l2), 'l2_unassigned_level1'));
+        $this->assertSame(0, $this->kpiValue($this->dashboardKpis($l2), 'l2_with_level1'));
+        $this->assertSame(2, $this->kpiValue($this->dashboardKpis($l2), 'l2_awaiting_level1_assignment'));
     }
 
-    public function test_unassigned_level2_count_matches_level2_pool_without_owner_or_lock(): void
+    public function test_awaiting_level1_assignment_counts_records_without_assigned_level1_officer(): void
+    {
+        $l2 = $this->makeLevel2Officer();
+        $level1 = User::factory()->activated()->create(['applicant_type' => null]);
+        $applicant = User::factory()->activated()->create(['applicant_type' => 'individual']);
+
+        $this->makeQualification($this->makeSubmittedApplication($applicant), [
+            'verification_state' => VerificationState::AwaitingAssignment,
+        ]);
+        $this->makeQualification($this->makeSubmittedApplication($applicant), [
+            'verification_state' => VerificationState::AssignedToLevel1,
+            'assigned_verifier_id' => null,
+        ]);
+        $this->makeQualification($this->makeSubmittedApplication($applicant), [
+            'verification_state' => VerificationState::AssignedToLevel1,
+            'assigned_verifier_id' => $level1->id,
+        ]);
+
+        $this->assertSame(2, $this->kpiValue($this->dashboardKpis($l2), 'l2_awaiting_level1_assignment'));
+    }
+
+    public function test_with_level2_counts_only_manual_records_with_owner(): void
+    {
+        $l2 = $this->makeLevel2Officer();
+        $otherL2 = $this->makeLevel2Officer();
+        $applicant = User::factory()->activated()->create(['applicant_type' => 'individual']);
+
+        $this->makeQualification($this->makeSubmittedApplication($applicant), [
+            'level2_review_owner_id' => $l2->id,
+        ]);
+        $this->makeQualification($this->makeSubmittedApplication($applicant));
+        $this->makeQualification($this->makeSubmittedApplication($applicant), [
+            'verification_state' => VerificationState::AutoVerifiedPendingLevel2,
+            'level2_review_locked_by' => $otherL2->id,
+            'level2_review_locked_at' => now(),
+        ]);
+
+        $this->assertSame(1, $this->kpiValue($this->dashboardKpis($l2), 'l2_with_level2'));
+    }
+
+    public function test_awaiting_level2_assignment_counts_manual_records_without_owner(): void
+    {
+        $l2 = $this->makeLevel2Officer();
+        $applicant = User::factory()->activated()->create(['applicant_type' => 'individual']);
+
+        $this->makeQualification($this->makeSubmittedApplication($applicant));
+        $this->makeQualification($this->makeSubmittedApplication($applicant), [
+            'level2_review_owner_id' => $l2->id,
+        ]);
+
+        $this->assertSame(1, $this->kpiValue($this->dashboardKpis($l2), 'l2_awaiting_level2_assignment'));
+    }
+
+    public function test_auto_verified_records_are_excluded_from_awaiting_level2_assignment(): void
     {
         $l2 = $this->makeLevel2Officer();
         $applicant = User::factory()->activated()->create(['applicant_type' => 'individual']);
@@ -200,11 +229,9 @@ class Level2DashboardMetricsTest extends TestCase
         $this->makeQualification($this->makeSubmittedApplication($applicant), [
             'verification_state' => VerificationState::AutoVerifiedPendingLevel2,
         ]);
-        $this->makeQualification($this->makeSubmittedApplication($applicant), [
-            'level2_review_owner_id' => $l2->id,
-        ]);
 
-        $this->assertSame(2, $this->kpiValue($this->dashboardKpis($l2), 'l2_unassigned_level2'));
+        $this->assertSame(1, $this->kpiValue($this->dashboardKpis($l2), 'l2_awaiting_level2_assignment'));
+        $this->assertSame(1, $this->kpiValue($this->dashboardKpis($l2), 'l2_auto_verified_awaiting'));
     }
 
     public function test_assigned_to_me_counts_only_logged_in_level2_officer(): void
@@ -241,7 +268,42 @@ class Level2DashboardMetricsTest extends TestCase
             'verification_state' => VerificationState::UnderLevel2Review,
         ]);
 
-        $this->assertSame(1, $this->kpiValue($this->dashboardKpis($l2), 'l2_auto_verified_awaiting'));
+        $kpis = $this->dashboardKpis($l2);
+        $this->assertSame(1, $this->kpiValue($kpis, 'l2_auto_verified_awaiting'));
+        $this->assertStringContainsString('Subset', collect($kpis)->firstWhere('key', 'l2_auto_verified_awaiting')['hint']);
+    }
+
+    public function test_workflow_chart_uses_friendly_stage_labels(): void
+    {
+        $l2 = $this->makeLevel2Officer();
+        $level1 = User::factory()->activated()->create(['applicant_type' => null]);
+        $applicant = User::factory()->activated()->create(['applicant_type' => 'individual']);
+
+        $this->makeQualification($this->makeSubmittedApplication($applicant), [
+            'verification_state' => VerificationState::AwaitingAssignment,
+        ]);
+        $this->makeQualification($this->makeSubmittedApplication($applicant), [
+            'verification_state' => VerificationState::UnderLevel1Review,
+            'assigned_verifier_id' => $level1->id,
+        ]);
+        $this->makeQualification($this->makeSubmittedApplication($applicant), [
+            'level2_review_owner_id' => $l2->id,
+        ]);
+        $this->makeQualification($this->makeSubmittedApplication($applicant));
+        $this->makeQualification($this->makeSubmittedApplication($applicant), [
+            'verification_state' => VerificationState::AutoVerifiedPendingLevel2,
+        ]);
+
+        $chart = collect($this->dashboardProps($l2)['charts'])
+            ->firstWhere('key', 'verification_l2_workflow_by_state');
+
+        $this->assertNotNull($chart);
+        $this->assertSame('Current qualifications by workflow stage', $chart['title']);
+        $this->assertContains('Awaiting Level 1 assignment', $chart['labels']);
+        $this->assertContains('With Level 1', $chart['labels']);
+        $this->assertContains('Awaiting Level 2 assignment', $chart['labels']);
+        $this->assertContains('With Level 2', $chart['labels']);
+        $this->assertContains('Auto-verified awaiting L2', $chart['labels']);
     }
 
     public function test_local_and_foreign_overdue_are_mutually_exclusive(): void
@@ -306,6 +368,25 @@ class Level2DashboardMetricsTest extends TestCase
         $this->assertSame(1, $this->kpiValue($this->dashboardKpis($l2, '?range=7'), 'l2_processed'));
     }
 
+    public function test_total_qualifications_includes_terminal_processed_states(): void
+    {
+        $l2 = $this->makeLevel2Officer();
+        $applicant = User::factory()->activated()->create(['applicant_type' => 'individual']);
+
+        $this->makeQualification($this->makeSubmittedApplication($applicant), [
+            'verification_state' => VerificationState::UnderLevel2Review,
+        ]);
+        $this->makeQualification($this->makeSubmittedApplication($applicant), [
+            'verification_state' => VerificationState::ApprovedForCertificate,
+        ]);
+        $this->makeQualification($this->makeSubmittedApplication($applicant), [
+            'verification_state' => VerificationState::Rejected,
+        ]);
+
+        $this->assertSame(3, $this->kpiValue($this->dashboardKpis($l2, '?range=30'), 'l2_total_qualifications'));
+        $this->assertSame(1, $this->kpiValue($this->dashboardKpis($l2, '?range=30'), 'l2_awaiting_level2_assignment'));
+    }
+
     public function test_total_qualifications_respects_selected_date_range(): void
     {
         $l2 = $this->makeLevel2Officer();
@@ -336,17 +417,17 @@ class Level2DashboardMetricsTest extends TestCase
         $kpis30 = $this->dashboardKpis($l2, '?range=30');
         $kpis7 = $this->dashboardKpis($l2, '?range=7');
 
-        $withLevel1_30 = collect($kpis30)->firstWhere('key', 'l2_with_level1');
-        $withLevel1_7 = collect($kpis7)->firstWhere('key', 'l2_with_level1');
+        $awaitingLevel1_30 = collect($kpis30)->firstWhere('key', 'l2_awaiting_level1_assignment');
+        $awaitingLevel1_7 = collect($kpis7)->firstWhere('key', 'l2_awaiting_level1_assignment');
 
-        $this->assertSame(1, (int) $withLevel1_30['value']);
-        $this->assertSame(1, (int) $withLevel1_7['value']);
-        $this->assertStringContainsString('Current queue', $withLevel1_30['hint']);
-        $this->assertSame('current_queue', $withLevel1_30['metric_scope'] ?? null);
+        $this->assertSame(1, (int) $awaitingLevel1_30['value']);
+        $this->assertSame(1, (int) $awaitingLevel1_7['value']);
+        $this->assertStringContainsString('waiting for Level 1 officer', $awaitingLevel1_30['hint']);
+        $this->assertSame('current_queue', $awaitingLevel1_30['metric_scope'] ?? null);
 
         $total30 = collect($kpis30)->firstWhere('key', 'l2_total_qualifications');
         $total7 = collect($kpis7)->firstWhere('key', 'l2_total_qualifications');
-        $this->assertStringContainsString('Last 30 days', $total30['hint']);
+        $this->assertStringContainsString('open + processed intake', $total30['hint']);
         $this->assertStringContainsString('Last 7 days', $total7['hint']);
         $this->assertSame('period', $total30['metric_scope'] ?? null);
     }

@@ -51,6 +51,7 @@ const props = defineProps<{
     timezone: string
     dashboard_scope?: 'level1_assigned' | 'level2_qualifications' | 'finance' | 'default'
     l2_metrics_explainer?: string | null
+    l1_metrics_explainer?: string | null
     date_range?: {
       selected: number
       from: string
@@ -173,6 +174,7 @@ function quickIcon(name: string) {
 }
 
 const dateRange = computed(() => props.meta.date_range)
+const isLevel1Scope = computed(() => props.meta.dashboard_scope === 'level1_assigned')
 const isLevel2Scope = computed(() => props.meta.dashboard_scope === 'level2_qualifications')
 const isFinanceScope = computed(() => props.meta.dashboard_scope === 'finance')
 const feeStructureRows = computed(() => props.finance_breakdowns?.revenue_by_fee_structure ?? [])
@@ -209,7 +211,7 @@ function dashboardUrl(rangeDays: number) {
             href="/admin/verification/assigned-to-me"
             class="rounded-xl border border-white/30 bg-[#F18230] px-4 py-2.5 text-sm font-semibold text-white shadow-md transition hover:bg-[#e07828]"
           >
-            Assigned to me
+            My Level 1 tasks
           </Link>
           <Link
             v-else-if="meta.dashboard_scope === 'level2_qualifications'"
@@ -310,15 +312,19 @@ function dashboardUrl(rangeDays: number) {
     <div v-if="kpis.length" class="mt-8">
       <h2 class="text-sm font-semibold uppercase tracking-wider text-text-muted">
         Key metrics
-        <span v-if="dateRange && !isLevel2Scope" class="font-normal normal-case text-text-muted">· {{ dateRange.label }}</span>
+        <span v-if="dateRange && !isLevel2Scope && !isLevel1Scope" class="font-normal normal-case text-text-muted">· {{ dateRange.label }}</span>
       </h2>
+      <p v-if="isLevel1Scope && meta.l1_metrics_explainer" class="mt-2 max-w-3xl text-sm text-text-muted">
+        {{ meta.l1_metrics_explainer }}
+        <span v-if="dateRange" class="font-medium text-text-primary"> Selected period: {{ dateRange.label }}.</span>
+      </p>
       <p v-if="isLevel2Scope && meta.l2_metrics_explainer" class="mt-2 max-w-3xl text-sm text-text-muted">
         {{ meta.l2_metrics_explainer }}
         <span v-if="dateRange" class="font-medium text-text-primary"> Selected period: {{ dateRange.label }}.</span>
       </p>
       <div
         class="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3"
-        :class="isFinanceScope ? '2xl:grid-cols-4' : isLevel2Scope ? '2xl:grid-cols-5' : '2xl:grid-cols-4'"
+        :class="isFinanceScope ? '2xl:grid-cols-4' : isLevel2Scope ? '2xl:grid-cols-5' : isLevel1Scope ? '2xl:grid-cols-4' : '2xl:grid-cols-4'"
       >
         <template v-for="card in kpis" :key="card.key">
           <Link
