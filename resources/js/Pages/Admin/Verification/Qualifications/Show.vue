@@ -2314,30 +2314,42 @@ const autoVerificationCollapsedSummary = computed(() => {
       </template>
     </AdminActionModal>
 
-    <AdminActionModal v-model="level1CompleteOpen" title="Mark Level 1 review complete" description="Your submission stays with this qualification and moves the task to Level 2 review.">
-      <div class="space-y-4">
-        <div>
-          <label class="text-sm font-semibold text-text-primary">Qualification type <span class="text-danger">*</span></label>
-          <select v-model="level1CompleteForm.qualification_type_id" class="zaqa-input mt-2">
-            <option value="" disabled>Select qualification type…</option>
-            <option v-for="type in qualificationTypes" :key="type.id" :value="type.id">
-              {{ qualificationTypeOptionLabel(type) }}
-            </option>
-          </select>
-          <div v-if="level1CompleteForm.errors.qualification_type_id" class="mt-1 text-xs text-danger">{{ level1CompleteForm.errors.qualification_type_id }}</div>
-        </div>
-        <div>
-          <label class="text-sm font-semibold text-text-primary">Recommendation <span class="text-danger">*</span></label>
-          <select v-model="level1CompleteForm.recommended_for_award" class="zaqa-input mt-2">
-            <option value="" disabled>Select recommendation…</option>
-            <option value="1">Recommend recognition</option>
-            <option value="0">Recommend Rejection</option>
-          </select>
-          <div v-if="level1CompleteForm.errors.recommended_for_award" class="mt-1 text-xs text-danger">{{ level1CompleteForm.errors.recommended_for_award }}</div>
+    <AdminActionModal
+      v-model="level1CompleteOpen"
+      title="Mark Level 1 review complete"
+      description="Your submission stays with this qualification and moves the task to Level 2 review."
+      max-width-class="max-w-4xl"
+      scrollable
+    >
+      <div class="grid grid-cols-1 gap-4">
+        <div class="grid grid-cols-1 gap-4 lg:grid-cols-2">
+          <div>
+            <label class="text-sm font-semibold text-text-primary">Qualification type <span class="text-danger">*</span></label>
+            <select v-model="level1CompleteForm.qualification_type_id" class="zaqa-input mt-1.5">
+              <option value="" disabled>Select qualification type…</option>
+              <option v-for="type in qualificationTypes" :key="type.id" :value="type.id">
+                {{ qualificationTypeOptionLabel(type) }}
+              </option>
+            </select>
+            <div v-if="level1CompleteForm.errors.qualification_type_id" class="mt-1 text-xs text-danger">{{ level1CompleteForm.errors.qualification_type_id }}</div>
+          </div>
+          <div>
+            <label class="text-sm font-semibold text-text-primary">Recommendation <span class="text-danger">*</span></label>
+            <select v-model="level1CompleteForm.recommended_for_award" class="zaqa-input mt-1.5">
+              <option value="" disabled>Select recommendation…</option>
+              <option value="1">Recommend recognition</option>
+              <option value="0">Recommend Rejection</option>
+            </select>
+            <div v-if="level1CompleteForm.errors.recommended_for_award" class="mt-1 text-xs text-danger">{{ level1CompleteForm.errors.recommended_for_award }}</div>
+          </div>
         </div>
         <div>
           <label class="text-sm font-semibold text-text-primary">Findings <span class="text-danger">*</span></label>
-          <textarea v-model="level1CompleteForm.findings" class="zaqa-input mt-2 h-auto min-h-[8rem] py-3" placeholder="Summarize checks, issues, and supporting observations." />
+          <textarea
+            v-model="level1CompleteForm.findings"
+            class="zaqa-input mt-1.5 h-auto min-h-[7.5rem] py-2.5"
+            placeholder="Summarize checks, issues, and supporting observations."
+          />
           <div v-if="level1CompleteForm.errors.findings" class="mt-1 text-xs text-danger">{{ level1CompleteForm.errors.findings }}</div>
         </div>
         <div>
@@ -2350,45 +2362,47 @@ const autoVerificationCollapsedSummary = computed(() => {
           </p>
           <textarea
             v-model="level1CompleteForm.accreditation_statement"
-            class="zaqa-input mt-2 h-auto min-h-[6rem] py-3"
+            class="zaqa-input mt-1.5 h-auto min-h-[6.25rem] py-2.5"
             placeholder="Enter the accreditation statement to appear on the certificate if approved."
             maxlength="2000"
           />
           <div v-if="level1CompleteForm.errors.accreditation_statement" class="mt-1 text-xs text-danger">{{ level1CompleteForm.errors.accreditation_statement }}</div>
         </div>
-        <div>
-          <label class="text-sm font-semibold text-text-primary">Evaluation report attachment</label>
-          <p class="mt-1 text-xs text-text-secondary">Upload the Level 1 evaluation report (PDF, Word, or image) — max 10&nbsp;MB.</p>
-          <input
-            ref="level1EvaluationReportInput"
-            type="file"
-            class="zaqa-input mt-2"
-            accept=".pdf,.doc,.docx,image/jpeg,image/png,image/gif,image/webp"
-            @change="
-              (e) => {
-                const t = e.target as HTMLInputElement
-                level1CompleteForm.evaluation_report = t.files?.[0] ?? null
-              }
-            "
-          />
-          <div v-if="level1CompleteForm.errors.evaluation_report" class="mt-1 text-xs text-danger">{{ level1CompleteForm.errors.evaluation_report }}</div>
-        </div>
-        <div>
-          <label class="text-sm font-semibold text-text-primary">Confirmation (optional)</label>
-          <p class="mt-1 text-xs text-text-secondary">Upload the confirmation file for Level 2 — max 10&nbsp;MB.</p>
-          <input
-            ref="level1AttachmentInput"
-            type="file"
-            class="zaqa-input mt-2"
-            accept=".pdf,.doc,.docx,image/jpeg,image/png,image/gif,image/webp"
-            @change="
-              (e) => {
-                const t = e.target as HTMLInputElement
-                level1CompleteForm.attachment = t.files?.[0] ?? null
-              }
-            "
-          />
-          <div v-if="level1CompleteForm.errors.attachment" class="mt-1 text-xs text-danger">{{ level1CompleteForm.errors.attachment }}</div>
+        <div class="grid grid-cols-1 gap-4 lg:grid-cols-2">
+          <div>
+            <label class="text-sm font-semibold text-text-primary">Evaluation report attachment</label>
+            <p class="mt-1 text-xs text-text-secondary">Upload the Level 1 evaluation report (PDF, Word, or image) — max 10&nbsp;MB.</p>
+            <input
+              ref="level1EvaluationReportInput"
+              type="file"
+              class="zaqa-input mt-1.5"
+              accept=".pdf,.doc,.docx,image/jpeg,image/png,image/gif,image/webp"
+              @change="
+                (e) => {
+                  const t = e.target as HTMLInputElement
+                  level1CompleteForm.evaluation_report = t.files?.[0] ?? null
+                }
+              "
+            />
+            <div v-if="level1CompleteForm.errors.evaluation_report" class="mt-1 text-xs text-danger">{{ level1CompleteForm.errors.evaluation_report }}</div>
+          </div>
+          <div>
+            <label class="text-sm font-semibold text-text-primary">Confirmation (optional)</label>
+            <p class="mt-1 text-xs text-text-secondary">Upload the confirmation file for Level 2 — max 10&nbsp;MB.</p>
+            <input
+              ref="level1AttachmentInput"
+              type="file"
+              class="zaqa-input mt-1.5"
+              accept=".pdf,.doc,.docx,image/jpeg,image/png,image/gif,image/webp"
+              @change="
+                (e) => {
+                  const t = e.target as HTMLInputElement
+                  level1CompleteForm.attachment = t.files?.[0] ?? null
+                }
+              "
+            />
+            <div v-if="level1CompleteForm.errors.attachment" class="mt-1 text-xs text-danger">{{ level1CompleteForm.errors.attachment }}</div>
+          </div>
         </div>
       </div>
       <template #footer>

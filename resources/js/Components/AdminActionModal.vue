@@ -7,6 +7,8 @@ const props = defineProps<{
   title: string
   description?: string
   maxWidthClass?: string
+  /** When true, caps modal height and scrolls the body while header/footer stay visible. */
+  scrollable?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -43,8 +45,11 @@ watch(
   <div v-if="open" class="fixed inset-0 z-50 flex items-center justify-center p-4" role="dialog" aria-modal="true">
     <button type="button" class="absolute inset-0 bg-black/60" aria-label="Close modal" @click="close" />
 
-    <div class="relative w-full overflow-hidden rounded-2xl border border-border bg-surface shadow-2xl" :class="maxWidthClass ?? 'max-w-2xl'">
-      <div class="flex items-start justify-between gap-4 border-b border-border px-5 py-4">
+    <div
+      class="relative w-full overflow-hidden rounded-2xl border border-border bg-surface shadow-2xl"
+      :class="[maxWidthClass ?? 'max-w-2xl', scrollable ? 'flex max-h-[90vh] flex-col' : '']"
+    >
+      <div class="flex shrink-0 items-start justify-between gap-4 border-b border-border px-5 py-4">
         <div class="min-w-0">
           <div class="truncate text-base font-semibold text-text-primary">{{ title }}</div>
           <div v-if="description" class="mt-1 text-xs text-text-muted">{{ description }}</div>
@@ -54,11 +59,11 @@ watch(
         </button>
       </div>
 
-      <div class="px-5 py-5">
+      <div :class="scrollable ? 'min-h-0 flex-1 overflow-y-auto px-5 py-4' : 'px-5 py-5'">
         <slot />
       </div>
 
-      <div class="border-t border-border bg-surface-muted px-5 py-4">
+      <div class="shrink-0 border-t border-border bg-surface-muted px-5 py-4">
         <div class="flex items-center justify-end gap-2">
           <slot name="footer">
             <button type="button" class="zaqa-btn zaqa-btn-secondary px-4 py-2 text-sm" @click="close">Cancel</button>
