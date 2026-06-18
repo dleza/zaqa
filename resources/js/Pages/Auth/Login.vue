@@ -66,7 +66,7 @@ const supportItems = [
 const loginBackgroundUrl = '/images/login-background.png'
 
 const loginOverlayGradient =
-  'linear-gradient(90deg, rgba(0, 55, 115, 0.82) 0%, rgba(0, 95, 170, 0.68) 42%, rgba(0, 115, 186, 0.25) 60%, rgba(244, 248, 252, 0.82) 78%, rgba(255, 255, 255, 0.96) 100%)'
+  'linear-gradient(90deg, rgba(0, 62, 126, 0.78) 0%, rgba(0, 95, 170, 0.58) 34%, rgba(0, 115, 186, 0.28) 50%, rgba(0, 115, 186, 0.12) 62%, rgba(244, 248, 252, 0.55) 74%, rgba(244, 248, 252, 0.82) 84%, rgba(255, 255, 255, 0.96) 100%)'
 </script>
 
 <template>
@@ -83,7 +83,7 @@ const loginOverlayGradient =
 
       <!-- Extended white logo header -->
       <div
-        class="absolute left-0 top-0 z-20 flex h-[110px] w-[min(92vw,720px)] items-center gap-4 rounded-br-[72px] bg-white px-5 shadow-sm sm:h-[125px] sm:gap-5 sm:px-8 sm:rounded-br-[96px] lg:h-[135px] lg:w-[min(44vw,720px)] lg:rounded-br-[120px] lg:px-10"
+        class="absolute left-0 top-0 z-20 flex h-[110px] w-[min(92vw,720px)] items-center gap-4 rounded-br-[72px] bg-white px-5 sm:h-[125px] sm:gap-5 sm:px-8 sm:rounded-br-[96px] lg:h-[135px] lg:w-[min(44vw,720px)] lg:rounded-br-[120px] lg:px-10"
       >
         <img :src="zaqaLogoUrl" alt="ZAQA logo" class="h-11 w-auto shrink-0 object-contain sm:h-12 lg:h-14" />
         <span class="h-10 w-px shrink-0 bg-slate-200" aria-hidden="true" />
@@ -95,11 +95,6 @@ const loginOverlayGradient =
       <div class="relative z-10 flex flex-1 flex-col lg:min-h-0 lg:flex-row">
         <!-- Left hero panel -->
         <aside class="relative flex min-h-[320px] flex-col text-white lg:min-h-0 lg:w-[55%] lg:shrink-0">
-          <!-- Local scrim for left-side text readability -->
-          <div
-            aria-hidden="true"
-            class="pointer-events-none absolute inset-0 bg-gradient-to-br from-[rgba(0,49,105,0.38)] via-[rgba(0,49,105,0.12)] to-transparent"
-          />
           <!-- Hero content -->
           <div
             class="relative z-10 flex flex-1 flex-col px-6 pb-8 pt-[7.5rem] sm:px-10 sm:pb-10 sm:pt-[8.25rem] lg:px-12 lg:pb-12 lg:pt-[9.5rem]"
