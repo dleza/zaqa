@@ -294,6 +294,7 @@ class AdminVerificationQualificationController extends Controller
                 'holder_nrc_passport' => $qualification->nrc_passport_number,
                 'student_number' => $qualification->student_number,
                 'certificate_number' => $qualification->certificate_number,
+                'examination_number' => $qualification->examination_number,
                 'award_date' => optional($qualification->award_date)?->format('Y-m-d'),
                 'subject_results' => $qualification->subjectResults
                     ->sortBy(fn ($row) => [$row->display_order ?? PHP_INT_MAX, $row->id])
@@ -373,6 +374,7 @@ class AdminVerificationQualificationController extends Controller
                         'document_type' => $d->document_type?->value ?? (string) $d->document_type,
                         'original_name' => $d->original_name,
                         'uploaded_by' => $d->uploadedBy?->name,
+                        'mime_type' => $d->mime_type,
                         'created_at' => optional($d->created_at)?->toIso8601String(),
                         'preview_url' => route('admin.verification.documents.preview', ['document' => $d->id]),
                         'download_url' => route('admin.verification.documents.download', ['document' => $d->id]),

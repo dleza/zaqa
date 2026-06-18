@@ -2,8 +2,10 @@
 import AdminLayout from '@/Layouts/AdminLayout.vue'
 import { Link, router, useForm } from '@inertiajs/vue3'
 import AdminActionModal from '@/Components/AdminActionModal.vue'
+import InlineDocumentPreview from '@/Components/Admin/InlineDocumentPreview.vue'
 import Level2DecisionLevel1Fields from '@/Components/Admin/Verification/Level2DecisionLevel1Fields.vue'
 import CollapsiblePanel from '@/Components/CollapsiblePanel.vue'
+import type { InlinePreviewDocument } from '@/lib/inlineDocumentPreview'
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import {
   ArrowRight,
@@ -15,6 +17,7 @@ import {
   Clock,
   Copy,
   ExternalLink,
+  Eye,
   FileDown,
   FileStack,
   Globe2,
@@ -73,6 +76,7 @@ const sendBackHistoryOpen = ref(false)
 const copiedRef = ref(false)
 const dismissedTitlePrompt = ref(false)
 const dismissedInstitutionPrompt = ref(false)
+const selectedPreviewDocument = ref<InlinePreviewDocument | null>(null)
 
 function catalogPromptDismissalKey(suffix: string) {
   return `zaqa:qualification:${props.qualification.id}:dismissed:${suffix}`
@@ -564,6 +568,22 @@ function documentTypeLabel(raw: string) {
   return documentTypeLabels[raw] ?? raw.replace(/_/g, ' ')
 }
 
+function previewQualificationDocument(document: {
+  document_type: string
+  original_name: string
+  mime_type?: string | null
+  preview_url: string
+  download_url: string
+}) {
+  selectedPreviewDocument.value = {
+    label: documentTypeLabel(document.document_type),
+    filename: document.original_name,
+    mime_type: document.mime_type,
+    preview_url: document.preview_url,
+    download_url: document.download_url,
+  }
+}
+
 const level1Review = computed(() => props.qualification?.level1_review ?? null)
 const qualificationTypes = computed(() => props.qualificationTypes ?? [])
 
@@ -690,6 +710,24 @@ function matchedStateLabel(matched: boolean | undefined) {
   return matched ? 'Matched' : 'Not matched'
 }
 
+const qualificationIdentifier = computed(() => {
+  const cert = (props.qualification.certificate_number ?? '').toString().trim()
+  const stud = (props.qualification.student_number ?? '').toString().trim()
+  const exam = (props.qualification.examination_number ?? '').toString().trim()
+
+  if (cert) {
+    return { typeLabel: 'Certificate number', value: cert }
+  }
+  if (stud) {
+    return { typeLabel: 'Student number', value: stud }
+  }
+  if (exam) {
+    return { typeLabel: 'Examination number', value: exam }
+  }
+
+  return { typeLabel: null, value: '—' }
+})
+
 const qualificationFacts = computed(() => [
   {
     label: 'Qualification type',
@@ -719,7 +757,8 @@ const qualificationFacts = computed(() => [
   },
   {
     label: 'Identifier',
-    value: props.qualification.student_number || props.qualification.certificate_number || '—',
+    typeLabel: qualificationIdentifier.value.typeLabel,
+    value: qualificationIdentifier.value.value,
   },
 ])
 
@@ -1188,7 +1227,10 @@ const autoVerificationCollapsedSummary = computed(() => {
                   :key="fact.label"
                   class="min-w-0 rounded-xl border border-border/60 bg-surface-muted/35 px-4 py-3"
                 >
-                  <dt class="text-[11px] font-bold uppercase tracking-wider text-text-muted">{{ fact.label }}</dt>
+                  <dt class="text-[11px] font-bold uppercase tracking-wider text-text-muted">
+                    {{ fact.label }}
+                    <span v-if="fact.typeLabel" class="normal-case font-semibold text-text-primary"> · {{ fact.typeLabel }}</span>
+                  </dt>
                   <dd class="mt-1 break-words text-sm font-semibold text-text-primary">{{ fact.value }}</dd>
                 </div>
               </dl>
@@ -1933,7 +1975,14 @@ const autoVerificationCollapsedSummary = computed(() => {
                       <td class="px-4 py-3 font-medium text-text-primary">{{ documentTypeLabel(d.document_type) }}</td>
                       <td class="px-4 py-3 text-text-primary">{{ d.original_name }}</td>
                       <td class="px-4 py-3 text-right">
-                        <a :href="d.preview_url" class="zaqa-btn zaqa-btn-secondary mr-1 inline-flex h-9 items-center px-3 py-2 text-xs">Preview</a>
+                        <button
+                          type="button"
+                          class="zaqa-btn zaqa-btn-secondary mr-1 inline-flex h-9 items-center gap-1 px-3 py-2 text-xs"
+                          @click="previewQualificationDocument(d)"
+                        >
+                          <Eye class="h-3.5 w-3.5" aria-hidden="true" />
+                          Preview
+                        </button>
                         <a :href="d.download_url" class="zaqa-btn zaqa-btn-secondary inline-flex h-9 items-center px-3 py-2 text-xs">Download</a>
                       </td>
                     </tr>
@@ -1943,6 +1992,8 @@ const autoVerificationCollapsedSummary = computed(() => {
               <div v-else class="rounded-xl border border-dashed border-border bg-surface-muted/40 px-4 py-5 text-sm text-text-muted">
                 No documents uploaded for this qualification item yet.
               </div>
+
+              <InlineDocumentPreview :document="selectedPreviewDocument" @close="selectedPreviewDocument = null" />
             </div>
           </details>
         </div>
