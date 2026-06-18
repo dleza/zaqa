@@ -66,7 +66,7 @@ const supportItems = [
 const loginBackgroundUrl = '/images/login-background.png'
 
 const loginOverlayGradient =
-  'linear-gradient(90deg, rgba(0, 49, 105, 0.96) 0%, rgba(0, 83, 160, 0.90) 40%, rgba(0, 115, 186, 0.35) 58%, rgba(244, 248, 252, 0.90) 75%, rgba(255, 255, 255, 0.98) 100%)'
+  'linear-gradient(90deg, rgba(0, 55, 115, 0.82) 0%, rgba(0, 95, 170, 0.68) 42%, rgba(0, 115, 186, 0.25) 60%, rgba(244, 248, 252, 0.82) 78%, rgba(255, 255, 255, 0.96) 100%)'
 </script>
 
 <template>
@@ -79,9 +79,6 @@ const loginOverlayGradient =
           :style="{ backgroundImage: `url('${loginBackgroundUrl}')` }"
         />
         <div class="absolute inset-0" :style="{ background: loginOverlayGradient }" />
-        <div
-          class="absolute inset-y-0 left-0 w-full max-w-[62%] opacity-[0.14] [background-image:radial-gradient(rgba(255,255,255,0.95)_1px,transparent_1px)] [background-size:18px_18px] lg:max-w-[58%]"
-        />
       </div>
 
       <!-- Extended white logo header -->
@@ -98,6 +95,11 @@ const loginOverlayGradient =
       <div class="relative z-10 flex flex-1 flex-col lg:min-h-0 lg:flex-row">
         <!-- Left hero panel -->
         <aside class="relative flex min-h-[320px] flex-col text-white lg:min-h-0 lg:w-[55%] lg:shrink-0">
+          <!-- Local scrim for left-side text readability -->
+          <div
+            aria-hidden="true"
+            class="pointer-events-none absolute inset-0 bg-gradient-to-br from-[rgba(0,49,105,0.38)] via-[rgba(0,49,105,0.12)] to-transparent"
+          />
           <!-- Hero content -->
           <div
             class="relative z-10 flex flex-1 flex-col px-6 pb-8 pt-[7.5rem] sm:px-10 sm:pb-10 sm:pt-[8.25rem] lg:px-12 lg:pb-12 lg:pt-[9.5rem]"
