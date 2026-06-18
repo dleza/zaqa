@@ -61,7 +61,7 @@ const isActivatePage = computed(() => currentPath.value === '/activate')
               Log in
             </a>
             <a v-if="!isRegisterPage" href="/register" class="zaqa-btn zaqa-btn-ghost-on-brand h-10 px-4 py-2 text-sm">
-              Register and Apply
+              Sign-up and Apply
             </a>
           </template>
         </nav>

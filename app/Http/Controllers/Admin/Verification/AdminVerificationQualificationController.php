@@ -725,6 +725,8 @@ class AdminVerificationQualificationController extends Controller
             $request->user(),
             $request->validated('comment'),
             $issueCertificate,
+            (string) $request->validated('findings'),
+            $request->validated('accreditation_statement'),
         );
 
         return back()->with(
@@ -745,6 +747,8 @@ class AdminVerificationQualificationController extends Controller
             $qualification,
             $request->user(),
             (string) $request->validated('reason'),
+            (string) $request->validated('findings'),
+            $request->validated('accreditation_statement'),
         );
 
         if ($request->boolean('generate_rejection_notice') && $request->user()?->can('verification.certificate.issue')) {
@@ -1245,12 +1249,38 @@ class AdminVerificationQualificationController extends Controller
                 : ($recommended ? 'Recommend recognition' : 'Recommend Rejection'),
             'findings' => $qualification->reviewer_notes,
             'accreditation_statement' => $qualification->level1_accreditation_statement,
+            'level2_correction' => $this->buildLevel2Level1CorrectionMeta($qualification),
             'qualification_type_correction' => $typeCorrectionPayload,
             'submitted_by_name' => $qualification->level1ReviewCompletedBy?->name
                 ?? $qualification->assignedVerifier?->name,
             'submitted_at' => optional($qualification->reviewed_at)?->toIso8601String(),
             'supporting_attachment' => $supportingAttachment ? $mapDocument($supportingAttachment) : null,
             'evaluation_report' => $evaluationReport ? $mapDocument($evaluationReport) : null,
+        ];
+    }
+
+    /**
+     * @return array<string, mixed>|null
+     */
+    private function buildLevel2Level1CorrectionMeta(Qualification $qualification): ?array
+    {
+        $log = AuditLog::query()
+            ->where('entity_type', Qualification::class)
+            ->where('entity_id', $qualification->id)
+            ->where('event_type', 'verification.level2_corrected_level1_submission')
+            ->orderByDesc('id')
+            ->first();
+
+        if (! $log) {
+            return null;
+        }
+
+        $metadata = (array) ($log->metadata ?? []);
+
+        return [
+            'corrected_at' => optional($log->created_at)?->toIso8601String(),
+            'corrected_by_name' => $log->actor_name_snapshot,
+            'changed_fields' => $metadata['changed_fields'] ?? [],
         ];
     }
 

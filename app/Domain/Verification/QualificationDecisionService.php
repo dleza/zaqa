@@ -24,16 +24,23 @@ class QualificationDecisionService
         private readonly QualificationCertificateService $certificates,
         private readonly QualificationLevel2ReviewLockService $locks,
         private readonly ApplicationOutcomeNotificationDispatcher $outcomeNotifications,
+        private readonly QualificationLevel2Level1SubmissionCorrectionService $level1SubmissionCorrections,
     ) {}
 
-    public function approve(Qualification $qualification, User $actor, ?string $comment = null, bool $issueCertificate = false): Qualification
-    {
+    public function approve(
+        Qualification $qualification,
+        User $actor,
+        ?string $comment = null,
+        bool $issueCertificate = false,
+        ?string $findings = null,
+        ?string $accreditationStatement = null,
+    ): Qualification {
         $comment = $comment !== null ? trim($comment) : null;
         if ($comment === '') {
             $comment = null;
         }
 
-        return DB::transaction(function () use ($qualification, $actor, $comment, $issueCertificate) {
+        return DB::transaction(function () use ($qualification, $actor, $comment, $issueCertificate, $findings, $accreditationStatement) {
             $qualification->refresh();
             $qualification->loadMissing('application');
 
@@ -53,6 +60,17 @@ class QualificationDecisionService
 
             if ($vs === VerificationState::AutoVerifiedPendingLevel2) {
                 $this->locks->assertActorHoldsLockOrIsSuperAdmin($qualification, $actor);
+            }
+
+            if ($findings !== null) {
+                $this->level1SubmissionCorrections->applyLevel2CorrectionsToLevel1Submission(
+                    $qualification,
+                    $actor,
+                    $findings,
+                    $accreditationStatement,
+                    'approval',
+                );
+                $qualification->refresh();
             }
 
             $before = $qualification->only([
@@ -137,8 +155,13 @@ class QualificationDecisionService
         });
     }
 
-    public function reject(Qualification $qualification, User $actor, string $reason): Qualification
-    {
+    public function reject(
+        Qualification $qualification,
+        User $actor,
+        string $reason,
+        ?string $findings = null,
+        ?string $accreditationStatement = null,
+    ): Qualification {
         $reason = trim($reason);
         if ($reason === '') {
             throw ValidationException::withMessages([
@@ -146,7 +169,7 @@ class QualificationDecisionService
             ]);
         }
 
-        return DB::transaction(function () use ($qualification, $actor, $reason) {
+        return DB::transaction(function () use ($qualification, $actor, $reason, $findings, $accreditationStatement) {
             $qualification->refresh();
             $qualification->loadMissing('application');
 
@@ -166,6 +189,17 @@ class QualificationDecisionService
 
             if ($vs === VerificationState::AutoVerifiedPendingLevel2) {
                 $this->locks->assertActorHoldsLockOrIsSuperAdmin($qualification, $actor);
+            }
+
+            if ($findings !== null) {
+                $this->level1SubmissionCorrections->applyLevel2CorrectionsToLevel1Submission(
+                    $qualification,
+                    $actor,
+                    $findings,
+                    $accreditationStatement,
+                    'rejection',
+                );
+                $qualification->refresh();
             }
 
             $before = $qualification->only([

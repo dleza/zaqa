@@ -230,6 +230,8 @@ class QualificationEditPageEnhancementsTest extends TestCase
 
         $this->actingAs($l2)
             ->post(route('admin.verification.qualifications.approve', $qualification), [
+                'findings' => 'Level 1 findings for review.',
+                'accreditation_statement' => 'Accredited institution statement.',
                 'comment' => 'Looks good.',
                 'issue_certificate' => false,
             ])

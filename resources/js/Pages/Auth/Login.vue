@@ -22,7 +22,7 @@ function submit() {
 <template>
   <GuestLayout :card="false" max-width-class="max-w-none" content-padding-class="p-0" :hide-header="true" :center-content="false">
     <div class="relative min-h-screen w-full">
-      <AuthTopBar right-href="/register" right-label="Register and Apply" right-label-short="Register" />
+      <AuthTopBar right-href="/register" right-label="Sign-up and Apply" right-label-short="Register" />
 
       <div class="grid w-full lg:min-h-[calc(100vh-56px)] lg:grid-cols-2">
         <!-- Desktop branding panel (hidden on mobile) -->
@@ -221,7 +221,7 @@ function submit() {
 
               <div class="text-center text-sm text-text-muted">
                 New here?
-                <Link href="/register" class="zaqa-link font-semibold">Register and Apply</Link>
+                <Link href="/register" class="zaqa-link font-semibold">Sign-up and Apply</Link>
                 <ArrowRight class="inline h-4 w-4 translate-y-[1px] text-text-muted" aria-hidden="true" />
               </div>
 

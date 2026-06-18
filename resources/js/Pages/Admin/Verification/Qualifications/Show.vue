@@ -2,6 +2,7 @@
 import AdminLayout from '@/Layouts/AdminLayout.vue'
 import { Link, router, useForm } from '@inertiajs/vue3'
 import AdminActionModal from '@/Components/AdminActionModal.vue'
+import Level2DecisionLevel1Fields from '@/Components/Admin/Verification/Level2DecisionLevel1Fields.vue'
 import CollapsiblePanel from '@/Components/CollapsiblePanel.vue'
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import {
@@ -131,10 +132,27 @@ const level1AttachmentInput = ref<HTMLInputElement | null>(null)
 const level1EvaluationReportInput = ref<HTMLInputElement | null>(null)
 const issueCveqForm = useForm<{ reissue: boolean }>({ reissue: false })
 const issueRejectionForm = useForm({})
-const approveForm = useForm<{ comment: string; issue_certificate: boolean }>({ comment: '', issue_certificate: true })
-const rejectForm = useForm<{ reason: string; generate_rejection_notice: boolean }>({
+const approveForm = useForm<{
+  comment: string
+  issue_certificate: boolean
+  findings: string
+  accreditation_statement: string
+}>({
+  comment: '',
+  issue_certificate: true,
+  findings: '',
+  accreditation_statement: '',
+})
+const rejectForm = useForm<{
+  reason: string
+  generate_rejection_notice: boolean
+  findings: string
+  accreditation_statement: string
+}>({
   reason: '',
   generate_rejection_notice: true,
+  findings: '',
+  accreditation_statement: '',
 })
 const reopenDecisionForm = useForm<{ reason: string; intended_action: string; confirm: boolean }>({
   reason: '',
@@ -170,8 +188,21 @@ function openLevel1CompleteModal() {
   level1CompleteOpen.value = true
 }
 
+function prefillLevel2DecisionLevel1Fields(target: { findings: string; accreditation_statement: string }) {
+  const review = props.qualification?.level1_review
+  target.findings = (review?.findings ?? props.qualification?.reviewer_notes ?? '').toString()
+  target.accreditation_statement = (review?.accreditation_statement ?? '').toString()
+}
+
+function openApproveModal() {
+  approveForm.clearErrors()
+  prefillLevel2DecisionLevel1Fields(approveForm)
+  approveOpen.value = true
+}
+
 function openRejectModal() {
   rejectForm.clearErrors()
+  prefillLevel2DecisionLevel1Fields(rejectForm)
   const review = props.qualification?.level1_review
   const findings = (review?.findings ?? props.qualification?.reviewer_notes ?? '').toString().trim()
   if (review?.recommended_for_award === false && findings !== '') {
@@ -180,6 +211,18 @@ function openRejectModal() {
     rejectForm.reason = ''
   }
   rejectOpen.value = true
+}
+
+function resetApproveForm() {
+  approveForm.clearErrors()
+  approveForm.reset()
+  approveForm.issue_certificate = true
+}
+
+function resetRejectForm() {
+  rejectForm.clearErrors()
+  rejectForm.reset()
+  rejectForm.generate_rejection_notice = true
 }
 
 function clearSendBackToLevel1Attachment() {
@@ -991,7 +1034,7 @@ const autoVerificationCollapsedSummary = computed(() => {
                 class="inline-flex items-center gap-2 rounded-xl border border-emerald-300/40 bg-emerald-500/15 px-3.5 py-2 text-sm font-semibold text-white transition hover:bg-emerald-500/25"
                 :disabled="isAutoVerifiedPendingL2 && lockMissingForActions"
                 :title="isAutoVerifiedPendingL2 && lockMissingForActions ? 'Lock for review before approving.' : ''"
-                @click="approveOpen = true"
+                @click="openApproveModal"
               >
                 Approve Verification Certificate
               </button>
@@ -1279,6 +1322,11 @@ const autoVerificationCollapsedSummary = computed(() => {
                       {{ level1Review.accreditation_statement }}
                     </div>
                   </div>
+                  <p v-if="level1Review?.level2_correction?.corrected_at" class="text-xs text-text-muted">
+                    Corrected by Level 2
+                    <span v-if="level1Review.level2_correction.corrected_by_name"> ({{ level1Review.level2_correction.corrected_by_name }})</span>
+                    on {{ formatDateTime(parseIso(level1Review.level2_correction.corrected_at)) }}.
+                  </p>
                   <div v-if="level1EvaluationReport" class="rounded-xl border border-border/70 bg-surface px-3 py-3">
                     <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                       <div class="min-w-0">
@@ -2445,9 +2493,21 @@ const autoVerificationCollapsedSummary = computed(() => {
     <AdminActionModal
       v-model="approveOpen"
       title="Approve qualification"
-      description="Optional internal comment. Qualification will be marked approved for certificate."
+      description="Review Level 1 findings and accreditation statement before approving."
+      max-width-class="max-w-4xl"
+      scrollable
     >
       <div class="space-y-4">
+        <Level2DecisionLevel1Fields
+          :findings="approveForm.findings"
+          :accreditation-statement="approveForm.accreditation_statement"
+          :findings-error="approveForm.errors.findings"
+          :accreditation-statement-error="approveForm.errors.accreditation_statement"
+          :accreditation-required="can.issue_certificate"
+          @update:findings="approveForm.findings = $event"
+          @update:accreditation-statement="approveForm.accreditation_statement = $event"
+        />
+
         <div>
           <label class="text-sm font-semibold text-text-primary">Comment (optional)</label>
           <textarea v-model="approveForm.comment" class="zaqa-input mt-2 h-auto min-h-[6rem] py-3" placeholder="Optional internal note." />
@@ -2476,9 +2536,7 @@ const autoVerificationCollapsedSummary = computed(() => {
           @click="
             () => {
               approveOpen = false
-              approveForm.clearErrors()
-              approveForm.reset()
-              approveForm.issue_certificate = true
+              resetApproveForm()
             }
           "
         >
@@ -2495,8 +2553,7 @@ const autoVerificationCollapsedSummary = computed(() => {
                 preserveScroll: true,
                 onSuccess: () => {
                   approveOpen = false
-                  approveForm.reset()
-                  approveForm.issue_certificate = true
+                  resetApproveForm()
                 },
               })
             }
@@ -2507,22 +2564,39 @@ const autoVerificationCollapsedSummary = computed(() => {
       </template>
     </AdminActionModal>
 
-    <AdminActionModal v-model="rejectOpen" title="Reject qualification" description="Reason is required and will be visible to the applicant.">
-      <div>
-        <label class="text-sm font-semibold text-text-primary">Reason</label>
-        <textarea v-model="rejectForm.reason" class="zaqa-input mt-2 h-auto min-h-[10rem] py-3" placeholder="Provide a clear rejection reason." />
-        <p
-          v-if="level1Review?.recommended_for_award === false && level1Findings.length > 0"
-          class="mt-2 text-xs text-text-muted"
-        >
-          Pre-filled from Level 1 findings when they did not recommend awarding. You may edit before submitting.
-        </p>
-        <div v-if="rejectForm.errors.reason" class="mt-1 text-xs text-danger">{{ rejectForm.errors.reason }}</div>
-        <div v-if="(rejectForm.errors as any).qualification" class="mt-1 text-xs text-danger">{{ (rejectForm.errors as any).qualification }}</div>
-        <div v-if="(rejectForm.errors as any).lock" class="mt-1 text-xs text-danger">{{ (rejectForm.errors as any).lock }}</div>
-        <p v-if="can.issue_certificate" class="mt-4 text-xs text-text-muted">
-          A rejection notice will be generated automatically when you reject this qualification.
-        </p>
+    <AdminActionModal
+      v-model="rejectOpen"
+      title="Reject qualification"
+      description="Reason is required and will be visible to the applicant."
+      max-width-class="max-w-4xl"
+      scrollable
+    >
+      <div class="space-y-4">
+        <Level2DecisionLevel1Fields
+          :findings="rejectForm.findings"
+          :accreditation-statement="rejectForm.accreditation_statement"
+          :findings-error="rejectForm.errors.findings"
+          :accreditation-statement-error="rejectForm.errors.accreditation_statement"
+          @update:findings="rejectForm.findings = $event"
+          @update:accreditation-statement="rejectForm.accreditation_statement = $event"
+        />
+
+        <div>
+          <label class="text-sm font-semibold text-text-primary">Reason</label>
+          <textarea v-model="rejectForm.reason" class="zaqa-input mt-2 h-auto min-h-[10rem] py-3" placeholder="Provide a clear rejection reason." />
+          <p
+            v-if="level1Review?.recommended_for_award === false && level1Findings.length > 0"
+            class="mt-2 text-xs text-text-muted"
+          >
+            Pre-filled from Level 1 findings when they did not recommend awarding. You may edit before submitting.
+          </p>
+          <div v-if="rejectForm.errors.reason" class="mt-1 text-xs text-danger">{{ rejectForm.errors.reason }}</div>
+          <div v-if="(rejectForm.errors as any).qualification" class="mt-1 text-xs text-danger">{{ (rejectForm.errors as any).qualification }}</div>
+          <div v-if="(rejectForm.errors as any).lock" class="mt-1 text-xs text-danger">{{ (rejectForm.errors as any).lock }}</div>
+          <p v-if="can.issue_certificate" class="mt-4 text-xs text-text-muted">
+            A rejection notice will be generated automatically when you reject this qualification.
+          </p>
+        </div>
       </div>
       <template #footer>
         <button
@@ -2531,9 +2605,7 @@ const autoVerificationCollapsedSummary = computed(() => {
           @click="
             () => {
               rejectOpen = false
-              rejectForm.clearErrors()
-              rejectForm.reset()
-              rejectForm.generate_rejection_notice = true
+              resetRejectForm()
             }
           "
         >
@@ -2550,8 +2622,7 @@ const autoVerificationCollapsedSummary = computed(() => {
                 preserveScroll: true,
                 onSuccess: () => {
                   rejectOpen = false
-                  rejectForm.reset()
-                  rejectForm.generate_rejection_notice = true
+                  resetRejectForm()
                 },
               })
             }

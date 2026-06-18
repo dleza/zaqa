@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import AdminLayout from '@/Layouts/AdminLayout.vue'
 import AdminActionModal from '@/Components/AdminActionModal.vue'
+import Level2DecisionLevel1Fields from '@/Components/Admin/Verification/Level2DecisionLevel1Fields.vue'
 import InstitutionCombobox from '@/Components/InstitutionCombobox.vue'
 import InputError from '@/Components/InputError.vue'
 import SubjectGradeSelect from '@/Components/SubjectGradeSelect.vue'
@@ -82,10 +83,27 @@ const approveOpen = ref(false)
 const rejectOpen = ref(false)
 const correctionHistoryOpen = ref(false)
 const formRoot = ref<HTMLElement | null>(null)
-const approveForm = useForm<{ comment: string; issue_certificate: boolean }>({ comment: '', issue_certificate: true })
-const rejectForm = useForm<{ reason: string; generate_rejection_notice: boolean }>({
+const approveForm = useForm<{
+  comment: string
+  issue_certificate: boolean
+  findings: string
+  accreditation_statement: string
+}>({
+  comment: '',
+  issue_certificate: true,
+  findings: '',
+  accreditation_statement: '',
+})
+const rejectForm = useForm<{
+  reason: string
+  generate_rejection_notice: boolean
+  findings: string
+  accreditation_statement: string
+}>({
   reason: '',
   generate_rejection_notice: true,
+  findings: '',
+  accreditation_statement: '',
 })
 
 const state = computed(() => (props.qualification.verification_state ?? '').toString())
@@ -110,14 +128,39 @@ const showLevel2DecisionActions = computed(() => canShowApprove.value || canShow
 const level2DecisionBlockedByDirtyForm = computed(() => form.isDirty)
 const level1Findings = computed(() => (level1Review.value?.findings ?? props.qualification.reviewer_notes ?? '').toString().trim())
 
+function prefillLevel2DecisionLevel1Fields(target: { findings: string; accreditation_statement: string }) {
+  const review = level1Review.value
+  target.findings = (review?.findings ?? props.qualification.reviewer_notes ?? '').toString()
+  target.accreditation_statement = (review?.accreditation_statement ?? '').toString()
+}
+
+function openApproveModal() {
+  approveForm.clearErrors()
+  prefillLevel2DecisionLevel1Fields(approveForm)
+  approveOpen.value = true
+}
+
 function openRejectModal() {
   rejectForm.clearErrors()
+  prefillLevel2DecisionLevel1Fields(rejectForm)
   if (level1Review.value?.recommended_for_award === false && level1Findings.value !== '') {
     rejectForm.reason = level1Findings.value
   } else {
     rejectForm.reason = ''
   }
   rejectOpen.value = true
+}
+
+function resetApproveForm() {
+  approveForm.clearErrors()
+  approveForm.reset()
+  approveForm.issue_certificate = true
+}
+
+function resetRejectForm() {
+  rejectForm.clearErrors()
+  rejectForm.reset()
+  rejectForm.generate_rejection_notice = true
 }
 
 const institutionMeta = ref<{ name: string } | null>(null)
@@ -491,7 +534,7 @@ function identityDocumentRow(): DocumentRow | null {
                     class="zaqa-btn zaqa-btn-primary px-4 py-2 text-sm"
                     :disabled="level2DecisionBlockedByDirtyForm || (isAutoVerifiedPendingL2 && lockMissingForActions)"
                     :title="level2DecisionBlockedByDirtyForm ? 'Save qualification changes before approving.' : isAutoVerifiedPendingL2 && lockMissingForActions ? 'Lock for review before approving.' : ''"
-                    @click="approveOpen = true"
+                    @click="openApproveModal"
                   >
                     Approve Verification Certificate
                   </button>
@@ -912,9 +955,21 @@ function identityDocumentRow(): DocumentRow | null {
     <AdminActionModal
       v-model="approveOpen"
       title="Approve qualification"
-      description="Optional internal comment. Qualification will be marked approved for certificate."
+      description="Review Level 1 findings and accreditation statement before approving."
+      max-width-class="max-w-4xl"
+      scrollable
     >
       <div class="space-y-4">
+        <Level2DecisionLevel1Fields
+          :findings="approveForm.findings"
+          :accreditation-statement="approveForm.accreditation_statement"
+          :findings-error="approveForm.errors.findings"
+          :accreditation-statement-error="approveForm.errors.accreditation_statement"
+          :accreditation-required="can?.issue_certificate === true"
+          @update:findings="approveForm.findings = $event"
+          @update:accreditation-statement="approveForm.accreditation_statement = $event"
+        />
+
         <div>
           <label class="text-sm font-semibold text-text-primary">Comment (optional)</label>
           <textarea v-model="approveForm.comment" class="zaqa-input mt-2 h-auto min-h-[6rem] py-3" placeholder="Optional internal note." />
@@ -942,9 +997,7 @@ function identityDocumentRow(): DocumentRow | null {
           @click="
             () => {
               approveOpen = false
-              approveForm.clearErrors()
-              approveForm.reset()
-              approveForm.issue_certificate = true
+              resetApproveForm()
             }
           "
         >
@@ -961,8 +1014,7 @@ function identityDocumentRow(): DocumentRow | null {
                 preserveScroll: true,
                 onSuccess: () => {
                   approveOpen = false
-                  approveForm.reset()
-                  approveForm.issue_certificate = true
+                  resetApproveForm()
                 },
               })
             }
@@ -973,22 +1025,39 @@ function identityDocumentRow(): DocumentRow | null {
       </template>
     </AdminActionModal>
 
-    <AdminActionModal v-model="rejectOpen" title="Reject qualification" description="Reason is required and will be visible to the applicant.">
-      <div>
-        <label class="text-sm font-semibold text-text-primary">Reason</label>
-        <textarea v-model="rejectForm.reason" class="zaqa-input mt-2 h-auto min-h-[10rem] py-3" placeholder="Provide a clear rejection reason." />
-        <p
-          v-if="level1Review?.recommended_for_award === false && level1Findings.length > 0"
-          class="mt-2 text-xs text-text-muted"
-        >
-          Pre-filled from Level 1 findings when they did not recommend recognition. You may edit before submitting.
-        </p>
-        <div v-if="rejectForm.errors.reason" class="mt-1 text-xs text-danger">{{ rejectForm.errors.reason }}</div>
-        <div v-if="(rejectForm.errors as any).qualification" class="mt-1 text-xs text-danger">{{ (rejectForm.errors as any).qualification }}</div>
-        <div v-if="(rejectForm.errors as any).lock" class="mt-1 text-xs text-danger">{{ (rejectForm.errors as any).lock }}</div>
-        <p v-if="can?.issue_certificate" class="mt-4 text-xs text-text-muted">
-          A rejection notice will be generated automatically when you reject this qualification.
-        </p>
+    <AdminActionModal
+      v-model="rejectOpen"
+      title="Reject qualification"
+      description="Reason is required and will be visible to the applicant."
+      max-width-class="max-w-4xl"
+      scrollable
+    >
+      <div class="space-y-4">
+        <Level2DecisionLevel1Fields
+          :findings="rejectForm.findings"
+          :accreditation-statement="rejectForm.accreditation_statement"
+          :findings-error="rejectForm.errors.findings"
+          :accreditation-statement-error="rejectForm.errors.accreditation_statement"
+          @update:findings="rejectForm.findings = $event"
+          @update:accreditation-statement="rejectForm.accreditation_statement = $event"
+        />
+
+        <div>
+          <label class="text-sm font-semibold text-text-primary">Reason</label>
+          <textarea v-model="rejectForm.reason" class="zaqa-input mt-2 h-auto min-h-[10rem] py-3" placeholder="Provide a clear rejection reason." />
+          <p
+            v-if="level1Review?.recommended_for_award === false && level1Findings.length > 0"
+            class="mt-2 text-xs text-text-muted"
+          >
+            Pre-filled from Level 1 findings when they did not recommend recognition. You may edit before submitting.
+          </p>
+          <div v-if="rejectForm.errors.reason" class="mt-1 text-xs text-danger">{{ rejectForm.errors.reason }}</div>
+          <div v-if="(rejectForm.errors as any).qualification" class="mt-1 text-xs text-danger">{{ (rejectForm.errors as any).qualification }}</div>
+          <div v-if="(rejectForm.errors as any).lock" class="mt-1 text-xs text-danger">{{ (rejectForm.errors as any).lock }}</div>
+          <p v-if="can?.issue_certificate" class="mt-4 text-xs text-text-muted">
+            A rejection notice will be generated automatically when you reject this qualification.
+          </p>
+        </div>
       </div>
       <template #footer>
         <button
@@ -997,9 +1066,7 @@ function identityDocumentRow(): DocumentRow | null {
           @click="
             () => {
               rejectOpen = false
-              rejectForm.clearErrors()
-              rejectForm.reset()
-              rejectForm.generate_rejection_notice = true
+              resetRejectForm()
             }
           "
         >
@@ -1016,8 +1083,7 @@ function identityDocumentRow(): DocumentRow | null {
                 preserveScroll: true,
                 onSuccess: () => {
                   rejectOpen = false
-                  rejectForm.reset()
-                  rejectForm.generate_rejection_notice = true
+                  resetRejectForm()
                 },
               })
             }
