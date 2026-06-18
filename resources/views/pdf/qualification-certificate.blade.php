@@ -172,10 +172,12 @@
             <td class="label">by</td>
             <td class="value">{{ $awarding_institution }}</td>
         </tr>
+        @if(!empty($recognition_statement))
         <tr>
             <td class="label">A registered and recognised institution</td>
             <td class="value">{{ $recognition_statement }}</td>
         </tr>
+        @endif
         <tr>
             <td class="label">This qualification is recognised in Zambia as</td>
             <td class="value">{{ $recognised_zambian_qualification }}</td>

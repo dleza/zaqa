@@ -5,6 +5,7 @@ namespace App\Domain\Verification;
 use App\Domain\Applications\ApplicationOutcomeNotificationDispatcher;
 use App\Domain\Audit\AuditLogService;
 use App\Domain\Certificates\QualificationCertificateService;
+use App\Domain\Settings\AwardingInstitutionAccreditationStatementService;
 use App\Domain\Tracking\ApplicationLifecycleService;
 use App\Enums\LifecycleStage;
 use App\Enums\LifecycleVisibility;
@@ -25,6 +26,7 @@ class QualificationDecisionService
         private readonly QualificationLevel2ReviewLockService $locks,
         private readonly ApplicationOutcomeNotificationDispatcher $outcomeNotifications,
         private readonly QualificationLevel2Level1SubmissionCorrectionService $level1SubmissionCorrections,
+        private readonly AwardingInstitutionAccreditationStatementService $accreditationStatements,
     ) {}
 
     public function approve(
@@ -71,6 +73,12 @@ class QualificationDecisionService
                     'approval',
                 );
                 $qualification->refresh();
+
+                $this->accreditationStatements->autoSaveFromLevel2ApprovalIfInstitutionBlank(
+                    $qualification,
+                    $actor,
+                    $accreditationStatement ?? $qualification->level1_accreditation_statement,
+                );
             }
 
             $before = $qualification->only([

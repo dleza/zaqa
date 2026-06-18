@@ -27,11 +27,19 @@ class UpdateAwardingInstitutionRequest extends FormRequest
             'sort_order' => ['nullable', 'integer', 'min:0', 'max:1000000'],
             'consent_form' => ['nullable', 'file', 'max:'.$maxKb, 'mimes:pdf,doc,docx,png,jpg,jpeg'],
             'remove_consent_form' => ['nullable', 'boolean'],
+            'accreditation_statement' => ['nullable', 'string', 'max:5000'],
             'unique_scope' => [
                 function () use ($inst) {
                     // no-op: keep rule set non-empty for future extensions
                 },
             ],
         ];
+    }
+
+    protected function prepareForValidation(): void
+    {
+        if (is_string($this->input('accreditation_statement'))) {
+            $this->merge(['accreditation_statement' => trim($this->input('accreditation_statement')) ?: null]);
+        }
     }
 }

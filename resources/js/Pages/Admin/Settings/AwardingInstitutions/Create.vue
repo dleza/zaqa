@@ -13,6 +13,7 @@ const form = useForm({
   name: '',
   is_active: true,
   sort_order: 0,
+  accreditation_statement: '',
   consent_form: null as File | null,
 })
 
@@ -70,6 +71,15 @@ function submit() {
             </div>
           </div>
           <div v-if="form.errors.is_active" class="text-xs text-danger">{{ form.errors.is_active }}</div>
+
+          <div>
+            <label class="text-sm font-semibold text-text-primary">Accreditation statement</label>
+            <p class="mt-1 text-xs text-text-muted">
+              Used as the default certificate accreditation statement for qualifications awarded by this institution.
+            </p>
+            <textarea v-model="form.accreditation_statement" class="zaqa-input mt-2 min-h-[8rem] resize-y" rows="5" maxlength="5000" />
+            <div v-if="form.errors.accreditation_statement" class="mt-1 text-xs text-danger">{{ form.errors.accreditation_statement }}</div>
+          </div>
 
           <div>
             <label class="text-sm font-semibold text-text-primary">Institution Consent Form</label>

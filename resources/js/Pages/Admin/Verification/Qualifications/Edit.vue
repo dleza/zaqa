@@ -131,7 +131,22 @@ const level1Findings = computed(() => (level1Review.value?.findings ?? props.qua
 function prefillLevel2DecisionLevel1Fields(target: { findings: string; accreditation_statement: string }) {
   const review = level1Review.value
   target.findings = (review?.findings ?? props.qualification.reviewer_notes ?? '').toString()
-  target.accreditation_statement = (review?.accreditation_statement ?? '').toString()
+  const qualAccreditation = (review?.accreditation_statement ?? '').toString().trim()
+  target.accreditation_statement = qualAccreditation !== ''
+    ? qualAccreditation
+    : (props.qualification.awarding_institution_accreditation_statement ?? '').toString()
+}
+
+function level2AccreditationInstitutionDefaulted(form: { accreditation_statement: string }) {
+  const qualAccreditation = (level1Review.value?.accreditation_statement ?? '').toString().trim()
+  return qualAccreditation === '' && (props.qualification.awarding_institution_accreditation_statement ?? '').toString().trim() !== '' && form.accreditation_statement.trim() !== ''
+}
+
+function level2AccreditationInstitutionMissing() {
+  const qualAccreditation = (level1Review.value?.accreditation_statement ?? '').toString().trim()
+  if (qualAccreditation !== '') return false
+  if ((props.qualification.awarding_institution_accreditation_statement ?? '').toString().trim() !== '') return false
+  return !!props.qualification.awarding_institution_id && props.qualification.awarding_institution_id !== 'other'
 }
 
 function openApproveModal() {
@@ -966,6 +981,8 @@ function identityDocumentRow(): DocumentRow | null {
           :findings-error="approveForm.errors.findings"
           :accreditation-statement-error="approveForm.errors.accreditation_statement"
           :accreditation-required="can?.issue_certificate === true"
+          :institution-defaulted="level2AccreditationInstitutionDefaulted(approveForm)"
+          :institution-missing-statement="level2AccreditationInstitutionMissing()"
           @update:findings="approveForm.findings = $event"
           @update:accreditation-statement="approveForm.accreditation_statement = $event"
         />
@@ -1038,6 +1055,8 @@ function identityDocumentRow(): DocumentRow | null {
           :accreditation-statement="rejectForm.accreditation_statement"
           :findings-error="rejectForm.errors.findings"
           :accreditation-statement-error="rejectForm.errors.accreditation_statement"
+          :institution-defaulted="level2AccreditationInstitutionDefaulted(rejectForm)"
+          :institution-missing-statement="level2AccreditationInstitutionMissing()"
           @update:findings="rejectForm.findings = $event"
           @update:accreditation-statement="rejectForm.accreditation_statement = $event"
         />

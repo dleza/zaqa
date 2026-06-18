@@ -15,6 +15,10 @@ const props = defineProps<{
     sort_order: number
     has_consent_form?: boolean
     consent_form_url?: string | null
+    accreditation_statement?: string | null
+    accreditation_statement_source?: string | null
+    accreditation_statement_updated_at?: string | null
+    accreditation_statement_updated_by_name?: string | null
   }
   countries: Array<{ id: number; name: string; iso_code: string }>
 }>()
@@ -25,6 +29,7 @@ const form = useForm({
   name: props.institution.name,
   is_active: props.institution.is_active,
   sort_order: props.institution.sort_order,
+  accreditation_statement: props.institution.accreditation_statement ?? '',
   consent_form: null as File | null,
   remove_consent_form: false,
 })
@@ -146,6 +151,20 @@ function submit() {
             </div>
           </div>
           <div v-if="form.errors.is_active" class="text-xs text-danger">{{ form.errors.is_active }}</div>
+
+          <div>
+            <label class="text-sm font-semibold text-text-primary">Accreditation statement</label>
+            <p class="mt-1 text-xs text-text-muted">
+              Used as the default certificate accreditation statement for qualifications awarded by this institution.
+            </p>
+            <textarea v-model="form.accreditation_statement" class="zaqa-input mt-2 min-h-[8rem] resize-y" rows="5" maxlength="5000" />
+            <p v-if="institution.accreditation_statement_updated_at" class="mt-1 text-xs text-text-muted">
+              Last updated
+              <span v-if="institution.accreditation_statement_updated_by_name"> by {{ institution.accreditation_statement_updated_by_name }}</span>
+              <span v-if="institution.accreditation_statement_source"> · source: {{ institution.accreditation_statement_source }}</span>
+            </p>
+            <div v-if="form.errors.accreditation_statement" class="mt-1 text-xs text-danger">{{ form.errors.accreditation_statement }}</div>
+          </div>
 
           <div class="rounded-xl border border-border bg-surface-muted/50 p-4">
             <div class="text-sm font-semibold text-text-primary">Institution Consent Form</div>

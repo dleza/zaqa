@@ -14,17 +14,27 @@ class AwardingInstitution extends Model
         'country_id',
         'name',
         'consent_form_path',
+        'accreditation_statement',
+        'accreditation_statement_source',
+        'accreditation_statement_updated_by_user_id',
+        'accreditation_statement_updated_at',
         'is_active',
         'sort_order',
     ];
 
     protected $casts = [
         'is_active' => 'bool',
+        'accreditation_statement_updated_at' => 'datetime',
     ];
 
     public function country(): BelongsTo
     {
         return $this->belongsTo(Country::class);
+    }
+
+    public function accreditationStatementUpdatedBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'accreditation_statement_updated_by_user_id');
     }
 
     public function learnerRecords(): HasMany

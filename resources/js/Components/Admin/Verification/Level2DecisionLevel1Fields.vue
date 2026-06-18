@@ -8,6 +8,8 @@ defineProps<{
   findingsError?: string
   accreditationStatementError?: string
   accreditationRequired?: boolean
+  institutionDefaulted?: boolean
+  institutionMissingStatement?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -19,7 +21,7 @@ const emit = defineEmits<{
 <template>
   <div class="space-y-4">
     <p class="rounded-xl border border-border/70 bg-surface-muted/40 px-4 py-3 text-xs text-text-muted">
-      These values were submitted by Level 1. You may correct wording before making the final decision. Changes will be audited.
+      These values were submitted by Level 1 when available. You may correct wording before making the final decision. Changes will be audited.
     </p>
 
     <div>
@@ -44,6 +46,12 @@ const emit = defineEmits<{
         <span v-if="accreditationRequired" class="text-danger">*</span>
         <span v-else class="text-xs font-normal text-text-muted">(optional)</span>
       </label>
+      <p v-if="institutionDefaulted" class="mt-1 text-xs text-text-muted">
+        Defaulted from the awarding institution. You may correct this before final approval. Changes are audited.
+      </p>
+      <p v-else-if="institutionMissingStatement" class="mt-1 text-xs font-medium text-amber-900">
+        No accreditation statement is saved for this awarding institution. Enter the statement before approving if it should appear on the certificate.
+      </p>
       <textarea
         :value="accreditationStatement"
         class="zaqa-input mt-2 h-auto min-h-[5rem] resize-y py-3"

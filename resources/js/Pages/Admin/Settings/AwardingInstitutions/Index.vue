@@ -10,7 +10,7 @@ import Swal from 'sweetalert2'
 const props = defineProps<{
   institutions: any
   countries: Array<{ id: number; name: string; iso_code: string }>
-  filters: { q: string; country_id: string | null; active: string | null }
+  filters: { q: string; country_id: string | null; active: string | null; missing_statement: string | null }
   can: { create: boolean; edit: boolean; delete: boolean }
   excel_import: { template_url: string; import_url: string; can_import: boolean }
 }>()
@@ -18,12 +18,18 @@ const props = defineProps<{
 const q = ref(props.filters.q ?? '')
 const countryId = ref<string>(props.filters.country_id ?? '')
 const active = ref<string>(props.filters.active ?? '')
+const missingStatement = ref<string>(props.filters.missing_statement ?? '')
 const excelImportOpen = ref(false)
 
-watch([q, countryId, active], () => {
+watch([q, countryId, active, missingStatement], () => {
   router.get(
     '/admin/settings/awarding-institutions',
-    { q: q.value, country_id: countryId.value || null, active: active.value || null },
+    {
+      q: q.value,
+      country_id: countryId.value || null,
+      active: active.value || null,
+      missing_statement: missingStatement.value || null,
+    },
     { preserveState: true, replace: true, preserveScroll: true },
   )
 })
@@ -100,6 +106,10 @@ async function deactivate(id: number) {
               <option value="1">Active</option>
               <option value="0">Inactive</option>
             </select>
+            <select v-model="missingStatement" class="zaqa-input h-10">
+              <option value="">All statements</option>
+              <option value="1">Missing statement</option>
+            </select>
           </div>
         </div>
       </div>
@@ -117,6 +127,7 @@ async function deactivate(id: number) {
             <tr>
               <th class="px-5 py-3 text-left">Institution</th>
               <th class="px-5 py-3 text-left">Country</th>
+              <th class="px-5 py-3 text-left">Statement</th>
               <th class="px-5 py-3 text-left">Status</th>
               <th class="px-5 py-3 text-right">Actions</th>
             </tr>
@@ -127,6 +138,11 @@ async function deactivate(id: number) {
                 <div class="font-semibold text-text-primary">{{ i.name }}</div>
               </td>
               <td class="px-5 py-3 text-text-primary">{{ i.country?.name ?? '—' }}</td>
+              <td class="px-5 py-3">
+                <span class="zaqa-badge" :class="i.has_accreditation_statement ? 'zaqa-badge-success' : 'zaqa-badge-warning'">
+                  {{ i.has_accreditation_statement ? 'On file' : 'Missing' }}
+                </span>
+              </td>
               <td class="px-5 py-3">
                 <span class="zaqa-badge" :class="i.is_active ? 'zaqa-badge-success' : 'zaqa-badge-warning'">
                   {{ i.is_active ? 'Active' : 'Inactive' }}

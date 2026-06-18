@@ -329,6 +329,27 @@ const stateLabels: Record<string, string> = {
               </div>
             </div>
 
+            <div>
+              <div class="text-xs font-semibold uppercase tracking-wider text-text-muted">Accreditation statement</div>
+              <div class="mt-1">
+                <span class="zaqa-badge" :class="institution.has_accreditation_statement ? 'zaqa-badge-success' : 'zaqa-badge-warning'">
+                  {{ institution.has_accreditation_statement ? 'On file' : 'Missing' }}
+                </span>
+              </div>
+              <p v-if="institution.accreditation_statement" class="mt-2 whitespace-pre-wrap text-sm text-text-primary">
+                {{ institution.accreditation_statement }}
+              </p>
+              <p v-else class="mt-2 text-sm text-text-muted">No default certificate accreditation statement saved for this institution.</p>
+              <div v-if="institution.accreditation_statement_updated_at" class="mt-2 text-xs text-text-muted">
+                Last updated: {{ fmtDate(institution.accreditation_statement_updated_at) }}
+                <span v-if="institution.accreditation_statement_updated_by_name"> by {{ institution.accreditation_statement_updated_by_name }}</span>
+                <span v-if="institution.accreditation_statement_source"> • Source: {{ institution.accreditation_statement_source }}</span>
+              </div>
+              <div v-if="can.edit" class="mt-2">
+                <Link :href="links.edit" class="zaqa-link text-sm">Edit statement</Link>
+              </div>
+            </div>
+
             <div class="rounded-xl border border-border bg-surface-muted p-4">
               <div class="flex items-center justify-between">
                 <div class="text-xs font-semibold uppercase tracking-wider text-text-muted">Integration status</div>

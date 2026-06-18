@@ -21,7 +21,7 @@ class AwardingInstitutionProfileService
      */
     public function build(AwardingInstitution $institution): array
     {
-        $institution->loadMissing(['country', 'integration']);
+        $institution->loadMissing(['country', 'integration', 'accreditationStatementUpdatedBy']);
 
         $countryIso = strtoupper((string) ($institution->country?->iso_code ?? ''));
         $isZambian = CountryIso::isZambia($countryIso);
@@ -139,6 +139,11 @@ class AwardingInstitutionProfileService
                 'is_foreign' => ! $isZambian,
                 'has_consent_form' => (bool) $institution->has_consent_form,
                 'consent_form_url' => $institution->consent_form_url,
+                'accreditation_statement' => $institution->accreditation_statement,
+                'accreditation_statement_source' => $institution->accreditation_statement_source,
+                'accreditation_statement_updated_at' => optional($institution->accreditation_statement_updated_at)?->toIso8601String(),
+                'accreditation_statement_updated_by_name' => $institution->accreditationStatementUpdatedBy?->name,
+                'has_accreditation_statement' => trim((string) ($institution->accreditation_statement ?? '')) !== '',
                 'created_at' => optional($institution->created_at)->toIso8601String(),
                 'updated_at' => optional($institution->updated_at)->toIso8601String(),
             ],

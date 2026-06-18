@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Admin\Settings;
 
 use App\Domain\Audit\AuditLogService;
 use App\Domain\InstitutionIntegrations\InstitutionPullLookupPreviewService;
+use App\Domain\Settings\AwardingInstitutionAccreditationStatementService;
 use App\Domain\Settings\AwardingInstitutionExcelImportService;
 use App\Domain\Settings\AwardingInstitutionProfileService;
 use App\Http\Controllers\Controller;
@@ -31,6 +32,7 @@ class AdminAwardingInstitutionsController extends Controller
         $q = trim((string) $request->query('q', ''));
         $countryId = $request->query('country_id');
         $active = $request->query('active');
+        $missingStatement = $request->query('missing_statement');
 
         $institutions = AwardingInstitution::query()
             ->with('country')
@@ -38,6 +40,10 @@ class AdminAwardingInstitutionsController extends Controller
             ->when(is_string($countryId) && $countryId !== '', fn ($qq) => $qq->where('country_id', (int) $countryId))
             ->when($active === '1', fn ($qq) => $qq->where('is_active', true))
             ->when($active === '0', fn ($qq) => $qq->where('is_active', false))
+            ->when($missingStatement === '1', fn ($qq) => $qq->where(function ($query) {
+                $query->whereNull('accreditation_statement')
+                    ->orWhere('accreditation_statement', '');
+            }))
             ->orderBy('country_id')
             ->orderBy('sort_order')
             ->orderBy('name')
@@ -49,6 +55,7 @@ class AdminAwardingInstitutionsController extends Controller
                 'country' => $i->country ? ['id' => $i->country->id, 'name' => $i->country->name, 'iso_code' => $i->country->iso_code] : null,
                 'is_active' => (bool) $i->is_active,
                 'sort_order' => (int) ($i->sort_order ?? 0),
+                'has_accreditation_statement' => trim((string) ($i->accreditation_statement ?? '')) !== '',
                 'show_url' => route('admin.settings.awarding_institutions.show', ['awardingInstitution' => $i->id]),
             ]);
 
@@ -69,6 +76,7 @@ class AdminAwardingInstitutionsController extends Controller
                 'q' => $q,
                 'country_id' => is_string($countryId) ? $countryId : null,
                 'active' => is_string($active) ? $active : null,
+                'missing_statement' => is_string($missingStatement) ? $missingStatement : null,
             ],
             'can' => [
                 'create' => (bool) $user?->can('settings.awarding_institutions.create'),
@@ -120,8 +128,11 @@ class AdminAwardingInstitutionsController extends Controller
         ]);
     }
 
-    public function store(StoreAwardingInstitutionRequest $request, AuditLogService $audit): RedirectResponse
-    {
+    public function store(
+        StoreAwardingInstitutionRequest $request,
+        AuditLogService $audit,
+        AwardingInstitutionAccreditationStatementService $accreditationStatements,
+    ): RedirectResponse {
         $data = $request->validated();
 
         $institution = DB::transaction(function () use ($data, $request) {
@@ -130,6 +141,14 @@ class AdminAwardingInstitutionsController extends Controller
                 'name' => $data['name'],
                 'is_active' => (bool) $data['is_active'],
                 'sort_order' => (int) ($data['sort_order'] ?? 0),
+                'accreditation_statement' => $data['accreditation_statement'] ?? null,
+                'accreditation_statement_source' => ($data['accreditation_statement'] ?? null) !== null
+                    ? AwardingInstitutionAccreditationStatementService::SOURCE_MANUAL
+                    : null,
+                'accreditation_statement_updated_by_user_id' => ($data['accreditation_statement'] ?? null) !== null
+                    ? $request->user()?->id
+                    : null,
+                'accreditation_statement_updated_at' => ($data['accreditation_statement'] ?? null) !== null ? now() : null,
             ]);
 
             if ($request->hasFile('consent_form')) {
@@ -144,6 +163,15 @@ class AdminAwardingInstitutionsController extends Controller
 
             return $inst;
         });
+
+        if (($data['accreditation_statement'] ?? null) !== null && $request->user()) {
+            $accreditationStatements->recordAdminUpdate(
+                $institution,
+                $request->user(),
+                null,
+                $data['accreditation_statement'],
+            );
+        }
 
         $audit->record(
             eventType: 'settings.awarding_institution_created',
@@ -161,6 +189,8 @@ class AdminAwardingInstitutionsController extends Controller
 
     public function edit(Request $request, AwardingInstitution $awardingInstitution): Response
     {
+        $awardingInstitution->loadMissing('accreditationStatementUpdatedBy');
+
         $countries = Country::query()
             ->where('is_active', true)
             ->orderBy('sort_order')
@@ -178,6 +208,10 @@ class AdminAwardingInstitutionsController extends Controller
                 'sort_order' => (int) ($awardingInstitution->sort_order ?? 0),
                 'has_consent_form' => (bool) $awardingInstitution->has_consent_form,
                 'consent_form_url' => $awardingInstitution->consent_form_url,
+                'accreditation_statement' => $awardingInstitution->accreditation_statement,
+                'accreditation_statement_source' => $awardingInstitution->accreditation_statement_source,
+                'accreditation_statement_updated_at' => optional($awardingInstitution->accreditation_statement_updated_at)?->toIso8601String(),
+                'accreditation_statement_updated_by_name' => $awardingInstitution->accreditationStatementUpdatedBy?->name,
             ],
             'countries' => $countries,
         ]);
@@ -236,17 +270,34 @@ class AdminAwardingInstitutionsController extends Controller
         return response()->json($result, ($result['ok'] ?? false) === true ? 200 : 422);
     }
 
-    public function update(UpdateAwardingInstitutionRequest $request, AwardingInstitution $awardingInstitution, AuditLogService $audit): RedirectResponse
-    {
+    public function update(
+        UpdateAwardingInstitutionRequest $request,
+        AwardingInstitution $awardingInstitution,
+        AuditLogService $audit,
+        AwardingInstitutionAccreditationStatementService $accreditationStatements,
+    ): RedirectResponse {
         $before = $awardingInstitution->toArray();
         $data = $request->validated();
+        $beforeStatement = $awardingInstitution->accreditation_statement;
 
         DB::transaction(function () use ($request, $data, $awardingInstitution) {
+            $statement = $data['accreditation_statement'] ?? null;
+            $statementChanged = array_key_exists('accreditation_statement', $data)
+                && $statement !== $awardingInstitution->accreditation_statement;
+
             $awardingInstitution->forceFill([
                 'country_id' => (int) $data['country_id'],
                 'name' => $data['name'],
                 'is_active' => (bool) $data['is_active'],
                 'sort_order' => (int) ($data['sort_order'] ?? 0),
+                'accreditation_statement' => $statement,
+                'accreditation_statement_source' => $statementChanged && $statement !== null
+                    ? AwardingInstitutionAccreditationStatementService::SOURCE_MANUAL
+                    : $awardingInstitution->accreditation_statement_source,
+                'accreditation_statement_updated_by_user_id' => $statementChanged
+                    ? $request->user()?->id
+                    : $awardingInstitution->accreditation_statement_updated_by_user_id,
+                'accreditation_statement_updated_at' => $statementChanged ? now() : $awardingInstitution->accreditation_statement_updated_at,
             ])->save();
 
             $disk = config('filesystems.default', 'local');
@@ -271,6 +322,17 @@ class AdminAwardingInstitutionsController extends Controller
                 $awardingInstitution->forceFill(['consent_form_path' => $path])->save();
             }
         });
+
+        if (array_key_exists('accreditation_statement', $data)
+            && $data['accreditation_statement'] !== $beforeStatement
+            && $request->user()) {
+            $accreditationStatements->recordAdminUpdate(
+                $awardingInstitution->fresh(),
+                $request->user(),
+                $beforeStatement,
+                $data['accreditation_statement'],
+            );
+        }
 
         $audit->record(
             eventType: 'settings.awarding_institution_updated',

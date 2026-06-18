@@ -4,6 +4,7 @@ namespace App\Domain\Verification;
 
 use App\Domain\Audit\AuditLogService;
 use App\Domain\Documents\ApplicantDocumentService;
+use App\Domain\Settings\AwardingInstitutionAccreditationStatementService;
 use App\Domain\Tracking\ApplicationLifecycleService;
 use App\Domain\Verification\Events\QualificationLevel1Completed;
 use App\Enums\DocumentType;
@@ -24,6 +25,7 @@ class QualificationLevel1ReviewService
         private readonly ApplicantDocumentService $documents,
         private readonly ApplicationLifecycleService $lifecycle,
         private readonly QualificationLevel2AutoAssignmentService $level2AutoAssignment,
+        private readonly AwardingInstitutionAccreditationStatementService $accreditationStatements,
     ) {}
 
     /**
@@ -391,6 +393,14 @@ class QualificationLevel1ReviewService
                         $recommendedForAward,
                     ));
                 }
+            }
+
+            if ($accreditationStatement !== null) {
+                $this->accreditationStatements->autoSaveFromLevel1IfInstitutionBlank(
+                    $qualification,
+                    $actor,
+                    $accreditationStatement,
+                );
             }
 
             return $qualification;

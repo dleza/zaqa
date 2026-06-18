@@ -213,6 +213,12 @@
                 @endif
             </td>
         </tr>
+        @if(!empty($recognition_statement))
+        <tr>
+            <td class="label">Accreditation statement</td>
+            <td class="value">{{ $recognition_statement }}</td>
+        </tr>
+        @endif
         <tr>
             <td colspan="2" class="fw-bold-level">Framework Level: {{ $framework_line }}</td>
         </tr>

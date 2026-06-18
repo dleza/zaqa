@@ -184,14 +184,51 @@ function openLevel1CompleteModal() {
     level1CompleteForm.recommended_for_award = ''
   }
   level1CompleteForm.findings = (review?.findings ?? props.qualification.reviewer_notes ?? '').toString()
-  level1CompleteForm.accreditation_statement = (review?.accreditation_statement ?? '').toString()
+  const qualAccreditation = (
+    props.qualification.level1_accreditation_statement
+    ?? review?.accreditation_statement
+    ?? ''
+  ).toString().trim()
+  level1CompleteForm.accreditation_statement = qualAccreditation !== ''
+    ? qualAccreditation
+    : (props.qualification.awarding_institution_accreditation_statement ?? '').toString()
   level1CompleteOpen.value = true
+}
+
+function level1AccreditationInstitutionDefaulted(): boolean {
+  const saved = (
+    props.qualification.level1_accreditation_statement
+    ?? props.qualification.level1_review?.accreditation_statement
+    ?? ''
+  ).toString().trim()
+  if (saved !== '') return false
+  return (
+    (props.qualification.awarding_institution_accreditation_statement ?? '').toString().trim() !== ''
+    && level1CompleteForm.accreditation_statement.trim() !== ''
+  )
 }
 
 function prefillLevel2DecisionLevel1Fields(target: { findings: string; accreditation_statement: string }) {
   const review = props.qualification?.level1_review
   target.findings = (review?.findings ?? props.qualification?.reviewer_notes ?? '').toString()
-  target.accreditation_statement = (review?.accreditation_statement ?? '').toString()
+  const qualAccreditation = (review?.accreditation_statement ?? '').toString().trim()
+  target.accreditation_statement = qualAccreditation !== ''
+    ? qualAccreditation
+    : (props.qualification?.awarding_institution_accreditation_statement ?? '').toString()
+}
+
+function level2AccreditationInstitutionDefaulted(form: { accreditation_statement: string }) {
+  const review = props.qualification?.level1_review
+  const qualAccreditation = (review?.accreditation_statement ?? '').toString().trim()
+  return qualAccreditation === '' && (props.qualification?.awarding_institution_accreditation_statement ?? '').toString().trim() !== '' && form.accreditation_statement.trim() !== ''
+}
+
+function level2AccreditationInstitutionMissing() {
+  const review = props.qualification?.level1_review
+  const qualAccreditation = (review?.accreditation_statement ?? '').toString().trim()
+  if (qualAccreditation !== '') return false
+  if ((props.qualification?.awarding_institution_accreditation_statement ?? '').toString().trim() !== '') return false
+  return !!props.qualification?.awarding_institution_id
 }
 
 function openApproveModal() {
@@ -2409,6 +2446,9 @@ const autoVerificationCollapsedSummary = computed(() => {
           <p class="mt-1 text-xs text-text-secondary">
             {{ isLevel1AccreditationRequired ? 'Required when recommending award. This may appear on the certificate if approved.' : 'Required only when recommending award.' }}
           </p>
+          <p v-if="level1AccreditationInstitutionDefaulted()" class="mt-1 text-xs text-text-muted">
+            Prefilled from the awarding institution. You may edit before submitting.
+          </p>
           <textarea
             v-model="level1CompleteForm.accreditation_statement"
             class="zaqa-input mt-1.5 h-auto min-h-[6.25rem] py-2.5"
@@ -2504,6 +2544,8 @@ const autoVerificationCollapsedSummary = computed(() => {
           :findings-error="approveForm.errors.findings"
           :accreditation-statement-error="approveForm.errors.accreditation_statement"
           :accreditation-required="can.issue_certificate"
+          :institution-defaulted="level2AccreditationInstitutionDefaulted(approveForm)"
+          :institution-missing-statement="level2AccreditationInstitutionMissing()"
           @update:findings="approveForm.findings = $event"
           @update:accreditation-statement="approveForm.accreditation_statement = $event"
         />
@@ -2577,6 +2619,8 @@ const autoVerificationCollapsedSummary = computed(() => {
           :accreditation-statement="rejectForm.accreditation_statement"
           :findings-error="rejectForm.errors.findings"
           :accreditation-statement-error="rejectForm.errors.accreditation_statement"
+          :institution-defaulted="level2AccreditationInstitutionDefaulted(rejectForm)"
+          :institution-missing-statement="level2AccreditationInstitutionMissing()"
           @update:findings="rejectForm.findings = $event"
           @update:accreditation-statement="rejectForm.accreditation_statement = $event"
         />

@@ -18,6 +18,7 @@ use App\Domain\Verification\QualificationDecisionService;
 use App\Domain\Verification\QualificationLevel1ReviewService;
 use App\Domain\Verification\QualificationLevel2ReviewLockService;
 use App\Domain\Verification\QualificationLevel2SendBackToLevel1Service;
+use App\Domain\Settings\AwardingInstitutionAccreditationStatementService;
 use App\Domain\Verification\QualificationSendBackService;
 use App\Domain\Verification\VerificationQualificationAccess;
 use App\Enums\DocumentType;
@@ -225,6 +226,8 @@ class AdminVerificationQualificationController extends Controller
                 'service_deadline_at' => optional($qualificationServiceDeadlineAt)?->toIso8601String(),
                 'reviewer_notes' => $qualification->reviewer_notes,
                 'level1_review' => $this->buildLevel1ReviewPayload($qualification),
+                'awarding_institution_accreditation_statement' => $this->awardingInstitutionAccreditationStatement($qualification),
+                'awarding_institution_has_accreditation_statement' => $this->awardingInstitutionHasAccreditationStatement($qualification),
                 'level1_correction_cycle' => (int) ($qualification->level1_correction_cycle ?? 0),
                 'level1_corrections_received' => (int) ($qualification->level1_correction_cycle ?? 0) > 0
                     && $qualification->returned_to_level1_at === null
@@ -283,6 +286,7 @@ class AdminVerificationQualificationController extends Controller
                 'title_catalog' => $titleCatalog,
                 'institution_catalog' => $institutionCatalog,
                 'awarding_institution' => $qualification->awardingInstitution?->name ?? $qualification->awarding_institution_name_other ?? $qualification->awarding_institution_name,
+                'awarding_institution_id' => $qualification->awarding_institution_id,
                 'country' => $qualification->country?->name ?? $qualification->country_name_other,
                 'holder_name' => $qualification->qualification_holder_name,
                 'holder_nrc_passport' => $qualification->nrc_passport_number,
@@ -1520,6 +1524,9 @@ class AdminVerificationQualificationController extends Controller
                 ?? VerificationState::AwaitingAssignment->value,
             'reviewer_notes' => $qualification->reviewer_notes,
             'level1_review' => $this->buildLevel1ReviewPayload($qualification),
+            'awarding_institution_accreditation_statement' => $this->awardingInstitutionAccreditationStatement($qualification),
+            'awarding_institution_has_accreditation_statement' => $this->awardingInstitutionHasAccreditationStatement($qualification),
+            'awarding_institution_id' => $qualification->awarding_institution_id,
             'level2_review_lock' => [
                 'is_locked' => $isLocked,
                 'locked_by_user_id' => $isLocked ? (int) $qualification->level2_review_locked_by : null,
@@ -1531,5 +1538,18 @@ class AdminVerificationQualificationController extends Controller
                 'payment_satisfied' => $paymentSatisfied,
             ],
         ];
+    }
+
+    private function awardingInstitutionAccreditationStatement(Qualification $qualification): ?string
+    {
+        $qualification->loadMissing('awardingInstitution');
+        $statement = trim((string) ($qualification->awardingInstitution?->accreditation_statement ?? ''));
+
+        return $statement !== '' ? $statement : null;
+    }
+
+    private function awardingInstitutionHasAccreditationStatement(Qualification $qualification): bool
+    {
+        return app(AwardingInstitutionAccreditationStatementService::class)->institutionHasStatement($qualification);
     }
 }

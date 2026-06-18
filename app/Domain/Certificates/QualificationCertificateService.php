@@ -7,6 +7,7 @@ use App\Domain\Audit\AuditLogService;
 use App\Domain\Notifications\OutboundMailService;
 use App\Domain\Notifications\OutboundSmsService;
 use App\Domain\Payments\ApplicationPaymentSatisfaction;
+use App\Domain\Settings\AwardingInstitutionAccreditationStatementService;
 use App\Domain\Settings\DocumentSignatureService;
 use App\Domain\Verification\VerifiedQualificationIngestionService;
 use App\Enums\DocumentSignatureType;
@@ -229,7 +230,7 @@ class QualificationCertificateService
                 entityId: $record->id,
                 beforeState: null,
                 afterState: $record->toArray(),
-                metadata: [
+                metadata: array_merge([
                     'qualification_id' => $qualification->id,
                     'application_id' => $application->id,
                     'certificate_number' => $certificateNumber,
@@ -237,7 +238,10 @@ class QualificationCertificateService
                     'reissue' => $reissue,
                     'post_revocation_issue' => $isPostRevocationIssue,
                     'replaced_certificate_id' => $replacesCertificateId,
-                ],
+                    'accreditation_statement_source' => $renderContext['metadata']['accreditation_statement_source'] ?? null,
+                    'awarding_institution_id' => $renderContext['metadata']['awarding_institution_id'] ?? null,
+                    'awarding_institution_name' => $renderContext['metadata']['awarding_institution_name'] ?? null,
+                ]),
                 actor: $issuer,
             );
 
@@ -658,7 +662,7 @@ class QualificationCertificateService
             'awarding_institution' => $institutionName !== '' ? $institutionName : '—',
             'award_date' => optional($qualification->award_date)?->format('d/m/Y') ?? '—',
             'framework_line' => $frameworkLine,
-            'recognition_statement' => $this->resolveAccreditationStatementForCertificate($qualification),
+            'recognition_statement' => $this->resolveAccreditationStatementText($qualification),
             'director_name' => config('certificates.director_general_name'),
             'director_title' => config('certificates.director_general_title'),
             ...$this->certificateSignatureViewData(),
@@ -678,6 +682,8 @@ class QualificationCertificateService
             'app_url' => config('app.url'),
         ];
 
+        $accreditation = $this->resolveAccreditationStatementForCertificate($qualification);
+
         return [
             'view' => self::TEMPLATE_VIEWS[$templateKey] ?? self::TEMPLATE_VIEWS[QualificationType::CERTIFICATE_TEMPLATE_DEFAULT],
             'data' => $viewData,
@@ -687,6 +693,10 @@ class QualificationCertificateService
                 'watermark_enabled' => $watermarkEnabled,
                 'watermark_asset_present' => $watermarkAssetPresent,
                 'verification_base_url' => config('certificates.verify_url_base'),
+                'accreditation_statement' => $accreditation['statement'],
+                'accreditation_statement_source' => $accreditation['source'],
+                'awarding_institution_id' => $accreditation['awarding_institution_id'],
+                'awarding_institution_name' => $accreditation['awarding_institution_name'],
             ], CertificateHolderName::metadataSnapshot($holder)),
         ];
     }
@@ -736,16 +746,17 @@ class QualificationCertificateService
         return $result->getDataUri();
     }
 
-    private function resolveAccreditationStatementForCertificate(Qualification $qualification): string
+    private function resolveAccreditationStatementText(Qualification $qualification): string
     {
-        if ($qualification->level1_recommended_for_award === true) {
-            $statement = trim((string) ($qualification->level1_accreditation_statement ?? ''));
-            if ($statement !== '') {
-                return $statement;
-            }
-        }
+        return $this->resolveAccreditationStatementForCertificate($qualification)['statement'];
+    }
 
-        return (string) config('certificates.recognition_act_clause');
+    /**
+     * @return array{statement: string, source: string, awarding_institution_id: int|null, awarding_institution_name: string|null}
+     */
+    private function resolveAccreditationStatementForCertificate(Qualification $qualification): array
+    {
+        return app(AwardingInstitutionAccreditationStatementService::class)->resolveForCertificate($qualification);
     }
 
     private function resolveTemplateKey(Qualification $qualification): string
