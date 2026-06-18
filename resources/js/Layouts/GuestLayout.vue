@@ -34,8 +34,9 @@ const isRegisterPage = computed(() => currentPath.value === '/register')
 const isActivatePage = computed(() => currentPath.value === '/activate')
 const isForgotPasswordPage = computed(() => currentPath.value === '/forgot-password')
 const hideDecorativeBackground = computed(() => isLoginPage.value || isActivatePage.value)
+const hideFooter = computed(() => isLoginPage.value)
 const compactFooterOnMobile = computed(
-  () => isLoginPage.value || isRegisterPage.value || isActivatePage.value || isForgotPasswordPage.value,
+  () => !isLoginPage.value && (isRegisterPage.value || isActivatePage.value || isForgotPasswordPage.value),
 )
 </script>
 
@@ -99,7 +100,7 @@ const compactFooterOnMobile = computed(
       </div>
     </main>
 
-    <footer class="zaqa-footer" :class="compactFooterOnMobile ? 'hidden md:block' : ''">
+    <footer class="zaqa-footer" :class="hideFooter ? 'hidden' : compactFooterOnMobile ? 'hidden md:block' : ''">
       <div class="zaqa-footer-inner py-4 sm:py-6 lg:py-8">
         <span class="text-text-on-dark/90">© {{ new Date().getFullYear() }} Zambia Qualifications Authority (ZAQA)</span>
         <span class="hidden sm:inline text-text-on-dark/75">Secure qualification verification and certificate validation.</span>
