@@ -169,6 +169,20 @@ class Level1DashboardMetricsTest extends TestCase
         $this->assertSame(1, $this->kpiValue($this->dashboardProps($l1)['kpis'], 'l1_in_review'));
     }
 
+    public function test_assigned_to_me_still_includes_assigned_before_review_is_started(): void
+    {
+        $l1 = $this->makeLevel1Officer();
+        $applicant = User::factory()->activated()->create(['applicant_type' => 'individual']);
+
+        $this->makeQualification($this->makeSubmittedApplication($applicant), [
+            'assigned_verifier_id' => $l1->id,
+            'verification_state' => VerificationState::AssignedToLevel1,
+        ]);
+
+        $this->assertSame(1, $this->kpiValue($this->dashboardProps($l1)['kpis'], 'l1_assigned_to_me'));
+        $this->assertSame(0, $this->kpiValue($this->dashboardProps($l1)['kpis'], 'l1_in_review'));
+    }
+
     public function test_completed_counts_only_current_user_completions_in_selected_range(): void
     {
         $l1 = $this->makeLevel1Officer();

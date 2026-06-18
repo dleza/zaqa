@@ -56,9 +56,12 @@ class AdminVerificationQualificationController extends Controller
         Request $request,
         Qualification $qualification,
         QualificationCertificateService $certificateService,
+        QualificationLevel1ReviewService $level1ReviewService,
     ): Response
     {
         VerificationQualificationAccess::ensureQualificationAccessible($request->user(), $qualification);
+
+        $qualification = $level1ReviewService->beginReviewIfAssigned($qualification, $request->user());
 
         $qualification->loadMissing([
             'application.applicant',
@@ -485,13 +488,19 @@ class AdminVerificationQualificationController extends Controller
             ->header('Content-Disposition', 'inline; filename="ZAQA-'.$record->certificate_number.'.pdf"');
     }
 
-    public function edit(Request $request, Qualification $qualification): Response
+    public function edit(
+        Request $request,
+        Qualification $qualification,
+        QualificationLevel1ReviewService $level1ReviewService,
+    ): Response
     {
         VerificationQualificationAccess::ensureQualificationAccessible($request->user(), $qualification);
         abort_unless(
             $request->user()->can('verification.level1.process') || $request->user()->can('verification.level2.review'),
             403
         );
+
+        $qualification = $level1ReviewService->beginReviewIfAssigned($qualification, $request->user());
 
         $qualification->load([
             'subjectResults',

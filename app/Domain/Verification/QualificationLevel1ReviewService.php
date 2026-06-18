@@ -26,6 +26,94 @@ class QualificationLevel1ReviewService
         private readonly QualificationLevel2AutoAssignmentService $level2AutoAssignment,
     ) {}
 
+    /**
+     * Move an assigned qualification into active Level 1 review when the assignee opens it.
+     */
+    public function beginReviewIfAssigned(Qualification $qualification, User $actor): Qualification
+    {
+        if (! $actor->can('verification.level1.process')) {
+            return $qualification;
+        }
+
+        if ((int) $qualification->assigned_verifier_id !== (int) $actor->id) {
+            return $qualification;
+        }
+
+        $vs = $qualification->verification_state;
+        if ($vs === VerificationState::UnderLevel1Review) {
+            return $qualification;
+        }
+
+        if ($vs !== VerificationState::AssignedToLevel1) {
+            return $qualification;
+        }
+
+        return DB::transaction(function () use ($qualification, $actor) {
+            $qualification->refresh();
+            $qualification->loadMissing('application');
+
+            $vs = $qualification->verification_state;
+            if ($vs === VerificationState::UnderLevel1Review) {
+                return $qualification;
+            }
+            if ($vs !== VerificationState::AssignedToLevel1) {
+                return $qualification;
+            }
+            if ((int) $qualification->assigned_verifier_id !== (int) $actor->id) {
+                return $qualification;
+            }
+
+            $before = [
+                'verification_state' => $qualification->verification_state?->value ?? null,
+            ];
+
+            $qualification->forceFill([
+                'verification_state' => VerificationState::UnderLevel1Review,
+            ])->save();
+
+            $after = [
+                'verification_state' => $qualification->verification_state?->value ?? null,
+            ];
+
+            $application = $qualification->application;
+            if ($application) {
+                $this->lifecycle->event(
+                    application: $application,
+                    eventType: 'verification',
+                    eventCodeBase: 'verification.level1_review_started.q'.$qualification->id,
+                    stage: LifecycleStage::Review,
+                    title: 'Level 1 review in progress',
+                    description: 'Level 1 officer opened this qualification for review.',
+                    visibility: LifecycleVisibility::Internal,
+                    actor: $actor,
+                    metadata: [
+                        'qualification_id' => $qualification->id,
+                        'assigned_verifier_id' => $actor->id,
+                    ],
+                    occurredAt: now(),
+                );
+            }
+
+            $this->audit->record(
+                eventType: 'verification.level1_review_started',
+                module: 'Verification',
+                actionName: 'level1_review_started',
+                message: 'Level 1 review started.',
+                entityType: Qualification::class,
+                entityId: $qualification->id,
+                beforeState: $before,
+                afterState: $after,
+                metadata: [
+                    'application_id' => $qualification->application_id,
+                    'assigned_verifier_id' => $actor->id,
+                ],
+                actor: $actor,
+            );
+
+            return $qualification->fresh();
+        });
+    }
+
     public function completeLevel1(
         Qualification $qualification,
         User $actor,
