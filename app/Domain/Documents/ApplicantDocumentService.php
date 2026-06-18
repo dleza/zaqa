@@ -13,7 +13,6 @@ use App\Models\Qualification;
 use App\Models\QualificationDocument;
 use App\Models\User;
 use Illuminate\Http\UploadedFile;
-use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
@@ -51,15 +50,23 @@ class ApplicantDocumentService
                 ->lockForUpdate()
                 ->get();
 
-            $previousCurrent = $existing->firstWhere('is_current_version', true);
+            $previousCurrent = $existing->firstWhere(fn (QualificationDocument $d) => $d->is_current_version && $d->deleted_at === null);
             $nextVersion = ((int) $existing->max('version_number')) + 1;
+            $supersededAt = now();
 
-            QualificationDocument::query()
+            $supersededQuery = QualificationDocument::query()
                 ->where('application_id', $application->id)
                 ->where('qualification_id', $qualification?->id)
                 ->where('document_type', $documentType->value)
                 ->where('is_current_version', true)
-                ->update(['is_current_version' => false]);
+                ->whereNull('deleted_at');
+
+            $supersededIds = $supersededQuery->pluck('id')->all();
+
+            $supersededQuery->update([
+                'is_current_version' => false,
+                'superseded_at' => $supersededAt,
+            ]);
 
             $sha256 = hash_file('sha256', $file->getRealPath());
 
@@ -93,14 +100,20 @@ class ApplicantDocumentService
                 'is_current_version' => true,
             ]);
 
-            $eventType = $previousCurrent ? 'documents.replaced' : 'documents.uploaded';
-            $actionName = $previousCurrent ? 'replaced' : 'uploaded';
+            if ($supersededIds !== []) {
+                QualificationDocument::query()
+                    ->whereIn('id', $supersededIds)
+                    ->update(['replaced_by_document_id' => $document->id]);
+            }
+
+            $eventType = $previousCurrent ? 'documents.applicant_document_replaced' : 'documents.applicant_document_uploaded';
+            $actionName = $previousCurrent ? 'applicant_document_replaced' : 'applicant_document_uploaded';
 
             $this->audit->record(
                 eventType: $eventType,
                 module: 'Documents',
                 actionName: $actionName,
-                message: $previousCurrent ? 'Document replaced.' : 'Document uploaded.',
+                message: $previousCurrent ? 'Applicant document replaced.' : 'Applicant document uploaded.',
                 entityType: QualificationDocument::class,
                 entityId: $document->id,
                 beforeState: $previousCurrent
@@ -122,6 +135,11 @@ class ApplicantDocumentService
                 metadata: [
                     'application_id' => $application->id,
                     'qualification_id' => $qualification?->id,
+                    'old_document_id' => $previousCurrent?->id,
+                    'new_document_id' => $document->id,
+                    'document_type' => $documentType->value,
+                    'old_version_number' => $previousCurrent?->version_number,
+                    'new_version_number' => $document->version_number,
                 ],
                 actor: $actor,
             );
@@ -186,6 +204,10 @@ class ApplicantDocumentService
         DB::transaction(function () use ($document, $actor) {
             $document->refresh();
 
+            if ($document->deleted_at !== null) {
+                return;
+            }
+
             $applicationId = $document->application_id;
             $application = Application::query()->whereKey($applicationId)->first();
             $type = $document->document_type?->value ?? (string) $document->document_type;
@@ -200,45 +222,30 @@ class ApplicantDocumentService
                 'is_current_version' => $wasCurrent,
             ];
 
-            if ($wasCurrent) {
-                $next = QualificationDocument::query()
-                    ->where('application_id', $applicationId)
-                    ->where('document_type', $type)
-                    ->where('id', '!=', $document->id)
-                    ->orderByDesc('version_number')
-                    ->first();
-
-                if ($next) {
-                    $next->forceFill(['is_current_version' => true])->save();
-                }
-            }
-
-            // Delete file first; ignore missing files gracefully.
-            try {
-                Storage::disk($document->disk)->delete($document->path);
-            } catch (\Throwable) {
-                // ignore storage errors in non-production; DB record will still be removed
-                Log::warning('Document storage delete failed (ignored)', [
-                    'document_id' => $before['document_id'],
-                    'disk' => $before['disk'],
-                    'path' => $before['path'],
-                ]);
-            }
-
-            $documentId = (int) $document->id;
-            QualificationDocument::destroy($documentId);
+            $document->forceFill([
+                'is_current_version' => false,
+                'deleted_at' => now(),
+            ])->save();
 
             $this->audit->record(
-                eventType: 'documents.deleted',
+                eventType: 'documents.applicant_document_deleted',
                 module: 'Documents',
-                actionName: 'deleted',
-                message: 'Document deleted by applicant.',
+                actionName: 'applicant_document_deleted',
+                message: 'Applicant document deleted.',
                 entityType: QualificationDocument::class,
                 entityId: $before['document_id'],
                 beforeState: $before,
-                afterState: null,
+                afterState: [
+                    'document_id' => $document->id,
+                    'document_type' => $type,
+                    'version_number' => $document->version_number,
+                    'deleted_at' => optional($document->deleted_at)?->toIso8601String(),
+                ],
                 metadata: [
                     'application_id' => $applicationId,
+                    'qualification_id' => $document->qualification_id,
+                    'document_type' => $type,
+                    'version_number' => $document->version_number,
                 ],
                 actor: $actor,
             );
@@ -247,7 +254,7 @@ class ApplicantDocumentService
                 $this->lifecycle->event(
                     application: $application,
                     eventType: 'documents',
-                    eventCodeBase: 'documents.deleted',
+                    eventCodeBase: 'documents.applicant_document_deleted',
                     stage: LifecycleStage::Wizard,
                     title: 'Document deleted',
                     description: 'Supporting document removed.',

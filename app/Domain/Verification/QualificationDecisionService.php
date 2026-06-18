@@ -3,6 +3,7 @@
 namespace App\Domain\Verification;
 
 use App\Domain\Applications\ApplicationOutcomeNotificationDispatcher;
+use App\Domain\Applications\ApplicationQualificationOutcomeSyncService;
 use App\Domain\Audit\AuditLogService;
 use App\Domain\Certificates\QualificationCertificateService;
 use App\Domain\Settings\AwardingInstitutionAccreditationStatementService;
@@ -159,6 +160,8 @@ class QualificationDecisionService
                 $qualification->refresh();
             }
 
+            app(ApplicationQualificationOutcomeSyncService::class)->syncIfNeeded($application->fresh(), $actor);
+
             return $qualification;
         });
     }
@@ -275,6 +278,8 @@ class QualificationDecisionService
             );
 
             $this->outcomeNotifications->notifyQualificationRejected($application, $qualification, $reason);
+
+            app(ApplicationQualificationOutcomeSyncService::class)->syncIfNeeded($application->fresh(), $actor);
 
             return $qualification;
         });

@@ -172,6 +172,9 @@ class QualificationCertificateService
                 'verification_state' => VerificationState::CertificateIssued,
             ])->save();
 
+            app(\App\Domain\Applications\ApplicationQualificationOutcomeSyncService::class)
+                ->syncIfNeeded($application->fresh(), $issuer);
+
             if (! $reissue) {
                 $this->verifiedIngestion->ingestFromIssuedCertificate($qualification, $record, $issuer);
                 $qualification->refresh();

@@ -239,6 +239,38 @@ class ApplicantDashboardTest extends TestCase
             ->assertOk();
     }
 
+    public function test_dashboard_includes_trackable_qualifications_for_open_items(): void
+    {
+        $applicant = $this->makeApplicant();
+        $application = $this->makeApplication($applicant, [
+            'current_status' => ApplicationStatus::InProgress,
+            'submitted_at' => now(),
+        ]);
+
+        $open = $this->makeQualification($application, [
+            'verification_state' => VerificationState::UnderLevel1Review,
+            'title_of_qualification' => 'Open Diploma',
+        ]);
+        $this->makeQualification($application, [
+            'verification_state' => VerificationState::CertificateIssued,
+            'title_of_qualification' => 'Closed Diploma',
+        ]);
+
+        $this->actingAs($applicant)
+            ->get('/applicant/dashboard')
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->has('trackableQualifications', 1)
+                ->where('trackableQualifications.0.id', $open->id)
+                ->where('trackableQualifications.0.title_of_qualification', 'Open Diploma')
+                ->where('trackableQualifications.0.status_label', 'Processing')
+                ->where('trackableQualifications.0.href', route('applicant.applications.track', [
+                    'application' => $application,
+                    'qualification' => $open->id,
+                ]))
+            );
+    }
+
     public function test_tracking_route_remains_accessible_for_submitted_application(): void
     {
         $applicant = $this->makeApplicant();

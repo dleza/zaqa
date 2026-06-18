@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import ApplicantLayout from '@/Layouts/ApplicantLayout.vue'
-import { Link } from '@inertiajs/vue3'
+import { Link, usePage } from '@inertiajs/vue3'
 import { computed } from 'vue'
 import {
   ArrowDown,
@@ -21,7 +21,45 @@ const props = defineProps<{
   application: any
   events: Array<any>
   statusHistoryFallback: Array<any>
+  selectedQualification?: {
+    id: number
+    title_of_qualification: string | null
+    verification_reference_number: string | null
+    status_label: string
+  } | null
 }>()
+
+const page = usePage()
+
+const selectedQualificationId = computed(() => {
+  const fromProps = Number(props.selectedQualification?.id ?? 0)
+  if (fromProps > 0) return fromProps
+  const raw = new URL(page.url, 'http://localhost').searchParams.get('qualification')
+  const parsed = Number(raw ?? 0)
+  return parsed > 0 ? parsed : null
+})
+
+const selectedQualificationLabel = computed(() => {
+  if (props.selectedQualification?.title_of_qualification) {
+    return props.selectedQualification.title_of_qualification
+  }
+  const match = (props.application?.qualifications ?? []).find(
+    (q: any) => Number(q.id) === selectedQualificationId.value,
+  )
+  return match?.title_of_qualification ?? null
+})
+
+function eventQualificationId(ev: any): number | null {
+  const raw = ev?.qualification_id ?? ev?.metadata?.qualification_id
+  const parsed = Number(raw ?? 0)
+  return parsed > 0 ? parsed : null
+}
+
+function eventMatchesSelectedQualification(ev: any): boolean {
+  if (!selectedQualificationId.value) return true
+  const qid = eventQualificationId(ev)
+  return qid === null || qid === selectedQualificationId.value
+}
 
 function money(cents: number, currency: string) {
   return new Intl.NumberFormat(undefined, { style: 'currency', currency: currency || 'ZMW' }).format((cents ?? 0) / 100)
@@ -86,15 +124,22 @@ function eventIcon(code: string | undefined) {
 }
 
 const timeline = computed(() => {
-  if ((props.events ?? []).length > 0) return props.events
-  return (props.statusHistoryFallback ?? []).map((h) => ({
-    id: `status-${h.id}`,
-    title: h.from_status ? `${h.from_status} → ${h.to_status}` : `Status: ${h.to_status}`,
-    description: h.comment ?? null,
-    occurred_at: h.changed_at,
-    event_code: 'status.fallback',
-    comment: null as string | null,
-  }))
+  const base = (props.events ?? []).length > 0
+    ? props.events
+    : (props.statusHistoryFallback ?? []).map((h) => ({
+        id: `status-${h.id}`,
+        title: h.from_status ? `${h.from_status} → ${h.to_status}` : `Status: ${h.to_status}`,
+        description: h.comment ?? null,
+        occurred_at: h.changed_at,
+        event_code: 'status.fallback',
+        comment: null as string | null,
+      }))
+
+  if (!selectedQualificationId.value) {
+    return base
+  }
+
+  return base.filter((ev) => eventMatchesSelectedQualification(ev))
 })
 
 /** Newest-first from API — first item is always the latest activity. */
@@ -163,6 +208,15 @@ function relativeLabel(iso: string | undefined): string | null {
           <Link :href="`/applicant/applications/${application.id}`" class="zaqa-btn zaqa-btn-secondary">View details</Link>
           <Link href="/applicant/applications" class="zaqa-btn zaqa-btn-ghost">All applications</Link>
         </div>
+      </div>
+
+      <div
+        v-if="selectedQualificationId && selectedQualificationLabel"
+        class="relative mt-4 rounded-2xl border border-[#EF7D00]/30 bg-[#EF7D00]/[0.08] px-5 py-4"
+      >
+        <div class="text-[11px] font-semibold uppercase tracking-wider text-[#EF7D00]">Tracking qualification</div>
+        <div class="mt-1 text-sm font-semibold text-text-primary">{{ selectedQualificationLabel }}</div>
+        <p class="mt-1 text-xs text-text-muted">Showing activity for this qualification and general application updates.</p>
       </div>
 
       <!-- Progress tracker -->

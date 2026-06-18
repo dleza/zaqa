@@ -101,30 +101,6 @@ function upload() {
         </button>
       </div>
     </div>
-
-    <div v-if="documentsOfType.length > 1" class="mt-4 border-t border-border/60 pt-3">
-      <div class="text-xs font-semibold text-text-primary">History</div>
-      <div class="mt-2 space-y-1">
-        <div
-          v-for="doc in documentsOfType"
-          :key="doc.id"
-          class="flex flex-wrap items-center justify-between gap-2 text-xs text-text-muted"
-        >
-          <div>
-            v{{ doc.version_number }} • {{ doc.original_name }}
-            <span v-if="doc.is_current_version" class="ml-1 text-success">(current)</span>
-          </div>
-          <div class="flex gap-2">
-            <a :href="doc.preview_url" target="_blank" rel="noopener" class="zaqa-link">
-              Preview
-            </a>
-            <a :href="doc.download_url" target="_blank" rel="noopener" class="zaqa-link">
-              Download
-            </a>
-          </div>
-        </div>
-      </div>
-    </div>
   </div>
 </template>
 

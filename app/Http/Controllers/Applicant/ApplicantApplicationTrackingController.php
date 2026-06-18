@@ -2,6 +2,8 @@
 
 namespace App\Http\Controllers\Applicant;
 
+use App\Domain\Applicant\ApplicantQualificationsService;
+use App\Domain\Applications\ApplicationQualificationOutcomeSyncService;
 use App\Enums\LifecycleVisibility;
 use App\Enums\PaymentStatus;
 use App\Http\Controllers\Controller;
@@ -17,12 +19,14 @@ class ApplicantApplicationTrackingController extends Controller
     {
         $this->authorize('view', $application);
 
+        $application = app(ApplicationQualificationOutcomeSyncService::class)->syncIfNeeded($application);
+
         $application->loadMissing([
             'lifecycleEvents.actor',
             'statusHistories',
             'invoice',
             'payments',
-            'qualifications:id,application_id,title_of_qualification',
+            'qualifications:id,application_id,title_of_qualification,verification_reference_number,verification_state',
         ]);
 
         $qualificationTitles = $application->qualifications
@@ -71,6 +75,20 @@ class ApplicantApplicationTrackingController extends Controller
         $displayPayment = $paymentsSorted->first(fn ($p) => $p->status === PaymentStatus::Confirmed)
             ?? $paymentsSorted->first();
 
+        $selectedQualification = null;
+        $qualificationId = (int) $request->query('qualification', 0);
+        if ($qualificationId > 0) {
+            $qualification = $application->qualifications->firstWhere('id', $qualificationId);
+            if ($qualification instanceof Qualification) {
+                $selectedQualification = [
+                    'id' => (int) $qualification->id,
+                    'title_of_qualification' => $qualification->title_of_qualification,
+                    'verification_reference_number' => $qualification->verification_reference_number,
+                    'status_label' => app(ApplicantQualificationsService::class)->applicantStatusLabel($qualification, $application),
+                ];
+            }
+        }
+
         return Inertia::render('Applicant/Applications/Track', [
             'application' => [
                 'id' => $application->id,
@@ -103,6 +121,7 @@ class ApplicantApplicationTrackingController extends Controller
             ],
             'events' => $events,
             'statusHistoryFallback' => $statusHistoryFallback,
+            'selectedQualification' => $selectedQualification,
         ]);
     }
 

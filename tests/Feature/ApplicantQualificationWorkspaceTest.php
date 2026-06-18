@@ -81,7 +81,9 @@ class ApplicantQualificationWorkspaceTest extends TestCase
             ->assertRedirect()
             ->assertSessionHas('success');
 
-        $this->assertDatabaseMissing('qualification_documents', ['id' => $document->id]);
+        $document->refresh();
+        $this->assertFalse($document->is_current_version);
+        $this->assertNotNull($document->deleted_at);
     }
 
     /**

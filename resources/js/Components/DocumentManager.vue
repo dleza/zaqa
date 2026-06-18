@@ -35,6 +35,14 @@ const requiredTypes = computed<DocType[]>(() => {
     return ['nrc_copy']
   }
   if (documentsScope.value === 'qualification_only') {
+    return ['certificate_copy']
+  }
+  return ['nrc_copy', 'certificate_copy']
+})
+
+const allTypes = computed<DocType[]>(() => {
+  if (documentsScope.value === 'identity_only') return ['nrc_copy']
+  if (documentsScope.value === 'qualification_only') {
     const base: DocType[] = ['certificate_copy']
     if (props.transcriptRequired) base.push('transcript')
     return base
@@ -42,12 +50,6 @@ const requiredTypes = computed<DocType[]>(() => {
   const base: DocType[] = ['nrc_copy', 'certificate_copy']
   if (props.transcriptRequired) base.push('transcript')
   return base
-})
-
-const allTypes = computed<DocType[]>(() => {
-  if (documentsScope.value === 'identity_only') return ['nrc_copy']
-  if (documentsScope.value === 'qualification_only') return ['certificate_copy', 'transcript']
-  return ['nrc_copy', 'certificate_copy', 'transcript']
 })
 
 function typeMeta(type: DocType) {
@@ -66,11 +68,9 @@ function typeMeta(type: DocType) {
       icon: FileText,
     }
   return {
-    label: 'Transcript',
-    helper: props.transcriptRequired
-      ? 'Transcript is required for foreign qualifications.'
-      : 'Transcript is optional. Upload it if you have it available.',
-    required: props.transcriptRequired,
+    label: 'Transcript (optional)',
+    helper: 'Optional. Upload a transcript if you have one.',
+    required: false,
     icon: FileText,
   }
 }
@@ -289,10 +289,11 @@ async function confirmDelete(doc: DocItem | null) {
                   <CheckCircle2 class="h-4 w-4" aria-hidden="true" />
                   Uploaded
                 </span>
-                <span v-else class="zaqa-badge">
+                <span v-else-if="typeMeta(type).required" class="zaqa-badge">
                   <AlertCircle class="h-4 w-4 text-text-muted" aria-hidden="true" />
                   Missing
                 </span>
+                <span v-else class="zaqa-badge text-text-muted">Not uploaded</span>
               </div>
               <div class="mt-1 text-xs text-text-muted">
                 {{ typeMeta(type).helper }}

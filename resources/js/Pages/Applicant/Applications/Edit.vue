@@ -1084,9 +1084,7 @@ const qualificationRows = computed(() => {
     const id = Number(q.id)
     const isForeign = (q.is_foreign_qualification ?? false) === true
     const hasCert = typeof q.has_certificate_document === 'boolean' ? q.has_certificate_document : hasCurrentQualificationDocument(id, 'certificate_copy')
-    const hasTranscript =
-      typeof q.has_transcript_document === 'boolean' ? q.has_transcript_document : hasCurrentQualificationDocument(id, 'transcript')
-    const docsOk = hasCert && (isForeign ? hasTranscript : true)
+    const docsOk = hasCert
 
     const requiresForeignConsent = typeof q.requires_foreign_consent === 'boolean' ? q.requires_foreign_consent : isForeign
     const hasForeignConsent =
@@ -2708,9 +2706,7 @@ onBeforeUnmount(() => {
                       <div class="mt-1 text-sm font-semibold text-text-primary">{{ d.original_name || '—' }}</div>
                     </div>
                     <div class="flex flex-wrap items-center gap-2">
-                      <span class="zaqa-badge" :class="d.is_current_version ? 'zaqa-badge-success' : 'zaqa-badge'">
-                        {{ d.is_current_version ? 'Uploaded' : 'Old version' }}
-                      </span>
+                      <span class="zaqa-badge zaqa-badge-success">Uploaded</span>
                       <a v-if="d.preview_url && application.can_edit" :href="d.preview_url" target="_blank" rel="noopener" class="zaqa-link text-xs">Preview</a>
                       <a v-if="d.download_url && application.can_edit" :href="d.download_url" target="_blank" rel="noopener" class="zaqa-link text-xs">Download</a>
                     </div>

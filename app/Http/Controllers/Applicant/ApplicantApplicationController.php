@@ -5,6 +5,9 @@ namespace App\Http\Controllers\Applicant;
 use App\Domain\Applications\ApplicantQualificationAmendmentComments;
 use App\Domain\Applications\ApplicantQualificationAmendmentGuard;
 use App\Domain\Applications\ApplicationDraftService;
+use App\Domain\Applications\ApplicationQualificationOutcomeSyncService;
+use App\Domain\Documents\QualificationDocumentEvidence;
+use App\Domain\Applicant\ApplicantQualificationsService;
 use App\Domain\Documents\ApplicantDocumentService;
 use App\Domain\Finance\InvoicePdfService;
 use App\Domain\Finance\PaymentReceiptPdfService;
@@ -74,25 +77,29 @@ class ApplicantApplicationController extends Controller
             ])
             ->latest('id')
             ->get()
-            ->map(fn (Application $application) => [
-                'id' => $application->id,
-                'uuid' => $application->uuid,
-                'application_number' => $application->application_number,
-                'current_status' => $application->current_status?->value ?? (string) $application->current_status,
-                'status_label' => $application->applicantStatusLabel(),
-                'display_status_label' => ((int) ($application->returned_qualifications_count ?? 0)) > 0
-                    ? 'Correction required'
-                    : $application->applicantStatusLabel(),
-                'correction_required' => ((int) ($application->returned_qualifications_count ?? 0)) > 0,
-                'service_type' => $application->service_type?->value ?? (string) $application->service_type,
-                'qualification_category' => $application->qualification_category,
-                'is_foreign' => (bool) $application->is_foreign,
-                'submitted_at' => optional($application->submitted_at)?->toIso8601String(),
-                'created_at' => optional($application->created_at)?->toIso8601String(),
-                'can_edit' => $request->user()->can('update', $application),
-                'can_delete' => $request->user()->can('delete', $application),
-                'wizard' => $this->wizardSummary($application, $user),
-            ]);
+            ->map(function (Application $application) use ($request, $user) {
+                $application = app(ApplicationQualificationOutcomeSyncService::class)->syncIfNeeded($application);
+
+                return [
+                    'id' => $application->id,
+                    'uuid' => $application->uuid,
+                    'application_number' => $application->application_number,
+                    'current_status' => $application->current_status?->value ?? (string) $application->current_status,
+                    'status_label' => $application->applicantStatusLabel(),
+                    'display_status_label' => ((int) ($application->returned_qualifications_count ?? 0)) > 0
+                        ? 'Correction required'
+                        : $application->applicantDisplayStatusLabel(),
+                    'correction_required' => ((int) ($application->returned_qualifications_count ?? 0)) > 0,
+                    'service_type' => $application->service_type?->value ?? (string) $application->service_type,
+                    'qualification_category' => $application->qualification_category,
+                    'is_foreign' => (bool) $application->is_foreign,
+                    'submitted_at' => optional($application->submitted_at)?->toIso8601String(),
+                    'created_at' => optional($application->created_at)?->toIso8601String(),
+                    'can_edit' => $request->user()->can('update', $application),
+                    'can_delete' => $request->user()->can('delete', $application),
+                    'wizard' => $this->wizardSummary($application, $user),
+                ];
+            });
 
         return Inertia::render('Applicant/Applications/Index', [
             'applications' => $applications,
@@ -189,6 +196,7 @@ class ApplicantApplicationController extends Controller
             $v = $d->document_type?->value ?? (string) $d->document_type;
 
             return (bool) $d->is_current_version
+                && $d->deleted_at === null
                 && in_array($v, [DocumentType::NrcCopy->value, DocumentType::PassportCopy->value], true);
         });
 
@@ -278,11 +286,6 @@ class ApplicantApplicationController extends Controller
             return false;
         }
 
-        if ((bool) ($q->transcript_required ?? false)
-            && ! $this->wizardHasQualificationDocument($application, $qid, DocumentType::Transcript)) {
-            return false;
-        }
-
         $foreign = $this->wizardQualificationInstitutionIsForeign($q);
         if ($foreign) {
             $consentOk = (bool) ($q->consentForm?->uploaded_document_id ?? false);
@@ -333,6 +336,7 @@ class ApplicantApplicationController extends Controller
             $v = $d->document_type?->value ?? (string) $d->document_type;
 
             return (bool) $d->is_current_version
+                && $d->deleted_at === null
                 && $v === $want
                 && (int) ($d->qualification_id ?? 0) === $qualificationId;
         });
@@ -721,11 +725,13 @@ class ApplicantApplicationController extends Controller
 
     private function applicationPayload(Request $request, Application $application): array
     {
+        $application = app(ApplicationQualificationOutcomeSyncService::class)->syncIfNeeded($application);
         $application->loadMissing('qualifications.certificates', 'payments', 'payments.latestAttempt', 'invoice');
+        $qualificationLabels = app(ApplicantQualificationsService::class);
 
         $signedExpiry = now()->addMinutes(15);
 
-        $documents = $application->documents
+        $documents = QualificationDocumentEvidence::filterActiveForReview($application->documents)
             ->sortByDesc('id')
             ->values()
             ->map(fn ($doc) => [
@@ -762,8 +768,7 @@ class ApplicantApplicationController extends Controller
 
         $paymentProof = $displayPayment?->proofDocument;
 
-        $currentDocs = $application->documents
-            ->filter(fn ($d) => (bool) $d->is_current_version);
+        $currentDocs = QualificationDocumentEvidence::filterActiveEvidence($application->documents);
 
         $sendBackHistoryByQualification = ApplicantQualificationAmendmentComments::historyGroupedByQualification(
             $application->qualifications,
@@ -772,7 +777,7 @@ class ApplicantApplicationController extends Controller
         $qualifications = $application->qualifications
             ->sortBy('id')
             ->values()
-            ->map(function ($q) use ($application, $currentDocs, $sendBackHistoryByQualification) {
+            ->map(function ($q) use ($application, $currentDocs, $sendBackHistoryByQualification, $qualificationLabels) {
                 $qid = (int) $q->id;
                 $commentHistory = $sendBackHistoryByQualification[$qid] ?? [];
                 $latestComment = $commentHistory[0] ?? null;
@@ -795,9 +800,6 @@ class ApplicantApplicationController extends Controller
                 $missing = [];
                 if (! $hasCert) {
                     $missing[] = 'certificate_copy';
-                }
-                if ((bool) ($q->transcript_required ?? false) && ! $hasTranscript) {
-                    $missing[] = 'transcript';
                 }
                 if ($requiresForeignConsent && ! $hasForeignConsent) {
                     $missing[] = 'foreign_consent';
@@ -919,6 +921,7 @@ class ApplicantApplicationController extends Controller
                     'institution_has_consent_form' => $requiresForeignConsent ? $institutionHasConsentForm : null,
                     'missing_requirements' => $missing,
                     'verification_state' => $q->verification_state?->value ?? (string) ($q->verification_state ?? ''),
+                    'status_label' => $qualificationLabels->applicantStatusLabel($q, $application),
                     'returned_to_applicant_at' => optional($q->returned_to_applicant_at)?->toIso8601String(),
                     'send_back_reopen_level' => $q->send_back_reopen_level,
                     'amendment_comment' => $latestComment['body'] ?? null,

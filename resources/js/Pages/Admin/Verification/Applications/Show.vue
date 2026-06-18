@@ -301,7 +301,6 @@ const slaProgressPct = computed(() => {
                 <tr>
                   <th class="px-4 py-3 text-left">Type</th>
                   <th class="px-4 py-3 text-left">File</th>
-                  <th class="px-4 py-3 text-left">Version</th>
                   <th class="px-4 py-3 text-left">Uploaded</th>
                   <th class="px-4 py-3 text-right">Actions</th>
                 </tr>
@@ -315,7 +314,6 @@ const slaProgressPct = computed(() => {
                       <span>{{ d.original_name }}</span>
                     </div>
                   </td>
-                  <td class="px-4 py-3 text-text-primary">v{{ d.version_number }}<span v-if="!d.is_current_version" class="text-xs text-text-muted"> (old)</span></td>
                   <td class="px-4 py-3 text-text-muted">{{ d.created_at ? new Date(d.created_at).toLocaleString() : '—' }}</td>
                   <td class="px-4 py-3 text-right">
                     <div class="inline-flex items-center gap-2">

@@ -24,6 +24,7 @@ class DashboardController extends Controller
             'returnedQualifications' => $payload['returned_qualifications'],
             'returnedQualificationsCount' => $payload['returned_qualifications_count'],
             'trackingHref' => $payload['tracking_href'],
+            'trackableQualifications' => $payload['trackable_qualifications'],
         ]);
     }
 }

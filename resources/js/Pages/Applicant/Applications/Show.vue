@@ -8,13 +8,14 @@ import {
   Building2,
   Calendar,
   CheckCircle2,
+  ChevronDown,
+  ChevronRight,
   Copy,
   Check,
   CreditCard,
   FileText,
   GraduationCap,
   Hash,
-  History,
   Layers,
   MapPin,
   Sparkles,
@@ -34,6 +35,31 @@ const props = defineProps<{
 
 const copiedQualId = ref<number | null>(null)
 let copyTimer: ReturnType<typeof setTimeout> | null = null
+const expandedQualificationIds = ref<Set<number>>(new Set())
+const paymentExpanded = ref(false)
+
+function qualificationKey(q: any, idx: number): number {
+  return Number(q.id ?? idx)
+}
+
+function isQualificationExpanded(q: any, idx: number): boolean {
+  return expandedQualificationIds.value.has(qualificationKey(q, idx))
+}
+
+function toggleQualification(q: any, idx: number) {
+  const key = qualificationKey(q, idx)
+  const next = new Set(expandedQualificationIds.value)
+  if (next.has(key)) {
+    next.delete(key)
+  } else {
+    next.add(key)
+  }
+  expandedQualificationIds.value = next
+}
+
+function togglePayment() {
+  paymentExpanded.value = !paymentExpanded.value
+}
 
 const countryNameById = computed(() => new Map(props.countries.map((c) => [c.id, c.name])))
 
@@ -216,6 +242,15 @@ function statusBadgeClass(status: string) {
   if (s === 'sent_back') return 'zaqa-badge zaqa-badge-warning'
   if (s === 'submitted' || s === 'resubmitted' || s === 'in_progress') return 'zaqa-badge zaqa-badge-info'
   if (s === 'approved') return 'zaqa-badge zaqa-badge-success'
+  if (s === 'rejected') return 'zaqa-badge zaqa-badge-danger'
+  return 'zaqa-badge'
+}
+
+function qualStatusBadgeClass(label: string) {
+  const s = (label ?? '').toLowerCase()
+  if (s === 'draft' || s === 'sent back') return 'zaqa-badge zaqa-badge-warning'
+  if (s === 'processing') return 'zaqa-badge zaqa-badge-info'
+  if (s === 'approved' || s === 'certificate issued' || s === 'closed') return 'zaqa-badge zaqa-badge-success'
   if (s === 'rejected') return 'zaqa-badge zaqa-badge-danger'
   return 'zaqa-badge'
 }
@@ -499,7 +534,7 @@ function invoiceStatusLabel(status: unknown): string {
                 No qualifications linked to this application.
               </div>
 
-              <div v-else class="mt-6 space-y-8">
+              <div v-else class="mt-6 space-y-4">
                 <article
                   v-for="(q, idx) in qualificationsList"
                   :key="q.id ?? idx"
@@ -510,11 +545,21 @@ function invoiceStatusLabel(status: unknown): string {
                     aria-hidden="true"
                   />
 
-                  <!-- Reference ribbon — always visible -->
-                  <div
-                    class="border-b border-border/70 bg-gradient-to-r from-brand/[0.06] via-surface-muted/90 to-surface-muted/40 px-5 py-5 pl-6 sm:px-8 sm:py-6"
+                  <button
+                    type="button"
+                    class="flex w-full flex-col gap-4 border-b border-border/70 bg-gradient-to-r from-brand/[0.06] via-surface-muted/90 to-surface-muted/40 px-5 py-5 pl-6 text-left transition hover:bg-surface-muted/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent/40 sm:px-8 sm:py-6"
+                    :aria-expanded="isQualificationExpanded(q, idx)"
+                    @click="toggleQualification(q, idx)"
                   >
-                    <div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                    <div class="flex items-start gap-3">
+                      <span class="mt-1 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border border-border bg-surface text-text-muted">
+                        <ChevronDown
+                          v-if="isQualificationExpanded(q, idx)"
+                          class="h-4 w-4"
+                          aria-hidden="true"
+                        />
+                        <ChevronRight v-else class="h-4 w-4" aria-hidden="true" />
+                      </span>
                       <div class="min-w-0 flex-1">
                         <div class="flex flex-wrap items-center gap-2">
                           <span
@@ -522,64 +567,91 @@ function invoiceStatusLabel(status: unknown): string {
                           >
                             Qualification {{ idx + 1 }}
                           </span>
-                          <span v-if="qualAwardScope(q).startsWith('Foreign')" class="text-[10px] font-semibold uppercase tracking-wide text-accent-deep">
+                          <span
+                            v-if="qualAwardScope(q).startsWith('Foreign')"
+                            class="text-[10px] font-semibold uppercase tracking-wide text-accent-deep"
+                          >
                             Foreign award
+                          </span>
+                          <span
+                            v-if="q.status_label"
+                            class="text-[10px]"
+                            :class="qualStatusBadgeClass(q.status_label)"
+                          >
+                            {{ q.status_label }}
                           </span>
                         </div>
                         <h3 class="mt-2 text-lg font-semibold leading-snug tracking-tight text-text-primary sm:text-xl">
                           {{ q.title_of_qualification || 'Untitled qualification' }}
                         </h3>
-                        <div
-                          class="mt-3 rounded-2xl border border-brand/25 bg-brand/[0.06] px-4 py-3"
-                        >
-                          <div class="text-[10px] font-bold uppercase tracking-wider text-brand">Names on qualification document</div>
-                          <div class="mt-1 text-sm font-semibold text-text-primary">
-                            {{ q.names_as_on_qualification_document?.trim() || 'Not captured' }}
-                          </div>
-                        </div>
-                      </div>
-
-                      <div
-                        class="flex w-full shrink-0 flex-col gap-2 rounded-2xl border-2 border-brand/25 bg-surface px-4 py-4 shadow-inner shadow-brand/5 sm:max-w-md lg:w-auto lg:min-w-[280px]"
-                      >
-                        <div class="flex items-center justify-between gap-2">
-                          <div class="flex items-center gap-2 text-brand">
-                            <Hash class="h-4 w-4 shrink-0 opacity-80" aria-hidden="true" />
-                            <span class="text-[10px] font-bold uppercase tracking-[0.18em] text-text-muted">
-                              Verification reference
-                            </span>
-                          </div>
-                          <button
-                            v-if="q.verification_reference_number"
-                            type="button"
-                            class="inline-flex items-center gap-1 rounded-lg border border-border bg-surface-muted px-2 py-1 text-[11px] font-semibold text-text-primary transition hover:border-brand/40 hover:bg-brand/5"
-                            @click="copyVerificationRef(Number(q.id), q.verification_reference_number)"
-                          >
-                            <Check v-if="copiedQualId === Number(q.id)" class="h-3.5 w-3.5 text-success" />
-                            <Copy v-else class="h-3.5 w-3.5 opacity-70" />
-                            {{ copiedQualId === Number(q.id) ? 'Copied' : 'Copy' }}
-                          </button>
-                        </div>
-                        <p
-                          v-if="q.verification_reference_number"
-                          class="break-all font-mono text-lg font-bold tracking-tight text-brand-dark sm:text-xl"
-                        >
-                          {{ q.verification_reference_number }}
-                        </p>
-                      <p v-else class="text-sm leading-relaxed text-text-muted">
-                        <template v-if="isDraftLike">
-                            This unique reference is generated automatically once your payment is confirmed.
-                        </template>
-                        <template v-else>
-                            A verification reference was not recorded for this row. If you submitted recently, refresh
-                            the page or contact ZAQA with your application reference above.
-                          </template>
+                        <p class="mt-1 text-xs text-text-muted">
+                          <span v-if="q.verification_reference_number" class="font-mono font-semibold text-brand">
+                            {{ q.verification_reference_number }}
+                          </span>
+                          <span v-else-if="isDraftLike">Reference after payment</span>
+                          <span v-else>No reference yet</span>
+                          <span class="mx-1.5">•</span>
+                          Click to {{ isQualificationExpanded(q, idx) ? 'hide' : 'view' }} details
                         </p>
                       </div>
                     </div>
-                  </div>
+                  </button>
 
-                  <div class="grid grid-cols-1 gap-6 px-5 py-6 pl-6 sm:px-8 lg:grid-cols-2 lg:items-start">
+                  <div v-show="isQualificationExpanded(q, idx)">
+                    <div class="border-b border-border/70 bg-surface-muted/40 px-5 py-5 pl-6 sm:px-8 sm:py-6">
+                      <div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                        <div class="min-w-0 flex-1">
+                          <div
+                            class="rounded-2xl border border-brand/25 bg-brand/[0.06] px-4 py-3"
+                          >
+                            <div class="text-[10px] font-bold uppercase tracking-wider text-brand">Names on qualification document</div>
+                            <div class="mt-1 text-sm font-semibold text-text-primary">
+                              {{ q.names_as_on_qualification_document?.trim() || 'Not captured' }}
+                            </div>
+                          </div>
+                        </div>
+
+                        <div
+                          class="flex w-full shrink-0 flex-col gap-2 rounded-2xl border-2 border-brand/25 bg-surface px-4 py-4 shadow-inner shadow-brand/5 sm:max-w-md lg:w-auto lg:min-w-[280px]"
+                        >
+                          <div class="flex items-center justify-between gap-2">
+                            <div class="flex items-center gap-2 text-brand">
+                              <Hash class="h-4 w-4 shrink-0 opacity-80" aria-hidden="true" />
+                              <span class="text-[10px] font-bold uppercase tracking-[0.18em] text-text-muted">
+                                Verification reference
+                              </span>
+                            </div>
+                            <button
+                              v-if="q.verification_reference_number"
+                              type="button"
+                              class="inline-flex items-center gap-1 rounded-lg border border-border bg-surface-muted px-2 py-1 text-[11px] font-semibold text-text-primary transition hover:border-brand/40 hover:bg-brand/5"
+                              @click.stop="copyVerificationRef(Number(q.id), q.verification_reference_number)"
+                            >
+                              <Check v-if="copiedQualId === Number(q.id)" class="h-3.5 w-3.5 text-success" />
+                              <Copy v-else class="h-3.5 w-3.5 opacity-70" />
+                              {{ copiedQualId === Number(q.id) ? 'Copied' : 'Copy' }}
+                            </button>
+                          </div>
+                          <p
+                            v-if="q.verification_reference_number"
+                            class="break-all font-mono text-lg font-bold tracking-tight text-brand-dark sm:text-xl"
+                          >
+                            {{ q.verification_reference_number }}
+                          </p>
+                          <p v-else class="text-sm leading-relaxed text-text-muted">
+                            <template v-if="isDraftLike">
+                              This unique reference is generated automatically once your payment is confirmed.
+                            </template>
+                            <template v-else>
+                              A verification reference was not recorded for this row. If you submitted recently, refresh
+                              the page or contact ZAQA with your application reference above.
+                            </template>
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div class="grid grid-cols-1 gap-6 px-5 py-6 pl-6 sm:px-8 lg:grid-cols-2 lg:items-start">
                     <div class="space-y-4">
                       <div
                         v-if="q.cveq_certificate"
@@ -770,6 +842,7 @@ function invoiceStatusLabel(status: unknown): string {
                       </table>
                     </div>
                   </div>
+                  </div>
                 </article>
               </div>
 
@@ -870,16 +943,33 @@ function invoiceStatusLabel(status: unknown): string {
 
             <!-- Payment -->
             <section>
-              <div class="flex items-center gap-3 border-b border-border/60 pb-3">
-                <span class="flex h-9 w-9 items-center justify-center rounded-xl bg-violet-500/15 text-violet-900" aria-hidden="true">
-                  <CreditCard class="h-5 w-5" />
-                </span>
-                <div>
-                  <h2 class="text-base font-semibold text-text-primary">Payment</h2>
-                  <p class="text-xs text-text-muted">Invoice and payment confirmation for this application.</p>
+              <button
+                type="button"
+                class="flex w-full items-center justify-between gap-3 border-b border-border/60 pb-3 text-left transition hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
+                :aria-expanded="paymentExpanded"
+                @click="togglePayment"
+              >
+                <div class="flex items-center gap-3">
+                  <span class="flex h-9 w-9 items-center justify-center rounded-xl bg-violet-500/15 text-violet-900" aria-hidden="true">
+                    <CreditCard class="h-5 w-5" />
+                  </span>
+                  <div>
+                    <h2 class="text-base font-semibold text-text-primary">Payment</h2>
+                    <p class="text-xs text-text-muted">
+                      Invoice {{ application.invoice?.invoice_number ?? '—' }}
+                      <span v-if="application.invoice?.amount_cents != null" class="mx-1">•</span>
+                      <span v-if="application.invoice?.amount_cents != null">
+                        {{ money(application.invoice?.amount_cents ?? 0, application.invoice?.currency ?? 'ZMW') }}
+                      </span>
+                    </p>
+                  </div>
                 </div>
-              </div>
-              <div class="mt-5 overflow-hidden rounded-2xl border border-border/80 bg-surface-muted/30">
+                <span class="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border border-border bg-surface text-text-muted">
+                  <ChevronDown v-if="paymentExpanded" class="h-4 w-4" aria-hidden="true" />
+                  <ChevronRight v-else class="h-4 w-4" aria-hidden="true" />
+                </span>
+              </button>
+              <div v-show="paymentExpanded" class="mt-5 overflow-hidden rounded-2xl border border-border/80 bg-surface-muted/30">
                 <dl class="divide-y divide-border/60">
                   <div class="flex flex-col gap-1 px-5 py-4 sm:flex-row sm:items-center sm:justify-between sm:gap-6">
                     <dt class="text-xs font-semibold uppercase tracking-wider text-text-muted">Invoice number</dt>
@@ -939,55 +1029,6 @@ function invoiceStatusLabel(status: unknown): string {
                   >
                     Download receipt
                   </a>
-                </div>
-              </div>
-            </section>
-
-            <div class="my-10 h-px bg-gradient-to-r from-transparent via-border to-transparent" />
-
-            <!-- Timeline -->
-            <section>
-              <div class="flex items-center gap-3 border-b border-border/60 pb-3">
-                <span class="flex h-9 w-9 items-center justify-center rounded-xl bg-slate-500/15 text-slate-800" aria-hidden="true">
-                  <History class="h-5 w-5" />
-                </span>
-                <div>
-                  <h2 class="text-base font-semibold text-text-primary">Status timeline</h2>
-                  <p class="text-xs text-text-muted">Recorded status changes on your application.</p>
-                </div>
-              </div>
-              <div
-                v-if="application.status_histories.length === 0"
-                class="mt-5 rounded-2xl border border-dashed border-border bg-surface-muted/40 px-5 py-8 text-center text-sm text-text-muted"
-              >
-                No status changes recorded yet.
-              </div>
-              <div v-else class="relative mt-6 space-y-0 pl-2">
-                <div
-                  class="absolute bottom-2 left-[11px] top-2 w-px bg-gradient-to-b from-brand/40 via-border to-transparent"
-                  aria-hidden="true"
-                />
-                <div
-                  v-for="h in application.status_histories"
-                  :key="h.id"
-                  class="relative pb-8 pl-10 last:pb-0"
-                >
-                  <span
-                    class="absolute left-0 top-1.5 flex h-[22px] w-[22px] items-center justify-center rounded-full border-2 border-surface bg-brand shadow-sm ring-2 ring-brand/20"
-                  >
-                    <CheckCircle2 class="h-3 w-3 text-text-on-dark" aria-hidden="true" />
-                  </span>
-                  <div class="rounded-2xl border border-border/80 bg-surface-muted/60 px-4 py-3">
-                    <div class="text-sm font-semibold text-text-primary">
-                      {{ h.from_status ?? '—' }}
-                      <span class="mx-1 text-text-muted">→</span>
-                      {{ h.to_status }}
-                    </div>
-                    <div v-if="h.comment" class="mt-2 text-sm text-text-muted">{{ h.comment }}</div>
-                    <div class="mt-2 text-[11px] font-medium text-text-muted">
-                      {{ formatDisplayDate(h.changed_at) }}
-                    </div>
-                  </div>
                 </div>
               </div>
             </section>

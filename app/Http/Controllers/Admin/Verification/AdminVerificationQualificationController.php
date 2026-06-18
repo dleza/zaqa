@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Admin\Verification;
 use App\Domain\Applications\ApplicationNotificationContact;
 use App\Domain\Applications\QualificationCaptureService;
 use App\Domain\Certificates\QualificationCertificateService;
+use App\Domain\Documents\QualificationDocumentEvidence;
 use App\Domain\Payments\ApplicationPaymentSatisfaction;
 use App\Domain\Verification\AutoAssignmentResult;
 use App\Domain\Verification\AssignmentService;
@@ -365,20 +366,18 @@ class AdminVerificationQualificationController extends Controller
                         'learner_record_id' => $a->learner_record_id,
                         'created_at' => optional($a->created_at)?->toIso8601String(),
                     ]),
-                'documents' => $qualification->documents
-                    ->sortByDesc('id')
-                    ->values()
+                'documents' => QualificationDocumentEvidence::filterOfficerApplicantEvidence($qualification->documents)
                     ->map(fn ($d) => [
                         'id' => $d->id,
                         'document_type' => $d->document_type?->value ?? (string) $d->document_type,
                         'original_name' => $d->original_name,
-                        'version_number' => $d->version_number,
-                        'is_current_version' => (bool) $d->is_current_version,
                         'uploaded_by' => $d->uploadedBy?->name,
                         'created_at' => optional($d->created_at)?->toIso8601String(),
                         'preview_url' => route('admin.verification.documents.preview', ['document' => $d->id]),
                         'download_url' => route('admin.verification.documents.download', ['document' => $d->id]),
-                    ]),
+                    ])
+                    ->values()
+                    ->all(),
                 'consent' => $qualification->consentForm
                     ? [
                         'id' => $qualification->consentForm->id,
@@ -948,7 +947,7 @@ class AdminVerificationQualificationController extends Controller
             $types[] = DocumentType::ConsentFormSigned->value;
         }
 
-        foreach ($qualification->documents->where('is_current_version', true) as $document) {
+        foreach (QualificationDocumentEvidence::filterActiveEvidence($qualification->documents) as $document) {
             $type = $document->document_type?->value ?? (string) $document->document_type;
             if ($type !== '' && ! in_array($type, $types, true)) {
                 $types[] = $type;
@@ -964,7 +963,7 @@ class AdminVerificationQualificationController extends Controller
     private function qualificationEditDocumentsPayload(Qualification $qualification): array
     {
         return $qualification->documents
-            ->where('is_current_version', true)
+            ->pipe(fn ($docs) => QualificationDocumentEvidence::filterActiveEvidence($docs))
             ->sortByDesc('id')
             ->values()
             ->map(fn ($d) => $this->mapEditDocumentRow($d))
@@ -982,6 +981,7 @@ class AdminVerificationQualificationController extends Controller
         }
 
         $appIdentity = $application->documents
+            ->filter(fn ($d) => QualificationDocumentEvidence::isActiveEvidence($d))
             ->filter(fn ($d) => in_array($d->document_type, [DocumentType::NrcCopy, DocumentType::PassportCopy], true)
                 && $d->qualification_id === null
                 && $d->is_current_version)

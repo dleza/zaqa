@@ -69,7 +69,7 @@ async function confirmDelete(app: any) {
                 <span class="text-text-primary">{{ app.service_type }}</span>
               </td>
               <td class="px-4 py-4">
-                <span class="zaqa-badge">{{ app.status_label }}</span>
+                <span class="zaqa-badge">{{ app.display_status_label ?? app.status_label }}</span>
               </td>
               <td class="px-4 py-4">
                 <span
@@ -114,7 +114,7 @@ async function confirmDelete(app: any) {
               <div class="text-sm font-semibold text-text-primary">{{ app.application_number }}</div>
               <div class="mt-1 text-xs text-text-muted">{{ app.service_type }} • {{ app.is_foreign ? 'Foreign' : 'Local' }}</div>
             </div>
-            <span class="zaqa-badge">{{ app.status_label }}</span>
+            <span class="zaqa-badge">{{ app.display_status_label ?? app.status_label }}</span>
           </div>
 
           <div class="mt-3 grid grid-cols-2 gap-3 text-xs">

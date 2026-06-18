@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Admin\Verification;
 
 use App\Domain\Audit\AuditLogService;
 use App\Domain\Documents\ApplicantDocumentService;
+use App\Domain\Documents\QualificationDocumentEvidence;
 use App\Domain\Verification\VerificationQualificationAccess;
 use App\Http\Controllers\Controller;
 use App\Models\QualificationDocument;
@@ -18,6 +19,10 @@ class AdminVerificationDocumentController extends Controller
         }
 
         $this->assertVerificationDocumentAccessible($request, $document);
+
+        if (! QualificationDocumentEvidence::isActiveEvidence($document)) {
+            abort(404);
+        }
 
         $audit->record(
             eventType: 'documents.previewed',
@@ -45,6 +50,10 @@ class AdminVerificationDocumentController extends Controller
         }
 
         $this->assertVerificationDocumentAccessible($request, $document);
+
+        if (! QualificationDocumentEvidence::isActiveEvidence($document)) {
+            abort(404);
+        }
 
         $audit->record(
             eventType: 'documents.downloaded',

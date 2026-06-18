@@ -2,8 +2,10 @@
 
 namespace App\Models;
 
+use App\Domain\Documents\QualificationDocumentEvidence;
 use App\Enums\DocumentType;
 use App\Enums\DocumentVisibility;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
@@ -25,6 +27,9 @@ class QualificationDocument extends Model
         'uploaded_by_user_id',
         'version_number',
         'is_current_version',
+        'superseded_at',
+        'deleted_at',
+        'replaced_by_document_id',
     ];
 
     protected $casts = [
@@ -33,9 +38,25 @@ class QualificationDocument extends Model
         'size_bytes' => 'int',
         'version_number' => 'int',
         'is_current_version' => 'bool',
+        'superseded_at' => 'datetime',
+        'deleted_at' => 'datetime',
         'created_at' => 'datetime',
         'updated_at' => 'datetime',
     ];
+
+    /**
+     * @param  Builder<QualificationDocument>  $query
+     * @return Builder<QualificationDocument>
+     */
+    public function scopeActiveEvidence(Builder $query): Builder
+    {
+        return QualificationDocumentEvidence::applyActiveEvidenceScope($query);
+    }
+
+    public function isActiveEvidence(): bool
+    {
+        return QualificationDocumentEvidence::isActiveEvidence($this);
+    }
 
     public function application(): BelongsTo
     {
@@ -50,6 +71,11 @@ class QualificationDocument extends Model
     public function uploadedBy(): BelongsTo
     {
         return $this->belongsTo(User::class, 'uploaded_by_user_id');
+    }
+
+    public function replacedBy(): BelongsTo
+    {
+        return $this->belongsTo(self::class, 'replaced_by_document_id');
     }
 }
 

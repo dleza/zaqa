@@ -1,9 +1,10 @@
 <script setup lang="ts">
 import { Link, usePage } from '@inertiajs/vue3'
 import ApplicantLayout from '@/Layouts/ApplicantLayout.vue'
-import { computed } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import {
   BadgeCheck,
+  ChevronDown,
   ChevronRight,
   CircleAlert,
   ClipboardList,
@@ -35,7 +36,47 @@ const props = defineProps<{
   returnedQualifications: Array<any>
   returnedQualificationsCount: number
   trackingHref: string
+  trackableQualifications: Array<{
+    id: number
+    application_id: number
+    application_number: string | null
+    title_of_qualification: string | null
+    verification_reference_number: string | null
+    status_label: string
+    href: string
+  }>
 }>()
+
+const trackingMenuOpen = ref(false)
+const trackingMenuRef = ref<HTMLElement | null>(null)
+
+const trackableQualifications = computed(() => props.trackableQualifications ?? [])
+
+function toggleTrackingMenu() {
+  trackingMenuOpen.value = !trackingMenuOpen.value
+}
+
+function closeTrackingMenu() {
+  trackingMenuOpen.value = false
+}
+
+function onDocumentClick(event: MouseEvent) {
+  if (!trackingMenuOpen.value) return
+  const root = trackingMenuRef.value
+  if (root && !root.contains(event.target as Node)) {
+    closeTrackingMenu()
+  }
+}
+
+onMounted(() => document.addEventListener('click', onDocumentClick))
+onBeforeUnmount(() => document.removeEventListener('click', onDocumentClick))
+
+function qualTrackBadgeClass(label: string) {
+  const s = (label ?? '').toLowerCase()
+  if (s === 'sent back') return 'zaqa-badge zaqa-badge-warning'
+  if (s === 'processing') return 'zaqa-badge zaqa-badge-info'
+  return 'zaqa-badge'
+}
 
 const latestApplication = computed(() => ((props.applications ?? [])[0] as any) ?? null)
 const firstReturnedQualification = computed(() => ((props.returnedQualifications ?? [])[0] as any) ?? null)
@@ -151,9 +192,8 @@ const statusCards = computed(() => [
       </div>
 
       <!-- Primary tracking action -->
-      <Link
-        :href="trackingHref"
-        class="group relative mt-6 block overflow-hidden rounded-2xl border border-[#0073BA]/25 bg-gradient-to-br from-[#0073BA]/[0.08] via-surface to-surface p-5 shadow-sm ring-1 ring-black/[0.04] transition hover:-translate-y-[1px] hover:border-[#0073BA]/40 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0073BA]/40 sm:p-6"
+      <div
+        class="relative mt-6 overflow-visible rounded-2xl border border-[#0073BA]/25 bg-gradient-to-br from-[#0073BA]/[0.08] via-surface to-surface p-5 shadow-sm ring-1 ring-black/[0.04] sm:p-6"
       >
         <div
           class="pointer-events-none absolute -right-8 -top-8 h-32 w-32 rounded-full bg-[#EF7D00]/10 blur-2xl"
@@ -174,14 +214,63 @@ const statusCards = computed(() => [
               </p>
             </div>
           </div>
-          <span
-            class="inline-flex h-11 shrink-0 items-center justify-center gap-2 self-start rounded-xl bg-[#0073BA] px-5 text-sm font-semibold text-white shadow-sm transition group-hover:bg-[#0066a5] sm:self-center"
-          >
-            View progress
-            <ChevronRight class="h-4 w-4 transition group-hover:translate-x-0.5" aria-hidden="true" />
-          </span>
+          <div ref="trackingMenuRef" class="relative w-full shrink-0 sm:w-auto sm:self-center">
+            <button
+              type="button"
+              class="inline-flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-[#EF7D00] px-5 text-sm font-semibold text-white shadow-sm transition hover:bg-[#d97000] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#EF7D00]/40 sm:w-auto"
+              :aria-expanded="trackingMenuOpen"
+              aria-haspopup="listbox"
+              @click.stop="toggleTrackingMenu"
+            >
+              View progress
+              <ChevronDown class="h-4 w-4 transition" :class="trackingMenuOpen ? 'rotate-180' : ''" aria-hidden="true" />
+            </button>
+
+            <div
+              v-if="trackingMenuOpen"
+              class="absolute right-0 z-50 mt-2 w-full min-w-[min(100%,20rem)] overflow-hidden rounded-xl border border-border bg-surface shadow-xl ring-1 ring-black/10 sm:min-w-[22rem]"
+              role="listbox"
+            >
+              <div class="border-b border-border bg-surface-muted px-4 py-3">
+                <div class="text-xs font-semibold uppercase tracking-wider text-text-muted">Select qualification</div>
+                <p class="mt-0.5 text-xs text-text-muted">Open qualifications still in progress.</p>
+              </div>
+
+              <div v-if="trackableQualifications.length === 0" class="px-4 py-5 text-sm text-text-muted">
+                No open qualifications to track right now.
+                <Link href="/applicant/qualifications?filter=completed" class="zaqa-link mt-2 inline-block text-sm font-semibold" @click="closeTrackingMenu">
+                  View completed qualifications
+                </Link>
+              </div>
+
+              <ul v-else class="max-h-72 divide-y divide-border/60 overflow-y-auto">
+                <li v-for="q in trackableQualifications" :key="q.id" role="option">
+                  <Link
+                    :href="q.href"
+                    class="group flex items-start justify-between gap-3 px-4 py-3 transition hover:bg-surface-muted/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent/40"
+                    @click="closeTrackingMenu"
+                  >
+                    <div class="min-w-0">
+                      <div class="flex flex-wrap items-center gap-2">
+                        <div class="text-sm font-semibold text-text-primary">
+                          {{ q.title_of_qualification || 'Untitled qualification' }}
+                        </div>
+                        <span :class="qualTrackBadgeClass(q.status_label)">{{ q.status_label }}</span>
+                      </div>
+                      <div class="mt-1 text-xs text-text-muted">
+                        <span v-if="q.verification_reference_number" class="font-mono">{{ q.verification_reference_number }}</span>
+                        <span v-if="q.verification_reference_number"> • </span>
+                        {{ q.application_number ?? 'Application' }}
+                      </div>
+                    </div>
+                    <ChevronRight class="mt-0.5 h-4 w-4 shrink-0 text-text-muted transition group-hover:translate-x-0.5" aria-hidden="true" />
+                  </Link>
+                </li>
+              </ul>
+            </div>
+          </div>
         </div>
-      </Link>
+      </div>
 
       <!-- Status summary -->
       <div class="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5 lg:gap-4">

@@ -24,13 +24,16 @@ class ApplicantDashboardService
      *   alerts: array<int,array{type:string,title:string,message:string,application_id?:int|null,application_number?:string|null,href?:string|null}>,
      *   returned_qualifications: array<int,array{qualification_id:int,application_id:int,application_number:string|null,title_of_qualification:string|null,returned_to_applicant_at:string|null,href:string}>,
      *   returned_qualifications_count: int,
-     *   tracking_href: string
+     *   tracking_href: string,
+     *   trackable_qualifications: array<int,array<string,mixed>>
      * }
      */
     public function build(User $user): array
     {
         $userId = $user->id;
-        $counts = app(ApplicantQualificationsService::class)->countsFor($user);
+        $qualificationsService = app(ApplicantQualificationsService::class);
+        $counts = $qualificationsService->countsFor($user);
+        $trackableQualifications = $qualificationsService->trackableFor($user);
 
         $continueDraft = Application::query()
             ->where('applicant_user_id', $userId)
@@ -158,6 +161,7 @@ class ApplicantDashboardService
             'tracking_href' => $latestApp instanceof Application
                 ? route('applicant.applications.track', $latestApp)
                 : route('applicant.applications.index'),
+            'trackable_qualifications' => $trackableQualifications,
         ];
     }
 

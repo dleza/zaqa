@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Domain\Applications\ApplicationQualificationOutcomeSyncService;
 use App\Enums\ApplicantType;
 use App\Enums\ApplicationStatus;
 use App\Enums\PaymentMethod;
@@ -180,6 +181,60 @@ class Application extends Model
             return 'Correction required';
         }
 
+        $outcomeSummary = $this->applicantQualificationOutcomeSummary();
+        if ($outcomeSummary !== null) {
+            return $outcomeSummary;
+        }
+
         return $this->applicantStatusLabel();
+    }
+
+    public function applicantQualificationOutcomeSummary(): ?string
+    {
+        $this->loadMissing('qualifications');
+
+        if ($this->qualifications->isEmpty()) {
+            return null;
+        }
+
+        $sync = app(ApplicationQualificationOutcomeSyncService::class);
+        if (! $sync->allQualificationsTerminal($this->qualifications)) {
+            return null;
+        }
+
+        $total = $this->qualifications->count();
+        $approvedCount = $this->qualifications->filter(
+            fn (Qualification $q) => in_array($q->verification_state, [
+                VerificationState::ApprovedForCertificate,
+                VerificationState::CertificateIssued,
+                VerificationState::Closed,
+            ], true)
+        )->count();
+        $rejectedCount = $this->qualifications
+            ->filter(fn (Qualification $q) => $q->verification_state === VerificationState::Rejected)
+            ->count();
+        $issuedCount = $this->qualifications
+            ->filter(fn (Qualification $q) => $q->verification_state === VerificationState::CertificateIssued)
+            ->count();
+
+        if ($rejectedCount === $total) {
+            return 'Rejected';
+        }
+
+        if ($rejectedCount > 0 && $approvedCount > 0) {
+            return "Completed — {$approvedCount} approved, {$rejectedCount} rejected";
+        }
+
+        if ($issuedCount === $total) {
+            return 'Completed — all certificates issued';
+        }
+
+        if ($approvedCount === $total) {
+            return $issuedCount > 0
+                ? "Completed — {$issuedCount} of {$total} certificates issued"
+                : 'Approved — awaiting certificate(s)';
+        }
+
+        return 'Completed';
     }
 }

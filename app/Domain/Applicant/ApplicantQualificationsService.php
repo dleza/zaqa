@@ -2,6 +2,7 @@
 
 namespace App\Domain\Applicant;
 
+use App\Domain\Applications\ApplicationQualificationOutcomeSyncService;
 use App\Enums\ApplicationStatus;
 use App\Enums\VerificationState;
 use App\Models\Application;
@@ -59,7 +60,64 @@ class ApplicantQualificationsService
             ->latest('qualifications.updated_at')
             ->latest('qualifications.id')
             ->get()
-            ->map(fn (Qualification $qualification) => $this->serializeListItem($qualification))
+            ->map(function (Qualification $qualification) {
+                /** @var Application $application */
+                $application = $qualification->application;
+                $application = app(ApplicationQualificationOutcomeSyncService::class)->syncIfNeeded($application);
+                $qualification->setRelation('application', $application);
+
+                return $this->serializeListItem($qualification);
+            })
+            ->values()
+            ->all();
+    }
+
+    /**
+     * Qualifications still open for tracking (not in a closed/final verification state).
+     *
+     * @return list<array{
+     *   id:int,
+     *   application_id:int,
+     *   application_number:string|null,
+     *   title_of_qualification:string|null,
+     *   verification_reference_number:string|null,
+     *   verification_state:string|null,
+     *   status_label:string,
+     *   href:string,
+     *   updated_at:string|null
+     * }>
+     */
+    public function trackableFor(User $user): array
+    {
+        $userId = (int) $user->id;
+        $closedStates = $this->closedQualificationStates();
+
+        return Qualification::query()
+            ->whereHas('application', function (Builder $q) use ($userId) {
+                $q->where('applicant_user_id', $userId)
+                    ->whereNotIn('current_status', [
+                        ApplicationStatus::Draft->value,
+                        ApplicationStatus::PendingPayment->value,
+                    ]);
+            })
+            ->where(function (Builder $q) use ($closedStates) {
+                $q->whereNull('verification_state')
+                    ->orWhereNotIn('verification_state', $closedStates);
+            })
+            ->with(['application:id,application_number,current_status'])
+            ->latest('qualifications.updated_at')
+            ->latest('qualifications.id')
+            ->get()
+            ->map(function (Qualification $qualification) {
+                /** @var Application $application */
+                $application = $qualification->application;
+                $application = app(ApplicationQualificationOutcomeSyncService::class)->syncIfNeeded($application);
+                $qualification->setRelation('application', $application);
+
+                return array_merge($this->serializeListItem($qualification), [
+                    'href' => $this->trackingHref($qualification, $application),
+                ]);
+            })
             ->values()
             ->all();
     }
@@ -104,12 +162,7 @@ class ApplicantQualificationsService
                         ->orWhereNotIn('verification_state', $this->terminalVerificationStates());
                 }),
             self::FILTER_SENT_BACK => $query->where('verification_state', VerificationState::ReturnedToApplicant),
-            self::FILTER_COMPLETED => $query->whereIn('verification_state', [
-                VerificationState::ApprovedForCertificate->value,
-                VerificationState::Rejected->value,
-                VerificationState::CertificateIssued->value,
-                VerificationState::Closed->value,
-            ]),
+            self::FILTER_COMPLETED => $query->whereIn('verification_state', $this->closedQualificationStates()),
             default => $query->whereHas(
                 'application',
                 fn (Builder $q) => $q->where('current_status', '!=', ApplicationStatus::Draft)
@@ -129,13 +182,23 @@ class ApplicantQualificationsService
     /**
      * @return list<string>
      */
-    private function terminalVerificationStates(): array
+    private function closedQualificationStates(): array
     {
         return [
             VerificationState::ApprovedForCertificate->value,
             VerificationState::Rejected->value,
             VerificationState::CertificateIssued->value,
             VerificationState::Closed->value,
+        ];
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function terminalVerificationStates(): array
+    {
+        return [
+            ...$this->closedQualificationStates(),
             VerificationState::ReturnedToApplicant->value,
         ];
     }
@@ -225,5 +288,13 @@ class ApplicantQualificationsService
         }
 
         return route('applicant.applications.track', $application);
+    }
+
+    private function trackingHref(Qualification $qualification, Application $application): string
+    {
+        return route('applicant.applications.track', [
+            'application' => $application,
+            'qualification' => $qualification->id,
+        ]);
     }
 }

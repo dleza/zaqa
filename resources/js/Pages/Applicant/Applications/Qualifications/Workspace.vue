@@ -1025,10 +1025,8 @@ const pendingConsentName = computed(() => pendingConsentFile.value?.name ?? '')
                   </p>
                 </div>
                 <div v-if="transcriptRequiredForDocs" class="sm:col-span-2">
-                  <label class="text-sm font-medium">
-                    Transcript
-                    <span v-if="!isForeignAwarding" class="font-normal text-text-muted">(if applicable)</span>
-                  </label>
+                  <label class="text-sm font-medium">Transcript (optional)</label>
+                  <p class="mt-1 text-xs text-text-muted">Optional. Upload a transcript if you have one.</p>
                   <div
                     v-if="existingDocument('transcript')"
                     class="mt-2 flex items-center justify-between gap-3 rounded-lg border border-success/25 bg-success/5 px-3 py-2"

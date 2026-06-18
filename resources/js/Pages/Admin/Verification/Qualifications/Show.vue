@@ -1921,11 +1921,10 @@ const autoVerificationCollapsedSummary = computed(() => {
             <div class="border-t border-border/60 px-5 py-4">
               <div v-if="qualification.documents?.length" class="overflow-hidden rounded-xl border border-border/80">
                 <table class="min-w-full text-sm">
-                  <thead class="bg-surface-muted/90 text-left text-[11px] font-bold uppercase tracking-wider text-text-muted">
+                    <thead class="bg-surface-muted/90 text-left text-[11px] font-bold uppercase tracking-wider text-text-muted">
                     <tr>
                       <th class="px-4 py-3">Type</th>
                       <th class="px-4 py-3">File</th>
-                      <th class="px-4 py-3">Version</th>
                       <th class="px-4 py-3 text-right">Actions</th>
                     </tr>
                   </thead>
@@ -1933,7 +1932,6 @@ const autoVerificationCollapsedSummary = computed(() => {
                     <tr v-for="d in qualification.documents" :key="d.id" class="transition hover:bg-surface-muted/40">
                       <td class="px-4 py-3 font-medium text-text-primary">{{ documentTypeLabel(d.document_type) }}</td>
                       <td class="px-4 py-3 text-text-primary">{{ d.original_name }}</td>
-                      <td class="px-4 py-3 tabular-nums text-text-muted">v{{ d.version_number }}</td>
                       <td class="px-4 py-3 text-right">
                         <a :href="d.preview_url" class="zaqa-btn zaqa-btn-secondary mr-1 inline-flex h-9 items-center px-3 py-2 text-xs">Preview</a>
                         <a :href="d.download_url" class="zaqa-btn zaqa-btn-secondary inline-flex h-9 items-center px-3 py-2 text-xs">Download</a>

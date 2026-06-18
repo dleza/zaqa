@@ -4,6 +4,7 @@ namespace App\Domain\Applications;
 
 use App\Domain\Applications\Events\ApplicationSubmitted;
 use App\Domain\Audit\AuditLogService;
+use App\Domain\Documents\QualificationDocumentEvidence;
 use App\Domain\Payments\ApplicationPaymentSatisfaction;
 use App\Domain\Tracking\ApplicationLifecycleService;
 use App\Domain\Verification\QualificationSlaService;
@@ -261,7 +262,7 @@ class ApplicationSubmissionService
     private function missingDocumentTypes(Application $application, array $requiredDocumentTypes): array
     {
         $currentDocsByType = $application->documents
-            ->filter(fn (QualificationDocument $doc) => (bool) $doc->is_current_version)
+            ->filter(fn (QualificationDocument $doc) => QualificationDocumentEvidence::isActiveEvidence($doc))
             ->groupBy(fn (QualificationDocument $doc) => $doc->document_type?->value ?? (string) $doc->document_type);
 
         $missing = [];
@@ -290,24 +291,12 @@ class ApplicationSubmissionService
         foreach ($application->qualifications as $q) {
             /** @var Qualification $q */
             $hasCertificate = $application->documents
-                ->where('is_current_version', true)
+                ->filter(fn (QualificationDocument $doc) => QualificationDocumentEvidence::isActiveEvidence($doc))
                 ->where('document_type', DocumentType::CertificateCopy->value)
                 ->where('qualification_id', $q->id)
                 ->count() > 0;
             if (! $hasCertificate) {
                 $missing[] = 'certificate_copy (qualification_id='.$q->id.')';
-            }
-
-            $needsTranscript = (bool) ($q->transcript_required ?? false);
-            if ($needsTranscript) {
-                $hasTranscript = $application->documents
-                    ->where('is_current_version', true)
-                    ->where('document_type', DocumentType::Transcript->value)
-                    ->where('qualification_id', $q->id)
-                    ->count() > 0;
-                if (! $hasTranscript) {
-                    $missing[] = 'transcript (qualification_id='.$q->id.')';
-                }
             }
         }
 

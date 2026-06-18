@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Admin\Verification;
 
 use App\Domain\Applications\ApplicationNotificationContact;
+use App\Domain\Documents\QualificationDocumentEvidence;
 use App\Domain\Tracking\ApplicationLifecycleService;
 use App\Domain\Verification\DecisionService;
 use App\Domain\Verification\SendBackService;
@@ -69,7 +70,7 @@ class AdminVerificationApplicationController extends Controller
         $qualCountTotal = $application->qualifications->count();
         $visibleQualificationIds = $visibleQualifications->pluck('id')->map(fn ($id) => (int) $id)->all();
 
-        $documentsForPayload = $application->documents;
+        $documentsForPayload = QualificationDocumentEvidence::filterActiveForReview($application->documents);
         if ($restricted && $viewer) {
             $documentsForPayload = $documentsForPayload->filter(function ($d) use ($visibleQualificationIds, $qualCountTotal, $visibleQualifications, $application) {
                 if ($d->qualification_id !== null) {

@@ -240,7 +240,7 @@ const documentTypeLabels: Record<string, string> = {
   nrc_copy: 'NRC copy',
   passport_copy: 'Passport copy',
   certificate_copy: 'Certificate',
-  transcript: 'Transcript',
+  transcript: 'Transcript (optional)',
   consent_form_signed: 'Institution consent',
   zaqa_consent_form_signed: 'ZAQA consent',
   other_supporting_document: 'Other supporting document',
@@ -793,9 +793,11 @@ function identityDocumentRow(): DocumentRow | null {
                 <div class="min-w-0 flex-1">
                   <div class="text-sm font-medium text-text-primary">{{ slot.label }}</div>
                   <div v-if="slot.document" class="mt-0.5 truncate text-xs text-text-muted">
-                    {{ slot.document.original_name }} · v{{ slot.document.version_number }}
+                    {{ slot.document.original_name }}
                   </div>
-                  <div v-else class="mt-0.5 text-xs text-text-muted">Not uploaded</div>
+                  <div v-else class="mt-0.5 text-xs text-text-muted">
+                    {{ slot.document_type === 'transcript' ? 'Transcript not uploaded' : 'Not uploaded' }}
+                  </div>
                 </div>
                 <div class="flex flex-wrap gap-2 sm:shrink-0 sm:justify-end">
                   <template v-if="slot.document">
