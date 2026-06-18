@@ -32,6 +32,11 @@ const currentPath = computed(() => {
 const isLoginPage = computed(() => currentPath.value === '/login')
 const isRegisterPage = computed(() => currentPath.value === '/register')
 const isActivatePage = computed(() => currentPath.value === '/activate')
+const isForgotPasswordPage = computed(() => currentPath.value === '/forgot-password')
+const hideDecorativeBackground = computed(() => isLoginPage.value || isActivatePage.value)
+const compactFooterOnMobile = computed(
+  () => isLoginPage.value || isRegisterPage.value || isActivatePage.value || isForgotPasswordPage.value,
+)
 </script>
 
 <template>
@@ -72,7 +77,7 @@ const isActivatePage = computed(() => currentPath.value === '/activate')
       <div
         aria-hidden="true"
         class="pointer-events-none absolute inset-0 overflow-hidden"
-        :class="isLoginPage || isRegisterPage || isActivatePage ? 'hidden' : ''"
+        :class="hideDecorativeBackground ? 'hidden' : ''"
       >
         <div class="absolute -top-24 left-1/2 h-96 w-96 -translate-x-1/2 rounded-full bg-brand/15 blur-3xl" />
         <div class="absolute -bottom-32 -right-24 h-[28rem] w-[28rem] rounded-full bg-accent/10 blur-3xl" />
@@ -94,7 +99,7 @@ const isActivatePage = computed(() => currentPath.value === '/activate')
       </div>
     </main>
 
-    <footer class="zaqa-footer" :class="isLoginPage || isRegisterPage || isActivatePage ? 'hidden md:block' : ''">
+    <footer class="zaqa-footer" :class="compactFooterOnMobile ? 'hidden md:block' : ''">
       <div class="zaqa-footer-inner py-4 sm:py-6 lg:py-8">
         <span class="text-text-on-dark/90">© {{ new Date().getFullYear() }} Zambia Qualifications Authority (ZAQA)</span>
         <span class="hidden sm:inline text-text-on-dark/75">Secure qualification verification and certificate validation.</span>

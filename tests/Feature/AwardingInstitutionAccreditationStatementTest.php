@@ -405,4 +405,25 @@ class AwardingInstitutionAccreditationStatementTest extends TestCase
         $this->assertSame('Existing institution statement.', $institution->accreditation_statement);
         $this->assertSame('Different Level 2 statement.', $qualification->level1_accreditation_statement);
     }
+
+    public function test_show_page_can_update_accreditation_statement_via_dedicated_endpoint(): void
+    {
+        $admin = $this->makeAdmin();
+        [, $institution] = $this->makeQualificationWithInstitution('Original statement.');
+
+        $this->actingAs($admin)
+            ->put(route('admin.settings.awarding_institutions.update_accreditation_statement', $institution), [
+                'accreditation_statement' => 'Updated from show page modal.',
+            ])
+            ->assertRedirect(route('admin.settings.awarding_institutions.show', $institution))
+            ->assertSessionHas('success');
+
+        $institution->refresh();
+        $this->assertSame('Updated from show page modal.', $institution->accreditation_statement);
+        $this->assertSame('manual', $institution->accreditation_statement_source);
+        $this->assertDatabaseHas('audit_logs', [
+            'event_type' => 'awarding_institution.accreditation_statement_updated',
+            'entity_id' => $institution->id,
+        ]);
+    }
 }

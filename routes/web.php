@@ -726,6 +726,12 @@ Route::middleware('auth')->group(function () {
                 ->name('awarding_institutions.import_template');
             Route::post('/awarding-institutions/import', [AdminAwardingInstitutionsController::class, 'import'])
                 ->name('awarding_institutions.import');
+            Route::get('/awarding-institutions/accreditation-statements/export', [AdminAwardingInstitutionsController::class, 'exportAccreditationStatements'])
+                ->middleware('can:settings.awarding_institutions.view')
+                ->name('awarding_institutions.accreditation_statements.export');
+            Route::post('/awarding-institutions/accreditation-statements/import', [AdminAwardingInstitutionsController::class, 'importAccreditationStatements'])
+                ->middleware('can:settings.awarding_institutions.edit')
+                ->name('awarding_institutions.accreditation_statements.import');
             Route::get('/awarding-institutions/create', [AdminAwardingInstitutionsController::class, 'create'])
                 ->middleware('can:settings.awarding_institutions.create')
                 ->name('awarding_institutions.create');
@@ -750,6 +756,9 @@ Route::middleware('auth')->group(function () {
             Route::put('/awarding-institutions/{awardingInstitution}', [AdminAwardingInstitutionsController::class, 'update'])
                 ->middleware('can:settings.awarding_institutions.edit')
                 ->name('awarding_institutions.update');
+            Route::put('/awarding-institutions/{awardingInstitution}/accreditation-statement', [AdminAwardingInstitutionsController::class, 'updateAccreditationStatement'])
+                ->middleware('can:settings.awarding_institutions.edit')
+                ->name('awarding_institutions.update_accreditation_statement');
             Route::delete('/awarding-institutions/{awardingInstitution}', [AdminAwardingInstitutionsController::class, 'destroy'])
                 ->middleware('can:settings.awarding_institutions.delete')
                 ->name('awarding_institutions.destroy');

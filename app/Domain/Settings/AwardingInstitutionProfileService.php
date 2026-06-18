@@ -181,6 +181,7 @@ class AwardingInstitutionProfileService
             ],
             'links' => [
                 'edit' => route('admin.settings.awarding_institutions.edit', ['awardingInstitution' => $institution->id]),
+                'update_accreditation_statement' => route('admin.settings.awarding_institutions.update_accreditation_statement', ['awardingInstitution' => $institution->id]),
                 'deactivate' => route('admin.settings.awarding_institutions.deactivate', ['awardingInstitution' => $institution->id]),
                 'reactivate' => route('admin.settings.awarding_institutions.reactivate', ['awardingInstitution' => $institution->id]),
                 'learner_records' => '/admin/learner-records?awarding_institution_id='.(int) $institution->id,

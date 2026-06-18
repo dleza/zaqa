@@ -1,9 +1,10 @@
 <script setup lang="ts">
 import AdminLayout from '@/Layouts/AdminLayout.vue'
+import AdminAccreditationStatementsExcelModal from '@/Components/AdminAccreditationStatementsExcelModal.vue'
 import AdminExcelImportModal from '@/Components/AdminExcelImportModal.vue'
 import AdminTablePagination from '@/Components/AdminTablePagination.vue'
 import { Link, router } from '@inertiajs/vue3'
-import { Building2, FileSpreadsheet, Plus, Search } from 'lucide-vue-next'
+import { Building2, FileSpreadsheet, FileText, Plus, Search } from 'lucide-vue-next'
 import { ref, watch } from 'vue'
 import Swal from 'sweetalert2'
 
@@ -13,6 +14,7 @@ const props = defineProps<{
   filters: { q: string; country_id: string | null; active: string | null; missing_statement: string | null }
   can: { create: boolean; edit: boolean; delete: boolean }
   excel_import: { template_url: string; import_url: string; can_import: boolean }
+  accreditation_statements_excel: { export_url: string; import_url: string; can_export: boolean; can_import: boolean }
 }>()
 
 const q = ref(props.filters.q ?? '')
@@ -20,6 +22,7 @@ const countryId = ref<string>(props.filters.country_id ?? '')
 const active = ref<string>(props.filters.active ?? '')
 const missingStatement = ref<string>(props.filters.missing_statement ?? '')
 const excelImportOpen = ref(false)
+const accreditationStatementsExcelOpen = ref(false)
 
 watch([q, countryId, active, missingStatement], () => {
   router.get(
@@ -69,6 +72,15 @@ async function deactivate(id: number) {
           <FileSpreadsheet class="h-4 w-4" aria-hidden="true" />
           Excel import
         </button>
+        <button
+          v-if="accreditation_statements_excel.can_export || accreditation_statements_excel.can_import"
+          type="button"
+          class="zaqa-btn zaqa-btn-secondary inline-flex items-center gap-2 px-4 py-2 text-sm"
+          @click="accreditationStatementsExcelOpen = true"
+        >
+          <FileText class="h-4 w-4" aria-hidden="true" />
+          Accreditation statements
+        </button>
         <Link v-if="can.create" href="/admin/settings/awarding-institutions/create" class="zaqa-btn zaqa-btn-primary px-4 py-2 text-sm">
           <Plus class="h-4 w-4" aria-hidden="true" />
           Add institution
@@ -83,6 +95,14 @@ async function deactivate(id: number) {
       :template-url="excel_import.template_url"
       :import-url="excel_import.import_url"
       :can-import="excel_import.can_import"
+    />
+
+    <AdminAccreditationStatementsExcelModal
+      v-model="accreditationStatementsExcelOpen"
+      :export-url="accreditation_statements_excel.export_url"
+      :import-url="accreditation_statements_excel.import_url"
+      :can-export="accreditation_statements_excel.can_export"
+      :can-import="accreditation_statements_excel.can_import"
     />
 
     <div class="mt-6 overflow-hidden rounded-2xl border border-border bg-surface shadow-sm">

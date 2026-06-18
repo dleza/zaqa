@@ -45,7 +45,7 @@ function openView(s: any) {
       <div>
         <div class="inline-flex items-center gap-2 text-xs font-semibold text-text-muted">
           <BookOpen class="h-4 w-4" aria-hidden="true" />
-          System settings
+          System Settings
         </div>
         <h1 class="mt-2 text-2xl font-semibold tracking-tight text-text-primary">Subjects</h1>
         <p class="mt-1 text-sm text-text-muted">

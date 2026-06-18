@@ -33,9 +33,9 @@ const maxWidthClass = computed(() => {
 </script>
 
 <template>
-  <div :class="['mx-auto w-full', maxWidthClass]">
+  <div class="w-full">
     <slot name="header" />
-    <div class="mt-6">
+    <div :class="['mt-6 w-full', maxWidthClass]">
       <slot />
     </div>
   </div>

@@ -1008,7 +1008,7 @@ class AdminDashboardService
     private function resolveSubtitle(User $user): string
     {
         if ($this->isLevel1ScopedDashboard($user)) {
-            return 'Your Level 1 workload at a glance — assigned tasks, corrections, and completions for the selected period.';
+            return 'Your Level 1 workload at a glance.';
         }
         if ($this->isLevel2ScopedDashboard($user)) {
             return 'Total includes open and processed qualifications from the selected period; queue cards show live workload by assignment stage.';

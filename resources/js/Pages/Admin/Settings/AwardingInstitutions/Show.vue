@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import AdminActionModal from '@/Components/AdminActionModal.vue'
 import AdminLayout from '@/Layouts/AdminLayout.vue'
-import { Link, router } from '@inertiajs/vue3'
+import { Link, router, useForm } from '@inertiajs/vue3'
 import { Activity, BadgeCheck, Ban, BookOpen, Building2, Cable, ChevronRight, FileText, GraduationCap, PlugZap, RefreshCcw, Search } from 'lucide-vue-next'
 import { reactive, ref } from 'vue'
 import Swal from 'sweetalert2'
@@ -49,6 +49,31 @@ const lookupError = ref<string | null>(null)
 const lookupResult = ref<any | null>(null)
 const lookupFieldErrors = ref<Record<string, string>>({})
 const lookupModalOpen = ref(false)
+const accreditationModalOpen = ref(false)
+
+const accreditationForm = useForm({
+  accreditation_statement: props.institution.accreditation_statement ?? '',
+})
+
+function openAccreditationModal() {
+  accreditationForm.accreditation_statement = props.institution.accreditation_statement ?? ''
+  accreditationForm.clearErrors()
+  accreditationModalOpen.value = true
+}
+
+function closeAccreditationModal() {
+  accreditationModalOpen.value = false
+  accreditationForm.clearErrors()
+}
+
+function submitAccreditationStatement() {
+  accreditationForm.put(props.links.update_accreditation_statement, {
+    preserveScroll: true,
+    onSuccess: () => {
+      closeAccreditationModal()
+    },
+  })
+}
 
 function openLookupModal() {
   lookupModalOpen.value = true
@@ -218,6 +243,15 @@ const stateLabels: Record<string, string> = {
               Edit
             </Link>
             <button
+              v-if="can.edit"
+              type="button"
+              class="zaqa-btn zaqa-btn-secondary inline-flex items-center gap-2 px-4 py-2 text-sm"
+              @click="openAccreditationModal"
+            >
+              <FileText class="h-4 w-4" aria-hidden="true" />
+              Accreditation statement
+            </button>
+            <button
               v-if="can.deactivate && institution.is_active"
               type="button"
               class="zaqa-btn zaqa-btn-secondary inline-flex items-center gap-2 px-4 py-2 text-sm"
@@ -346,7 +380,7 @@ const stateLabels: Record<string, string> = {
                 <span v-if="institution.accreditation_statement_source"> • Source: {{ institution.accreditation_statement_source }}</span>
               </div>
               <div v-if="can.edit" class="mt-2">
-                <Link :href="links.edit" class="zaqa-link text-sm">Edit statement</Link>
+                <button type="button" class="zaqa-link text-sm" @click="openAccreditationModal">Edit statement</button>
               </div>
             </div>
 
@@ -597,6 +631,57 @@ const stateLabels: Record<string, string> = {
         >
           <Search class="h-4 w-4" aria-hidden="true" />
           {{ lookupLoading ? 'Searching…' : 'Run lookup preview' }}
+        </button>
+      </template>
+    </AdminActionModal>
+
+    <AdminActionModal
+      v-model="accreditationModalOpen"
+      title="Accreditation statement"
+      :description="`Default certificate accreditation statement for ${institution.name}.`"
+      max-width-class="max-w-2xl"
+      scrollable
+    >
+      <form id="accreditation-statement-form" class="space-y-4" @submit.prevent="submitAccreditationStatement">
+        <p class="text-xs text-text-muted">
+          Used as the default certificate accreditation statement for qualifications awarded by this institution.
+        </p>
+        <div>
+          <label class="text-sm font-semibold text-text-primary">Statement</label>
+          <textarea
+            v-model="accreditationForm.accreditation_statement"
+            class="zaqa-input mt-2 min-h-[12rem] resize-y"
+            rows="8"
+            maxlength="5000"
+            placeholder="Enter the accreditation statement for certificate recognition."
+          />
+          <div class="mt-1.5 flex items-start justify-between gap-3">
+            <p v-if="accreditationForm.errors.accreditation_statement" class="text-xs text-danger">
+              {{ accreditationForm.errors.accreditation_statement }}
+            </p>
+            <p class="ml-auto shrink-0 text-xs tabular-nums text-text-muted">
+              {{ accreditationForm.accreditation_statement.length }} / 5000
+            </p>
+          </div>
+        </div>
+        <p v-if="institution.accreditation_statement_updated_at" class="text-xs text-text-muted">
+          Last updated: {{ fmtDate(institution.accreditation_statement_updated_at) }}
+          <span v-if="institution.accreditation_statement_updated_by_name"> by {{ institution.accreditation_statement_updated_by_name }}</span>
+          <span v-if="institution.accreditation_statement_source"> · source: {{ institution.accreditation_statement_source }}</span>
+        </p>
+      </form>
+
+      <template #footer>
+        <button type="button" class="zaqa-btn zaqa-btn-secondary px-4 py-2 text-sm" :disabled="accreditationForm.processing" @click="closeAccreditationModal">
+          Cancel
+        </button>
+        <button
+          type="submit"
+          form="accreditation-statement-form"
+          class="zaqa-btn zaqa-btn-primary px-4 py-2 text-sm"
+          :disabled="accreditationForm.processing"
+        >
+          {{ accreditationForm.processing ? 'Saving…' : 'Save statement' }}
         </button>
       </template>
     </AdminActionModal>

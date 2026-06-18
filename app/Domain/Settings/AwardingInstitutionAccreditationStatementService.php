@@ -159,6 +159,90 @@ class AwardingInstitutionAccreditationStatementService
         );
     }
 
+    public function applyAdminStatementUpdate(
+        AwardingInstitution $institution,
+        User $actor,
+        ?string $statement,
+    ): bool {
+        $statement = $statement !== null ? trim($statement) : null;
+        if ($statement === '') {
+            $statement = null;
+        }
+
+        $before = $institution->accreditation_statement;
+        if ($before === $statement) {
+            return false;
+        }
+
+        $institution->forceFill([
+            'accreditation_statement' => $statement,
+            'accreditation_statement_source' => $statement !== null
+                ? self::SOURCE_MANUAL
+                : $institution->accreditation_statement_source,
+            'accreditation_statement_updated_by_user_id' => $actor->id,
+            'accreditation_statement_updated_at' => now(),
+        ])->save();
+
+        $this->recordAdminUpdate($institution, $actor, $before, $statement);
+
+        return true;
+    }
+
+    public function applyImportedStatementUpdate(
+        AwardingInstitution $institution,
+        User $actor,
+        string $statement,
+        bool $overwrite,
+        int $rowNumber,
+    ): void {
+        $statement = trim($statement);
+        $before = $institution->accreditation_statement;
+
+        $institution->forceFill([
+            'accreditation_statement' => $statement,
+            'accreditation_statement_source' => self::SOURCE_IMPORT,
+            'accreditation_statement_updated_by_user_id' => $actor->id,
+            'accreditation_statement_updated_at' => now(),
+        ])->save();
+
+        $this->recordImportUpdate($institution, $actor, $before, $statement, $overwrite, $rowNumber);
+    }
+
+    public function recordImportUpdate(
+        AwardingInstitution $institution,
+        User $actor,
+        ?string $before,
+        string $after,
+        bool $overwrite,
+        int $rowNumber,
+    ): void {
+        $beforeText = trim((string) ($before ?? ''));
+
+        $this->audit->record(
+            eventType: 'awarding_institution.accreditation_statement_imported',
+            module: 'Settings',
+            actionName: 'accreditation_statement_imported',
+            message: 'Awarding institution accreditation statement updated via Excel import.',
+            entityType: AwardingInstitution::class,
+            entityId: $institution->id,
+            beforeState: ['accreditation_statement' => $before],
+            afterState: [
+                'accreditation_statement' => $after,
+                'accreditation_statement_source' => self::SOURCE_IMPORT,
+            ],
+            metadata: [
+                'institution_name' => $institution->name,
+                'row_number' => $rowNumber,
+                'old_statement_present' => $beforeText !== '',
+                'overwrite' => $overwrite,
+                'statement_source' => self::SOURCE_IMPORT,
+                'old_statement_length' => strlen($beforeText),
+                'new_statement_length' => strlen($after),
+            ],
+            actor: $actor,
+        );
+    }
+
     private function autoSaveToInstitutionIfBlank(
         Qualification $qualification,
         User $actor,

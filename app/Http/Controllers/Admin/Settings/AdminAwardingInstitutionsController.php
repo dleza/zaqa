@@ -5,12 +5,15 @@ namespace App\Http\Controllers\Admin\Settings;
 use App\Domain\Audit\AuditLogService;
 use App\Domain\InstitutionIntegrations\InstitutionPullLookupPreviewService;
 use App\Domain\Settings\AwardingInstitutionAccreditationStatementService;
+use App\Domain\Settings\AwardingInstitutionAccreditationStatementExcelService;
 use App\Domain\Settings\AwardingInstitutionExcelImportService;
 use App\Domain\Settings\AwardingInstitutionProfileService;
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Admin\Settings\ImportAwardingInstitutionAccreditationStatementsExcelRequest;
 use App\Http\Requests\Admin\Settings\ImportAwardingInstitutionsExcelRequest;
 use App\Http\Requests\Admin\Settings\PreviewInstitutionPullLookupRequest;
 use App\Http\Requests\Admin\Settings\StoreAwardingInstitutionRequest;
+use App\Http\Requests\Admin\Settings\UpdateAwardingInstitutionAccreditationStatementRequest;
 use App\Http\Requests\Admin\Settings\UpdateAwardingInstitutionRequest;
 use App\Models\AwardingInstitution;
 use App\Models\Country;
@@ -88,6 +91,12 @@ class AdminAwardingInstitutionsController extends Controller
                 'import_url' => route('admin.settings.awarding_institutions.import'),
                 'can_import' => (bool) ($user?->can('settings.awarding_institutions.create') || $user?->can('settings.awarding_institutions.edit')),
             ],
+            'accreditation_statements_excel' => [
+                'export_url' => route('admin.settings.awarding_institutions.accreditation_statements.export'),
+                'import_url' => route('admin.settings.awarding_institutions.accreditation_statements.import'),
+                'can_export' => (bool) $user?->can('settings.awarding_institutions.view'),
+                'can_import' => (bool) $user?->can('settings.awarding_institutions.edit'),
+            ],
         ]);
     }
 
@@ -111,6 +120,35 @@ class AdminAwardingInstitutionsController extends Controller
         return back()
             ->with('success', $report->summaryLine())
             ->with('import_report', ['errors' => $report->errors]);
+    }
+
+    public function exportAccreditationStatements(
+        Request $request,
+        AwardingInstitutionAccreditationStatementExcelService $excel,
+    ): StreamedResponse {
+        abort_unless($request->user()?->can('settings.awarding_institutions.view'), 403);
+
+        $missingOnly = $request->query('missing_only') === '1';
+
+        return $excel->export($missingOnly);
+    }
+
+    public function importAccreditationStatements(
+        ImportAwardingInstitutionAccreditationStatementsExcelRequest $request,
+        AwardingInstitutionAccreditationStatementExcelService $excel,
+    ): RedirectResponse {
+        $summary = $excel->import(
+            $request->file('file'),
+            $request->user(),
+            $request->boolean('overwrite_existing'),
+        );
+
+        return back()
+            ->with('success', $summary->summaryLine())
+            ->with('import_report', [
+                'errors' => array_slice($summary->errors, 0, 10),
+                'summary' => $summary->toArray(),
+            ]);
     }
 
     public function create(Request $request): Response
@@ -347,6 +385,25 @@ class AdminAwardingInstitutionsController extends Controller
         );
 
         return back()->with('success', 'Awarding institution updated.');
+    }
+
+    public function updateAccreditationStatement(
+        UpdateAwardingInstitutionAccreditationStatementRequest $request,
+        AwardingInstitution $awardingInstitution,
+        AwardingInstitutionAccreditationStatementService $accreditationStatements,
+    ): RedirectResponse {
+        $user = $request->user();
+        abort_unless($user, 403);
+
+        $accreditationStatements->applyAdminStatementUpdate(
+            $awardingInstitution,
+            $user,
+            $request->validated('accreditation_statement'),
+        );
+
+        return redirect()
+            ->route('admin.settings.awarding_institutions.show', ['awardingInstitution' => $awardingInstitution->id])
+            ->with('success', 'Accreditation statement updated.');
     }
 
     public function deactivate(Request $request, AwardingInstitution $awardingInstitution, AuditLogService $audit): RedirectResponse
