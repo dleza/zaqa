@@ -43,7 +43,16 @@ type CorrectionEntry = {
 
 const props = defineProps<{
   qualification: Record<string, any>
-  application: { id: number; application_number: string | null }
+  application: { id: number; application_number: string | null; payment_satisfied?: boolean }
+  viewerUserId?: number | null
+  can?: {
+    level1_process?: boolean
+    level2_review?: boolean
+    approve?: boolean
+    reject?: boolean
+    issue_certificate?: boolean
+    is_super_admin?: boolean
+  }
   countries: Array<{ id: number; name: string; iso_code?: string | null }>
   qualificationTypes: Array<{
     id: number
@@ -68,6 +77,46 @@ const props = defineProps<{
   } | null
   correction_history: CorrectionEntry[]
 }>()
+
+const approveOpen = ref(false)
+const rejectOpen = ref(false)
+const approveForm = useForm<{ comment: string; issue_certificate: boolean }>({ comment: '', issue_certificate: true })
+const rejectForm = useForm<{ reason: string; generate_rejection_notice: boolean }>({
+  reason: '',
+  generate_rejection_notice: true,
+})
+
+const state = computed(() => (props.qualification.verification_state ?? '').toString())
+const level2Lock = computed(() => props.qualification.level2_review_lock ?? {})
+const level1Review = computed(() => props.qualification.level1_review ?? null)
+const isAutoVerifiedPendingL2 = computed(() => state.value === 'auto_verified_pending_level2')
+const isLevel2Viewer = computed(() => props.can?.level2_review === true)
+const isSuperAdmin = computed(() => props.can?.is_super_admin === true)
+const lockIsActive = computed(() => !!level2Lock.value?.is_locked)
+const viewerHasLock = computed(() => {
+  if (!props.viewerUserId) return false
+  return lockIsActive.value && Number(level2Lock.value?.locked_by_user_id ?? 0) === Number(props.viewerUserId)
+})
+const lockMissingForActions = computed(() => isAutoVerifiedPendingL2.value && !viewerHasLock.value && !isSuperAdmin.value)
+const canShowApprove = computed(
+  () => props.can?.approve === true && ['under_level2_review', 'auto_verified_pending_level2'].includes(state.value),
+)
+const canShowReject = computed(
+  () => props.can?.reject === true && ['under_level2_review', 'auto_verified_pending_level2'].includes(state.value),
+)
+const showLevel2DecisionActions = computed(() => canShowApprove.value || canShowReject.value)
+const level2DecisionBlockedByDirtyForm = computed(() => form.isDirty)
+const level1Findings = computed(() => (level1Review.value?.findings ?? props.qualification.reviewer_notes ?? '').toString().trim())
+
+function openRejectModal() {
+  rejectForm.clearErrors()
+  if (level1Review.value?.recommended_for_award === false && level1Findings.value !== '') {
+    rejectForm.reason = level1Findings.value
+  } else {
+    rejectForm.reason = ''
+  }
+  rejectOpen.value = true
+}
 
 const institutionMeta = ref<{ name: string } | null>(null)
 if (props.qualification.awarding_institution_id && props.qualification.awarding_institution_id !== 'other') {
@@ -233,6 +282,7 @@ function removeSubjectRow(idx: number) {
 
 function submit() {
   if (form.processing) return
+  if (!form.isDirty) return
   applyIdentifierToForm()
   form.awarding_institution_name = awardingDisplayName() || '—'
 
@@ -665,18 +715,57 @@ function identityDocumentRow(): DocumentRow | null {
 
           <div class="space-y-4 border-t border-border pt-6">
             <div class="max-w-xl">
-              <label class="text-sm font-medium text-text-primary">Correction note (optional)</label>
-              <p class="mt-0.5 text-xs text-text-muted">Recorded once when you save field changes below.</p>
+              <label class="text-sm font-medium text-text-primary">Correction note <span class="text-danger">*</span></label>
+              <p class="mt-0.5 text-xs text-text-muted">Required when saving field changes. Explain why these qualification details were corrected.</p>
               <input
                 v-model="form.correction_note"
                 class="zaqa-input mt-2"
                 placeholder="e.g. Fixed institution name to match certificate scan."
+                required
               />
               <InputError :message="form.errors.correction_note" />
             </div>
-            <div class="flex flex-wrap items-center justify-end gap-3">
-              <Link :href="`/admin/verification/qualifications/${qualification.id}`" class="zaqa-btn zaqa-btn-secondary px-5 py-2.5 text-sm">Cancel</Link>
-              <button type="submit" class="zaqa-btn zaqa-btn-primary px-5 py-2.5 text-sm" :disabled="form.processing">Save changes</button>
+            <div class="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+              <div class="flex flex-wrap items-center gap-3">
+                <Link :href="`/admin/verification/qualifications/${qualification.id}`" class="zaqa-btn zaqa-btn-secondary px-5 py-2.5 text-sm">Cancel</Link>
+                <button
+                  type="submit"
+                  class="zaqa-btn zaqa-btn-primary px-5 py-2.5 text-sm"
+                  :disabled="form.processing || !form.isDirty"
+                >
+                  Save changes
+                </button>
+                <p v-if="!form.isDirty" class="text-xs text-text-muted">No changes to save.</p>
+              </div>
+
+              <div v-if="showLevel2DecisionActions" class="rounded-xl border border-border bg-surface-muted/40 px-4 py-3">
+                <div class="text-xs font-semibold uppercase tracking-wide text-text-muted">Level 2 actions</div>
+                <p v-if="level2DecisionBlockedByDirtyForm" class="mt-1 text-xs text-text-muted">
+                  Save changes before taking a Level 2 decision.
+                </p>
+                <div class="mt-3 flex flex-wrap gap-2">
+                  <button
+                    v-if="canShowApprove"
+                    type="button"
+                    class="zaqa-btn zaqa-btn-primary px-4 py-2 text-sm"
+                    :disabled="level2DecisionBlockedByDirtyForm || (isAutoVerifiedPendingL2 && lockMissingForActions)"
+                    :title="level2DecisionBlockedByDirtyForm ? 'Save qualification changes before approving.' : isAutoVerifiedPendingL2 && lockMissingForActions ? 'Lock for review before approving.' : ''"
+                    @click="approveOpen = true"
+                  >
+                    Approve Verification Certificate
+                  </button>
+                  <button
+                    v-if="canShowReject"
+                    type="button"
+                    class="zaqa-btn zaqa-btn-secondary border-danger/30 px-4 py-2 text-sm text-danger"
+                    :disabled="level2DecisionBlockedByDirtyForm || (isAutoVerifiedPendingL2 && lockMissingForActions)"
+                    :title="level2DecisionBlockedByDirtyForm ? 'Save qualification changes before rejecting.' : isAutoVerifiedPendingL2 && lockMissingForActions ? 'Lock for review before rejecting.' : ''"
+                    @click="openRejectModal"
+                  >
+                    Issue Notice of Rejection
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
         </form>
@@ -715,6 +804,125 @@ function identityDocumentRow(): DocumentRow | null {
           @click="submitDocumentUpload"
         >
           {{ documentsByType.get(documentUploadForm.document_type) ? 'Replace file' : 'Upload file' }}
+        </button>
+      </template>
+    </AdminActionModal>
+
+    <AdminActionModal
+      v-model="approveOpen"
+      title="Approve qualification"
+      description="Optional internal comment. Qualification will be marked approved for certificate."
+    >
+      <div class="space-y-4">
+        <div>
+          <label class="text-sm font-semibold text-text-primary">Comment (optional)</label>
+          <textarea v-model="approveForm.comment" class="zaqa-input mt-2 h-auto min-h-[6rem] py-3" placeholder="Optional internal note." />
+          <div v-if="approveForm.errors.comment" class="mt-1 text-xs text-danger">{{ approveForm.errors.comment }}</div>
+        </div>
+        <div v-if="can?.issue_certificate" class="rounded-xl border border-border/70 bg-surface-muted/40 px-4 py-3 text-sm text-text-primary">
+          <p class="font-semibold">Certificate of Recognition</p>
+          <p class="mt-1 text-xs text-text-muted">
+            A certificate of recognition will be generated automatically when you approve. Payment must be satisfied.
+          </p>
+          <p v-if="application.payment_satisfied === false" class="mt-2 text-xs font-medium text-amber-900">
+            Payment is not satisfied — certificate issuance is blocked until fees are covered.
+          </p>
+          <div v-if="approveForm.errors.issue_certificate" class="mt-1 text-xs text-danger">{{ approveForm.errors.issue_certificate }}</div>
+          <div v-if="(approveForm.errors as any).payment" class="mt-1 text-xs text-danger">{{ (approveForm.errors as any).payment }}</div>
+          <div v-if="(approveForm.errors as any).application" class="mt-1 text-xs text-danger">{{ (approveForm.errors as any).application }}</div>
+          <div v-if="(approveForm.errors as any).qualification" class="mt-1 text-xs text-danger">{{ (approveForm.errors as any).qualification }}</div>
+          <div v-if="(approveForm.errors as any).lock" class="mt-1 text-xs text-danger">{{ (approveForm.errors as any).lock }}</div>
+        </div>
+      </div>
+      <template #footer>
+        <button
+          type="button"
+          class="zaqa-btn zaqa-btn-secondary px-4 py-2 text-sm"
+          @click="
+            () => {
+              approveOpen = false
+              approveForm.clearErrors()
+              approveForm.reset()
+              approveForm.issue_certificate = true
+            }
+          "
+        >
+          Cancel
+        </button>
+        <button
+          type="button"
+          class="zaqa-btn zaqa-btn-primary px-4 py-2 text-sm"
+          :disabled="approveForm.processing"
+          @click="
+            () => {
+              approveForm.issue_certificate = true
+              approveForm.post(`/admin/verification/qualifications/${qualification.id}/approve`, {
+                preserveScroll: true,
+                onSuccess: () => {
+                  approveOpen = false
+                  approveForm.reset()
+                  approveForm.issue_certificate = true
+                },
+              })
+            }
+          "
+        >
+          Approve
+        </button>
+      </template>
+    </AdminActionModal>
+
+    <AdminActionModal v-model="rejectOpen" title="Reject qualification" description="Reason is required and will be visible to the applicant.">
+      <div>
+        <label class="text-sm font-semibold text-text-primary">Reason</label>
+        <textarea v-model="rejectForm.reason" class="zaqa-input mt-2 h-auto min-h-[10rem] py-3" placeholder="Provide a clear rejection reason." />
+        <p
+          v-if="level1Review?.recommended_for_award === false && level1Findings.length > 0"
+          class="mt-2 text-xs text-text-muted"
+        >
+          Pre-filled from Level 1 findings when they did not recommend recognition. You may edit before submitting.
+        </p>
+        <div v-if="rejectForm.errors.reason" class="mt-1 text-xs text-danger">{{ rejectForm.errors.reason }}</div>
+        <div v-if="(rejectForm.errors as any).qualification" class="mt-1 text-xs text-danger">{{ (rejectForm.errors as any).qualification }}</div>
+        <div v-if="(rejectForm.errors as any).lock" class="mt-1 text-xs text-danger">{{ (rejectForm.errors as any).lock }}</div>
+        <p v-if="can?.issue_certificate" class="mt-4 text-xs text-text-muted">
+          A rejection notice will be generated automatically when you reject this qualification.
+        </p>
+      </div>
+      <template #footer>
+        <button
+          type="button"
+          class="zaqa-btn zaqa-btn-secondary px-4 py-2 text-sm"
+          @click="
+            () => {
+              rejectOpen = false
+              rejectForm.clearErrors()
+              rejectForm.reset()
+              rejectForm.generate_rejection_notice = true
+            }
+          "
+        >
+          Cancel
+        </button>
+        <button
+          type="button"
+          class="zaqa-btn zaqa-btn-primary px-4 py-2 text-sm"
+          :disabled="rejectForm.processing"
+          @click="
+            () => {
+              rejectForm.generate_rejection_notice = true
+              rejectForm.post(`/admin/verification/qualifications/${qualification.id}/reject`, {
+                preserveScroll: true,
+                onSuccess: () => {
+                  rejectOpen = false
+                  rejectForm.reset()
+                  rejectForm.generate_rejection_notice = true
+                },
+              })
+            }
+          "
+        >
+          Reject
         </button>
       </template>
     </AdminActionModal>

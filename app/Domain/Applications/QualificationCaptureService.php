@@ -434,6 +434,45 @@ class QualificationCaptureService
      *
      * @param  array<string, mixed>  $data
      */
+    public function adminVerificationCorrectionWouldChange(Qualification $qualification, array $data): bool
+    {
+        return $this->previewAdminVerificationCorrectionChanges($qualification, $data) !== [];
+    }
+
+    /**
+     * @param  array<string, mixed>  $data
+     * @return list<array{field: string, label: string, from: mixed, to: mixed}>
+     */
+    public function previewAdminVerificationCorrectionChanges(Qualification $qualification, array $data): array
+    {
+        $qualification->loadMissing(['subjectResults', 'awardingInstitution.country', 'country']);
+
+        $beforeQualification = $qualification->toArray();
+        if ($qualification->award_date) {
+            $beforeQualification['award_date'] = $qualification->award_date->format('Y-m-d');
+        }
+        $beforeSubjects = $qualification->subjectResults
+            ->map(fn ($row) => ['subject_name' => $row->subject_name, 'grade' => $row->grade, 'display_order' => $row->display_order])
+            ->values()
+            ->all();
+
+        $projection = $this->buildAdminVerificationCorrectionProjection($qualification, $data);
+        $afterQualification = $projection['qualification'];
+        if (! empty($afterQualification['award_date'])) {
+            $afterQualification['award_date'] = \Illuminate\Support\Carbon::parse((string) $afterQualification['award_date'])->format('Y-m-d');
+        }
+
+        return VerificationQualificationCorrectionDiff::build(
+            $beforeQualification,
+            $afterQualification,
+            $beforeSubjects,
+            $projection['subjects'],
+        );
+    }
+
+    /**
+     * @param  array<string, mixed>  $data
+     */
     public function adminVerificationCorrection(Qualification $qualification, array $data, User $actor): Qualification
     {
         return DB::transaction(function () use ($qualification, $data, $actor) {
@@ -460,93 +499,8 @@ class QualificationCaptureService
                 'fee_currency' => $qualification->fee_currency,
             ];
 
-            $qualificationTypeId = (int) $data['qualification_type_id'];
-            $qualificationType = QualificationType::query()->whereKey($qualificationTypeId)->firstOrFail();
-
-            $resolvedInstitutionId = $this->resolveNumericAwardingInstitutionId($data['awarding_institution_id'] ?? null);
-
-            $isForeignQualification = (bool) $qualification->is_foreign_qualification;
-            if ($resolvedInstitutionId) {
-                $inst = AwardingInstitution::query()->with('country')->find($resolvedInstitutionId);
-                $iso = strtoupper((string) ($inst?->country?->iso_code ?? ''));
-                if ($iso !== '') {
-                    $isForeignQualification = ! CountryIso::isZambia($iso);
-                }
-            } elseif (! empty($data['country_id'])) {
-                $country = Country::query()->find((int) $data['country_id']);
-                $iso = strtoupper((string) ($country?->iso_code ?? ''));
-                if ($iso !== '') {
-                    $isForeignQualification = ! CountryIso::isZambia($iso);
-                }
-            }
-
-            $transcriptRequired = (bool) $isForeignQualification || (bool) $qualificationType->requires_subject_results;
-
-            $holderName = trim((string) ($data['qualification_holder_name'] ?? ''));
-            if ($holderName === '') {
-                $holderName = (string) ($qualification->qualification_holder_name ?? '');
-            }
-            $nrc = trim((string) ($data['nrc_passport_number'] ?? ''));
-            if ($nrc === '') {
-                $nrc = (string) ($qualification->nrc_passport_number ?? '');
-            }
-
-            $awardingInstitutionNameOther = trim((string) ($data['awarding_institution_name_other'] ?? ''));
-            $awardingInstitutionNameInput = trim((string) ($data['awarding_institution_name'] ?? ''));
-
-            $awardingInstitutionName = $awardingInstitutionNameInput;
-            if ($awardingInstitutionName === '' && $awardingInstitutionNameOther !== '') {
-                $awardingInstitutionName = $awardingInstitutionNameOther;
-            }
-            if ($awardingInstitutionName === '' && $resolvedInstitutionId) {
-                $awardingInstitutionName = (string) (AwardingInstitution::query()->whereKey($resolvedInstitutionId)->value('name') ?? '');
-            }
-            if ($awardingInstitutionName === '') {
-                $awardingInstitutionName = (string) ($qualification->awarding_institution_name ?? '');
-            }
-
-            $notesVal = array_key_exists('notes', $data)
-                ? (($data['notes'] ?? '') !== '' ? (string) $data['notes'] : null)
-                : $qualification->notes;
-
-            $countryNameOther = trim((string) ($data['country_name_other'] ?? ''));
-
-            $titleSourceRaw = array_key_exists('qualification_title_source', $data)
-                ? trim((string) ($data['qualification_title_source'] ?? ''))
-                : '';
-            $manualTitleRaw = array_key_exists('applicant_entered_qualification_title', $data)
-                ? trim((string) ($data['applicant_entered_qualification_title'] ?? ''))
-                : '';
-
-            $payload = [
-                'awarding_institution_id' => $resolvedInstitutionId,
-                'awarding_institution_name_other' => $awardingInstitutionNameOther !== '' ? $awardingInstitutionNameOther : null,
-                'awarding_institution_name' => $awardingInstitutionName,
-                'qualification_holder_name' => $holderName,
-                'country_id' => (int) $data['country_id'],
-                'country_name_other' => $countryNameOther !== '' ? $countryNameOther : null,
-                'nrc_passport_number' => $nrc,
-                'certificate_number' => trim((string) ($data['certificate_number'] ?? '')) ?: null,
-                'student_number' => trim((string) ($data['student_number'] ?? '')) ?: null,
-                'examination_number' => trim((string) ($data['examination_number'] ?? '')) ?: null,
-                'title_of_qualification' => (string) $data['title_of_qualification'],
-                'names_as_on_qualification_document' => array_key_exists('names_as_on_qualification_document', $data)
-                    ? $this->normalizeNamesAsOnQualificationDocument($data['names_as_on_qualification_document'])
-                    : (string) ($qualification->names_as_on_qualification_document ?? ''),
-                'award_date' => (string) $data['award_date'],
-                'qualification_type' => $qualificationType->zqf_level_code,
-                'qualification_type_id' => $qualificationTypeId,
-                'is_foreign_qualification' => $isForeignQualification,
-                'transcript_required' => $transcriptRequired,
-                'transcript_reason' => array_key_exists('transcript_reason', $data)
-                    ? ((($data['transcript_reason'] ?? '') !== '') ? (string) $data['transcript_reason'] : null)
-                    : $qualification->transcript_reason,
-                'notes' => $notesVal,
-            ];
-
-            if ($titleSourceRaw !== '' || $manualTitleRaw !== '' || array_key_exists('qualification_title_id', $data)) {
-                $this->applyQualificationTitleFields($payload, $data, $titleSourceRaw, $manualTitleRaw);
-            }
+            $projection = $this->buildAdminVerificationCorrectionProjection($qualification, $data);
+            $payload = $projection['payload'];
 
             $qualification->forceFill($payload)->save();
 
@@ -618,6 +572,149 @@ class QualificationCaptureService
 
             return $qualification->fresh();
         });
+    }
+
+    /**
+     * @param  array<string, mixed>  $data
+     * @return array{payload: array<string, mixed>, qualification: array<string, mixed>, subjects: list<array{subject_name: string|null, grade: string|null, display_order: int|null}>}
+     */
+    private function buildAdminVerificationCorrectionProjection(Qualification $qualification, array $data): array
+    {
+        $qualificationTypeId = (int) $data['qualification_type_id'];
+        $qualificationType = QualificationType::query()->whereKey($qualificationTypeId)->firstOrFail();
+
+        $resolvedInstitutionId = $this->resolveNumericAwardingInstitutionId($data['awarding_institution_id'] ?? null);
+
+        $isForeignQualification = (bool) $qualification->is_foreign_qualification;
+        if ($resolvedInstitutionId) {
+            $inst = AwardingInstitution::query()->with('country')->find($resolvedInstitutionId);
+            $iso = strtoupper((string) ($inst?->country?->iso_code ?? ''));
+            if ($iso !== '') {
+                $isForeignQualification = ! CountryIso::isZambia($iso);
+            }
+        } elseif (! empty($data['country_id'])) {
+            $country = Country::query()->find((int) $data['country_id']);
+            $iso = strtoupper((string) ($country?->iso_code ?? ''));
+            if ($iso !== '') {
+                $isForeignQualification = ! CountryIso::isZambia($iso);
+            }
+        }
+
+        $transcriptRequired = (bool) $isForeignQualification || (bool) $qualificationType->requires_subject_results;
+
+        $holderName = trim((string) ($data['qualification_holder_name'] ?? ''));
+        if ($holderName === '') {
+            $holderName = (string) ($qualification->qualification_holder_name ?? '');
+        }
+        $nrc = trim((string) ($data['nrc_passport_number'] ?? ''));
+        if ($nrc === '') {
+            $nrc = (string) ($qualification->nrc_passport_number ?? '');
+        }
+
+        $awardingInstitutionNameOther = trim((string) ($data['awarding_institution_name_other'] ?? ''));
+        $awardingInstitutionNameInput = trim((string) ($data['awarding_institution_name'] ?? ''));
+
+        $awardingInstitutionName = $awardingInstitutionNameInput;
+        if ($awardingInstitutionName === '' && $awardingInstitutionNameOther !== '') {
+            $awardingInstitutionName = $awardingInstitutionNameOther;
+        }
+        if ($awardingInstitutionName === '' && $resolvedInstitutionId) {
+            $awardingInstitutionName = (string) (AwardingInstitution::query()->whereKey($resolvedInstitutionId)->value('name') ?? '');
+        }
+        if ($awardingInstitutionName === '') {
+            $awardingInstitutionName = (string) ($qualification->awarding_institution_name ?? '');
+        }
+
+        $notesVal = array_key_exists('notes', $data)
+            ? (($data['notes'] ?? '') !== '' ? (string) $data['notes'] : null)
+            : $qualification->notes;
+
+        $countryNameOther = trim((string) ($data['country_name_other'] ?? ''));
+
+        $titleSourceRaw = array_key_exists('qualification_title_source', $data)
+            ? trim((string) ($data['qualification_title_source'] ?? ''))
+            : '';
+        $manualTitleRaw = array_key_exists('applicant_entered_qualification_title', $data)
+            ? trim((string) ($data['applicant_entered_qualification_title'] ?? ''))
+            : '';
+
+        $payload = [
+            'awarding_institution_id' => $resolvedInstitutionId,
+            'awarding_institution_name_other' => $awardingInstitutionNameOther !== '' ? $awardingInstitutionNameOther : null,
+            'awarding_institution_name' => $awardingInstitutionName,
+            'qualification_holder_name' => $holderName,
+            'country_id' => (int) $data['country_id'],
+            'country_name_other' => $countryNameOther !== '' ? $countryNameOther : null,
+            'nrc_passport_number' => $nrc,
+            'certificate_number' => trim((string) ($data['certificate_number'] ?? '')) ?: null,
+            'student_number' => trim((string) ($data['student_number'] ?? '')) ?: null,
+            'examination_number' => trim((string) ($data['examination_number'] ?? '')) ?: null,
+            'title_of_qualification' => (string) $data['title_of_qualification'],
+            'names_as_on_qualification_document' => array_key_exists('names_as_on_qualification_document', $data)
+                ? $this->normalizeNamesAsOnQualificationDocument($data['names_as_on_qualification_document'])
+                : (string) ($qualification->names_as_on_qualification_document ?? ''),
+            'award_date' => (string) $data['award_date'],
+            'qualification_type' => $qualificationType->zqf_level_code,
+            'qualification_type_id' => $qualificationTypeId,
+            'is_foreign_qualification' => $isForeignQualification,
+            'transcript_required' => $transcriptRequired,
+            'transcript_reason' => array_key_exists('transcript_reason', $data)
+                ? ((($data['transcript_reason'] ?? '') !== '') ? (string) $data['transcript_reason'] : null)
+                : $qualification->transcript_reason,
+            'notes' => $notesVal,
+        ];
+
+        if ($titleSourceRaw !== '' || $manualTitleRaw !== '' || array_key_exists('qualification_title_id', $data)) {
+            $this->applyQualificationTitleFields($payload, $data, $titleSourceRaw, $manualTitleRaw);
+        }
+
+        $subjects = $this->projectAdminVerificationSubjectResults(
+            is_array($data['subject_results'] ?? null) ? $data['subject_results'] : [],
+        );
+
+        return [
+            'payload' => $payload,
+            'qualification' => array_merge($qualification->toArray(), $payload),
+            'subjects' => $subjects,
+        ];
+    }
+
+    /**
+     * @param  array<int, array<string, mixed>>  $rows
+     * @return list<array{subject_name: string|null, grade: string|null, display_order: int|null}>
+     */
+    private function projectAdminVerificationSubjectResults(array $rows): array
+    {
+        $out = [];
+
+        foreach (array_values($rows) as $index => $row) {
+            $certificateSubjectId = (int) ($row['certificate_subject_id'] ?? 0);
+            if ($certificateSubjectId < 1) {
+                continue;
+            }
+
+            $catalog = CertificateSubject::query()
+                ->whereKey($certificateSubjectId)
+                ->where('is_active', true)
+                ->first();
+
+            if (! $catalog) {
+                continue;
+            }
+
+            $normalizedGrade = CertificateSubjectGrade::normalize($row['grade'] ?? null);
+            if ($normalizedGrade === null) {
+                continue;
+            }
+
+            $out[] = [
+                'subject_name' => $catalog->name,
+                'grade' => $normalizedGrade,
+                'display_order' => $index,
+            ];
+        }
+
+        return $out;
     }
 
     private function resolveNumericAwardingInstitutionId(mixed $raw): ?int

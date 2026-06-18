@@ -502,6 +502,13 @@ class AdminVerificationQualificationController extends Controller
 
         $qualification = $level1ReviewService->beginReviewIfAssigned($qualification, $request->user());
 
+        $user = $request->user();
+        if ($user && VerificationQualificationAccess::mustRestrictToAssignedQualifications($user)) {
+            $vs = $qualification->verification_state;
+            $allowed = [VerificationState::AssignedToLevel1, VerificationState::UnderLevel1Review];
+            abort_unless($vs instanceof VerificationState && in_array($vs, $allowed, true), 403);
+        }
+
         $qualification->load([
             'subjectResults',
             'country',
@@ -510,7 +517,11 @@ class AdminVerificationQualificationController extends Controller
             'application.applicant.applicantProfile',
             'application.documents.uploadedBy',
             'documents.uploadedBy',
+            'level1ReviewCompletedBy',
+            'level2ReviewLockedBy',
         ]);
+
+        $decisionContext = $this->qualificationEditDecisionContext($qualification);
 
         $countries = Country::query()
             ->where('is_active', true)
@@ -537,7 +548,7 @@ class AdminVerificationQualificationController extends Controller
         $institutionForm = QualificationAwardingInstitutionFormState::forForm($qualification);
 
         return Inertia::render('Admin/Verification/Qualifications/Edit', [
-            'qualification' => [
+            'qualification' => array_merge([
                 'id' => $qualification->id,
                 'qualification_holder_name' => $qualification->qualification_holder_name,
                 'names_as_on_qualification_document' => $qualification->names_as_on_qualification_document,
@@ -566,11 +577,14 @@ class AdminVerificationQualificationController extends Controller
                         'grade' => $row->grade,
                     ];
                 })->values()->all(),
-            ],
+            ], $decisionContext),
             'application' => [
                 'id' => $qualification->application_id,
                 'application_number' => $qualification->application?->application_number,
+                'payment_satisfied' => $decisionContext['application']['payment_satisfied'] ?? false,
             ],
+            'viewerUserId' => $user?->id,
+            'can' => $this->qualificationOfficerPermissions($user),
             'countries' => $countries,
             'qualificationTypes' => $qualificationTypes->map(fn (QualificationType $t) => [
                 'id' => $t->id,
@@ -600,7 +614,14 @@ class AdminVerificationQualificationController extends Controller
             abort_unless($vs instanceof VerificationState && in_array($vs, $allowed, true), 403);
         }
 
-        $capture->adminVerificationCorrection($qualification, $request->validated(), $request->user());
+        $validated = $request->validated();
+        if (! $capture->adminVerificationCorrectionWouldChange($qualification, $validated)) {
+            return redirect()
+                ->route('admin.verification.qualifications.edit', $qualification)
+                ->with('info', 'No changes to save.');
+        }
+
+        $capture->adminVerificationCorrection($qualification, $validated, $request->user());
 
         return redirect()
             ->route('admin.verification.qualifications.show', $qualification)
@@ -1430,5 +1451,55 @@ class AdminVerificationQualificationController extends Controller
         }
 
         return 'Auto-assignment retried by '.$actor->name.'; failed: '.($result->failureReason ?? 'Unknown assignment error.');
+    }
+
+    /**
+     * @return array<string, bool>
+     */
+    private function qualificationOfficerPermissions(?User $user): array
+    {
+        return [
+            'level1_process' => (bool) $user?->can('verification.level1.process'),
+            'level2_review' => (bool) $user?->can('verification.level2.review'),
+            'approve' => (bool) $user?->can('verification.decide.approve'),
+            'reject' => (bool) $user?->can('verification.decide.reject'),
+            'issue_certificate' => (bool) $user?->can('verification.certificate.issue'),
+            'is_super_admin' => (bool) $user?->hasRole('Super Admin'),
+        ];
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function qualificationEditDecisionContext(Qualification $qualification): array
+    {
+        $qualification->loadMissing(['application', 'level1ReviewCompletedBy', 'assignedVerifier', 'level2ReviewLockedBy']);
+        $applicationModel = $qualification->application;
+        $paymentSatisfaction = app(ApplicationPaymentSatisfaction::class);
+        $paymentSatisfied = $applicationModel ? $paymentSatisfaction->isSatisfied($applicationModel) : false;
+
+        $locks = app(QualificationLevel2ReviewLockService::class);
+        $lockExpired = $locks->isExpired($qualification->level2_review_locked_at);
+        $isLocked = (bool) $qualification->level2_review_locked_by && ! $lockExpired;
+        $lockExpiresAt = $qualification->level2_review_locked_at
+            ? $qualification->level2_review_locked_at->copy()->addMinutes($locks->ttlMinutes())
+            : null;
+
+        return [
+            'verification_state' => $qualification->verification_state?->value
+                ?? VerificationState::AwaitingAssignment->value,
+            'reviewer_notes' => $qualification->reviewer_notes,
+            'level1_review' => $this->buildLevel1ReviewPayload($qualification),
+            'level2_review_lock' => [
+                'is_locked' => $isLocked,
+                'locked_by_user_id' => $isLocked ? (int) $qualification->level2_review_locked_by : null,
+                'locked_by_name' => $isLocked ? ($qualification->level2ReviewLockedBy?->name ?? null) : null,
+                'locked_at' => $isLocked ? optional($qualification->level2_review_locked_at)?->toIso8601String() : null,
+                'expires_at' => $isLocked ? optional($lockExpiresAt)?->toIso8601String() : null,
+            ],
+            'application' => [
+                'payment_satisfied' => $paymentSatisfied,
+            ],
+        ];
     }
 }

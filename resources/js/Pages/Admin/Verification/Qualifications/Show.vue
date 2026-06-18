@@ -334,7 +334,8 @@ const canShowLevel1Complete = computed(() => {
 const canEditQualificationDetails = computed(() => {
   if (!props.can.edit_qualification) return false
   if (!isRestrictedLevel1.value) return true
-  return isViewerAssignedLevel1.value
+  if (!isViewerAssignedLevel1.value) return false
+  return restrictedLevel1CanAct.value
 })
 
 const canShowApprove = computed(() => props.can.approve === true && ['under_level2_review', 'auto_verified_pending_level2'].includes(state.value))

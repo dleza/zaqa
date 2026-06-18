@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests\Admin\Verification;
 
+use App\Domain\Applications\QualificationCaptureService;
 use App\Domain\Verification\VerificationQualificationAccess;
 use App\Http\Requests\Concerns\ValidatesCertificateSubjectGrades;
 use App\Models\AwardingInstitution;
@@ -140,6 +141,23 @@ class AdminUpdateVerificationQualificationRequest extends FormRequest
                         $validator->errors()->add('subject_results', 'Each subject may only be selected once.');
                     }
                 }
+            }
+
+            $qualification = $this->route('qualification');
+            if (! $qualification instanceof Qualification || $validator->errors()->isNotEmpty()) {
+                return;
+            }
+
+            $wouldChange = app(QualificationCaptureService::class)
+                ->adminVerificationCorrectionWouldChange($qualification, $this->all());
+
+            if (! $wouldChange) {
+                return;
+            }
+
+            $note = trim((string) $this->input('correction_note', ''));
+            if (mb_strlen($note) < 3) {
+                $validator->errors()->add('correction_note', 'Correction note is required when saving changes.');
             }
         });
     }

@@ -107,5 +107,50 @@ class VerificationQualificationLevel1ActionRestrictionsTest extends TestCase
         $qualification->refresh();
         $this->assertSame(VerificationState::UnderLevel2Review, $qualification->verification_state);
     }
+
+    public function test_level1_can_edit_after_returned_from_level2_for_correction(): void
+    {
+        $application = $this->makeSubmittedApplication();
+        $qualification = $this->makeQualification($application);
+
+        $level2 = User::factory()->activated()->create(['applicant_type' => null]);
+        $level2->givePermissionTo([
+            'verification.assign',
+            'verification.pool.view',
+            'verification.level2.review',
+            'verification.send_back',
+        ]);
+
+        $level1 = User::factory()->activated()->create(['applicant_type' => null]);
+        $level1->givePermissionTo([
+            'dashboard.view',
+            'verification.pool.view',
+            'verification.level1.process',
+        ]);
+
+        app(AssignmentService::class)->assign($qualification, $level2, $level1, 'Please review.');
+        app(QualificationLevel1ReviewService::class)->completeLevel1(
+            $qualification,
+            $level1,
+            'Initial review complete.',
+            false,
+            (int) $qualification->qualification_type_id,
+        );
+
+        $qualification->refresh();
+        $qualification->forceFill([
+            'verification_state' => VerificationState::UnderLevel1Review,
+            'assigned_verifier_id' => $level1->id,
+            'returned_to_level1_to_user_id' => $level1->id,
+            'returned_to_level1_by_user_id' => $level2->id,
+            'returned_to_level1_at' => now(),
+            'level1_correction_cycle' => 1,
+            'level2_review_owner_id' => null,
+        ])->save();
+
+        $this->actingAs($level1)
+            ->get("/admin/verification/qualifications/{$qualification->id}/edit")
+            ->assertOk();
+    }
 }
 
