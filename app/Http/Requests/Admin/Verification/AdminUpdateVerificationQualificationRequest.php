@@ -71,7 +71,9 @@ class AdminUpdateVerificationQualificationRequest extends FormRequest
      */
     public function messages(): array
     {
-        return $this->certificateSubjectGradeMessages();
+        return array_merge($this->certificateSubjectGradeMessages(), [
+            'correction_note.max' => 'Correction note must not exceed 2,000 characters.',
+        ]);
     }
 
     public function withValidator(Validator $validator): void

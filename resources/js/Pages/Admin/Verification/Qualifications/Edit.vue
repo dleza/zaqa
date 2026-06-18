@@ -129,6 +129,8 @@ function onInstitutionSelected(opt: { id: number | 'other'; name: string }) {
   institutionMeta.value = opt.id === 'other' ? { name: '' } : { name: opt.name }
 }
 
+const CORRECTION_NOTE_MAX_LENGTH = 2000
+
 type IdentifierType = 'certificate_number' | 'student_number' | 'examination_number'
 const identifierType = ref<IdentifierType>('certificate_number')
 const identifierValue = ref('')
@@ -156,6 +158,8 @@ const form = useForm({
     saved_grade: r.grade ?? '',
   })),
 })
+
+const correctionNoteLength = computed(() => form.correction_note.length)
 
 const uploadModalOpen = ref(false)
 const uploadTargetType = ref('')
@@ -712,90 +716,100 @@ function identityDocumentRow(): DocumentRow | null {
                   <InputError class="mt-2" :message="form.errors.subject_results" />
                 </div>
               </section>
-
-              <section class="rounded-2xl border border-border bg-surface-muted/40 p-6 shadow-sm sm:p-7">
-                <div class="flex items-center gap-2 text-text-primary">
-                  <FileText class="h-5 w-5 shrink-0 text-brand" aria-hidden="true" />
-                  <h2 class="text-base font-semibold">Supporting documents</h2>
-                </div>
-                <p class="mt-1 text-sm text-text-muted">Preview or replace files attached to this qualification.</p>
-
-                <div class="mt-5 space-y-2">
-                  <div
-                    v-for="slot in documentSlots"
-                    :key="slot.document_type"
-                    class="flex flex-col gap-2 rounded-xl border border-border/80 bg-surface px-4 py-3 sm:flex-row sm:items-center sm:justify-between"
-                  >
-                    <div class="min-w-0">
-                      <div class="text-sm font-medium text-text-primary">{{ slot.label }}</div>
-                      <div v-if="slot.document" class="truncate text-xs text-text-muted">
-                        {{ slot.document.original_name }} · v{{ slot.document.version_number }}
-                      </div>
-                      <div v-else class="text-xs text-text-muted">Not uploaded</div>
-                    </div>
-                    <div class="flex flex-wrap gap-2">
-                      <template v-if="slot.document">
-                        <a
-                          :href="slot.document.preview_url"
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          class="zaqa-btn zaqa-btn-secondary inline-flex items-center gap-1 px-3 py-1.5 text-xs"
-                        >
-                          <Eye class="h-3.5 w-3.5" /> Preview
-                        </a>
-                        <a :href="slot.document.download_url" class="zaqa-btn zaqa-btn-secondary inline-flex items-center gap-1 px-3 py-1.5 text-xs">
-                          <Download class="h-3.5 w-3.5" /> Download
-                        </a>
-                        <button
-                          type="button"
-                          class="zaqa-btn zaqa-btn-secondary inline-flex items-center gap-1 px-3 py-1.5 text-xs"
-                          @click="openUploadModal(slot.document_type, slot.label)"
-                        >
-                          <RefreshCw class="h-3.5 w-3.5" /> Replace
-                        </button>
-                        <button
-                          v-if="slot.document.can_delete"
-                          type="button"
-                          class="zaqa-btn zaqa-btn-secondary inline-flex items-center gap-1 px-3 py-1.5 text-xs text-danger"
-                          :disabled="deletingDocumentId === slot.document.id"
-                          @click="confirmDeleteDocument(slot.document)"
-                        >
-                          <Trash2 class="h-3.5 w-3.5" /> Remove
-                        </button>
-                      </template>
-                      <button
-                        v-else
-                        type="button"
-                        class="zaqa-btn zaqa-btn-secondary inline-flex items-center gap-1 px-3 py-1.5 text-xs"
-                        @click="openUploadModal(slot.document_type, slot.label)"
-                      >
-                        <RefreshCw class="h-3.5 w-3.5" /> Upload
-                      </button>
-                    </div>
-                  </div>
-                </div>
-
-                <div
-                  v-if="documentSlots.length === 0"
-                  class="mt-4 rounded-xl border border-dashed border-border bg-surface-muted/40 px-4 py-5 text-sm text-text-muted"
-                >
-                  No document types configured for this qualification.
-                </div>
-              </section>
             </div>
           </div>
 
+          <section class="rounded-2xl border border-border bg-surface-muted/40 p-6 shadow-sm sm:p-7">
+            <div class="flex items-center gap-2 text-text-primary">
+              <FileText class="h-5 w-5 shrink-0 text-brand" aria-hidden="true" />
+              <h2 class="text-base font-semibold">Supporting documents</h2>
+            </div>
+            <p class="mt-1 text-sm text-text-muted">Preview or replace files attached to this qualification.</p>
+
+            <div v-if="documentSlots.length" class="mt-5 grid grid-cols-1 gap-4 lg:grid-cols-2">
+              <div
+                v-for="slot in documentSlots"
+                :key="slot.document_type"
+                class="flex h-full flex-col gap-3 rounded-xl border border-border/80 bg-surface p-4 sm:flex-row sm:items-center sm:justify-between"
+              >
+                <div class="min-w-0 flex-1">
+                  <div class="text-sm font-medium text-text-primary">{{ slot.label }}</div>
+                  <div v-if="slot.document" class="mt-0.5 truncate text-xs text-text-muted">
+                    {{ slot.document.original_name }} · v{{ slot.document.version_number }}
+                  </div>
+                  <div v-else class="mt-0.5 text-xs text-text-muted">Not uploaded</div>
+                </div>
+                <div class="flex flex-wrap gap-2 sm:shrink-0 sm:justify-end">
+                  <template v-if="slot.document">
+                    <a
+                      :href="slot.document.preview_url"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      class="zaqa-btn zaqa-btn-secondary inline-flex items-center gap-1 px-3 py-1.5 text-xs"
+                    >
+                      <Eye class="h-3.5 w-3.5" /> Preview
+                    </a>
+                    <a :href="slot.document.download_url" class="zaqa-btn zaqa-btn-secondary inline-flex items-center gap-1 px-3 py-1.5 text-xs">
+                      <Download class="h-3.5 w-3.5" /> Download
+                    </a>
+                    <button
+                      type="button"
+                      class="zaqa-btn zaqa-btn-secondary inline-flex items-center gap-1 px-3 py-1.5 text-xs"
+                      @click="openUploadModal(slot.document_type, slot.label)"
+                    >
+                      <RefreshCw class="h-3.5 w-3.5" /> Replace
+                    </button>
+                    <button
+                      v-if="slot.document.can_delete"
+                      type="button"
+                      class="zaqa-btn zaqa-btn-secondary inline-flex items-center gap-1 px-3 py-1.5 text-xs text-danger"
+                      :disabled="deletingDocumentId === slot.document.id"
+                      @click="confirmDeleteDocument(slot.document)"
+                    >
+                      <Trash2 class="h-3.5 w-3.5" /> Remove
+                    </button>
+                  </template>
+                  <button
+                    v-else
+                    type="button"
+                    class="zaqa-btn zaqa-btn-secondary inline-flex items-center gap-1 px-3 py-1.5 text-xs"
+                    @click="openUploadModal(slot.document_type, slot.label)"
+                  >
+                    <RefreshCw class="h-3.5 w-3.5" /> Upload
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <div
+              v-else
+              class="mt-4 rounded-xl border border-dashed border-border bg-surface-muted/40 px-4 py-5 text-sm text-text-muted"
+            >
+              No document types configured for this qualification.
+            </div>
+          </section>
+
           <div class="space-y-4 border-t border-border pt-6">
-            <div class="max-w-xl" data-field="correction_note">
+            <div class="max-w-3xl" data-field="correction_note">
               <label class="text-sm font-medium text-text-primary">Correction note <span class="text-danger">*</span></label>
               <p class="mt-0.5 text-xs text-text-muted">Required when saving field changes. Explain why these qualification details were corrected.</p>
-              <input
+              <textarea
                 v-model="form.correction_note"
-                class="zaqa-input mt-2"
+                class="zaqa-input mt-2 min-h-[7rem] resize-y"
+                rows="4"
+                :maxlength="CORRECTION_NOTE_MAX_LENGTH"
                 placeholder="e.g. Fixed institution name to match certificate scan."
                 required
               />
-              <InputError :message="form.errors.correction_note" />
+              <div class="mt-1.5 flex flex-wrap items-start justify-between gap-x-3 gap-y-1">
+                <InputError :message="form.errors.correction_note" />
+                <p
+                  class="ml-auto shrink-0 text-xs tabular-nums"
+                  :class="correctionNoteLength >= CORRECTION_NOTE_MAX_LENGTH ? 'text-danger' : 'text-text-muted'"
+                >
+                  {{ correctionNoteLength }} / {{ CORRECTION_NOTE_MAX_LENGTH }}
+                </p>
+              </div>
             </div>
             <div class="flex flex-wrap items-center gap-3">
               <Link :href="`/admin/verification/qualifications/${qualification.id}`" class="zaqa-btn zaqa-btn-secondary px-5 py-2.5 text-sm">Cancel</Link>
