@@ -67,6 +67,9 @@ const loginBackgroundUrl = '/images/login-background.png'
 
 const loginOverlayGradient =
   'linear-gradient(90deg, rgba(0, 62, 126, 0.78) 0%, rgba(0, 95, 170, 0.58) 34%, rgba(0, 115, 186, 0.28) 50%, rgba(0, 115, 186, 0.12) 62%, rgba(244, 248, 252, 0.55) 74%, rgba(244, 248, 252, 0.82) 84%, rgba(255, 255, 255, 0.96) 100%)'
+
+const loginMobileOverlayGradient =
+  'linear-gradient(180deg, rgba(0, 62, 126, 0.72) 0%, rgba(0, 95, 170, 0.32) 32%, rgba(244, 248, 252, 0.88) 58%, rgba(255, 255, 255, 0.97) 100%)'
 </script>
 
 <template>
@@ -78,26 +81,27 @@ const loginOverlayGradient =
           class="absolute inset-0 bg-cover bg-center bg-no-repeat"
           :style="{ backgroundImage: `url('${loginBackgroundUrl}')` }"
         />
-        <div class="absolute inset-0" :style="{ background: loginOverlayGradient }" />
+        <div class="absolute inset-0 hidden lg:block" :style="{ background: loginOverlayGradient }" />
+        <div class="absolute inset-0 lg:hidden" :style="{ background: loginMobileOverlayGradient }" />
       </div>
 
-      <!-- Extended white logo header -->
+      <!-- Extended white logo header (desktop only) -->
       <div
-        class="absolute left-0 top-0 z-20 flex h-[110px] w-[min(92vw,720px)] items-center gap-4 rounded-br-[72px] bg-white px-5 sm:h-[125px] sm:gap-5 sm:px-8 sm:rounded-br-[96px] lg:h-[135px] lg:w-[min(44vw,720px)] lg:rounded-br-[120px] lg:px-10"
+        class="absolute left-0 top-0 z-20 hidden h-[135px] w-[min(44vw,720px)] items-center gap-5 rounded-br-[120px] bg-white px-10 lg:flex"
       >
-        <img :src="zaqaLogoUrl" alt="ZAQA logo" class="h-11 w-auto shrink-0 object-contain sm:h-12 lg:h-14" />
+        <img :src="zaqaLogoUrl" alt="ZAQA logo" class="h-14 w-auto shrink-0 object-contain" />
         <span class="h-10 w-px shrink-0 bg-slate-200" aria-hidden="true" />
-        <span class="text-xs font-bold uppercase tracking-[0.16em] text-[#0F2A4D] sm:text-sm lg:text-[15px] lg:tracking-[0.18em]">
+        <span class="text-[15px] font-bold uppercase tracking-[0.18em] text-[#0F2A4D]">
           Verification Portal
         </span>
       </div>
 
       <div class="relative z-10 flex flex-1 flex-col lg:min-h-0 lg:flex-row">
-        <!-- Left hero panel -->
-        <aside class="relative flex min-h-[320px] flex-col text-white lg:min-h-0 lg:w-[55%] lg:shrink-0">
+        <!-- Left hero panel (desktop only) -->
+        <aside class="relative hidden min-h-0 w-[55%] shrink-0 flex-col text-white lg:flex">
           <!-- Hero content -->
           <div
-            class="relative z-10 flex flex-1 flex-col px-6 pb-8 pt-[7.5rem] sm:px-10 sm:pb-10 sm:pt-[8.25rem] lg:px-12 lg:pb-12 lg:pt-[9.5rem]"
+            class="relative z-10 flex flex-1 flex-col px-12 pb-12 pt-[9.5rem]"
           >
             <div class="max-w-xl">
               <p class="text-xs font-bold uppercase tracking-[0.22em] text-[#EF7D00] sm:text-sm">WELCOME BACK</p>
@@ -140,24 +144,33 @@ const loginOverlayGradient =
         </aside>
 
         <!-- Right login section -->
-        <section class="relative flex flex-1 flex-col px-4 py-8 sm:px-8 sm:py-10 lg:w-[45%] lg:px-10 lg:py-12">
+        <section
+          class="relative flex min-h-[100dvh] flex-1 flex-col justify-center px-4 py-6 sm:px-6 lg:min-h-0 lg:w-[45%] lg:justify-start lg:px-10 lg:py-12"
+        >
+          <!-- Mobile branding -->
+          <div class="mb-5 flex flex-col items-center gap-2 text-center lg:hidden">
+            <img :src="zaqaLogoUrl" alt="ZAQA logo" class="h-11 w-auto object-contain" />
+            <span class="text-[11px] font-bold uppercase tracking-[0.18em] text-white/95">
+              Verification Portal
+            </span>
+          </div>
 
-          <div class="relative flex flex-1 items-center justify-center">
+          <div class="relative flex flex-1 items-center justify-center lg:flex-1">
             <div
-              class="w-full max-w-[580px] rounded-[28px] bg-white px-6 py-8 shadow-[0_24px_80px_-32px_rgba(15,42,77,0.28)] sm:px-10 sm:py-12 lg:px-12 lg:py-14"
+              class="w-full max-w-md rounded-[24px] bg-white px-5 py-6 shadow-[0_24px_80px_-32px_rgba(15,42,77,0.28)] sm:max-w-md sm:px-8 sm:py-8 lg:max-w-[580px] lg:rounded-[28px] lg:px-12 lg:py-14"
             >
-              <div class="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-[#0073BA]/10">
-                <Lock class="h-7 w-7 text-[#0073BA]" aria-hidden="true" />
+              <div class="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-[#0073BA]/10 lg:h-16 lg:w-16">
+                <Lock class="h-6 w-6 text-[#0073BA] lg:h-7 lg:w-7" aria-hidden="true" />
               </div>
 
-              <h2 class="mt-6 text-center text-2xl font-bold tracking-tight text-[#0F2A4D] sm:text-[1.75rem]">
+              <h2 class="mt-5 text-center text-xl font-bold tracking-tight text-[#0F2A4D] lg:mt-6 lg:text-[1.75rem]">
                 Log in to your account
               </h2>
               <p class="mt-2 text-center text-sm text-slate-500">
                 Use your email address or phone number to continue.
               </p>
 
-              <form class="mt-8 space-y-5" @submit.prevent="submit">
+              <form class="mt-6 space-y-4 lg:mt-8 lg:space-y-5" @submit.prevent="submit">
                 <div>
                   <label class="text-[11px] font-bold uppercase tracking-[0.14em] text-slate-500">
                     Email or phone number
@@ -171,7 +184,7 @@ const loginOverlayGradient =
                       v-model="form.identifier"
                       type="text"
                       placeholder="Enter your email or phone number"
-                      class="h-14 w-full rounded-xl border border-slate-200 bg-white pl-12 pr-4 text-sm text-[#0F2A4D] outline-none transition placeholder:text-slate-400 focus:border-[#0073BA] focus:ring-4 focus:ring-[#0073BA]/15"
+                      class="h-12 w-full rounded-xl border border-slate-200 bg-white pl-12 pr-4 text-sm text-[#0F2A4D] outline-none transition placeholder:text-slate-400 focus:border-[#0073BA] focus:ring-4 focus:ring-[#0073BA]/15 lg:h-14"
                       autocomplete="username"
                     />
                   </div>
@@ -189,7 +202,7 @@ const loginOverlayGradient =
                       v-model="form.password"
                       :type="showPassword ? 'text' : 'password'"
                       placeholder="Enter your password"
-                      class="h-14 w-full rounded-xl border border-slate-200 bg-white pl-12 pr-12 text-sm text-[#0F2A4D] outline-none transition placeholder:text-slate-400 focus:border-[#0073BA] focus:ring-4 focus:ring-[#0073BA]/15"
+                      class="h-12 w-full rounded-xl border border-slate-200 bg-white pl-12 pr-12 text-sm text-[#0F2A4D] outline-none transition placeholder:text-slate-400 focus:border-[#0073BA] focus:ring-4 focus:ring-[#0073BA]/15 lg:h-14"
                       autocomplete="current-password"
                     />
                     <button
@@ -265,7 +278,7 @@ const loginOverlayGradient =
 
                 <button
                   type="submit"
-                  class="group inline-flex h-14 w-full items-center justify-center gap-2 rounded-xl bg-[#0073BA] text-base font-semibold text-white shadow-[0_12px_28px_-10px_rgba(0,115,186,0.65)] transition hover:bg-[#0066a6] disabled:opacity-70"
+                  class="group inline-flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-[#0073BA] text-base font-semibold text-white shadow-[0_12px_28px_-10px_rgba(0,115,186,0.65)] transition hover:bg-[#0066a6] disabled:opacity-70 lg:h-14"
                   :disabled="form.processing"
                 >
                   Log in
@@ -273,7 +286,7 @@ const loginOverlayGradient =
                 </button>
               </form>
 
-              <div class="my-6 flex items-center gap-3 text-xs text-slate-400">
+              <div class="my-5 flex items-center gap-3 text-xs text-slate-400 lg:my-6">
                 <div class="h-px flex-1 bg-slate-200" />
                 <span>or</span>
                 <div class="h-px flex-1 bg-slate-200" />
@@ -291,8 +304,8 @@ const loginOverlayGradient =
         </section>
       </div>
 
-      <!-- Bottom support strip -->
-      <footer class="relative z-10 border-t-2 border-[#EF7D00] bg-white">
+      <!-- Bottom support strip (desktop only) -->
+      <footer class="relative z-10 hidden border-t-2 border-[#EF7D00] bg-white lg:block">
         <div class="mx-auto grid max-w-7xl gap-6 px-6 py-6 sm:grid-cols-3 sm:gap-8 sm:px-10 sm:py-7">
           <div v-for="item in supportItems" :key="item.title" class="flex gap-4">
             <span
