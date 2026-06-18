@@ -1221,7 +1221,7 @@ class AdminVerificationQualificationController extends Controller
             'recommended_for_award' => $recommended,
             'recommendation_label' => $recommended === null
                 ? null
-                : ($recommended ? 'Recommend awarding' : 'Do not recommend awarding'),
+                : ($recommended ? 'Recommend recognition' : 'Recommend Rejection'),
             'findings' => $qualification->reviewer_notes,
             'accreditation_statement' => $qualification->level1_accreditation_statement,
             'qualification_type_correction' => $typeCorrectionPayload,

@@ -476,7 +476,7 @@ function formatDuration(ms: number | null): string {
 }
 
 const documentTypeLabels: Record<string, string> = {
-  level1_review_attachment: 'Level 1 supporting attachment',
+  level1_review_attachment: 'Confirmation',
   level1_evaluation_report: 'Level 1 evaluation report',
 }
 function documentTypeLabel(raw: string) {
@@ -1296,7 +1296,7 @@ const autoVerificationCollapsedSummary = computed(() => {
                   <div v-if="level1Attachment" class="rounded-xl border border-border/70 bg-surface px-3 py-3">
                     <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                       <div class="min-w-0">
-                        <div class="text-[11px] font-bold uppercase tracking-wider text-text-muted">Supporting attachment</div>
+                        <div class="text-[11px] font-bold uppercase tracking-wider text-text-muted">Confirmation</div>
                         <div class="mt-1 truncate text-sm font-semibold text-text-primary">{{ level1Attachment.original_name }}</div>
                       </div>
                       <div class="flex flex-wrap gap-2">
@@ -2330,8 +2330,8 @@ const autoVerificationCollapsedSummary = computed(() => {
           <label class="text-sm font-semibold text-text-primary">Recommendation <span class="text-danger">*</span></label>
           <select v-model="level1CompleteForm.recommended_for_award" class="zaqa-input mt-2">
             <option value="" disabled>Select recommendation…</option>
-            <option value="1">Recommend awarding</option>
-            <option value="0">Do not recommend awarding</option>
+            <option value="1">Recommend recognition</option>
+            <option value="0">Recommend Rejection</option>
           </select>
           <div v-if="level1CompleteForm.errors.recommended_for_award" class="mt-1 text-xs text-danger">{{ level1CompleteForm.errors.recommended_for_award }}</div>
         </div>
@@ -2374,8 +2374,8 @@ const autoVerificationCollapsedSummary = computed(() => {
           <div v-if="level1CompleteForm.errors.evaluation_report" class="mt-1 text-xs text-danger">{{ level1CompleteForm.errors.evaluation_report }}</div>
         </div>
         <div>
-          <label class="text-sm font-semibold text-text-primary">Supporting attachment (optional)</label>
-          <p class="mt-1 text-xs text-text-secondary">Additional supporting file for Level 2 — max 10&nbsp;MB.</p>
+          <label class="text-sm font-semibold text-text-primary">Confirmation (optional)</label>
+          <p class="mt-1 text-xs text-text-secondary">Upload the confirmation file for Level 2 — max 10&nbsp;MB.</p>
           <input
             ref="level1AttachmentInput"
             type="file"

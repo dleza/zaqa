@@ -570,7 +570,7 @@ class Level1ReviewCompletionTest extends TestCase
             ->assertOk()
             ->assertInertia(fn ($page) => $page
                 ->where('qualification.qualification_type', $masters->name)
-                ->where('qualification.level1_review.recommendation_label', 'Recommend awarding')
+                ->where('qualification.level1_review.recommendation_label', 'Recommend recognition')
                 ->where('qualification.level1_review.findings', 'Verified against records.')
                 ->where('qualification.level1_review.accreditation_statement', 'Accredited awarding body.')
                 ->where('qualification.level1_review.qualification_type_correction.message', "Qualification type changed from {$diploma->name} to {$masters->name}")
