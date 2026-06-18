@@ -5,7 +5,7 @@ import InstitutionCombobox from '@/Components/InstitutionCombobox.vue'
 import InputError from '@/Components/InputError.vue'
 import SubjectGradeSelect from '@/Components/SubjectGradeSelect.vue'
 import { Link, router, useForm } from '@inertiajs/vue3'
-import { computed, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { selectGradeValue } from '@/lib/certificateSubjectGrades'
 import { resolveCertificateSubjectId } from '@/lib/resolveCertificateSubjectId'
 import { ArrowLeft, Download, Eye, FileEdit, FileText, GraduationCap, History, MapPin, RefreshCw, Trash2 } from 'lucide-vue-next'
@@ -80,6 +80,8 @@ const props = defineProps<{
 
 const approveOpen = ref(false)
 const rejectOpen = ref(false)
+const correctionHistoryOpen = ref(false)
+const formRoot = ref<HTMLElement | null>(null)
 const approveForm = useForm<{ comment: string; issue_certificate: boolean }>({ comment: '', issue_certificate: true })
 const rejectForm = useForm<{ reason: string; generate_rejection_notice: boolean }>({
   reason: '',
@@ -294,8 +296,71 @@ function submit() {
       }
       return o
     })
-    .put(`/admin/verification/qualifications/${props.qualification.id}`, { preserveScroll: true })
+    .put(`/admin/verification/qualifications/${props.qualification.id}`, {
+      preserveScroll: true,
+      onError: () => focusFirstFormError(),
+    })
 }
+
+const formErrorFieldOrder = [
+  'correction_note',
+  'names_as_on_qualification_document',
+  'qualification_holder_name',
+  'nrc_passport_number',
+  'country_id',
+  'awarding_institution_id',
+  'awarding_institution_name_other',
+  'qualification_type_id',
+  'title_of_qualification',
+  'certificate_number',
+  'student_number',
+  'examination_number',
+  'award_date',
+] as const
+
+function resolveFirstErrorFieldKey(errors: Record<string, string>): string | null {
+  const keys = Object.keys(errors).filter((key) => errors[key])
+  if (keys.length === 0) return null
+
+  for (const field of formErrorFieldOrder) {
+    if (keys.includes(field)) return field
+  }
+  if (keys.some((key) => key.startsWith('subject_results'))) return 'subject_results'
+
+  return keys[0]
+}
+
+function focusFirstFormError() {
+  nextTick(() => {
+    const errors = form.errors as Record<string, string>
+    let fieldKey = resolveFirstErrorFieldKey(errors)
+    if (!fieldKey) return
+
+    if (fieldKey === 'certificate_number' || fieldKey === 'student_number' || fieldKey === 'examination_number') {
+      fieldKey = 'identifier'
+    }
+
+    const el = formRoot.value?.querySelector(`[data-field="${fieldKey}"]`) as HTMLElement | null
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      const focusable = (
+        el.matches('input,select,textarea')
+          ? el
+          : el.querySelector('input,select,textarea')
+      ) as HTMLElement | null
+      focusable?.focus({ preventScroll: true })
+      return
+    }
+
+    formRoot.value?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  })
+}
+
+onMounted(() => {
+  if (resolveFirstErrorFieldKey(form.errors as Record<string, string>)) {
+    focusFirstFormError()
+  }
+})
 
 function openUploadModal(documentType: string, label?: string) {
   uploadTargetType.value = documentType
@@ -385,7 +450,7 @@ function identityDocumentRow(): DocumentRow | null {
             <ArrowLeft class="h-4 w-4" aria-hidden="true" />
             Back to qualification task
           </Link>
-          <div class="mt-4 flex flex-wrap items-start justify-between gap-4">
+          <div class="mt-4 flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
             <div class="flex min-w-0 items-start gap-3">
               <span class="mt-0.5 inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-brand/10 text-brand">
                 <FileEdit class="h-5 w-5" aria-hidden="true" />
@@ -398,10 +463,57 @@ function identityDocumentRow(): DocumentRow | null {
                 </p>
               </div>
             </div>
+
+            <div class="flex w-full shrink-0 flex-col gap-3 lg:w-auto lg:items-end">
+              <div class="flex flex-wrap items-center gap-2 lg:justify-end">
+                <button
+                  type="button"
+                  class="zaqa-btn zaqa-btn-secondary inline-flex items-center gap-2 px-4 py-2 text-sm"
+                  @click="correctionHistoryOpen = true"
+                >
+                  <History class="h-4 w-4" aria-hidden="true" />
+                  View history
+                  <span
+                    v-if="correction_history.length"
+                    class="rounded-full bg-brand/15 px-2 py-0.5 text-xs font-semibold text-brand"
+                  >
+                    {{ correction_history.length }}
+                  </span>
+                </button>
+                <template v-if="showLevel2DecisionActions">
+                  <button
+                    v-if="canShowApprove"
+                    type="button"
+                    class="zaqa-btn zaqa-btn-primary px-4 py-2 text-sm"
+                    :disabled="level2DecisionBlockedByDirtyForm || (isAutoVerifiedPendingL2 && lockMissingForActions)"
+                    :title="level2DecisionBlockedByDirtyForm ? 'Save qualification changes before approving.' : isAutoVerifiedPendingL2 && lockMissingForActions ? 'Lock for review before approving.' : ''"
+                    @click="approveOpen = true"
+                  >
+                    Approve Verification Certificate
+                  </button>
+                  <button
+                    v-if="canShowReject"
+                    type="button"
+                    class="zaqa-btn zaqa-btn-secondary border-danger/30 px-4 py-2 text-sm text-danger"
+                    :disabled="level2DecisionBlockedByDirtyForm || (isAutoVerifiedPendingL2 && lockMissingForActions)"
+                    :title="level2DecisionBlockedByDirtyForm ? 'Save qualification changes before rejecting.' : isAutoVerifiedPendingL2 && lockMissingForActions ? 'Lock for review before rejecting.' : ''"
+                    @click="openRejectModal"
+                  >
+                    Issue Notice of Rejection
+                  </button>
+                </template>
+              </div>
+              <p
+                v-if="showLevel2DecisionActions && level2DecisionBlockedByDirtyForm"
+                class="text-xs text-text-muted lg:text-right"
+              >
+                Save changes before taking a Level 2 decision.
+              </p>
+            </div>
           </div>
         </div>
 
-        <form class="space-y-8" @submit.prevent="submit">
+        <form ref="formRoot" class="space-y-8" @submit.prevent="submit">
           <div class="grid gap-8 xl:grid-cols-2 xl:items-start">
             <div class="space-y-8">
               <section class="rounded-2xl border border-border bg-surface-muted/40 p-6 shadow-sm sm:p-7">
@@ -411,7 +523,7 @@ function identityDocumentRow(): DocumentRow | null {
                 </div>
                 <p class="mt-1 text-sm text-text-muted">Country of award and the institution that issued this qualification.</p>
                 <div class="mt-5 grid grid-cols-1 gap-4 lg:grid-cols-2">
-                  <div class="lg:col-span-2">
+                  <div class="lg:col-span-2" data-field="country_id">
                     <label class="text-sm font-medium text-text-primary">Country of award</label>
                     <select v-model="form.country_id" class="zaqa-input">
                       <option value="">Select country</option>
@@ -419,7 +531,7 @@ function identityDocumentRow(): DocumentRow | null {
                     </select>
                     <InputError :message="form.errors.country_id" />
                   </div>
-                  <div class="lg:col-span-2">
+                  <div class="lg:col-span-2" data-field="awarding_institution_id">
                     <InstitutionCombobox
                       :country-id="form.country_id"
                       v-model="form.awarding_institution_id"
@@ -444,7 +556,7 @@ function identityDocumentRow(): DocumentRow | null {
                 </div>
                 <p class="mt-1 text-sm text-text-muted">Name and primary ID as recorded on this qualification item.</p>
                 <div class="mt-5 grid grid-cols-1 gap-4">
-                  <div>
+                  <div data-field="names_as_on_qualification_document">
                     <label class="text-sm font-medium">Name as on qualification document</label>
                     <input
                       v-model="form.names_as_on_qualification_document"
@@ -455,12 +567,12 @@ function identityDocumentRow(): DocumentRow | null {
                     <p class="mt-1.5 text-xs text-text-muted">Use the spelling, initials, and order shown on the document.</p>
                     <InputError :message="form.errors.names_as_on_qualification_document" />
                   </div>
-                  <div>
+                  <div data-field="qualification_holder_name">
                     <label class="text-sm font-medium">Full name</label>
                     <input v-model="form.qualification_holder_name" class="zaqa-input" />
                     <InputError :message="form.errors.qualification_holder_name" />
                   </div>
-                  <div>
+                  <div data-field="nrc_passport_number">
                     <label class="text-sm font-medium">NRC / Passport number</label>
                     <div class="mt-1 flex flex-col gap-2 sm:flex-row sm:items-center">
                       <input v-model="form.nrc_passport_number" class="zaqa-input font-mono text-sm sm:min-w-0 sm:flex-1" />
@@ -527,7 +639,7 @@ function identityDocumentRow(): DocumentRow | null {
                 <h2 class="text-base font-semibold text-text-primary">Qualification details</h2>
                 <p class="mt-1 text-sm text-text-muted">Must align with supporting documents.</p>
                 <div class="mt-5 grid grid-cols-1 gap-4 sm:grid-cols-2">
-                  <div class="sm:col-span-2">
+                  <div class="sm:col-span-2" data-field="qualification_type_id">
                     <label class="text-sm font-medium">Qualification type (ZQF)</label>
                     <select v-model="form.qualification_type_id" class="zaqa-input">
                       <option value="" disabled>Select type…</option>
@@ -535,7 +647,7 @@ function identityDocumentRow(): DocumentRow | null {
                     </select>
                     <InputError :message="form.errors.qualification_type_id" />
                   </div>
-                  <div class="sm:col-span-2">
+                  <div class="sm:col-span-2" data-field="title_of_qualification">
                     <label class="text-sm font-medium">Title of qualification</label>
                     <input v-model="form.title_of_qualification" class="zaqa-input" />
                     <InputError :message="form.errors.title_of_qualification" />
@@ -548,19 +660,19 @@ function identityDocumentRow(): DocumentRow | null {
                       <option value="examination_number">Examination number</option>
                     </select>
                   </div>
-                  <div>
+                  <div data-field="identifier">
                     <label class="text-sm font-medium">Identifier value</label>
                     <input v-model="identifierValue" class="zaqa-input" />
                     <InputError :message="form.errors.certificate_number" />
                   </div>
-                  <div class="sm:col-span-2">
+                  <div class="sm:col-span-2" data-field="award_date">
                     <label class="text-sm font-medium">Award date</label>
                     <input v-model="form.award_date" type="date" class="zaqa-input" />
                     <InputError :message="form.errors.award_date" />
                   </div>
                 </div>
 
-                <div v-if="needsSubjects" class="mt-8 border-t border-border pt-8">
+                <div v-if="needsSubjects" class="mt-8 border-t border-border pt-8" data-field="subject_results">
                   <div class="flex flex-wrap items-center justify-between gap-2">
                     <div class="text-sm font-semibold text-text-primary">Subject results</div>
                     <button type="button" class="zaqa-btn zaqa-btn-secondary px-3 py-2 text-xs" @click="addSubjectRow">Add subject</button>
@@ -670,51 +782,11 @@ function identityDocumentRow(): DocumentRow | null {
                   No document types configured for this qualification.
                 </div>
               </section>
-
-              <section class="rounded-2xl border border-border bg-surface p-6 shadow-sm sm:p-7">
-                <div class="flex items-center gap-2 text-text-primary">
-                  <History class="h-5 w-5 shrink-0 text-brand" aria-hidden="true" />
-                  <h2 class="text-base font-semibold">Correction history</h2>
-                </div>
-                <p class="mt-1 text-sm text-text-muted">Who changed what on this qualification during verification.</p>
-                <div v-if="correction_history.length" class="mt-5 space-y-4">
-                  <div
-                    v-for="entry in correction_history"
-                    :key="entry.id"
-                    class="rounded-xl border border-border/80 bg-surface-muted/30 px-4 py-3"
-                  >
-                    <div class="flex flex-wrap items-start justify-between gap-2">
-                      <div class="text-sm font-semibold text-text-primary">{{ entry.summary }}</div>
-                      <div class="text-xs text-text-muted">{{ formatAt(entry.at) }}</div>
-                    </div>
-                    <div class="mt-1 text-xs text-text-muted">{{ entry.actor_name ?? 'System' }}</div>
-                    <p v-if="entry.note" class="mt-2 text-sm text-text-primary">{{ entry.note }}</p>
-                    <ul v-if="entry.field_changes?.length" class="mt-3 space-y-2 text-sm">
-                      <li v-for="(change, cIdx) in entry.field_changes" :key="cIdx" class="rounded-lg bg-surface px-3 py-2">
-                        <div class="font-medium text-text-primary">{{ change.label }}</div>
-                        <div class="mt-1 text-xs text-text-muted">
-                          <span class="line-through">{{ change.from }}</span>
-                          <span class="mx-1">→</span>
-                          <span class="font-medium text-text-primary">{{ change.to }}</span>
-                        </div>
-                      </li>
-                    </ul>
-                    <div v-else-if="entry.event_type.includes('document')" class="mt-2 text-xs text-text-muted">
-                      <span v-if="entry.document_before">{{ entry.document_before }}</span>
-                      <span v-if="entry.document_before && entry.document_after"> → </span>
-                      <span v-if="entry.document_after">{{ entry.document_after }}</span>
-                    </div>
-                  </div>
-                </div>
-                <div v-else class="mt-5 rounded-xl border border-dashed border-border bg-surface-muted/40 px-4 py-5 text-sm text-text-muted">
-                  No corrections recorded yet.
-                </div>
-              </section>
             </div>
           </div>
 
           <div class="space-y-4 border-t border-border pt-6">
-            <div class="max-w-xl">
+            <div class="max-w-xl" data-field="correction_note">
               <label class="text-sm font-medium text-text-primary">Correction note <span class="text-danger">*</span></label>
               <p class="mt-0.5 text-xs text-text-muted">Required when saving field changes. Explain why these qualification details were corrected.</p>
               <input
@@ -725,52 +797,67 @@ function identityDocumentRow(): DocumentRow | null {
               />
               <InputError :message="form.errors.correction_note" />
             </div>
-            <div class="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-              <div class="flex flex-wrap items-center gap-3">
-                <Link :href="`/admin/verification/qualifications/${qualification.id}`" class="zaqa-btn zaqa-btn-secondary px-5 py-2.5 text-sm">Cancel</Link>
-                <button
-                  type="submit"
-                  class="zaqa-btn zaqa-btn-primary px-5 py-2.5 text-sm"
-                  :disabled="form.processing || !form.isDirty"
-                >
-                  Save changes
-                </button>
-                <p v-if="!form.isDirty" class="text-xs text-text-muted">No changes to save.</p>
-              </div>
-
-              <div v-if="showLevel2DecisionActions" class="rounded-xl border border-border bg-surface-muted/40 px-4 py-3">
-                <div class="text-xs font-semibold uppercase tracking-wide text-text-muted">Level 2 actions</div>
-                <p v-if="level2DecisionBlockedByDirtyForm" class="mt-1 text-xs text-text-muted">
-                  Save changes before taking a Level 2 decision.
-                </p>
-                <div class="mt-3 flex flex-wrap gap-2">
-                  <button
-                    v-if="canShowApprove"
-                    type="button"
-                    class="zaqa-btn zaqa-btn-primary px-4 py-2 text-sm"
-                    :disabled="level2DecisionBlockedByDirtyForm || (isAutoVerifiedPendingL2 && lockMissingForActions)"
-                    :title="level2DecisionBlockedByDirtyForm ? 'Save qualification changes before approving.' : isAutoVerifiedPendingL2 && lockMissingForActions ? 'Lock for review before approving.' : ''"
-                    @click="approveOpen = true"
-                  >
-                    Approve Verification Certificate
-                  </button>
-                  <button
-                    v-if="canShowReject"
-                    type="button"
-                    class="zaqa-btn zaqa-btn-secondary border-danger/30 px-4 py-2 text-sm text-danger"
-                    :disabled="level2DecisionBlockedByDirtyForm || (isAutoVerifiedPendingL2 && lockMissingForActions)"
-                    :title="level2DecisionBlockedByDirtyForm ? 'Save qualification changes before rejecting.' : isAutoVerifiedPendingL2 && lockMissingForActions ? 'Lock for review before rejecting.' : ''"
-                    @click="openRejectModal"
-                  >
-                    Issue Notice of Rejection
-                  </button>
-                </div>
-              </div>
+            <div class="flex flex-wrap items-center gap-3">
+              <Link :href="`/admin/verification/qualifications/${qualification.id}`" class="zaqa-btn zaqa-btn-secondary px-5 py-2.5 text-sm">Cancel</Link>
+              <button
+                type="submit"
+                class="zaqa-btn zaqa-btn-primary px-5 py-2.5 text-sm"
+                :disabled="form.processing || !form.isDirty"
+              >
+                Save changes
+              </button>
+              <p v-if="!form.isDirty" class="text-xs text-text-muted">No changes to save.</p>
             </div>
           </div>
         </form>
       </div>
     </div>
+
+    <AdminActionModal
+      v-model="correctionHistoryOpen"
+      title="Correction history"
+      description="Who changed what on this qualification during verification."
+      max-width-class="max-w-4xl"
+      scrollable
+    >
+      <div v-if="correction_history.length" class="space-y-4">
+        <div
+          v-for="entry in correction_history"
+          :key="entry.id"
+          class="rounded-xl border border-border/80 bg-surface-muted/30 px-4 py-3"
+        >
+          <div class="flex flex-wrap items-start justify-between gap-2">
+            <div class="text-sm font-semibold text-text-primary">{{ entry.summary }}</div>
+            <div class="text-xs text-text-muted">{{ formatAt(entry.at) }}</div>
+          </div>
+          <div class="mt-1 text-xs text-text-muted">{{ entry.actor_name ?? 'System' }}</div>
+          <p v-if="entry.note" class="mt-2 text-sm text-text-primary">{{ entry.note }}</p>
+          <ul v-if="entry.field_changes?.length" class="mt-3 space-y-2 text-sm">
+            <li v-for="(change, cIdx) in entry.field_changes" :key="cIdx" class="rounded-lg bg-surface px-3 py-2">
+              <div class="font-medium text-text-primary">{{ change.label }}</div>
+              <div class="mt-1 text-xs text-text-muted">
+                <span class="line-through">{{ change.from }}</span>
+                <span class="mx-1">→</span>
+                <span class="font-medium text-text-primary">{{ change.to }}</span>
+              </div>
+            </li>
+          </ul>
+          <div v-else-if="entry.event_type.includes('document')" class="mt-2 text-xs text-text-muted">
+            <span v-if="entry.document_before">{{ entry.document_before }}</span>
+            <span v-if="entry.document_before && entry.document_after"> → </span>
+            <span v-if="entry.document_after">{{ entry.document_after }}</span>
+          </div>
+        </div>
+      </div>
+      <div v-else class="rounded-xl border border-dashed border-border bg-surface-muted/40 px-4 py-5 text-sm text-text-muted">
+        No corrections recorded yet.
+      </div>
+      <template #footer>
+        <button type="button" class="zaqa-btn zaqa-btn-secondary px-4 py-2 text-sm" @click="correctionHistoryOpen = false">
+          Close
+        </button>
+      </template>
+    </AdminActionModal>
 
     <AdminActionModal
       v-model="uploadModalOpen"
