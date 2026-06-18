@@ -259,6 +259,40 @@ class OptionalTranscriptUploadTest extends TestCase
             );
     }
 
+    public function test_qualification_document_upload_rejects_non_pdf_or_image_files(): void
+    {
+        [$user, $application, $qualification] = $this->makeSchoolQualificationWithCertificateOnly();
+
+        $this->actingAs($user)
+            ->post("/applicant/applications/{$application->id}/documents", [
+                'document_type' => DocumentType::Transcript->value,
+                'qualification_id' => $qualification->id,
+                'file' => UploadedFile::fake()->create(
+                    'transcript.docx',
+                    120,
+                    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+                ),
+            ])
+            ->assertSessionHasErrors(['file']);
+    }
+
+    public function test_foreign_consent_upload_rejects_non_pdf_or_image_files(): void
+    {
+        [$user, $application, $qualification] = $this->makeForeignQualificationWithCertificateOnly();
+
+        $this->actingAs($user)
+            ->post("/applicant/applications/{$application->id}/consent/foreign-upload", [
+                'qualification_id' => $qualification->id,
+                'file' => UploadedFile::fake()->create(
+                    'consent.docx',
+                    120,
+                    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+                ),
+                'source_awarding_institution_name' => 'Foreign University',
+            ])
+            ->assertSessionHasErrors(['file']);
+    }
+
     /**
      * @return array{0: User, 1: Application}
      */

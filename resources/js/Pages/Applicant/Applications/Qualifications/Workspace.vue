@@ -10,6 +10,11 @@ import SubjectGradeSelect from '@/Components/SubjectGradeSelect.vue'
 import Swal from 'sweetalert2'
 import { selectGradeValue } from '@/lib/certificateSubjectGrades'
 import { resolveCertificateSubjectId } from '@/lib/resolveCertificateSubjectId'
+import {
+  APPLICANT_DOCUMENT_ACCEPT,
+  APPLICANT_DOCUMENT_FILE_ERROR,
+  isAllowedApplicantDocumentFile,
+} from '@/lib/applicantDocumentUpload'
 import 'sweetalert2/dist/sweetalert2.min.css'
 import { Building2, FileStack, GraduationCap, MapPin, Shield, Sparkles, Trash2 } from 'lucide-vue-next'
 
@@ -475,19 +480,69 @@ function hasPendingUploads(): boolean {
   return !!(pendingCertificateFile.value || pendingTranscriptFile.value || pendingConsentFile.value)
 }
 
+function assignPendingFile(
+  file: File | null,
+  input: HTMLInputElement | null,
+  setter: (value: File | null) => void,
+) {
+  if (!file) {
+    setter(null)
+    return
+  }
+
+  if (!isAllowedApplicantDocumentFile(file)) {
+    setter(null)
+    if (input) input.value = ''
+    void Swal.fire({
+      icon: 'error',
+      title: 'Invalid file type',
+      text: APPLICANT_DOCUMENT_FILE_ERROR,
+    })
+    return
+  }
+
+  setter(file)
+}
+
 function onPendingCertificateChange(e: Event) {
   const t = e.target as HTMLInputElement
-  pendingCertificateFile.value = t.files?.[0] ?? null
+  assignPendingFile(t.files?.[0] ?? null, t, (value) => {
+    pendingCertificateFile.value = value
+  })
 }
 
 function onPendingTranscriptChange(e: Event) {
   const t = e.target as HTMLInputElement
-  pendingTranscriptFile.value = t.files?.[0] ?? null
+  assignPendingFile(t.files?.[0] ?? null, t, (value) => {
+    pendingTranscriptFile.value = value
+  })
 }
 
 function onPendingConsentChange(e: Event) {
   const t = e.target as HTMLInputElement
-  pendingConsentFile.value = t.files?.[0] ?? null
+  assignPendingFile(t.files?.[0] ?? null, t, (value) => {
+    pendingConsentFile.value = value
+  })
+}
+
+function validatePendingUploadFiles(): boolean {
+  const pending = [
+    pendingCertificateFile.value,
+    pendingTranscriptFile.value,
+    pendingConsentFile.value,
+  ].filter((file): file is File => file instanceof File)
+
+  const invalid = pending.find((file) => !isAllowedApplicantDocumentFile(file))
+  if (!invalid) {
+    return true
+  }
+
+  void Swal.fire({
+    icon: 'error',
+    title: 'Invalid file type',
+    text: APPLICANT_DOCUMENT_FILE_ERROR,
+  })
+  return false
 }
 
 async function runPendingUploads(qid: number): Promise<void> {
@@ -650,6 +705,10 @@ function submitQualificationAndDocuments() {
       title: 'Complete required fields',
       html: `<ul class="mt-2 list-disc space-y-1 pl-5 text-left text-sm">${validationErrors.map((e) => `<li>${e}</li>`).join('')}</ul>`,
     })
+    return
+  }
+
+  if (hasPendingUploads() && !validatePendingUploadFiles()) {
     return
   }
 
@@ -1016,10 +1075,11 @@ const pendingConsentName = computed(() => pendingConsentFile.value?.name ?? '')
                     ref="certificateFileInputEl"
                     type="file"
                     class="zaqa-input mt-2"
-                    accept=".pdf,.jpg,.jpeg,.png,.webp,application/pdf,image/jpeg,image/png,image/webp"
+                    :accept="APPLICANT_DOCUMENT_ACCEPT"
                     :disabled="locked"
                     @change="onPendingCertificateChange"
                   />
+                  <p class="mt-1 text-xs text-text-muted">PDF or image files only (JPG, PNG, WEBP).</p>
                   <p v-if="pendingCertificateName" class="mt-2 text-xs text-text-muted">
                     Selected: <span class="font-semibold text-text-primary">{{ pendingCertificateName }}</span>
                   </p>
@@ -1050,10 +1110,11 @@ const pendingConsentName = computed(() => pendingConsentFile.value?.name ?? '')
                     ref="transcriptFileInputEl"
                     type="file"
                     class="zaqa-input mt-2"
-                    accept=".pdf,.jpg,.jpeg,.png,.webp,application/pdf,image/jpeg,image/png,image/webp"
+                    :accept="APPLICANT_DOCUMENT_ACCEPT"
                     :disabled="locked"
                     @change="onPendingTranscriptChange"
                   />
+                  <p class="mt-1 text-xs text-text-muted">PDF or image files only (JPG, PNG, WEBP).</p>
                   <p v-if="pendingTranscriptName" class="mt-2 text-xs text-text-muted">
                     Selected: <span class="font-semibold text-text-primary">{{ pendingTranscriptName }}</span>
                   </p>
@@ -1116,11 +1177,12 @@ const pendingConsentName = computed(() => pendingConsentFile.value?.name ?? '')
                   <input
                     ref="consentFileInputEl"
                     type="file"
-                    accept=".pdf,.doc,.docx,.jpg,.jpeg,.png,.webp,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,image/jpeg,image/png,image/webp"
+                    :accept="APPLICANT_DOCUMENT_ACCEPT"
                     class="zaqa-input mt-2"
                     :disabled="locked"
                     @change="onPendingConsentChange"
                   />
+                  <p class="mt-1 text-xs text-text-muted">PDF or image files only (JPG, PNG, WEBP).</p>
                   <p v-if="pendingConsentName" class="mt-2 text-xs text-text-muted">
                     Selected: <span class="font-semibold text-text-primary">{{ pendingConsentName }}</span>
                   </p>

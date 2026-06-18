@@ -4,6 +4,11 @@ import { router, useForm } from '@inertiajs/vue3'
 import InputError from '@/Components/InputError.vue'
 import Swal from 'sweetalert2'
 import { AlertCircle, CheckCircle2, Download, Eye, FileText, RefreshCw, Trash2, Upload, X } from 'lucide-vue-next'
+import {
+  APPLICANT_DOCUMENT_ACCEPT,
+  APPLICANT_DOCUMENT_FILE_ERROR,
+  isAllowedApplicantDocumentFile,
+} from '@/lib/applicantDocumentUpload'
 
 type DocType = 'nrc_copy' | 'certificate_copy' | 'transcript'
 
@@ -156,6 +161,18 @@ function cancelUpload() {
 }
 
 function setFile(file: File | null) {
+  if (file && !isAllowedApplicantDocumentFile(file)) {
+    form.file = null
+    if (fileInput.value) fileInput.value.value = ''
+    resetSelectedPreview()
+    void Swal.fire({
+      icon: 'error',
+      title: 'Invalid file type',
+      text: APPLICANT_DOCUMENT_FILE_ERROR,
+    })
+    return
+  }
+
   form.file = file
 }
 
@@ -374,7 +391,7 @@ async function confirmDelete(doc: DocItem | null) {
                 <input
                   ref="fileInput"
                   type="file"
-                  accept="application/pdf,image/*"
+                  :accept="APPLICANT_DOCUMENT_ACCEPT"
                   class="zaqa-input"
                   @change="onFileChange(modalType, $event)"
                 />

@@ -20,16 +20,12 @@ class UploadForeignConsentRequest extends FormRequest
     public function rules(): array
     {
         $maxKb = (int) config('documents.max_upload_kb', 5120);
-        $mimeTypes = array_merge((array) config('documents.allowed_mimetypes', [
+        $mimeTypes = (array) config('documents.allowed_mimetypes', [
             'application/pdf',
             'image/jpeg',
             'image/png',
             'image/webp',
-        ]), [
-            'application/msword',
-            'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
         ]);
-        $mimeTypes = array_values(array_unique($mimeTypes));
 
         return [
             'qualification_id' => ['required', 'integer', 'exists:qualifications,id'],
