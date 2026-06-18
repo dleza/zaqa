@@ -140,13 +140,14 @@ const loginMobileOverlayGradient =
 
             <div class="mt-auto pt-10 lg:pt-12">
               <div class="h-px w-full bg-[#EF7D00]/80" aria-hidden="true" />
-              <div class="mt-4 flex flex-wrap items-center gap-x-3 gap-y-2 text-xs font-semibold text-white/90 sm:text-sm">
-                <span class="inline-flex items-center gap-2">
-                  <Shield class="h-4 w-4 text-[#EF7D00]" aria-hidden="true" />
-                  Government Recognised
-                </span>
-                <span class="hidden text-[#EF7D00] sm:inline" aria-hidden="true">•</span>
-                <span>Official ZAQA System</span>
+              <div class="mt-4">
+                <Link
+                  href="/how-to-apply"
+                  class="group inline-flex items-center gap-2 text-xs font-semibold text-[#EF7D00] transition hover:text-white sm:text-sm"
+                >
+                  How to apply
+                  <ArrowRight class="h-4 w-4 transition-transform group-hover:translate-x-0.5" aria-hidden="true" />
+                </Link>
               </div>
             </div>
           </div>

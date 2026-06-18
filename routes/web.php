@@ -75,6 +75,7 @@ use App\Http\Controllers\Auth\NewPasswordController;
 use App\Http\Controllers\Auth\PasswordResetLinkController;
 use App\Http\Controllers\Auth\PhonePasswordResetController;
 use App\Http\Controllers\Auth\RegisteredApplicantController;
+use App\Http\Controllers\HowToApplyController;
 use App\Http\Controllers\Finance\FinanceApplicationTrackingController;
 use App\Http\Controllers\Finance\FinancePaymentProofController;
 use App\Http\Controllers\Docs\InstitutionApiDocsController;
@@ -122,6 +123,7 @@ Route::middleware('guest')->group(function () {
 Route::get('/activate/email', [AccountActivationController::class, 'verifyEmail'])->name('activation.email.verify');
 Route::get('/certificates/{token}', [CertificateVerificationController::class, 'show'])->name('certificates.verify');
 Route::get('/receipts/{token}', [ReceiptVerificationController::class, 'show'])->name('receipts.verify');
+Route::get('/how-to-apply', [HowToApplyController::class, 'show'])->name('how-to-apply');
 
 Route::middleware('auth')->group(function () {
     Route::post('/logout', [AuthenticatedSessionController::class, 'destroy'])->name('logout');
