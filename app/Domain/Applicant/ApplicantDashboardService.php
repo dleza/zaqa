@@ -23,28 +23,14 @@ class ApplicantDashboardService
      *   activity: array<int,array<string,mixed>>,
      *   alerts: array<int,array{type:string,title:string,message:string,application_id?:int|null,application_number?:string|null,href?:string|null}>,
      *   returned_qualifications: array<int,array{qualification_id:int,application_id:int,application_number:string|null,title_of_qualification:string|null,returned_to_applicant_at:string|null,href:string}>,
-     *   returned_qualifications_count: int
+     *   returned_qualifications_count: int,
+     *   tracking_href: string
      * }
      */
     public function build(User $user): array
     {
         $userId = $user->id;
-
-        $countsByStatus = Application::query()
-            ->where('applicant_user_id', $userId)
-            ->select('current_status')
-            ->selectRaw('COUNT(*) as aggregate')
-            ->groupBy('current_status')
-            ->pluck('aggregate', 'current_status');
-
-        $counts = [
-            'total' => (int) $countsByStatus->sum(),
-            'draft' => (int) ($countsByStatus[ApplicationStatus::Draft->value] ?? 0),
-            'submitted' => (int) ($countsByStatus[ApplicationStatus::Submitted->value] ?? 0),
-            'sent_back' => (int) ($countsByStatus[ApplicationStatus::SentBack->value] ?? 0),
-            'approved' => (int) ($countsByStatus[ApplicationStatus::Approved->value] ?? 0),
-            'rejected' => (int) ($countsByStatus[ApplicationStatus::Rejected->value] ?? 0),
-        ];
+        $counts = app(ApplicantQualificationsService::class)->countsFor($user);
 
         $continueDraft = Application::query()
             ->where('applicant_user_id', $userId)
@@ -100,8 +86,10 @@ class ApplicantDashboardService
                 'qualifications as returned_qualifications_count' => fn (Builder $q) => $q->where('verification_state', VerificationState::ReturnedToApplicant),
             ])
             ->latest('id')
-            ->limit(5)
+            ->limit(1)
             ->get();
+
+        $latestApp = $recentApps->first();
 
         $applications = $recentApps->map(function (Application $a) {
             $paymentsSorted = $a->payments->sortByDesc('id');
@@ -167,6 +155,9 @@ class ApplicantDashboardService
             'alerts' => $alerts,
             'returned_qualifications' => $returnedQualifications,
             'returned_qualifications_count' => $returnedQualificationsCount,
+            'tracking_href' => $latestApp instanceof Application
+                ? route('applicant.applications.track', $latestApp)
+                : route('applicant.applications.index'),
         ];
     }
 

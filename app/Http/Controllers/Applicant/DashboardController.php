@@ -23,6 +23,7 @@ class DashboardController extends Controller
             'alerts' => $payload['alerts'],
             'returnedQualifications' => $payload['returned_qualifications'],
             'returnedQualificationsCount' => $payload['returned_qualifications_count'],
+            'trackingHref' => $payload['tracking_href'],
         ]);
     }
 }

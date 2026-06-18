@@ -63,6 +63,7 @@ use App\Http\Controllers\Applicant\ApplicantProfileEditController;
 use App\Http\Controllers\Applicant\ApplicantProfileIdentityDocumentController;
 use App\Http\Controllers\Applicant\ApplicantQualificationCertificateController;
 use App\Http\Controllers\Applicant\ApplicantQualificationController;
+use App\Http\Controllers\Applicant\ApplicantQualificationsController;
 use App\Http\Controllers\Applicant\ApplicantReferenceController;
 use App\Http\Controllers\Applicant\ApplicantServiceFeedbackController;
 use App\Http\Controllers\Applicant\DashboardController;
@@ -134,6 +135,8 @@ Route::middleware('auth')->group(function () {
 
     Route::middleware(EnsureAccountIsActive::class)->prefix('applicant')->name('applicant.')->group(function () {
         Route::get('/dashboard', [DashboardController::class, 'index'])->name('dashboard');
+
+        Route::get('/qualifications', [ApplicantQualificationsController::class, 'index'])->name('qualifications.index');
 
         Route::get('/notifications', [ApplicantNotificationsController::class, 'index'])->name('notifications.index');
         Route::post('/notifications/read-all', [ApplicantNotificationsController::class, 'markAllRead'])->name('notifications.read_all');
