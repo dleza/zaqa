@@ -121,16 +121,11 @@ function submit() {
 
       <div class="mt-5">
         <div class="text-xs font-semibold uppercase tracking-wider text-text-muted">Account type</div>
-        <div class="relative mt-2 flex rounded-full border border-border bg-surface-muted p-1">
-          <span
-            class="absolute inset-y-1 left-1 w-[calc(50%-0.25rem)] rounded-full bg-surface shadow-sm transition-transform duration-300"
-            :class="mode === 'institution' ? 'translate-x-full' : 'translate-x-0'"
-            aria-hidden="true"
-          />
+        <div class="register-segmented mt-2">
           <button
             type="button"
-            class="relative z-10 inline-flex flex-1 items-center justify-center gap-2 rounded-full px-3 py-2 text-sm font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
-            :class="mode === 'individual' ? 'text-text-primary' : 'text-text-muted hover:text-text-primary'"
+            class="register-segment"
+            :class="{ 'register-segment--active': mode === 'individual' }"
             @click="mode = 'individual'"
           >
             <User class="h-4 w-4" aria-hidden="true" />
@@ -138,8 +133,8 @@ function submit() {
           </button>
           <button
             type="button"
-            class="relative z-10 inline-flex flex-1 items-center justify-center gap-2 rounded-full px-3 py-2 text-sm font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
-            :class="mode === 'institution' ? 'text-text-primary' : 'text-text-muted hover:text-text-primary'"
+            class="register-segment"
+            :class="{ 'register-segment--active': mode === 'institution' }"
             @click="mode = 'institution'"
           >
             <Building2 class="h-4 w-4" aria-hidden="true" />
@@ -210,22 +205,14 @@ function submit() {
 
         <div>
           <div class="text-xs font-semibold uppercase tracking-wider text-text-muted">Contact method</div>
-          <div class="relative mt-2 flex rounded-full border border-border bg-surface-muted p-1">
-            <span
-              class="absolute inset-y-1 left-1 w-[calc(50%-0.25rem)] rounded-full bg-surface shadow-sm transition-transform duration-300"
-              :class="contactMethod === 'phone' ? 'translate-x-full' : 'translate-x-0'"
-              aria-hidden="true"
-            />
+          <div class="register-segmented mt-2">
             <button
               type="button"
-              class="relative z-10 inline-flex flex-1 items-center justify-center gap-2 rounded-full px-3 py-2 text-sm font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
-              :class="
-                contactMethod === 'email'
-                  ? 'text-text-primary'
-                  : registerWithEmail
-                    ? 'text-text-muted hover:text-text-primary'
-                    : 'cursor-not-allowed text-text-muted opacity-50'
-              "
+              class="register-segment"
+              :class="{
+                'register-segment--active': contactMethod === 'email',
+                'register-segment--disabled': !registerWithEmail,
+              }"
               :disabled="!registerWithEmail"
               :aria-disabled="!registerWithEmail"
               @click="setContactMethod('email')"
@@ -235,14 +222,11 @@ function submit() {
             </button>
             <button
               type="button"
-              class="relative z-10 inline-flex flex-1 items-center justify-center gap-2 rounded-full px-3 py-2 text-sm font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
-              :class="
-                contactMethod === 'phone'
-                  ? 'text-text-primary'
-                  : registerWithSms
-                    ? 'text-text-muted hover:text-text-primary'
-                    : 'cursor-not-allowed text-text-muted opacity-50'
-              "
+              class="register-segment"
+              :class="{
+                'register-segment--active': contactMethod === 'phone',
+                'register-segment--disabled': !registerWithSms,
+              }"
               :disabled="!registerWithSms"
               :aria-disabled="!registerWithSms"
               @click="setContactMethod('phone')"
@@ -469,6 +453,61 @@ function submit() {
 </template>
 
 <style scoped>
+.register-segmented {
+  display: flex;
+  gap: 0;
+  padding: 4px;
+  background-color: #f4f7fa;
+  border: 1px solid #d9e2ec;
+  border-radius: 9999px;
+}
+
+.register-segment {
+  display: inline-flex;
+  flex: 1;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid transparent;
+  border-radius: 9999px;
+  background-color: transparent;
+  color: #475569;
+  font-size: 0.875rem;
+  font-weight: 600;
+  line-height: 1.25rem;
+  transition:
+    background-color 150ms ease,
+    color 150ms ease,
+    border-color 150ms ease;
+}
+
+.register-segment:hover:not(:disabled):not(.register-segment--active) {
+  background-color: #ffffff;
+  color: #0073ba;
+}
+
+.register-segment:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px #ffffff, 0 0 0 4px #0073ba;
+}
+
+.register-segment--active {
+  background-color: #ef7d00;
+  border-color: #ef7d00;
+  color: #ffffff;
+}
+
+.register-segment--active:hover:not(:disabled) {
+  background-color: #ef7d00;
+  color: #ffffff;
+}
+
+.register-segment--disabled:not(.register-segment--active) {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
 .fade-enter-active,
 .fade-leave-active {
   transition: opacity 180ms ease;
