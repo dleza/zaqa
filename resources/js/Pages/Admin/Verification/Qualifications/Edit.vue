@@ -9,7 +9,7 @@ import { Link, router, useForm } from '@inertiajs/vue3'
 import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { selectGradeValue } from '@/lib/certificateSubjectGrades'
 import { resolveCertificateSubjectId } from '@/lib/resolveCertificateSubjectId'
-import { ArrowLeft, Download, Eye, FileEdit, FileText, GraduationCap, History, MapPin, RefreshCw, Trash2 } from 'lucide-vue-next'
+import { ArrowLeft, Download, Eye, ExternalLink, FileEdit, FileText, GraduationCap, History, MapPin, RefreshCw, Trash2, X } from 'lucide-vue-next'
 import Swal from 'sweetalert2'
 
 type DocumentRow = {
@@ -20,9 +20,18 @@ type DocumentRow = {
   qualification_id: number | null
   preview_url: string
   download_url: string
+  mime_type?: string | null
   can_delete: boolean
   can_replace?: boolean
   uploaded_by?: string | null
+}
+
+type PreviewDocument = {
+  label: string
+  filename: string
+  mime_type?: string | null
+  preview_url: string
+  download_url: string
 }
 
 type DocumentSlot = {
@@ -73,6 +82,7 @@ const props = defineProps<{
     original_name: string | null
     preview_url: string
     download_url: string
+    mime_type?: string | null
     document_id: number | null
     can_delete: boolean
     can_replace?: boolean
@@ -225,6 +235,8 @@ const uploadModalOpen = ref(false)
 const uploadTargetType = ref('')
 const uploadTargetLabel = ref('')
 const uploadModalFileInput = ref<HTMLInputElement | null>(null)
+const selectedPreviewDocument = ref<PreviewDocument | null>(null)
+const previewPanelRef = ref<HTMLElement | null>(null)
 
 const documentUploadForm = useForm<{
   document_type: string
@@ -250,6 +262,80 @@ const documentTypeLabels: Record<string, string> = {
 
 function documentTypeLabel(raw: string) {
   return documentTypeLabels[raw] ?? raw.replace(/_/g, ' ')
+}
+
+function inferDocumentMimeType(filename: string, mimeType?: string | null): string {
+  const mime = (mimeType ?? '').trim().toLowerCase()
+  if (mime) {
+    return mime
+  }
+
+  const extension = filename.includes('.') ? filename.split('.').pop()?.toLowerCase() ?? '' : ''
+  const byExtension: Record<string, string> = {
+    pdf: 'application/pdf',
+    jpg: 'image/jpeg',
+    jpeg: 'image/jpeg',
+    png: 'image/png',
+    webp: 'image/webp',
+  }
+
+  return byExtension[extension] ?? ''
+}
+
+const previewKind = computed<'image' | 'pdf' | 'unsupported' | null>(() => {
+  if (!selectedPreviewDocument.value) {
+    return null
+  }
+
+  const mime = inferDocumentMimeType(
+    selectedPreviewDocument.value.filename,
+    selectedPreviewDocument.value.mime_type,
+  )
+
+  if (mime.startsWith('image/')) {
+    return 'image'
+  }
+  if (mime === 'application/pdf') {
+    return 'pdf'
+  }
+
+  return 'unsupported'
+})
+
+function openInlinePreview(document: PreviewDocument) {
+  selectedPreviewDocument.value = document
+  void nextTick(() => {
+    previewPanelRef.value?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+    previewPanelRef.value?.focus()
+  })
+}
+
+function closeInlinePreview() {
+  selectedPreviewDocument.value = null
+}
+
+function previewSupportingDocument(document: DocumentRow, label: string) {
+  openInlinePreview({
+    label,
+    filename: document.original_name,
+    mime_type: document.mime_type,
+    preview_url: document.preview_url,
+    download_url: document.download_url,
+  })
+}
+
+function previewIdentityDocument() {
+  if (!props.identity_document) {
+    return
+  }
+
+  openInlinePreview({
+    label: identityDocumentLabel.value,
+    filename: props.identity_document.original_name ?? 'Identity document',
+    mime_type: props.identity_document.mime_type,
+    preview_url: props.identity_document.preview_url,
+    download_url: props.identity_document.download_url,
+  })
 }
 
 const documentsByType = computed(() => {
@@ -642,16 +728,15 @@ function identityDocumentRow(): DocumentRow | null {
                     <div class="mt-1 flex flex-col gap-2 sm:flex-row sm:items-center">
                       <input v-model="form.nrc_passport_number" class="zaqa-input font-mono text-sm sm:min-w-0 sm:flex-1" />
                       <div v-if="identity_document" class="flex shrink-0 flex-wrap gap-2">
-                        <a
-                          :href="identity_document.preview_url"
-                          target="_blank"
-                          rel="noopener noreferrer"
+                        <button
+                          type="button"
                           class="zaqa-btn zaqa-btn-secondary inline-flex items-center gap-1.5 px-3 py-2 text-xs"
                           :title="`Preview ${identityDocumentLabel}`"
+                          @click="previewIdentityDocument"
                         >
                           <Eye class="h-3.5 w-3.5" aria-hidden="true" />
                           Preview
-                        </a>
+                        </button>
                         <a
                           :href="identity_document.download_url"
                           class="zaqa-btn zaqa-btn-secondary inline-flex items-center gap-1.5 px-3 py-2 text-xs"
@@ -804,14 +889,13 @@ function identityDocumentRow(): DocumentRow | null {
                 </div>
                 <div class="flex flex-wrap gap-2 sm:shrink-0 sm:justify-end">
                   <template v-if="slot.document">
-                    <a
-                      :href="slot.document.preview_url"
-                      target="_blank"
-                      rel="noopener noreferrer"
+                    <button
+                      type="button"
                       class="zaqa-btn zaqa-btn-secondary inline-flex items-center gap-1 px-3 py-1.5 text-xs"
+                      @click="previewSupportingDocument(slot.document, slot.label)"
                     >
                       <Eye class="h-3.5 w-3.5" /> Preview
-                    </a>
+                    </button>
                     <a :href="slot.document.download_url" class="zaqa-btn zaqa-btn-secondary inline-flex items-center gap-1 px-3 py-1.5 text-xs">
                       <Download class="h-3.5 w-3.5" /> Download
                     </a>
@@ -850,6 +934,69 @@ function identityDocumentRow(): DocumentRow | null {
               class="mt-4 rounded-xl border border-dashed border-border bg-surface-muted/40 px-4 py-5 text-sm text-text-muted"
             >
               No document types configured for this qualification.
+            </div>
+
+            <div
+              v-if="selectedPreviewDocument"
+              ref="previewPanelRef"
+              tabindex="-1"
+              class="mt-5 overflow-hidden rounded-2xl border border-border bg-surface shadow-sm outline-none"
+            >
+              <div class="flex items-start justify-between gap-3 border-b border-border px-5 py-4">
+                <div class="min-w-0">
+                  <h3 class="text-base font-semibold text-text-primary">Document preview</h3>
+                  <p class="mt-1 text-sm text-text-muted">{{ selectedPreviewDocument.label }}</p>
+                  <p class="mt-0.5 truncate text-xs text-text-muted">{{ selectedPreviewDocument.filename }}</p>
+                </div>
+                <button
+                  type="button"
+                  class="zaqa-btn zaqa-btn-secondary inline-flex h-9 w-9 shrink-0 items-center justify-center p-0"
+                  aria-label="Close preview"
+                  @click="closeInlinePreview"
+                >
+                  <X class="h-4 w-4" aria-hidden="true" />
+                </button>
+              </div>
+
+              <div class="flex flex-wrap items-center gap-2 border-b border-border bg-surface-muted/40 px-5 py-3">
+                <a
+                  :href="selectedPreviewDocument.download_url"
+                  class="zaqa-btn zaqa-btn-secondary inline-flex items-center gap-1.5 px-3 py-1.5 text-xs"
+                >
+                  <Download class="h-3.5 w-3.5" aria-hidden="true" />
+                  Download
+                </a>
+                <a
+                  :href="selectedPreviewDocument.preview_url"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  class="zaqa-btn zaqa-btn-secondary inline-flex items-center gap-1.5 px-3 py-1.5 text-xs"
+                >
+                  <ExternalLink class="h-3.5 w-3.5" aria-hidden="true" />
+                  Open in new tab
+                </a>
+              </div>
+
+              <div class="max-h-[70vh] overflow-auto p-5">
+                <img
+                  v-if="previewKind === 'image'"
+                  :src="selectedPreviewDocument.preview_url"
+                  :alt="selectedPreviewDocument.filename"
+                  class="mx-auto max-h-[420px] w-full object-contain sm:max-h-[600px]"
+                />
+                <iframe
+                  v-else-if="previewKind === 'pdf'"
+                  :src="selectedPreviewDocument.preview_url"
+                  :title="`Preview ${selectedPreviewDocument.filename}`"
+                  class="h-[420px] w-full rounded-xl border border-border bg-white sm:h-[600px]"
+                />
+                <div
+                  v-else
+                  class="rounded-xl border border-dashed border-border bg-surface-muted/40 px-4 py-8 text-center text-sm text-text-muted"
+                >
+                  Preview is not available for this file type. You can download the document instead.
+                </div>
+              </div>
             </div>
           </section>
 

@@ -1002,6 +1002,7 @@ class AdminVerificationQualificationController extends Controller
                 'original_name' => $appIdentity->original_name,
                 'preview_url' => route('admin.verification.documents.preview', ['document' => $appIdentity->id]),
                 'download_url' => route('admin.verification.documents.download', ['document' => $appIdentity->id]),
+                'mime_type' => $appIdentity->mime_type,
                 'document_id' => $appIdentity->id,
                 'can_delete' => $canManage,
                 'can_replace' => $canManage,
@@ -1023,6 +1024,7 @@ class AdminVerificationQualificationController extends Controller
                 'original_name' => $profile->identity_document_original_name,
                 'preview_url' => route('admin.verification.qualifications.profile_identity.preview', ['qualification' => $qualification]),
                 'download_url' => route('admin.verification.qualifications.profile_identity.download', ['qualification' => $qualification]),
+                'mime_type' => null,
                 'document_id' => null,
                 'can_delete' => false,
                 'can_replace' => false,
@@ -1110,6 +1112,7 @@ class AdminVerificationQualificationController extends Controller
             'created_at' => optional($d->created_at)?->toIso8601String(),
             'preview_url' => route('admin.verification.documents.preview', ['document' => $d->id]),
             'download_url' => route('admin.verification.documents.download', ['document' => $d->id]),
+            'mime_type' => $d->mime_type,
             'can_delete' => $canManage,
             'can_replace' => $canManage,
         ];
