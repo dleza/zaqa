@@ -27,11 +27,20 @@ function submit() {
   form.post('/login')
 }
 
+function timeGreeting(): string {
+  const hour = new Date().getHours()
+  if (hour < 12) return 'Good Morning'
+  if (hour < 17) return 'Good Afternoon'
+  return 'Good Evening'
+}
+
+const greeting = timeGreeting()
+
 const heroFeatures = [
   {
     icon: Shield,
     title: 'Secure & Protected',
-    description: 'Your data is encrypted and protected with industry-standard security.',
+    description: 'Your data is encrypted and secure.',
   },
   {
     icon: Clock3,
@@ -41,7 +50,7 @@ const heroFeatures = [
   {
     icon: Users,
     title: 'Trusted Platform',
-    description: 'The official platform of the Zambia Qualifications Authority.',
+    description: 'The official Qualifications Verification platform.',
   },
 ]
 
@@ -104,14 +113,14 @@ const loginMobileOverlayGradient =
             class="relative z-10 flex flex-1 flex-col px-12 pb-12 pt-[9.5rem]"
           >
             <div class="max-w-xl">
-              <p class="text-xs font-bold uppercase tracking-[0.22em] text-[#EF7D00] sm:text-sm">WELCOME BACK</p>
+              <p class="text-xs font-bold uppercase tracking-[0.22em] text-[#EF7D00] sm:text-sm">{{ greeting }}</p>
               <h1 class="mt-3 text-4xl font-bold tracking-tight text-white sm:text-5xl lg:text-[3.25rem] lg:leading-tight">
-                Member Login
+                Client Login
               </h1>
               <div class="mt-4 h-1 w-16 rounded-full bg-[#EF7D00]" aria-hidden="true" />
 
               <p class="mt-6 max-w-lg text-sm leading-relaxed text-white/85 sm:text-[15px]">
-                Access your account to manage applications, verify qualifications and manage your organisation.
+                Access your account to manage applications and verify qualifications.
               </p>
             </div>
 
