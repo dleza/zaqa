@@ -832,24 +832,11 @@ const showSubjectResultsSection = computed(
     subjectResultsCount.value > 0,
 )
 
-const workflowOpen = ref(false)
-const assignmentOpen = ref(false)
+const showSlaModal = ref(false)
+const showAssignmentModal = ref(false)
+const showWorkflowModal = ref(false)
 const decisionOpen = ref(false)
 const autoVerificationOpen = ref(false)
-
-const workflowCurrentStageLabel = computed(() => {
-  if (workflowActiveStep.value === -1) return 'With applicant for amendment'
-  const step = workflowSteps.value[workflowActiveStep.value]
-  if (!step) return stateDisplay.value
-  return `${step.label} / ${step.sub}`
-})
-
-const workflowCollapsedSummary = computed(() => `Current stage: ${workflowCurrentStageLabel.value}`)
-
-const assignmentCollapsedSummary = computed(() => {
-  const owner = ownerLine.value.name ?? 'Not assigned'
-  return `Level 1 owner: ${owner} • Status: ${stateDisplay.value}`
-})
 
 const decisionCollapsedSummary = computed(() => {
   if (hasLevel1Submission.value) {
@@ -1181,6 +1168,36 @@ const autoVerificationCollapsedSummary = computed(() => {
         </div>
       </section>
 
+      <section class="rounded-2xl border border-border/70 bg-surface px-5 py-4 shadow-sm">
+        <div class="text-xs font-bold uppercase tracking-wider text-text-muted">More details</div>
+        <div class="mt-3 flex flex-wrap gap-2">
+          <button
+            type="button"
+            class="zaqa-btn zaqa-btn-secondary inline-flex items-center gap-2 px-3.5 py-2 text-sm"
+            @click="showSlaModal = true"
+          >
+            <Timer class="h-4 w-4 shrink-0" aria-hidden="true" />
+            SLA snapshot
+          </button>
+          <button
+            type="button"
+            class="zaqa-btn zaqa-btn-secondary inline-flex items-center gap-2 px-3.5 py-2 text-sm"
+            @click="showAssignmentModal = true"
+          >
+            <UserRound class="h-4 w-4 shrink-0" aria-hidden="true" />
+            Assignment
+          </button>
+          <button
+            type="button"
+            class="zaqa-btn zaqa-btn-secondary inline-flex items-center gap-2 px-3.5 py-2 text-sm"
+            @click="showWorkflowModal = true"
+          >
+            <LayoutList class="h-4 w-4 shrink-0" aria-hidden="true" />
+            Workflow
+          </button>
+        </div>
+      </section>
+
       <div
         v-if="showLevel2CorrectionBanner"
         class="rounded-2xl border border-violet-300/70 bg-violet-50 px-5 py-4 text-violet-950 shadow-sm"
@@ -1208,8 +1225,7 @@ const autoVerificationCollapsedSummary = computed(() => {
         </p>
       </div>
 
-      <div class="grid gap-6 lg:grid-cols-12 lg:items-start">
-        <div class="space-y-5 lg:col-span-8">
+      <div class="space-y-5">
           <section class="rounded-2xl border border-border/70 bg-surface p-5 shadow-sm">
               <div class="flex items-start justify-between gap-3">
                 <div>
@@ -1996,192 +2012,193 @@ const autoVerificationCollapsedSummary = computed(() => {
               <InlineDocumentPreview :document="selectedPreviewDocument" @close="selectedPreviewDocument = null" />
             </div>
           </details>
-        </div>
-
-        <aside class="space-y-4 lg:col-span-4">
-          <section class="rounded-2xl border border-border/70 bg-surface p-5 shadow-sm">
-            <div class="flex items-start justify-between gap-4">
-              <div>
-                <div class="text-sm font-semibold text-text-primary">Qualification SLA snapshot</div>
-                <div class="mt-1 text-xs text-text-muted">
-                  Qualification-scoped timing for operational review.
-                </div>
-              </div>
-              <div class="text-right">
-                <div class="text-xs font-semibold uppercase tracking-wider text-text-muted">SLA</div>
-                <div
-                  class="mt-1 inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs font-semibold"
-                  :class="
-                    !slaClockActive
-                      ? 'border-border bg-surface-muted text-text-muted'
-                      : displayIsOverdue
-                        ? 'border-red-300/40 bg-red-500/15 text-red-900'
-                        : 'border-emerald-300/40 bg-emerald-500/15 text-emerald-900'
-                  "
-                >
-                  <Timer class="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-                  <span v-if="!deadlineAt">—</span>
-                  <span v-else-if="!slaClockActive">Closed</span>
-                  <span v-else-if="displayIsOverdue">Overdue by {{ formatDuration(displayOverdueByMs) }}</span>
-                  <span v-else>Due in {{ formatDuration(displayDueInMs) }}</span>
-                </div>
-              </div>
-            </div>
-
-            <div class="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-1">
-              <div class="rounded-xl border border-border bg-surface-muted p-4">
-                <div class="flex items-center justify-between">
-                  <div class="text-xs font-semibold uppercase tracking-wider text-text-muted">Qualification SLA age</div>
-                  <Clock class="h-4 w-4 text-text-muted" aria-hidden="true" />
-                </div>
-                <div class="mt-2 text-lg font-semibold text-text-primary">{{ formatDuration(ageMs) }}</div>
-                <div class="mt-1 text-xs text-text-muted">
-                  Since {{ formatDateTime(slaStartedAt) }}
-                </div>
-              </div>
-
-              <div class="rounded-xl border border-border bg-surface-muted p-4">
-                <div class="flex items-center justify-between">
-                  <div class="text-xs font-semibold uppercase tracking-wider text-text-muted">Since Level 1 assignment</div>
-                  <Timer class="h-4 w-4 text-text-muted" aria-hidden="true" />
-                </div>
-                <div class="mt-2 text-lg font-semibold text-text-primary">
-                  {{ latestAssignmentAt ? formatDuration(sinceAssignedMs) : '—' }}
-                </div>
-                <div class="mt-1 text-xs text-text-muted">
-                  {{ latestAssignmentAt ? `Assigned ${formatDateTime(latestAssignmentAt)}` : 'Not assigned yet' }}
-                </div>
-              </div>
-            </div>
-
-            <div v-if="slaProgressPct !== null" class="mt-4">
-              <div class="flex items-center justify-between text-xs text-text-muted">
-                <div>Elapsed SLA</div>
-                <div class="font-semibold text-text-primary">{{ slaProgressPct }}%</div>
-              </div>
-              <div class="mt-2 h-2 w-full overflow-hidden rounded-full bg-surface-muted">
-                <div
-                  class="h-full rounded-full transition-[width]"
-                  :class="displayIsOverdue ? 'bg-red-500/60' : 'bg-emerald-500/60'"
-                  :style="{ width: `${Math.min(100, slaProgressPct)}%` }"
-                />
-              </div>
-            </div>
-            <p v-else-if="deadlineAt && !slaClockActive" class="mt-4 text-xs text-text-muted">
-              Service target window is closed for this qualification; countdown and progress are not shown.
-            </p>
-          </section>
-
-          <CollapsiblePanel
-            v-model:open="assignmentOpen"
-            title="Assignment"
-            subtitle="Current task owner, status, and assignment history."
-            :collapsed-summary="assignmentCollapsedSummary"
-            title-size="sm"
-            content-class="px-5 pb-5 pt-4"
-          >
-            <template #icon>
-              <UserRound class="h-4 w-4 text-brand" aria-hidden="true" />
-            </template>
-
-            <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-1">
-              <div class="rounded-xl border border-border/70 bg-surface-muted/35 px-4 py-3">
-                <div class="text-[11px] font-bold uppercase tracking-wider text-text-muted">Level 1 owner</div>
-                <div v-if="ownerLine.name" class="mt-1 text-sm font-semibold text-text-primary">{{ ownerLine.name }}</div>
-                <div v-else class="mt-1 text-sm font-medium italic text-text-muted">Not assigned</div>
-                <div v-if="qualification.assigned_at" class="mt-1 text-[11px] text-text-muted">
-                  Assigned {{ formatTimelineAt(qualification.assigned_at) }}
-                </div>
-              </div>
-
-              <div class="rounded-xl border border-border/70 bg-surface-muted/35 px-4 py-3">
-                <div class="text-[11px] font-bold uppercase tracking-wider text-text-muted">Task status</div>
-                <div class="mt-1 inline-flex items-center rounded-full border border-border/70 bg-surface px-2.5 py-1 text-[11px] font-semibold text-text-primary">
-                  {{ stateDisplay }}
-                </div>
-                <p v-if="qualification.returned_to_applicant_at" class="mt-2 text-[11px] leading-relaxed text-amber-900">
-                  With applicant since {{ formatTimelineAt(qualification.returned_to_applicant_at) }}
-                </p>
-              </div>
-            </div>
-
-            <details v-if="qualification.assignments?.length" class="group mt-4 rounded-xl border border-border/70 bg-surface-muted/25">
-              <summary class="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 [&::-webkit-details-marker]:hidden">
-                <div>
-                  <div class="text-sm font-semibold text-text-primary">Assignment history</div>
-                  <div class="mt-1 text-xs text-text-muted">Expand to review previous assignment moves.</div>
-                </div>
-                <div class="flex items-center gap-2">
-                  <span class="inline-flex items-center rounded-full border border-border/70 bg-surface px-2.5 py-0.5 text-[11px] font-semibold text-text-primary">
-                    {{ qualification.assignments.length }}
-                  </span>
-                  <ChevronDown class="h-4 w-4 text-text-muted transition group-open:rotate-180" aria-hidden="true" />
-                </div>
-              </summary>
-              <div class="border-t border-border/60 px-4 py-4">
-                <ul class="space-y-3">
-                  <li
-                    v-for="a in qualification.assignments"
-                    :key="a.id"
-                    class="rounded-xl border border-border/60 bg-surface px-3 py-2.5 text-sm"
-                  >
-                    <div class="text-[11px] font-medium text-text-muted">{{ formatTimelineAt(a.assigned_at) }}</div>
-                    <div class="mt-0.5 font-medium text-text-primary">{{ a.assigned_by }} → {{ a.assigned_to }}</div>
-                    <div v-if="a.comment" class="mt-1.5 border-t border-border/50 pt-1.5 text-xs text-text-muted">{{ a.comment }}</div>
-                  </li>
-                </ul>
-              </div>
-            </details>
-          </CollapsiblePanel>
-
-          <CollapsiblePanel
-            v-model:open="workflowOpen"
-            title="Two-level workflow"
-            subtitle="Level 2 assigns and oversees; Level 1 performs desk review on this task."
-            :collapsed-summary="workflowCollapsedSummary"
-            title-size="sm"
-            content-class="px-5 pb-5 pt-4"
-          >
-            <ol class="space-y-0">
-              <li
-                v-for="(step, idx) in workflowSteps"
-                :key="step.key"
-                class="relative flex gap-3 pb-4 last:pb-0"
-              >
-                <div
-                  v-if="idx < workflowSteps.length - 1"
-                  class="absolute left-[15px] top-8 h-[calc(100%-0.25rem)] w-px bg-border"
-                  aria-hidden="true"
-                />
-                <div
-                  class="relative z-[1] flex h-8 w-8 shrink-0 items-center justify-center rounded-full border-2 text-xs font-bold"
-                  :class="
-                    workflowActiveStep === idx
-                      ? 'border-brand bg-brand text-white shadow-sm'
-                      : workflowActiveStep > idx
-                        ? 'border-success/40 bg-success/10 text-success'
-                        : 'border-border bg-surface-muted text-text-muted'
-                  "
-                >
-                  {{ idx + 1 }}
-                </div>
-                <div class="min-w-0 pt-0.5">
-                  <div class="text-sm font-semibold text-text-primary">{{ step.label }}</div>
-                  <div class="text-xs text-text-muted">{{ step.sub }}</div>
-                </div>
-              </li>
-            </ol>
-            <div
-              v-if="workflowActiveStep === -1"
-              class="mt-4 rounded-lg border border-amber-300/50 bg-amber-50 px-3 py-2 text-xs font-medium text-amber-950"
-            >
-              Task is with the applicant for amendment.
-            </div>
-          </CollapsiblePanel>
-        </aside>
       </div>
       </div>
     </div>
+
+    <AdminActionModal
+      v-model="showSlaModal"
+      title="Qualification SLA snapshot"
+      description="Qualification-scoped timing for operational review."
+      max-width-class="max-w-2xl"
+      scrollable
+    >
+      <div class="flex items-start justify-between gap-4">
+        <div class="text-xs font-semibold uppercase tracking-wider text-text-muted">SLA status</div>
+        <div
+          class="inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs font-semibold"
+          :class="
+            !slaClockActive
+              ? 'border-border bg-surface-muted text-text-muted'
+              : displayIsOverdue
+                ? 'border-red-300/40 bg-red-500/15 text-red-900'
+                : 'border-emerald-300/40 bg-emerald-500/15 text-emerald-900'
+          "
+        >
+          <Timer class="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+          <span v-if="!deadlineAt">—</span>
+          <span v-else-if="!slaClockActive">Closed</span>
+          <span v-else-if="displayIsOverdue">Overdue by {{ formatDuration(displayOverdueByMs) }}</span>
+          <span v-else>Due in {{ formatDuration(displayDueInMs) }}</span>
+        </div>
+      </div>
+
+      <div class="mt-4 grid gap-3 sm:grid-cols-2">
+        <div class="rounded-xl border border-border bg-surface-muted p-4">
+          <div class="flex items-center justify-between">
+            <div class="text-xs font-semibold uppercase tracking-wider text-text-muted">Qualification SLA age</div>
+            <Clock class="h-4 w-4 text-text-muted" aria-hidden="true" />
+          </div>
+          <div class="mt-2 text-lg font-semibold text-text-primary">{{ formatDuration(ageMs) }}</div>
+          <div class="mt-1 text-xs text-text-muted">
+            Since {{ formatDateTime(slaStartedAt) }}
+          </div>
+        </div>
+
+        <div class="rounded-xl border border-border bg-surface-muted p-4">
+          <div class="flex items-center justify-between">
+            <div class="text-xs font-semibold uppercase tracking-wider text-text-muted">Since Level 1 assignment</div>
+            <Timer class="h-4 w-4 text-text-muted" aria-hidden="true" />
+          </div>
+          <div class="mt-2 text-lg font-semibold text-text-primary">
+            {{ latestAssignmentAt ? formatDuration(sinceAssignedMs) : '—' }}
+          </div>
+          <div class="mt-1 text-xs text-text-muted">
+            {{ latestAssignmentAt ? `Assigned ${formatDateTime(latestAssignmentAt)}` : 'Not assigned yet' }}
+          </div>
+        </div>
+      </div>
+
+      <div v-if="slaProgressPct !== null" class="mt-4">
+        <div class="flex items-center justify-between text-xs text-text-muted">
+          <div>Elapsed SLA</div>
+          <div class="font-semibold text-text-primary">{{ slaProgressPct }}%</div>
+        </div>
+        <div class="mt-2 h-2 w-full overflow-hidden rounded-full bg-surface-muted">
+          <div
+            class="h-full rounded-full transition-[width]"
+            :class="displayIsOverdue ? 'bg-red-500/60' : 'bg-emerald-500/60'"
+            :style="{ width: `${Math.min(100, slaProgressPct)}%` }"
+          />
+        </div>
+      </div>
+      <p v-else-if="deadlineAt && !slaClockActive" class="mt-4 text-xs text-text-muted">
+        Service target window is closed for this qualification; countdown and progress are not shown.
+      </p>
+
+      <template #footer>
+        <button type="button" class="zaqa-btn zaqa-btn-secondary px-4 py-2 text-sm" @click="showSlaModal = false">Close</button>
+      </template>
+    </AdminActionModal>
+
+    <AdminActionModal
+      v-model="showAssignmentModal"
+      title="Assignment"
+      description="Current task owner, status, and assignment history."
+      max-width-class="max-w-2xl"
+      scrollable
+    >
+      <div class="grid gap-3 sm:grid-cols-2">
+        <div class="rounded-xl border border-border/70 bg-surface-muted/35 px-4 py-3">
+          <div class="text-[11px] font-bold uppercase tracking-wider text-text-muted">Level 1 owner</div>
+          <div v-if="ownerLine.name" class="mt-1 text-sm font-semibold text-text-primary">{{ ownerLine.name }}</div>
+          <div v-else class="mt-1 text-sm font-medium italic text-text-muted">Not assigned</div>
+          <div v-if="qualification.assigned_at" class="mt-1 text-[11px] text-text-muted">
+            Assigned {{ formatTimelineAt(qualification.assigned_at) }}
+          </div>
+        </div>
+
+        <div class="rounded-xl border border-border/70 bg-surface-muted/35 px-4 py-3">
+          <div class="text-[11px] font-bold uppercase tracking-wider text-text-muted">Task status</div>
+          <div class="mt-1 inline-flex items-center rounded-full border border-border/70 bg-surface px-2.5 py-1 text-[11px] font-semibold text-text-primary">
+            {{ stateDisplay }}
+          </div>
+          <p v-if="qualification.returned_to_applicant_at" class="mt-2 text-[11px] leading-relaxed text-amber-900">
+            With applicant since {{ formatTimelineAt(qualification.returned_to_applicant_at) }}
+          </p>
+        </div>
+      </div>
+
+      <details v-if="qualification.assignments?.length" class="group mt-4 rounded-xl border border-border/70 bg-surface-muted/25">
+        <summary class="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 [&::-webkit-details-marker]:hidden">
+          <div>
+            <div class="text-sm font-semibold text-text-primary">Assignment history</div>
+            <div class="mt-1 text-xs text-text-muted">Expand to review previous assignment moves.</div>
+          </div>
+          <div class="flex items-center gap-2">
+            <span class="inline-flex items-center rounded-full border border-border/70 bg-surface px-2.5 py-0.5 text-[11px] font-semibold text-text-primary">
+              {{ qualification.assignments.length }}
+            </span>
+            <ChevronDown class="h-4 w-4 text-text-muted transition group-open:rotate-180" aria-hidden="true" />
+          </div>
+        </summary>
+        <div class="border-t border-border/60 px-4 py-4">
+          <ul class="space-y-3">
+            <li
+              v-for="a in qualification.assignments"
+              :key="a.id"
+              class="rounded-xl border border-border/60 bg-surface px-3 py-2.5 text-sm"
+            >
+              <div class="text-[11px] font-medium text-text-muted">{{ formatTimelineAt(a.assigned_at) }}</div>
+              <div class="mt-0.5 font-medium text-text-primary">{{ a.assigned_by }} → {{ a.assigned_to }}</div>
+              <div v-if="a.comment" class="mt-1.5 border-t border-border/50 pt-1.5 text-xs text-text-muted">{{ a.comment }}</div>
+            </li>
+          </ul>
+        </div>
+      </details>
+
+      <template #footer>
+        <button type="button" class="zaqa-btn zaqa-btn-secondary px-4 py-2 text-sm" @click="showAssignmentModal = false">Close</button>
+      </template>
+    </AdminActionModal>
+
+    <AdminActionModal
+      v-model="showWorkflowModal"
+      title="Two-level workflow"
+      description="Level 2 assigns and oversees; Level 1 performs desk review on this task."
+      max-width-class="max-w-lg"
+      scrollable
+    >
+      <ol class="space-y-0">
+        <li
+          v-for="(step, idx) in workflowSteps"
+          :key="step.key"
+          class="relative flex gap-3 pb-4 last:pb-0"
+        >
+          <div
+            v-if="idx < workflowSteps.length - 1"
+            class="absolute left-[15px] top-8 h-[calc(100%-0.25rem)] w-px bg-border"
+            aria-hidden="true"
+          />
+          <div
+            class="relative z-[1] flex h-8 w-8 shrink-0 items-center justify-center rounded-full border-2 text-xs font-bold"
+            :class="
+              workflowActiveStep === idx
+                ? 'border-brand bg-brand text-white shadow-sm'
+                : workflowActiveStep > idx
+                  ? 'border-success/40 bg-success/10 text-success'
+                  : 'border-border bg-surface-muted text-text-muted'
+            "
+          >
+            {{ idx + 1 }}
+          </div>
+          <div class="min-w-0 pt-0.5">
+            <div class="text-sm font-semibold text-text-primary">{{ step.label }}</div>
+            <div class="text-xs text-text-muted">{{ step.sub }}</div>
+          </div>
+        </li>
+      </ol>
+      <div
+        v-if="workflowActiveStep === -1"
+        class="mt-4 rounded-lg border border-amber-300/50 bg-amber-50 px-3 py-2 text-xs font-medium text-amber-950"
+      >
+        Task is with the applicant for amendment.
+      </div>
+
+      <template #footer>
+        <button type="button" class="zaqa-btn zaqa-btn-secondary px-4 py-2 text-sm" @click="showWorkflowModal = false">Close</button>
+      </template>
+    </AdminActionModal>
 
     <AdminActionModal v-model="assignOpen" title="Assign Level 1 reviewer" description="Only Level 2 can assign qualification tasks to Level 1.">
       <div class="space-y-4">
