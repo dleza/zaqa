@@ -1,7 +1,15 @@
 <script setup lang="ts">
+import { onMounted, ref } from 'vue'
 import { Head, Link } from '@inertiajs/vue3'
 import GuestLayout from '@/Layouts/GuestLayout.vue'
-import { ArrowLeft, ArrowRight } from 'lucide-vue-next'
+import { zaqaLogoUrl } from '@/constants/zaqaLogo'
+import { ArrowRight } from 'lucide-vue-next'
+
+const mounted = ref(false)
+
+onMounted(() => {
+  mounted.value = true
+})
 
 const steps = [
   {
@@ -30,48 +38,50 @@ const steps = [
 <template>
   <Head title="How to apply" />
 
-  <GuestLayout max-width-class="max-w-2xl">
-    <div>
-      <Link
-        href="/login"
-        class="inline-flex items-center gap-1.5 text-sm font-medium text-[#0073BA] transition hover:underline"
-      >
-        <ArrowLeft class="h-4 w-4" aria-hidden="true" />
-        Back to login
-      </Link>
+  <GuestLayout
+    :hide-header="true"
+    max-width-class="max-w-3xl"
+    content-padding-class="px-4 py-6 sm:px-6 sm:py-8"
+  >
+    <div class="transition-all duration-500 ease-out" :class="mounted ? 'translate-y-0 opacity-100' : 'translate-y-2 opacity-0'">
+      <div class="flex justify-center">
+        <img :src="zaqaLogoUrl" alt="ZAQA logo" class="h-16 w-auto object-contain sm:h-[4.5rem]" />
+      </div>
 
-      <h1 class="mt-4 text-2xl font-bold tracking-tight text-[#0F2A4D] sm:text-3xl">How to apply</h1>
-      <p class="mt-3 text-sm leading-relaxed text-slate-600 sm:text-base">
+      <h2 class="mt-4 text-center text-xl font-semibold tracking-tight text-text-primary sm:text-2xl">How to apply</h2>
+      <p class="mt-1.5 text-center text-sm text-text-muted">
         Follow these steps to submit a qualification verification application through the ZAQA Verification Portal.
-        This guide will be expanded with more detail soon.
       </p>
 
-      <ol class="mt-8 space-y-5">
+      <ol class="mt-5 space-y-3">
         <li
           v-for="(step, index) in steps"
           :key="step.title"
-          class="flex gap-4 rounded-2xl border border-slate-200 bg-white px-5 py-4 shadow-sm"
+          class="flex gap-4 rounded-xl border border-border bg-surface-muted/60 p-4"
         >
           <span
-            class="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#0073BA]/10 text-sm font-bold text-[#0073BA]"
+            class="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-brand/10 text-sm font-bold text-brand"
           >
             {{ index + 1 }}
           </span>
           <div>
-            <h2 class="text-base font-semibold text-[#0F2A4D]">{{ step.title }}</h2>
-            <p class="mt-1 text-sm leading-relaxed text-slate-600">{{ step.description }}</p>
+            <h3 class="text-sm font-semibold text-text-primary sm:text-base">{{ step.title }}</h3>
+            <p class="mt-1 text-sm leading-relaxed text-text-muted">{{ step.description }}</p>
           </div>
         </li>
       </ol>
 
-      <div class="mt-8 flex flex-col gap-3 sm:flex-row sm:items-center">
-        <Link href="/register" class="zaqa-btn zaqa-btn-primary inline-flex items-center justify-center gap-2">
-          Sign-up and Apply
-          <ArrowRight class="h-4 w-4" aria-hidden="true" />
-        </Link>
-        <Link href="/login" class="zaqa-btn zaqa-btn-secondary inline-flex items-center justify-center">
-          Log in
-        </Link>
+      <Link
+        href="/register"
+        class="zaqa-btn zaqa-btn-primary mt-5 inline-flex h-11 w-full items-center justify-center gap-2 rounded-xl"
+      >
+        Sign-up and Apply
+        <ArrowRight class="h-4 w-4" aria-hidden="true" />
+      </Link>
+
+      <div class="mt-5 text-center text-sm text-text-muted">
+        Already have an account?
+        <Link href="/login" class="zaqa-link font-semibold">Log in</Link>
       </div>
     </div>
   </GuestLayout>
