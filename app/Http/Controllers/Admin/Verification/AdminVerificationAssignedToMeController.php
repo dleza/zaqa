@@ -18,9 +18,7 @@ class AdminVerificationAssignedToMeController extends Controller
             abort(403);
         }
 
-        $request->merge(['mine' => '1']);
-
-        $rows = $pool->pool($request, $request->user()?->id);
+        $rows = $pool->assignedToMe($request, $user);
 
         return Inertia::render('Admin/Verification/AssignedToMe', [
             'pageVariant' => 'assigned',

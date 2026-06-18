@@ -29,12 +29,12 @@ const pageTitle = computed(() =>
 const pageDescription = computed(() =>
   variant.value === 'awaiting_applicant'
     ? 'Qualifications you sent back for corrections — the applicant has not yet resubmitted changes. Use this list to follow up or open the task for context.'
-    : 'Verification tasks tied to you: Level 1 assignments and Level 2 reviews you own after an applicant returns their corrections. Open a row to continue — actions apply to that qualification only.',
+    : 'Qualifications currently waiting for your action.',
 )
 const emptyMessage = computed(() =>
   variant.value === 'awaiting_applicant'
     ? 'No qualifications are waiting on applicants from your send-backs.'
-    : 'No qualification tasks assigned to you.',
+    : 'You have no qualifications waiting for your action.',
 )
 
 const q = ref((props.filters?.q ?? '').toString())
@@ -53,6 +53,7 @@ function formatQualVerificationState(raw: string | null | undefined): string {
     assigned_to_level1: 'Assigned — Level 1',
     under_level1_review: 'Under Level 1 review',
     under_level2_review: 'Under Level 2 review',
+    auto_verified_pending_level2: 'Auto-verified — pending Level 2',
     returned_to_applicant: 'Returned to applicant',
     approved_for_certificate: 'Approved for certificate',
     rejected: 'Rejected',
