@@ -21,6 +21,7 @@ type DocumentRow = {
   preview_url: string
   download_url: string
   can_delete: boolean
+  can_replace?: boolean
   uploaded_by?: string | null
 }
 
@@ -74,6 +75,7 @@ const props = defineProps<{
     download_url: string
     document_id: number | null
     can_delete: boolean
+    can_replace?: boolean
     delete_url?: string | null
   } | null
   correction_history: CorrectionEntry[]
@@ -496,6 +498,7 @@ function identityDocumentRow(): DocumentRow | null {
     preview_url: props.identity_document.preview_url,
     download_url: props.identity_document.download_url,
     can_delete: props.identity_document.can_delete,
+    can_replace: props.identity_document.can_replace !== false,
   }
 }
 </script>
@@ -658,7 +661,7 @@ function identityDocumentRow(): DocumentRow | null {
                           Download
                         </a>
                         <button
-                          v-if="identity_document.source === 'application'"
+                          v-if="identity_document.can_replace !== false && identity_document.source === 'application'"
                           type="button"
                           class="zaqa-btn zaqa-btn-secondary inline-flex items-center gap-1.5 px-3 py-2 text-xs"
                           @click="openIdentityUploadModal"
@@ -813,6 +816,7 @@ function identityDocumentRow(): DocumentRow | null {
                       <Download class="h-3.5 w-3.5" /> Download
                     </a>
                     <button
+                      v-if="slot.document.can_replace !== false"
                       type="button"
                       class="zaqa-btn zaqa-btn-secondary inline-flex items-center gap-1 px-3 py-1.5 text-xs"
                       @click="openUploadModal(slot.document_type, slot.label)"

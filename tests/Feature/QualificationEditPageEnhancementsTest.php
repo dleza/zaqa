@@ -3,12 +3,14 @@
 namespace Tests\Feature;
 
 use App\Enums\ApplicationStatus;
+use App\Enums\DocumentType;
 use App\Enums\VerificationState;
 use App\Models\Application;
 use App\Models\AuditLog;
 use App\Models\AwardingInstitution;
 use App\Models\Country;
 use App\Models\Qualification;
+use App\Models\QualificationDocument;
 use App\Models\QualificationType;
 use App\Models\User;
 use Database\Seeders\BillingCategoriesSeeder;
@@ -16,6 +18,8 @@ use Database\Seeders\FeeStructuresSeeder;
 use Database\Seeders\QualificationTypesSeeder;
 use Database\Seeders\RolesAndPermissionsSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Tests\TestCase;
 
@@ -26,6 +30,7 @@ class QualificationEditPageEnhancementsTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
+        Storage::fake('local');
         $this->seed(RolesAndPermissionsSeeder::class);
         $this->seed([BillingCategoriesSeeder::class, QualificationTypesSeeder::class, FeeStructuresSeeder::class]);
     }
@@ -109,6 +114,7 @@ class QualificationEditPageEnhancementsTest extends TestCase
         $user->assignRole('Verification Officer Level 2');
         $user->givePermissionTo([
             'verification.pool.view',
+            'verification.level2.review',
             'verification.decide.approve',
             'verification.decide.reject',
             'verification.certificate.issue',
@@ -121,7 +127,7 @@ class QualificationEditPageEnhancementsTest extends TestCase
     {
         $user = User::factory()->activated()->create(['applicant_type' => null]);
         $user->assignRole('Verification Officer Level 1');
-        $user->givePermissionTo(['verification.pool.view']);
+        $user->givePermissionTo(['verification.pool.view', 'verification.level1.process']);
 
         return $user;
     }
@@ -240,5 +246,140 @@ class QualificationEditPageEnhancementsTest extends TestCase
 
         $qualification->refresh();
         $this->assertSame(VerificationState::ApprovedForCertificate, $qualification->verification_state);
+    }
+
+    public function test_level2_cannot_replace_or_delete_applicant_uploaded_documents_on_edit_page(): void
+    {
+        [$application, $qualification, $document] = $this->seedApplicantCertificateDocument();
+        $l2 = $this->makeLevel2Officer();
+        $qualification->forceFill([
+            'verification_state' => VerificationState::UnderLevel2Review,
+            'level2_review_owner_id' => $l2->id,
+        ])->save();
+
+        $this->actingAs($l2)
+            ->get(route('admin.verification.qualifications.edit', $qualification))
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page
+                ->has('documents', 1)
+                ->where('documents.0.id', $document->id)
+                ->where('documents.0.can_delete', false)
+                ->where('documents.0.can_replace', false));
+
+        $this->actingAs($l2)
+            ->post(route('admin.verification.qualifications.documents.store', $qualification), [
+                'document_type' => DocumentType::CertificateCopy->value,
+                'file' => UploadedFile::fake()->create('verifier-replacement.pdf', 100, 'application/pdf'),
+                'correction_note' => 'Attempted replace',
+            ])
+            ->assertSessionHasErrors(['file']);
+
+        $this->actingAs($l2)
+            ->delete(route('admin.verification.qualifications.documents.destroy', [
+                'qualification' => $qualification,
+                'document' => $document,
+            ]))
+            ->assertSessionHasErrors(['file']);
+
+        $document->refresh();
+        $this->assertNull($document->deleted_at);
+        $this->assertTrue($document->is_current_version);
+    }
+
+    public function test_level1_cannot_replace_or_delete_applicant_uploaded_documents_on_edit_page(): void
+    {
+        [$application, $qualification, $document] = $this->seedApplicantCertificateDocument();
+        $l1 = $this->makeLevel1Officer();
+        $qualification->forceFill([
+            'verification_state' => VerificationState::UnderLevel1Review,
+            'assigned_verifier_id' => $l1->id,
+        ])->save();
+
+        $this->actingAs($l1)
+            ->get(route('admin.verification.qualifications.edit', $qualification))
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page
+                ->where('documents.0.can_delete', false)
+                ->where('documents.0.can_replace', false));
+
+        $this->actingAs($l1)
+            ->delete(route('admin.verification.qualifications.documents.destroy', [
+                'qualification' => $qualification,
+                'document' => $document,
+            ]))
+            ->assertSessionHasErrors(['file']);
+    }
+
+    public function test_super_admin_can_replace_applicant_uploaded_documents_on_edit_page(): void
+    {
+        [$application, $qualification, $document] = $this->seedApplicantCertificateDocument();
+        $superAdmin = User::factory()->activated()->create(['applicant_type' => null]);
+        $superAdmin->assignRole('Super Admin');
+        $qualification->forceFill(['verification_state' => VerificationState::UnderLevel2Review])->save();
+
+        $this->actingAs($superAdmin)
+            ->get(route('admin.verification.qualifications.edit', $qualification))
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page
+                ->where('documents.0.can_delete', true)
+                ->where('documents.0.can_replace', true));
+
+        $this->actingAs($superAdmin)
+            ->post(route('admin.verification.qualifications.documents.store', $qualification), [
+                'document_type' => DocumentType::CertificateCopy->value,
+                'file' => UploadedFile::fake()->create('admin-replacement.pdf', 100, 'application/pdf'),
+                'correction_note' => 'Super Admin correction',
+            ])
+            ->assertRedirect(route('admin.verification.qualifications.edit', $qualification))
+            ->assertSessionHasNoErrors();
+
+        $document->refresh();
+        $this->assertFalse($document->is_current_version);
+    }
+
+    /**
+     * @return array{0: Application, 1: Qualification, 2: QualificationDocument}
+     */
+    private function seedApplicantCertificateDocument(): array
+    {
+        $applicant = User::factory()->activated()->create(['applicant_type' => 'individual']);
+        $application = Application::query()->create([
+            'uuid' => (string) Str::uuid(),
+            'application_number' => 'ZAQA-DOC-'.Str::upper(Str::random(6)),
+            'applicant_user_id' => $applicant->id,
+            'applicant_type' => 'individual',
+            'service_type' => 'verification',
+            'qualification_category' => 'diploma',
+            'current_status' => ApplicationStatus::Submitted,
+            'verification_state' => VerificationState::UnderLevel2Review,
+            'is_foreign' => false,
+            'metadata' => [],
+            'submitted_at' => now(),
+            'paid_at' => now(),
+        ]);
+
+        $qualification = $this->makeQualification($application);
+        $path = sprintf('applications/%s/certificate_copy_v1_test.pdf', $application->id);
+        Storage::disk('local')->put($path, 'certificate');
+
+        $document = QualificationDocument::query()->create([
+            'application_id' => $application->id,
+            'qualification_id' => $qualification->id,
+            'document_type' => DocumentType::CertificateCopy->value,
+            'original_name' => 'certificate.pdf',
+            'stored_name' => 'certificate_copy_v1_test.pdf',
+            'disk' => 'local',
+            'path' => $path,
+            'mime_type' => 'application/pdf',
+            'extension' => 'pdf',
+            'size_bytes' => 100,
+            'sha256_hash' => hash('sha256', 'certificate'),
+            'visibility' => 'private',
+            'uploaded_by_user_id' => $applicant->id,
+            'version_number' => 1,
+            'is_current_version' => true,
+        ]);
+
+        return [$application, $qualification, $document];
     }
 }

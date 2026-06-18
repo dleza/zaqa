@@ -51,6 +51,10 @@ class AdminQualificationDocumentService
                 ->where('is_current_version', true)
                 ->first();
 
+            if ($beforeCurrent) {
+                VerificationApplicantDocumentGuard::assertOfficerMayModifyDocument($actor, $beforeCurrent, $application);
+            }
+
             $document = $this->documents->upload(
                 $application,
                 $documentType,
@@ -104,6 +108,11 @@ class AdminQualificationDocumentService
             $workflowSnapshot = $this->workflowSnapshot($qualification);
 
             $this->assertDocumentAccessibleForQualification($qualification, $document);
+
+            $application = $qualification->application;
+            if ($application) {
+                VerificationApplicantDocumentGuard::assertOfficerMayModifyDocument($actor, $document, $application);
+            }
 
             $before = [
                 'document_id' => $document->id,

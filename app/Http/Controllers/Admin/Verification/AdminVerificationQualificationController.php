@@ -21,6 +21,7 @@ use App\Domain\Verification\QualificationLevel2ReviewLockService;
 use App\Domain\Verification\QualificationLevel2SendBackToLevel1Service;
 use App\Domain\Settings\AwardingInstitutionAccreditationStatementService;
 use App\Domain\Verification\QualificationSendBackService;
+use App\Domain\Verification\VerificationApplicantDocumentGuard;
 use App\Domain\Verification\VerificationQualificationAccess;
 use App\Enums\DocumentType;
 use App\Enums\VerificationState;
@@ -598,9 +599,9 @@ class AdminVerificationQualificationController extends Controller
             ])->values()->all(),
             'certificateSubjects' => $certificateSubjects,
             'subjectGradeOptions' => CertificateSubjectGrade::allowed(),
-            'documents' => $this->qualificationEditDocumentsPayload($qualification),
+            'documents' => $this->qualificationEditDocumentsPayload($qualification, $user),
             'expected_document_types' => $this->qualificationEditExpectedDocumentTypes($qualification),
-            'identity_document' => $this->qualificationEditIdentityPayload($qualification),
+            'identity_document' => $this->qualificationEditIdentityPayload($qualification, $user),
             'correction_history' => $this->qualificationCorrectionHistory($qualification),
         ]);
     }
@@ -960,20 +961,20 @@ class AdminVerificationQualificationController extends Controller
     /**
      * @return list<array<string, mixed>>
      */
-    private function qualificationEditDocumentsPayload(Qualification $qualification): array
+    private function qualificationEditDocumentsPayload(Qualification $qualification, ?User $user = null): array
     {
         return $qualification->documents
             ->pipe(fn ($docs) => QualificationDocumentEvidence::filterActiveEvidence($docs))
             ->sortByDesc('id')
             ->values()
-            ->map(fn ($d) => $this->mapEditDocumentRow($d))
+            ->map(fn ($d) => $this->mapEditDocumentRow($d, $qualification, $user))
             ->all();
     }
 
     /**
      * @return array<string, mixed>|null
      */
-    private function qualificationEditIdentityPayload(Qualification $qualification): ?array
+    private function qualificationEditIdentityPayload(Qualification $qualification, ?User $user = null): ?array
     {
         $application = $qualification->application;
         if (! $application) {
@@ -989,6 +990,12 @@ class AdminVerificationQualificationController extends Controller
             ->first();
 
         if ($appIdentity) {
+            $canManage = ! VerificationApplicantDocumentGuard::officerBlockedFromModifyingApplicantDocument(
+                $user,
+                $appIdentity,
+                $application,
+            );
+
             return [
                 'source' => 'application',
                 'document_type' => $appIdentity->document_type?->value ?? (string) $appIdentity->document_type,
@@ -996,7 +1003,8 @@ class AdminVerificationQualificationController extends Controller
                 'preview_url' => route('admin.verification.documents.preview', ['document' => $appIdentity->id]),
                 'download_url' => route('admin.verification.documents.download', ['document' => $appIdentity->id]),
                 'document_id' => $appIdentity->id,
-                'can_delete' => true,
+                'can_delete' => $canManage,
+                'can_replace' => $canManage,
                 'delete_url' => route('admin.verification.qualifications.documents.destroy', [
                     'qualification' => $qualification,
                     'document' => $appIdentity->id,
@@ -1017,6 +1025,7 @@ class AdminVerificationQualificationController extends Controller
                 'download_url' => route('admin.verification.qualifications.profile_identity.download', ['qualification' => $qualification]),
                 'document_id' => null,
                 'can_delete' => false,
+                'can_replace' => false,
             ];
         }
 
@@ -1076,8 +1085,20 @@ class AdminVerificationQualificationController extends Controller
     /**
      * @return array<string, mixed>
      */
-    private function mapEditDocumentRow(\App\Models\QualificationDocument $d): array
+    private function mapEditDocumentRow(\App\Models\QualificationDocument $d, Qualification $qualification, ?User $user = null): array
     {
+        $application = $qualification->application;
+        $canManage = ! in_array($d->document_type, [
+            DocumentType::PaymentProof,
+            DocumentType::GeneratedReceipt,
+            DocumentType::GeneratedCertificate,
+            DocumentType::Level1ReviewAttachment,
+        ], true);
+
+        if ($canManage && $application) {
+            $canManage = ! VerificationApplicantDocumentGuard::officerBlockedFromModifyingApplicantDocument($user, $d, $application);
+        }
+
         return [
             'id' => $d->id,
             'document_type' => $d->document_type?->value ?? (string) $d->document_type,
@@ -1089,12 +1110,8 @@ class AdminVerificationQualificationController extends Controller
             'created_at' => optional($d->created_at)?->toIso8601String(),
             'preview_url' => route('admin.verification.documents.preview', ['document' => $d->id]),
             'download_url' => route('admin.verification.documents.download', ['document' => $d->id]),
-            'can_delete' => ! in_array($d->document_type, [
-                DocumentType::PaymentProof,
-                DocumentType::GeneratedReceipt,
-                DocumentType::GeneratedCertificate,
-                DocumentType::Level1ReviewAttachment,
-            ], true),
+            'can_delete' => $canManage,
+            'can_replace' => $canManage,
         ];
     }
 
