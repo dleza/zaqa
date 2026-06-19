@@ -214,9 +214,11 @@ Route::middleware('auth')->group(function () {
         Route::post('/applications/{application}/payment/prepare', [ApplicantPaymentController::class, 'prepare'])->name('applications.payment.prepare');
         Route::post('/applications/{application}/payment/select', [ApplicantPaymentController::class, 'selectMethod'])->name('applications.payment.select');
         Route::post('/applications/{application}/payment/initiate-card', [ApplicantPaymentController::class, 'initiateCardForApplication'])->name('applications.payment.initiate_card');
+        Route::post('/applications/{application}/payment/card/capture-context', [ApplicantPaymentController::class, 'createCardCaptureContext'])->name('applications.payment.card.capture_context');
         Route::post('/applications/{application}/payment/initiate-mobile-money', [ApplicantPaymentController::class, 'initiateMobileMoneyForApplication'])->name('applications.payment.initiate_mobile_money');
         Route::post('/applications/{application}/payment/upload-proof', [ApplicantPaymentController::class, 'uploadProofForApplication'])->name('applications.payment.upload_proof');
         Route::post('/payments/{payment}/initiate-card', [ApplicantPaymentController::class, 'initiateCard'])->name('payments.initiate_card');
+        Route::post('/payments/{payment}/card/confirm', [ApplicantPaymentController::class, 'confirmCardPayment'])->name('payments.card.confirm');
         Route::post('/payments/{payment}/initiate-mobile-money', [ApplicantPaymentController::class, 'initiateMobileMoney'])->name('payments.initiate_mobile_money');
         Route::get('/payments/attempts/{attempt}/status', [ApplicantPaymentController::class, 'attemptStatus'])->name('payments.attempts.status');
         Route::post('/payments/{payment}/mobile-money/status', [ApplicantPaymentController::class, 'mobileMoneyStatus'])->name('payments.mobile_money.status');
