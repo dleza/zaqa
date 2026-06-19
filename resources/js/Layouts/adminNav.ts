@@ -94,8 +94,8 @@ export const adminNavSections: AdminNavSection[] = [
     ],
   },
   {
-    label: 'Verified Qualifications',
-    requiredAnyPermissions: ['admin.applications.view'],
+    label: 'Verified Applications',
+    requiredAnyPermissions: ['admin.applications.view', 'admin.certificates.view'],
     items: [
       {
         label: 'Applications pool',
@@ -118,6 +118,13 @@ export const adminNavSections: AdminNavSection[] = [
         icon: FileText,
         activeStartsWith: '/admin/applications/track',
         requiredAnyPermissions: ['admin.applications.view'],
+      },
+      {
+        label: 'Certificates',
+        href: '/admin/certificates',
+        icon: BadgeCheck,
+        activeStartsWith: '/admin/certificates',
+        requiredAnyPermissions: ['admin.certificates.view'],
       },
     ],
   },
@@ -284,19 +291,6 @@ export const adminNavSections: AdminNavSection[] = [
         icon: Banknote,
         activeStartsWith: '/admin/finance/payments',
         requiredAnyPermissions: ['finance.payments.view'],
-      },
-    ],
-  },
-  {
-    label: 'Certificates',
-    requiredAnyPermissions: ['admin.certificates.view'],
-    items: [
-      {
-        label: 'Certificates',
-        href: '/admin/certificates',
-        icon: BadgeCheck,
-        activeStartsWith: '/admin/certificates',
-        requiredAnyPermissions: ['admin.certificates.view'],
       },
     ],
   },

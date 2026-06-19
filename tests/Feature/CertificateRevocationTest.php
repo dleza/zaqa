@@ -373,8 +373,16 @@ class CertificateRevocationTest extends TestCase
             ->assertInertia(fn ($page) => $page
                 ->has('certificates.data', 1)
                 ->where('certificates.data.0.status', QualificationCertificate::STATUS_REVOKED)
-                ->where('certificates.data.0.revoked_by_name', $level2->name)
-                ->where('certificates.data.0.revoke_url', null));
+                ->has('certificates.data.0.show_url'));
+
+        $this->actingAs($level2)
+            ->get(route('admin.certificates.show', ['qualificationCertificate' => $cert->fresh()]))
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page
+                ->where('certificate.status', QualificationCertificate::STATUS_REVOKED)
+                ->where('certificate.revoked_by_name', $level2->name)
+                ->where('certificate.revocation_reason', 'Issued in error.')
+                ->where('certificate.revoke_url', null));
     }
 
     public function test_issue_after_revocation_records_audit_event(): void

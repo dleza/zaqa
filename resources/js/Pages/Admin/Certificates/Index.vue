@@ -1,10 +1,9 @@
 <script setup lang="ts">
 import AdminLayout from '@/Layouts/AdminLayout.vue'
-import AdminActionModal from '@/Components/AdminActionModal.vue'
 import AdminExcelImportModal from '@/Components/AdminExcelImportModal.vue'
 import AdminPagination from '@/Components/AdminPagination.vue'
-import { Link, router, useForm } from '@inertiajs/vue3'
-import { BadgeCheck, Ban, ExternalLink, FileDown, FileSpreadsheet, Search } from 'lucide-vue-next'
+import { Link, router } from '@inertiajs/vue3'
+import { BadgeCheck, FileSpreadsheet, Search } from 'lucide-vue-next'
 import { computed, ref, watch } from 'vue'
 
 const props = defineProps<{
@@ -13,21 +12,12 @@ const props = defineProps<{
   status_options: Array<{ value: string; label: string }>
   type_options: Array<{ value: string; label: string }>
   excel_import: { template_url: string; import_url: string; can_import: boolean }
-  can?: { revoke?: boolean }
 }>()
 
 const q = ref(props.filters.q ?? '')
 const status = ref(props.filters.status ?? '')
 const type = ref(props.filters.type ?? '')
 const excelImportOpen = ref(false)
-const revokeOpen = ref(false)
-const revokeTarget = ref<{ id: number; certificate_number: string; revoke_url: string } | null>(null)
-
-const revokeForm = useForm({
-  revocation_reason: '',
-  revocation_public_note: '',
-  confirm: false,
-})
 
 const statusBadgeClass = computed(() => {
   return (value: string | null | undefined) => {
@@ -55,25 +45,6 @@ function formatIssued(iso: string | null | undefined) {
     return iso
   }
 }
-
-function openRevokeModal(row: { id: number; certificate_number: string; revoke_url: string | null }) {
-  if (!row.revoke_url) return
-  revokeTarget.value = { id: row.id, certificate_number: row.certificate_number, revoke_url: row.revoke_url }
-  revokeForm.reset()
-  revokeOpen.value = true
-}
-
-function submitRevoke() {
-  if (!revokeTarget.value) return
-  revokeForm.post(revokeTarget.value.revoke_url, {
-    preserveScroll: true,
-    onSuccess: () => {
-      revokeOpen.value = false
-      revokeTarget.value = null
-      revokeForm.reset()
-    },
-  })
-}
 </script>
 
 <template>
@@ -86,8 +57,8 @@ function submitRevoke() {
         </div>
         <h1 class="mt-2 text-2xl font-semibold tracking-tight text-text-primary">CVEQ registry</h1>
         <p class="mt-1 text-sm text-text-muted">
-          Certificates of Verification and Evaluation of Qualification issued in the portal. Search by CVEQ number, ZAQA
-          reference, application number, qualification title, or holder name.
+          Search issued certificates by CVEQ number, qualification title, or holder name. Open a row to download, verify, or
+          revoke.
         </p>
       </div>
       <div class="flex flex-wrap items-center gap-2">
@@ -152,13 +123,9 @@ function submitRevoke() {
               <th class="px-5 py-3 text-left">Type</th>
               <th class="px-5 py-3 text-left">Status</th>
               <th class="px-5 py-3 text-left">Issued</th>
-              <th class="px-5 py-3 text-left">Revoked</th>
-              <th class="px-5 py-3 text-left">Application</th>
               <th class="px-5 py-3 text-left">Qualification</th>
               <th class="px-5 py-3 text-left">Holder</th>
-              <th class="px-5 py-3 text-left">ZAQA ref</th>
-              <th class="px-5 py-3 text-left">Issued by</th>
-              <th class="px-5 py-3 text-right">Actions</th>
+              <th class="px-5 py-3 text-right">Action</th>
             </tr>
           </thead>
           <tbody class="divide-y divide-border/60">
@@ -173,57 +140,12 @@ function submitRevoke() {
                 <span class="zaqa-badge" :class="statusBadgeClass(row.status)">{{ row.status_label ?? row.status }}</span>
               </td>
               <td class="px-5 py-3 text-text-primary">{{ formatIssued(row.issued_at) }}</td>
-              <td class="px-5 py-3 text-text-primary">
-                <div>{{ formatIssued(row.revoked_at) }}</div>
-                <div v-if="row.revoked_by_name" class="text-xs text-text-muted">{{ row.revoked_by_name }}</div>
-              </td>
-              <td class="px-5 py-3">
-                <span class="font-mono font-semibold text-text-primary">{{ row.application_number ?? '—' }}</span>
-              </td>
-              <td class="max-w-[220px] px-5 py-3 text-text-primary">
+              <td class="max-w-[280px] px-5 py-3 text-text-primary">
                 <span class="line-clamp-2">{{ row.qualification_title ?? '—' }}</span>
               </td>
               <td class="px-5 py-3 text-text-primary">{{ row.holder_name ?? '—' }}</td>
-              <td class="px-5 py-3 font-mono text-xs text-text-muted">{{ row.zaqa_reference_number ?? '—' }}</td>
-              <td class="px-5 py-3 text-text-primary">{{ row.issued_by_name ?? '—' }}</td>
               <td class="px-5 py-3 text-right">
-                <div class="flex flex-wrap justify-end gap-2">
-                  <a
-                    :href="row.download_url"
-                    class="zaqa-btn zaqa-btn-secondary inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold"
-                    :title="row.status === 'revoked' ? 'Downloads the original PDF as issued (historical record).' : undefined"
-                  >
-                    <FileDown class="h-3.5 w-3.5" aria-hidden="true" />
-                    PDF
-                  </a>
-                  <a
-                    v-if="row.verification_url"
-                    :href="row.verification_url"
-                    target="_blank"
-                    rel="noopener"
-                    class="zaqa-btn zaqa-btn-secondary inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold"
-                  >
-                    <BadgeCheck class="h-3.5 w-3.5" aria-hidden="true" />
-                    Verify page
-                  </a>
-                  <button
-                    v-if="row.revoke_url && can?.revoke"
-                    type="button"
-                    class="zaqa-btn zaqa-btn-danger inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold"
-                    @click="openRevokeModal(row)"
-                  >
-                    <Ban class="h-3.5 w-3.5" aria-hidden="true" />
-                    Revoke
-                  </button>
-                  <Link
-                    v-if="row.verification_task_url"
-                    :href="row.verification_task_url"
-                    class="zaqa-btn zaqa-btn-secondary inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold"
-                  >
-                    <ExternalLink class="h-3.5 w-3.5" aria-hidden="true" />
-                    Task
-                  </Link>
-                </div>
+                <Link :href="row.show_url" class="zaqa-btn zaqa-btn-secondary h-9 px-3 py-2 text-xs">View</Link>
               </td>
             </tr>
           </tbody>
@@ -234,57 +156,5 @@ function submitRevoke() {
         <AdminPagination :links="certificates.links ?? []" />
       </div>
     </div>
-
-    <AdminActionModal
-      v-model="revokeOpen"
-      title="Revoke certificate"
-      :description="
-        revokeTarget
-          ? `Revoke CVEQ ${revokeTarget.certificate_number}. The certificate will remain in history but will no longer verify as valid publicly.`
-          : ''
-      "
-    >
-      <div class="space-y-4">
-        <div>
-          <label class="text-sm font-semibold text-text-primary" for="revocation_reason">Internal reason (required)</label>
-          <textarea
-            id="revocation_reason"
-            v-model="revokeForm.revocation_reason"
-            rows="3"
-            class="zaqa-input mt-2 w-full"
-            placeholder="Why is this certificate being revoked?"
-          />
-          <div v-if="revokeForm.errors.revocation_reason" class="mt-1 text-xs text-danger">{{ revokeForm.errors.revocation_reason }}</div>
-        </div>
-        <div>
-          <label class="text-sm font-semibold text-text-primary" for="revocation_public_note">Public note (optional)</label>
-          <textarea
-            id="revocation_public_note"
-            v-model="revokeForm.revocation_public_note"
-            rows="2"
-            class="zaqa-input mt-2 w-full"
-            placeholder="Shown on the public verification page if provided."
-          />
-          <div v-if="revokeForm.errors.revocation_public_note" class="mt-1 text-xs text-danger">{{ revokeForm.errors.revocation_public_note }}</div>
-        </div>
-        <label class="flex items-start gap-2 text-sm text-text-secondary">
-          <input v-model="revokeForm.confirm" type="checkbox" class="mt-1 rounded border-border" />
-          <span>I understand this certificate will no longer verify as valid publicly.</span>
-        </label>
-        <div v-if="revokeForm.errors.confirm" class="text-xs text-danger">{{ revokeForm.errors.confirm }}</div>
-        <div v-if="revokeForm.errors.certificate" class="text-xs text-danger">{{ revokeForm.errors.certificate }}</div>
-      </div>
-      <template #footer>
-        <button type="button" class="zaqa-btn zaqa-btn-secondary px-4 py-2 text-sm" @click="revokeOpen = false">Cancel</button>
-        <button
-          type="button"
-          class="zaqa-btn zaqa-btn-danger px-4 py-2 text-sm"
-          :disabled="revokeForm.processing"
-          @click="submitRevoke"
-        >
-          Revoke certificate
-        </button>
-      </template>
-    </AdminActionModal>
   </AdminLayout>
 </template>

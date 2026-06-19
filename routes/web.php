@@ -505,6 +505,12 @@ Route::middleware('auth')->group(function () {
         Route::post('/certificates/bulk-issue-import', [AdminCertificatesController::class, 'bulkIssueImport'])
             ->middleware('can:verification.certificate.issue')
             ->name('certificates.bulk_issue_import');
+        Route::get('/certificates/{qualificationCertificate}', [AdminCertificatesController::class, 'show'])
+            ->middleware('can:admin.certificates.view')
+            ->name('certificates.show');
+        Route::get('/certificates/{qualificationCertificate}/preview', [AdminCertificatesController::class, 'preview'])
+            ->middleware('can:admin.certificates.view')
+            ->name('certificates.preview');
         Route::get('/certificates/{qualificationCertificate}/download', [AdminCertificatesController::class, 'download'])
             ->middleware('can:admin.certificates.view')
             ->name('certificates.download');

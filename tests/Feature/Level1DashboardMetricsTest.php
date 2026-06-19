@@ -319,7 +319,7 @@ class Level1DashboardMetricsTest extends TestCase
         $l1 = $this->makeLevel1Officer();
         $actions = collect($this->dashboardProps($l1)['quick_actions']);
 
-        $this->assertTrue($actions->contains(fn ($a) => $a['href'] === '/admin/verification/assigned-to-me'));
+        $this->assertFalse($actions->contains(fn ($a) => $a['href'] === '/admin/verification/assigned-to-me'));
         $this->assertFalse($actions->contains(fn ($a) => $a['href'] === '/admin/verification/pool'));
         $this->assertFalse($actions->contains(fn ($a) => $a['href'] === '/admin/finance/payment-proofs'));
         $this->assertFalse($actions->contains(fn ($a) => $a['href'] === '/admin/users'));

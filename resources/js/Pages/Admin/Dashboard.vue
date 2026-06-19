@@ -206,43 +206,6 @@ function dashboardUrl(rangeDays: number) {
             <span class="text-white/60">· {{ meta.timezone }}</span>
           </div>
         </div>
-        <div class="flex shrink-0 flex-wrap gap-2">
-          <Link
-            v-if="meta.dashboard_scope === 'level1_assigned'"
-            href="/admin/verification/assigned-to-me"
-            class="rounded-xl border border-white/30 bg-[#F18230] px-4 py-2.5 text-sm font-semibold text-white shadow-md transition hover:bg-[#e07828]"
-          >
-            My Level 1 tasks
-          </Link>
-          <Link
-            v-else-if="meta.dashboard_scope === 'level2_qualifications'"
-            href="/admin/verification/assigned-to-me"
-            class="rounded-xl border border-white/30 bg-[#F18230] px-4 py-2.5 text-sm font-semibold text-white shadow-md transition hover:bg-[#e07828]"
-          >
-            My Level 2 tasks
-          </Link>
-          <Link
-            v-else-if="isFinanceScope"
-            href="/admin/finance/payment-proofs"
-            class="rounded-xl border border-white/30 bg-[#F18230] px-4 py-2.5 text-sm font-semibold text-white shadow-md transition hover:bg-[#e07828]"
-          >
-            Open payment proofs
-          </Link>
-          <Link
-            v-else-if="quick_actions.some((a) => a.href === '/admin/verification/pool')"
-            href="/admin/verification/pool"
-            class="rounded-xl border border-white/30 bg-[#F18230] px-4 py-2.5 text-sm font-semibold text-white shadow-md transition hover:bg-[#e07828]"
-          >
-            Open pool
-          </Link>
-          <Link
-            v-if="!isFinanceScope && quick_actions.some((a) => a.href === '/admin/finance/payment-proofs')"
-            href="/admin/finance/payment-proofs"
-            class="rounded-xl border border-white/25 bg-white/10 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-white/20"
-          >
-            Finance queue
-          </Link>
-        </div>
       </div>
     </div>
 

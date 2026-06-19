@@ -1042,7 +1042,6 @@ class AdminDashboardService
         };
 
         if ($this->isLevel1ScopedDashboard($user)) {
-            $push('My Level 1 tasks', '/admin/verification/assigned-to-me', 'user-check', 'verification.level1.process');
             if ($user->can('reports.view')) {
                 $push('My performance', '/admin/reports/my-performance', 'activity', 'reports.view');
             }

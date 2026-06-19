@@ -38,16 +38,10 @@ class AdminCertificatesController extends Controller
         ];
 
         $user = $request->user();
-        $canOpenVerificationTask = (bool) $user?->can('verification.pool.view');
-        $canRevoke = (bool) $user?->can('certificates.revoke');
 
         $certificates = QualificationCertificate::query()
             ->with([
-                'qualification:id,application_id,title_of_qualification,qualification_holder_name',
-                'application:id,application_number',
-                'application.applicant:id,name,email',
-                'issuedBy:id,name',
-                'revokedBy:id,name',
+                'qualification:id,title_of_qualification,qualification_holder_name',
             ])
             ->when($status !== '' && in_array($status, $allowedStatuses, true), fn ($query) => $query->where('status', $status))
             ->when($type !== '' && in_array($type, $allowedTypes, true), fn ($query) => $query->where('certificate_type', $type))
@@ -70,38 +64,7 @@ class AdminCertificatesController extends Controller
             ->orderByDesc('id')
             ->paginate(25)
             ->withQueryString()
-            ->through(function (QualificationCertificate $cert) use ($canOpenVerificationTask, $canRevoke) {
-                $qualificationId = (int) $cert->qualification_id;
-                $verificationUrl = rtrim((string) config('certificates.verify_url_base'), '/').'/'.$cert->verification_token;
-
-                return [
-                    'id' => $cert->id,
-                    'certificate_number' => $cert->certificate_number,
-                    'zaqa_reference_number' => $cert->zaqa_reference_number,
-                    'status' => $cert->status,
-                    'status_label' => $this->statusLabel($cert->status),
-                    'certificate_type' => $cert->certificate_type ?: QualificationCertificate::TYPE_VERIFICATION,
-                    'certificate_type_label' => $this->typeLabel($cert->certificate_type),
-                    'issued_at' => optional($cert->issued_at)?->toIso8601String(),
-                    'revoked_at' => optional($cert->revoked_at)?->toIso8601String(),
-                    'revoked_by_name' => $cert->revokedBy?->name,
-                    'recipient_email' => $cert->recipient_email,
-                    'qualification_title' => $cert->qualification?->title_of_qualification,
-                    'holder_name' => CertificateHolderName::displayFromCertificateMetadata($cert->metadata)
-                        ?? $cert->qualification?->qualification_holder_name,
-                    'application_number' => $cert->application?->application_number,
-                    'applicant_name' => $cert->application?->applicant?->name,
-                    'issued_by_name' => $cert->issuedBy?->name,
-                    'download_url' => route('admin.certificates.download', ['qualificationCertificate' => $cert]),
-                    'verification_url' => $verificationUrl,
-                    'revoke_url' => $canRevoke && $cert->status === QualificationCertificate::STATUS_ISSUED
-                        ? route('admin.certificates.revoke', ['qualificationCertificate' => $cert])
-                        : null,
-                    'verification_task_url' => $canOpenVerificationTask && $qualificationId > 0
-                        ? route('admin.verification.qualifications.show', ['qualification' => $qualificationId])
-                        : null,
-                ];
-            });
+            ->through(fn (QualificationCertificate $cert) => $this->mapRegistryRow($cert));
 
         return Inertia::render('Admin/Certificates/Index', [
             'certificates' => $certificates,
@@ -109,9 +72,6 @@ class AdminCertificatesController extends Controller
                 'q' => $q,
                 'status' => $status,
                 'type' => $type,
-            ],
-            'can' => [
-                'revoke' => $canRevoke,
             ],
             'status_options' => [
                 ['value' => '', 'label' => 'All statuses'],
@@ -130,6 +90,47 @@ class AdminCertificatesController extends Controller
                 'can_import' => (bool) $user?->can('verification.certificate.issue'),
             ],
         ]);
+    }
+
+    public function show(Request $request, QualificationCertificate $qualificationCertificate): Response
+    {
+        abort_unless($request->user()?->can('admin.certificates.view'), 403);
+
+        $qualificationCertificate->load([
+            'qualification:id,application_id,title_of_qualification,qualification_holder_name,verification_reference_number',
+            'application:id,application_number',
+            'issuedBy:id,name',
+            'revokedBy:id,name',
+        ]);
+
+        $user = $request->user();
+        $canRevoke = (bool) $user?->can('certificates.revoke');
+        $canOpenVerificationTask = (bool) $user?->can('verification.pool.view');
+        $qualificationId = (int) $qualificationCertificate->qualification_id;
+
+        return Inertia::render('Admin/Certificates/Show', [
+            'certificate' => $this->mapCertificateDetail($qualificationCertificate),
+            'preview_document' => $this->mapPreviewDocument($qualificationCertificate),
+            'can' => [
+                'revoke' => $canRevoke,
+                'open_verification_task' => $canOpenVerificationTask && $qualificationId > 0,
+            ],
+        ]);
+    }
+
+    public function preview(
+        Request $request,
+        QualificationCertificate $qualificationCertificate,
+        QualificationCertificateService $certificates,
+    ): SymfonyResponse {
+        abort_unless($request->user()?->can('admin.certificates.view'), 403);
+
+        return response($certificates->pdfContents($qualificationCertificate))
+            ->header('Content-Type', 'application/pdf')
+            ->header(
+                'Content-Disposition',
+                'inline; filename="ZAQA-'.$qualificationCertificate->certificate_number.'.pdf"',
+            );
     }
 
     public function bulkIssueTemplate(Request $request): StreamedResponse
@@ -181,12 +182,88 @@ class AdminCertificatesController extends Controller
         QualificationCertificate $qualificationCertificate,
         QualificationCertificateService $certificates,
     ): SymfonyResponse {
+        abort_unless($request->user()?->can('admin.certificates.view'), 403);
+
         return response($certificates->pdfContents($qualificationCertificate))
             ->header('Content-Type', 'application/pdf')
             ->header(
                 'Content-Disposition',
                 'attachment; filename="ZAQA-'.$qualificationCertificate->certificate_number.'.pdf"',
             );
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function mapRegistryRow(QualificationCertificate $cert): array
+    {
+        return [
+            'id' => $cert->id,
+            'certificate_number' => $cert->certificate_number,
+            'status' => $cert->status,
+            'status_label' => $this->statusLabel($cert->status),
+            'certificate_type_label' => $this->typeLabel($cert->certificate_type),
+            'issued_at' => optional($cert->issued_at)?->toIso8601String(),
+            'qualification_title' => $cert->qualification?->title_of_qualification,
+            'holder_name' => CertificateHolderName::displayFromCertificateMetadata($cert->metadata)
+                ?? $cert->qualification?->qualification_holder_name,
+            'show_url' => route('admin.certificates.show', ['qualificationCertificate' => $cert]),
+        ];
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function mapCertificateDetail(QualificationCertificate $cert): array
+    {
+        $qualificationId = (int) $cert->qualification_id;
+        $verificationUrl = rtrim((string) config('certificates.verify_url_base'), '/').'/'.$cert->verification_token;
+
+        return [
+            'id' => $cert->id,
+            'certificate_number' => $cert->certificate_number,
+            'zaqa_reference_number' => $cert->zaqa_reference_number,
+            'status' => $cert->status,
+            'status_label' => $this->statusLabel($cert->status),
+            'certificate_type' => $cert->certificate_type ?: QualificationCertificate::TYPE_VERIFICATION,
+            'certificate_type_label' => $this->typeLabel($cert->certificate_type),
+            'issued_at' => optional($cert->issued_at)?->toIso8601String(),
+            'issued_by_name' => $cert->issuedBy?->name,
+            'qualification_title' => $cert->qualification?->title_of_qualification,
+            'qualification_id' => $qualificationId > 0 ? $qualificationId : null,
+            'holder_name' => CertificateHolderName::displayFromCertificateMetadata($cert->metadata)
+                ?? $cert->qualification?->qualification_holder_name,
+            'application_number' => $cert->application?->application_number,
+            'revoked_at' => optional($cert->revoked_at)?->toIso8601String(),
+            'revoked_by_name' => $cert->revokedBy?->name,
+            'revocation_reason' => $cert->revocation_reason,
+            'revocation_public_note' => $cert->revocation_public_note,
+            'download_url' => route('admin.certificates.download', ['qualificationCertificate' => $cert]),
+            'preview_url' => route('admin.certificates.preview', ['qualificationCertificate' => $cert]),
+            'verification_url' => $verificationUrl,
+            'revoke_url' => $cert->status === QualificationCertificate::STATUS_ISSUED
+                ? route('admin.certificates.revoke', ['qualificationCertificate' => $cert])
+                : null,
+            'verification_task_url' => $qualificationId > 0
+                ? route('admin.verification.qualifications.show', ['qualification' => $qualificationId])
+                : null,
+        ];
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    private function mapPreviewDocument(QualificationCertificate $cert): array
+    {
+        $filename = 'ZAQA-'.$cert->certificate_number.'.pdf';
+
+        return [
+            'label' => $this->typeLabel($cert->certificate_type).' certificate',
+            'filename' => $filename,
+            'mime_type' => 'application/pdf',
+            'preview_url' => route('admin.certificates.preview', ['qualificationCertificate' => $cert]),
+            'download_url' => route('admin.certificates.download', ['qualificationCertificate' => $cert]),
+        ];
     }
 
     private function statusLabel(string $status): string

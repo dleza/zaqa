@@ -129,7 +129,52 @@ class AdminCertificatesRegistryTest extends TestCase
         $response->assertInertia(fn ($page) => $page
             ->has('certificates.data', 1)
             ->where('certificates.data.0.certificate_number', $cert->certificate_number)
-            ->where('certificates.data.0.verification_url', rtrim((string) config('certificates.verify_url_base'), '/').'/'.$cert->verification_token));
+            ->where('certificates.data.0.show_url', route('admin.certificates.show', ['qualificationCertificate' => $cert]))
+            ->missing('certificates.data.0.download_url')
+            ->missing('certificates.data.0.verification_url'));
+    }
+
+    public function test_registry_show_page_displays_certificate_detail(): void
+    {
+        [, , $cert] = $this->createIssuedCertificateFixture();
+
+        $viewer = User::factory()->activated()->create(['applicant_type' => null]);
+        $viewer->givePermissionTo(['dashboard.view', 'admin.certificates.view']);
+
+        $this->actingAs($viewer)
+            ->get(route('admin.certificates.show', ['qualificationCertificate' => $cert]))
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page
+                ->component('Admin/Certificates/Show')
+                ->where('certificate.certificate_number', $cert->certificate_number)
+                ->where('certificate.status', QualificationCertificate::STATUS_ISSUED)
+                ->has('preview_document.preview_url')
+                ->has('preview_document.download_url'));
+    }
+
+    public function test_registry_show_forbidden_without_permission(): void
+    {
+        [, , $cert] = $this->createIssuedCertificateFixture();
+
+        $user = User::factory()->activated()->create(['applicant_type' => null]);
+        $user->givePermissionTo(['dashboard.view']);
+
+        $this->actingAs($user)
+            ->get(route('admin.certificates.show', ['qualificationCertificate' => $cert]))
+            ->assertForbidden();
+    }
+
+    public function test_registry_preview_streams_inline_pdf(): void
+    {
+        [, , $cert] = $this->createIssuedCertificateFixture();
+
+        $viewer = User::factory()->activated()->create(['applicant_type' => null]);
+        $viewer->givePermissionTo(['dashboard.view', 'admin.certificates.view']);
+
+        $this->actingAs($viewer)
+            ->get(route('admin.certificates.preview', ['qualificationCertificate' => $cert]))
+            ->assertOk()
+            ->assertHeader('content-type', 'application/pdf');
     }
 
     public function test_registry_download_streams_pdf(): void
