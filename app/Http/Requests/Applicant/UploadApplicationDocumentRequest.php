@@ -2,12 +2,15 @@
 
 namespace App\Http\Requests\Applicant;
 
+use App\Http\Requests\Concerns\ValidatesUserUploadSize;
 use App\Enums\DocumentType;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rules\Enum;
 
 class UploadApplicationDocumentRequest extends FormRequest
 {
+    use ValidatesUserUploadSize;
+
     public function authorize(): bool
     {
         $application = $this->route('application');
@@ -20,7 +23,7 @@ class UploadApplicationDocumentRequest extends FormRequest
      */
     public function rules(): array
     {
-        $maxKb = (int) config('documents.max_upload_kb', 10240);
+        $maxKb = $this->userUploadMaxKb();
         $mimeTypes = (array) config('documents.allowed_mimetypes', [
             'application/pdf',
             'image/jpeg',
@@ -35,6 +38,11 @@ class UploadApplicationDocumentRequest extends FormRequest
             // the UI should send a qualification_id. Application-scoped types may omit it.
             'qualification_id' => ['nullable', 'integer', 'exists:qualifications,id'],
         ];
+    }
+
+    public function messages(): array
+    {
+        return $this->userUploadValidationMessages();
     }
 }
 

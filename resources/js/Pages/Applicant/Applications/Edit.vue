@@ -11,6 +11,7 @@ import DocumentManager from '@/Components/DocumentManager.vue'
 import ActionModal from '@/Components/ActionModal.vue'
 import Swal from 'sweetalert2'
 import { isAllowedCertificateSubjectGrade } from '@/lib/certificateSubjectGrades'
+import { useUploadLimits } from '@/lib/uploadLimits'
 import {
   AlertCircle,
   CheckCircle2,
@@ -87,6 +88,7 @@ const steps = computed(() => [
 const activeStep = ref<StepKey>('applicant')
 const saveState = ref<{ state: 'idle' | 'saving' | 'saved' | 'error'; message?: string }>({ state: 'idle' })
 const page = usePage()
+const { pdfOrImageHint } = useUploadLimits()
 
 function setSaved(message = 'Saved') {
   saveState.value = { state: 'saved', message }
@@ -2515,7 +2517,8 @@ onBeforeUnmount(() => {
 
                 <div class="mt-4">
                   <label class="text-sm font-medium">Proof file (PDF or image)</label>
-                  <input type="file" accept="application/pdf,image/*" class="zaqa-input" @change="onProofFileChange" />
+                  <p class="mt-1 text-xs text-text-muted">{{ pdfOrImageHint }}</p>
+                  <input type="file" accept="application/pdf,image/*" class="zaqa-input mt-2" @change="onProofFileChange" />
                   <InputError :message="proofForm.errors.file" />
                 </div>
 

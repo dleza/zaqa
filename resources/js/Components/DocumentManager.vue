@@ -9,6 +9,9 @@ import {
   APPLICANT_DOCUMENT_FILE_ERROR,
   isAllowedApplicantDocumentFile,
 } from '@/lib/applicantDocumentUpload'
+import { useUploadLimits } from '@/lib/uploadLimits'
+
+const { maxFileSizeLabel, pdfOrImageHint } = useUploadLimits()
 
 type DocType = 'nrc_copy' | 'certificate_copy' | 'transcript'
 
@@ -364,7 +367,7 @@ async function confirmDelete(doc: DocItem | null) {
               </span>
             </div>
             <div class="mt-1 text-xs text-text-muted">
-              Upload a PDF or image. Re-uploads replace the current version.
+              Upload a PDF or image. Re-uploads replace the current version. {{ maxFileSizeLabel }}
             </div>
           </div>
           <button type="button" class="zaqa-btn zaqa-btn-secondary px-3 py-2 text-xs" aria-label="Close" @click="cancelUpload">
@@ -440,7 +443,7 @@ async function confirmDelete(doc: DocItem | null) {
         </div>
 
         <div class="flex flex-col gap-3 border-t border-border bg-surface-muted px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
-          <p class="text-xs text-text-muted">Accepted: PDF or image. Keep documents clear and readable.</p>
+          <p class="text-xs text-text-muted">{{ pdfOrImageHint }}. Keep documents clear and readable.</p>
           <div class="flex gap-2">
             <button type="button" class="zaqa-btn zaqa-btn-secondary px-4" :disabled="form.processing" @click="cancelUpload">Cancel</button>
             <button type="button" class="zaqa-btn zaqa-btn-primary px-5" :disabled="!form.file || form.processing" @click="upload">

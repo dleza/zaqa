@@ -143,15 +143,20 @@ class OptionalTranscriptUploadTest extends TestCase
     public function test_uploaded_transcript_validates_max_size(): void
     {
         [$user, $application, $qualification] = $this->makeForeignQualificationWithCertificateOnly();
-        $maxKb = (int) config('documents.max_upload_kb', 10240);
+        $maxKb = \App\Support\Uploads\UserUploadLimit::maxFileSizeKb();
 
-        $this->actingAs($user)
+        $response = $this->actingAs($user)
             ->post("/applicant/applications/{$application->id}/documents", [
                 'document_type' => 'transcript',
                 'qualification_id' => $qualification->id,
                 'file' => UploadedFile::fake()->create('transcript.pdf', $maxKb + 1, 'application/pdf'),
-            ])
-            ->assertSessionHasErrors(['file']);
+            ]);
+
+        $response->assertSessionHasErrors(['file']);
+        $this->assertStringContainsString(
+            'Maximum allowed size is 3 MB',
+            (string) session('errors')->get('file')[0],
+        );
     }
 
     public function test_uploaded_transcript_saves_successfully(): void

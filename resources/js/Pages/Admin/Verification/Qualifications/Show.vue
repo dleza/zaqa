@@ -11,6 +11,7 @@ import {
   APPLICANT_DOCUMENT_FILE_ERROR,
   isAllowedApplicantDocumentFile,
 } from '@/lib/applicantDocumentUpload'
+import { useUploadLimits } from '@/lib/uploadLimits'
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import {
   ArrowRight,
@@ -36,6 +37,8 @@ import {
   UserRound,
   X,
 } from 'lucide-vue-next'
+
+const { pdfOrImageHint } = useUploadLimits()
 
 const props = defineProps<{
   qualification: any
@@ -2413,7 +2416,7 @@ const autoVerificationCollapsedSummary = computed(() => {
         </div>
         <div>
           <label class="text-sm font-semibold text-text-primary">Optional attachment</label>
-          <p class="mt-1 text-xs text-text-secondary">PDF or image files only (JPG, PNG, WEBP), max 10&nbsp;MB.</p>
+          <p class="mt-1 text-xs text-text-secondary">{{ pdfOrImageHint }}</p>
           <input
             ref="sendBackToLevel1AttachmentInput"
             type="file"
@@ -2572,7 +2575,7 @@ const autoVerificationCollapsedSummary = computed(() => {
         <div class="grid grid-cols-1 gap-4 lg:grid-cols-2">
           <div>
             <label class="text-sm font-semibold text-text-primary">Evaluation report attachment</label>
-            <p class="mt-1 text-xs text-text-secondary">Upload the Level 1 evaluation report — PDF or image files only (JPG, PNG, WEBP), max 10&nbsp;MB.</p>
+            <p class="mt-1 text-xs text-text-secondary">Upload the Level 1 evaluation report — {{ pdfOrImageHint }}</p>
             <input
               ref="level1EvaluationReportInput"
               type="file"
@@ -2584,7 +2587,7 @@ const autoVerificationCollapsedSummary = computed(() => {
           </div>
           <div>
             <label class="text-sm font-semibold text-text-primary">Confirmation (optional)</label>
-            <p class="mt-1 text-xs text-text-secondary">Upload the confirmation file for Level 2 — PDF or image files only (JPG, PNG, WEBP), max 10&nbsp;MB.</p>
+            <p class="mt-1 text-xs text-text-secondary">Upload the confirmation file for Level 2 — {{ pdfOrImageHint }}</p>
             <input
               ref="level1AttachmentInput"
               type="file"

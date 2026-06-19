@@ -15,10 +15,12 @@ import {
   APPLICANT_DOCUMENT_FILE_ERROR,
   isAllowedApplicantDocumentFile,
 } from '@/lib/applicantDocumentUpload'
+import { useUploadLimits } from '@/lib/uploadLimits'
 import 'sweetalert2/dist/sweetalert2.min.css'
 import { Building2, FileStack, GraduationCap, MapPin, Shield, Sparkles, Trash2, UserRound } from 'lucide-vue-next'
 
 const inertiaPage = usePage()
+const { pdfOrImageHint } = useUploadLimits()
 
 const props = defineProps<{
   application: any
@@ -1221,7 +1223,7 @@ const pendingConsentName = computed(() => pendingConsentFile.value?.name ?? '')
                     :disabled="locked"
                     @change="onPendingCertificateChange"
                   />
-                  <p class="mt-1 text-xs text-text-muted">PDF or image files only (JPG, PNG, WEBP).</p>
+                  <p class="mt-1 text-xs text-text-muted">{{ pdfOrImageHint }}</p>
                   <p v-if="pendingCertificateName" class="mt-2 text-xs text-text-muted">
                     Selected: <span class="font-semibold text-text-primary">{{ pendingCertificateName }}</span>
                   </p>
@@ -1291,7 +1293,7 @@ const pendingConsentName = computed(() => pendingConsentFile.value?.name ?? '')
                     :disabled="locked"
                     @change="onPendingTranscriptChange"
                   />
-                  <p class="mt-1 text-xs text-text-muted">PDF or image files only (JPG, PNG, WEBP).</p>
+                  <p class="mt-1 text-xs text-text-muted">{{ pdfOrImageHint }}</p>
                   <p v-if="pendingTranscriptName" class="mt-2 text-xs text-text-muted">
                     Selected: <span class="font-semibold text-text-primary">{{ pendingTranscriptName }}</span>
                   </p>
@@ -1359,7 +1361,7 @@ const pendingConsentName = computed(() => pendingConsentFile.value?.name ?? '')
                     :disabled="locked"
                     @change="onPendingConsentChange"
                   />
-                  <p class="mt-1 text-xs text-text-muted">PDF or image files only (JPG, PNG, WEBP).</p>
+                  <p class="mt-1 text-xs text-text-muted">{{ pdfOrImageHint }}</p>
                   <p v-if="pendingConsentName" class="mt-2 text-xs text-text-muted">
                     Selected: <span class="font-semibold text-text-primary">{{ pendingConsentName }}</span>
                   </p>

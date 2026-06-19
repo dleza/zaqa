@@ -2,11 +2,14 @@
 
 namespace App\Http\Requests\Applicant;
 
+use App\Http\Requests\Concerns\ValidatesUserUploadSize;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Validator;
 
 class UploadForeignConsentRequest extends FormRequest
 {
+    use ValidatesUserUploadSize;
+
     public function authorize(): bool
     {
         $application = $this->route('application');
@@ -19,7 +22,7 @@ class UploadForeignConsentRequest extends FormRequest
      */
     public function rules(): array
     {
-        $maxKb = (int) config('documents.max_upload_kb', 5120);
+        $maxKb = $this->userUploadMaxKb();
         $mimeTypes = (array) config('documents.allowed_mimetypes', [
             'application/pdf',
             'image/jpeg',
@@ -36,6 +39,11 @@ class UploadForeignConsentRequest extends FormRequest
             // Back-compat alias for older clients
             'source_awarding_body_name' => ['nullable', 'string', 'max:255'],
         ];
+    }
+
+    public function messages(): array
+    {
+        return $this->userUploadValidationMessages();
     }
 
     public function withValidator(Validator $validator): void

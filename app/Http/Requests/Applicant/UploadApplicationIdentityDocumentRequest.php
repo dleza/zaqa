@@ -2,10 +2,13 @@
 
 namespace App\Http\Requests\Applicant;
 
+use App\Http\Requests\Concerns\ValidatesUserUploadSize;
 use Illuminate\Foundation\Http\FormRequest;
 
 class UploadApplicationIdentityDocumentRequest extends FormRequest
 {
+    use ValidatesUserUploadSize;
+
     public function authorize(): bool
     {
         return (bool) $this->user();
@@ -16,7 +19,7 @@ class UploadApplicationIdentityDocumentRequest extends FormRequest
      */
     public function rules(): array
     {
-        $maxKb = (int) config('documents.max_upload_kb', 10240);
+        $maxKb = $this->userUploadMaxKb();
         $mimeTypes = (array) config('documents.allowed_mimetypes', [
             'application/pdf',
             'image/jpeg',
@@ -29,5 +32,9 @@ class UploadApplicationIdentityDocumentRequest extends FormRequest
             'file' => ['required', 'file', 'max:'.$maxKb, 'mimetypes:'.implode(',', $mimeTypes)],
         ];
     }
-}
 
+    public function messages(): array
+    {
+        return $this->userUploadValidationMessages();
+    }
+}

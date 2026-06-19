@@ -2,6 +2,9 @@
 import { computed, ref } from 'vue'
 import { useForm } from '@inertiajs/vue3'
 import InputError from '@/Components/InputError.vue'
+import { useUploadLimits } from '@/lib/uploadLimits'
+
+const { pdfOrImageHint } = useUploadLimits()
 
 type DocType = 'nrc_copy' | 'certificate_copy' | 'transcript'
 
@@ -56,7 +59,7 @@ function upload() {
       <div class="min-w-0">
         <h3 class="text-sm font-semibold text-text-primary">Upload document</h3>
         <p class="mt-1 text-xs text-text-muted">
-          Select the document type, then upload a clear PDF or image. Re-uploads replace the current version.
+          Select the document type, then upload a clear PDF or image. Re-uploads replace the current version. {{ pdfOrImageHint }}
         </p>
 
         <div class="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">

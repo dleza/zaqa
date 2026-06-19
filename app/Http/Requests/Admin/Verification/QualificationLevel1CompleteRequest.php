@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests\Admin\Verification;
 
+use App\Http\Requests\Concerns\ValidatesUserUploadSize;
 use App\Models\Qualification;
 use App\Models\QualificationType;
 use Illuminate\Foundation\Http\FormRequest;
@@ -10,6 +11,8 @@ use Illuminate\Validation\Validator;
 
 class QualificationLevel1CompleteRequest extends FormRequest
 {
+    use ValidatesUserUploadSize;
+
     public function authorize(): bool
     {
         return $this->user()?->can('verification.level1.process') ?? false;
@@ -17,6 +20,8 @@ class QualificationLevel1CompleteRequest extends FormRequest
 
     public function rules(): array
     {
+        $maxKb = $this->userUploadMaxKb();
+
         return [
             'qualification_type_id' => ['required', 'integer', 'exists:qualification_types,id'],
             'recommended_for_award' => ['required', 'boolean'],
@@ -30,13 +35,13 @@ class QualificationLevel1CompleteRequest extends FormRequest
             'evaluation_report' => [
                 'nullable',
                 'file',
-                'max:10240',
+                'max:'.$maxKb,
                 'mimes:pdf,jpg,jpeg,png,webp',
             ],
             'attachment' => [
                 'nullable',
                 'file',
-                'max:10240',
+                'max:'.$maxKb,
                 'mimes:pdf,jpg,jpeg,png,webp',
             ],
         ];
@@ -44,9 +49,9 @@ class QualificationLevel1CompleteRequest extends FormRequest
 
     public function messages(): array
     {
-        return [
+        return array_merge($this->userUploadValidationMessages(), [
             'accreditation_statement.required' => 'Accreditation statement is required when recommending award.',
-        ];
+        ]);
     }
 
     public function withValidator(Validator $validator): void

@@ -26,5 +26,8 @@ return [
             env('ZAQA_RECEIPT_VERIFY_BASE', rtrim((string) env('APP_URL', 'http://localhost'), '/').'/receipts')
         ), '/'),
     ],
+    'uploads' => [
+        'max_file_size_mb' => (int) env('ZAQA_UPLOAD_MAX_FILE_SIZE_MB', 3),
+    ],
 ];
 

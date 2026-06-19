@@ -2,6 +2,7 @@
 
 namespace App\Http\Middleware;
 
+use App\Support\Uploads\UserUploadLimit;
 use Illuminate\Http\Request;
 use Illuminate\Notifications\DatabaseNotification;
 use Inertia\Middleware;
@@ -69,6 +70,7 @@ class HandleInertiaRequests extends Middleware
                 'created_qualification_id' => fn () => $request->session()->get('created_qualification_id'),
                 'payment_completed' => fn () => $request->session()->get('payment_completed'),
             ],
+            'uploads' => fn () => UserUploadLimit::inertiaProps(),
         ]);
     }
 }

@@ -4,12 +4,15 @@ namespace App\Http\Requests\Admin\Verification;
 
 use App\Domain\Verification\VerificationQualificationAccess;
 use App\Enums\DocumentType;
+use App\Http\Requests\Concerns\ValidatesUserUploadSize;
 use App\Models\Qualification;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rules\Enum;
 
 class AdminUploadVerificationQualificationDocumentRequest extends FormRequest
 {
+    use ValidatesUserUploadSize;
+
     public function authorize(): bool
     {
         $qualification = $this->route('qualification');
@@ -30,7 +33,7 @@ class AdminUploadVerificationQualificationDocumentRequest extends FormRequest
      */
     public function rules(): array
     {
-        $maxKb = (int) config('documents.max_upload_kb', 10240);
+        $maxKb = $this->userUploadMaxKb();
         $mimeTypes = (array) config('documents.allowed_mimetypes', [
             'application/pdf',
             'image/jpeg',
@@ -55,5 +58,10 @@ class AdminUploadVerificationQualificationDocumentRequest extends FormRequest
             'file' => ['required', 'file', 'max:'.$maxKb, 'mimetypes:'.implode(',', $mimeTypes)],
             'correction_note' => ['nullable', 'string', 'max:2000'],
         ];
+    }
+
+    public function messages(): array
+    {
+        return $this->userUploadValidationMessages();
     }
 }

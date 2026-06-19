@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests\Applicant;
 
+use App\Http\Requests\Concerns\ValidatesUserUploadSize;
 use App\Domain\Applications\ApplicationNotificationContact;
 use App\Enums\ApplicantType;
 use App\Enums\QualificationType;
@@ -14,6 +15,7 @@ use Illuminate\Validation\Validator;
 class CreateApplicationDraftRequest extends FormRequest
 {
     use ValidatesApplicationNotificationContact;
+    use ValidatesUserUploadSize;
     public function authorize(): bool
     {
         return (bool) $this->user();
@@ -39,7 +41,7 @@ class CreateApplicationDraftRequest extends FormRequest
             'gender' => ['nullable', 'string', 'in:male,female'],
             'identity_type' => ['nullable', 'string', 'in:nrc,passport'],
             'identity_number' => ['nullable', 'string', 'max:100'],
-            'identity_file' => ['nullable', 'file', 'max:'.((int) config('documents.max_upload_kb', 10240)), 'mimetypes:'.implode(',', (array) config('documents.allowed_mimetypes', [
+            'identity_file' => ['nullable', 'file', 'max:'.$this->userUploadMaxKb(), 'mimetypes:'.implode(',', (array) config('documents.allowed_mimetypes', [
                 'application/pdf',
                 'image/jpeg',
                 'image/png',
@@ -134,5 +136,10 @@ class CreateApplicationDraftRequest extends FormRequest
 
             $this->validateApplicationNotificationContact($validator, $submittingFor);
         });
+    }
+
+    public function messages(): array
+    {
+        return $this->userUploadValidationMessages();
     }
 }
