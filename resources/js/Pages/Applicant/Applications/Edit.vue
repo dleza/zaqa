@@ -163,7 +163,9 @@ watch(
 )
 
 function isStepDirty(step: StepKey): boolean {
-  if (step === 'applicant') return (applicantForm.isDirty ?? false) === true
+  if (step === 'applicant') {
+    return (applicantForm.isDirty ?? false) === true || (submittingForForm.isDirty ?? false) === true
+  }
   if (step === 'consent') return (declarationsForm.isDirty ?? false) === true
   return false
 }
@@ -205,13 +207,14 @@ function evaluateApplicantStep(): { ok: boolean; missing: string[] } {
     .toString()
     .trim()
 
+  const applicantTypeStr = trimStr(props.applicant?.applicant_type ?? props.application?.applicant_type)
+  const isSelfIndividual = submittingFor === 'self' && applicantTypeStr === 'individual'
+
   const emailEff = trimStr(applicantForm.email) || trimStr(props.applicant?.email)
   const phoneEff = trimStr(applicantForm.phone_primary) || trimStr(props.applicant?.phone_primary)
-  if (!emailEff && !phoneEff) {
+  if (!isSelfIndividual && !emailEff && !phoneEff) {
     missing.push('Provide at least one contact method (email or primary phone).')
   }
-
-  const applicantTypeStr = trimStr(props.applicant?.applicant_type ?? props.application?.applicant_type)
 
   if (submittingFor === 'other') {
     const firstName =
@@ -242,7 +245,7 @@ function evaluateApplicantStep(): { ok: boolean; missing: string[] } {
     const gender =
       trimStr(props.applicant?.applicant_profile?.gender) ||
       trimStr(applicantForm.gender)
-    if (!gender) missing.push('Select your gender under Biodata.')
+    if (!gender) missing.push('Select your gender.')
 
     const identityType =
       trimStr(applicantForm.identity_type) ||
@@ -255,8 +258,8 @@ function evaluateApplicantStep(): { ok: boolean; missing: string[] } {
         ? trimStr(props.applicant?.applicant_profile?.passport_number)
         : trimStr(props.applicant?.applicant_profile?.nrc_number))
 
-    if (!identityType) missing.push('Select identity type under Biodata.')
-    if (!identityNumber) missing.push('Enter your NRC or passport number under Biodata.')
+    if (!identityType) missing.push('Select identity type (NRC or Passport).')
+    if (!identityNumber) missing.push('Enter your NRC or passport number.')
   }
 
   const identityUploadOk =
@@ -265,7 +268,7 @@ function evaluateApplicantStep(): { ok: boolean; missing: string[] } {
       : hasApplicationIdentityDoc() || !!(props.applicant?.applicant_profile?.identity_document_uploaded_at ?? false)
 
   if (!identityUploadOk) {
-    missing.push('Upload a clear copy of the holder’s NRC or passport in the Identity document section.')
+    missing.push('Upload a clear copy of the holder’s NRC or passport.')
   }
 
   return { ok: missing.length === 0, missing }
@@ -277,6 +280,8 @@ function discardChangesForActiveStep() {
   if (activeStep.value === 'applicant') {
     applicantForm.reset()
     applicantForm.clearErrors()
+    submittingForForm.reset()
+    submittingForForm.clearErrors()
   }
   if (activeStep.value === 'consent') {
     declarationsForm.defaults({
@@ -449,6 +454,50 @@ const identityUploadForm = useForm<{ identity_type: string; file: File | null }>
 const savedSubmittingFor = computed(() => trimStr(props.application?.metadata?.submitting_for ?? 'self') || 'self')
 const effectiveSubmittingFor = computed(() => (institutionOnlyOnBehalf.value ? 'other' : submittingForForm.submitting_for))
 
+const profileHasIdentityUpload = computed(
+  () => !!(props.applicant?.applicant_profile?.identity_document_uploaded_at ?? false),
+)
+
+const isIndividualSelfStep = computed(
+  () => applicantType.value === 'individual' && effectiveSubmittingFor.value === 'self',
+)
+
+const hasIdentityOnFile = computed(() => {
+  if (effectiveSubmittingFor.value === 'other') {
+    return hasApplicationIdentityDoc()
+  }
+
+  return hasApplicationIdentityDoc() || profileHasIdentityUpload.value
+})
+
+const showApplicantContactFields = computed(() => {
+  if (institutionOnlyOnBehalf.value) return true
+
+  if (isIndividualSelfStep.value) {
+    const emailEff = trimStr(applicantForm.email) || trimStr(props.applicant?.email)
+    const phoneEff = trimStr(applicantForm.phone_primary) || trimStr(props.applicant?.phone_primary)
+    return !emailEff && !phoneEff
+  }
+
+  return false
+})
+
+watch(
+  () => submittingForForm.submitting_for,
+  (val) => {
+    if (val === 'self') {
+      submittingForForm.subject_first_name = ''
+      submittingForForm.subject_other_names = ''
+      submittingForForm.subject_last_name = ''
+      submittingForForm.notification_contact_mode = 'applicant_account'
+      submittingForForm.additional_notification_email = ''
+      submittingForForm.additional_notification_name = ''
+      submittingForForm.additional_notification_relationship = ''
+      submittingForForm.clearErrors()
+    }
+  },
+)
+
 const additionalEmailMatchesAccount = computed(() => {
   const additional = (submittingForForm.additional_notification_email ?? '').toString().trim().toLowerCase()
   const account = applicantAccountEmail.value.toLowerCase()
@@ -485,34 +534,59 @@ function uploadIdentityDocument() {
   })
 }
 
-function saveSubmittingFor() {
-  setSaving('Saving verification subject…')
-  submittingForForm.patch(`/applicant/applications/${props.application.id}`, {
-    preserveScroll: true,
-    onSuccess: () => {
-      setSaved('Verification subject saved.')
-      router.reload({ only: ['application'] })
-    },
-    onError: () => setError('Could not save verification subject.'),
-    onFinish: () => {
-      if (saveState.value.state === 'saving') saveState.value = { state: 'idle' }
-    },
-  })
-}
-
-function saveApplicantDetails(nextStep?: StepKey) {
+function saveApplicantStep(nextStep?: StepKey) {
   setSaving('Saving applicant details…')
-  applicantForm.put(`/applicant/applications/${props.application.id}/applicant-details`, {
-    preserveScroll: true,
-    onSuccess: () => {
-      setSaved('Applicant details saved.')
-      if (nextStep) goToStep(nextStep)
-    },
-    onError: () => setError('Applicant details could not be saved.'),
-    onFinish: () => {
-      if (saveState.value.state === 'saving') saveState.value = { state: 'idle' }
-    },
-  })
+
+  const finishSuccess = () => {
+    setSaved('Applicant details saved.')
+    if (nextStep) {
+      goToStep(nextStep)
+    } else {
+      router.reload({ only: ['application', 'applicant'] })
+    }
+  }
+
+  const saveApplicantDetailsOnly = () => {
+    const shouldSaveApplicant =
+      (applicantForm.isDirty ?? false) ||
+      institutionOnlyOnBehalf.value ||
+      isIndividualSelfStep.value ||
+      showApplicantContactFields.value
+
+    if (!shouldSaveApplicant) {
+      finishSuccess()
+      return
+    }
+
+    applicantForm.put(`/applicant/applications/${props.application.id}/applicant-details`, {
+      preserveScroll: true,
+      onSuccess: finishSuccess,
+      onError: () => setError('Applicant details could not be saved.'),
+      onFinish: () => {
+        if (saveState.value.state === 'saving') saveState.value = { state: 'idle' }
+      },
+    })
+  }
+
+  const submittingForChanged =
+    (submittingForForm.isDirty ?? false) || trimStr(submittingForForm.submitting_for) !== savedSubmittingFor.value
+
+  if (submittingForChanged) {
+    submittingForForm.patch(`/applicant/applications/${props.application.id}`, {
+      preserveScroll: true,
+      onSuccess: () => {
+        submittingForForm.clearErrors()
+        saveApplicantDetailsOnly()
+      },
+      onError: () => setError('Could not save verification subject.'),
+      onFinish: () => {
+        if (saveState.value.state === 'saving') saveState.value = { state: 'idle' }
+      },
+    })
+    return
+  }
+
+  saveApplicantDetailsOnly()
 }
 
 const applicationLocked = computed(() => {
@@ -1361,78 +1435,161 @@ onBeforeUnmount(() => {
 
 	    <div class="w-full max-w-none mx-auto -mx-4 px-4 sm:-mx-6 sm:px-6 lg:-mx-6 lg:px-8 2xl:-mx-10 2xl:px-10">
 	      <WizardShell class="zaqa-wizard-shell" :show-sidebar="showSidebar">
-        <section v-if="activeStep === 'applicant'" class="rounded-xl border border-border bg-surface p-5">
-          <h2 class="text-sm font-semibold text-text-primary">Applicant details</h2>
-          <p class="mt-1 text-xs text-text-muted">Confirm your details for communication and verification.</p>
+        <section v-if="activeStep === 'applicant'" class="rounded-2xl border border-border bg-surface p-6 shadow-sm ring-1 ring-black/5 sm:p-8">
+          <div class="flex items-start justify-between gap-4">
+            <div>
+              <h2 class="text-lg font-semibold text-text-primary sm:text-xl">Applicant information</h2>
+            </div>
+            <div class="hidden rounded-full border border-brand/20 bg-brand/10 px-3 py-1.5 text-xs font-semibold text-brand sm:block">
+              Step 1
+            </div>
+          </div>
 
-          <div class="mt-4 rounded-2xl border border-border bg-surface-muted p-4">
-            <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-              <div>
-                <div class="text-sm font-semibold text-text-primary">Verification subject</div>
-                <div class="mt-1 text-xs text-text-muted">Who is this verification being submitted for?</div>
+          <form class="mt-8 grid grid-cols-1 gap-5 sm:grid-cols-2 sm:gap-6" @submit.prevent="saveApplicantStep('qualification')">
+            <div class="sm:col-span-2">
+              <div class="text-sm font-medium text-text-primary">Submitting as</div>
+              <div class="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
+                <label
+                  v-if="!institutionOnlyOnBehalf"
+                  class="zaqa-radio-card"
+                  :class="submittingForForm.submitting_for === 'self' ? 'zaqa-radio-card-active' : ''"
+                >
+                  <input v-model="submittingForForm.submitting_for" type="radio" value="self" class="mt-1 rounded border-border text-brand focus:ring-brand/25" />
+                  <div>
+                    <div class="text-sm font-semibold text-text-primary">Myself</div>
+                    <div class="mt-1 text-xs text-text-muted">We’ll use your authenticated profile details as the application holder.</div>
+                  </div>
+                </label>
+                <label class="zaqa-radio-card" :class="submittingForForm.submitting_for === 'other' ? 'zaqa-radio-card-active' : ''">
+                  <input v-model="submittingForForm.submitting_for" type="radio" value="other" class="mt-1 rounded border-border text-brand focus:ring-brand/25" />
+                  <div>
+                    <div class="text-sm font-semibold text-text-primary">On behalf of someone</div>
+                    <div class="mt-1 text-xs text-text-muted">Enter the biodata for the holder of the qualification to be verified below.</div>
+                  </div>
+                </label>
               </div>
-              <button type="button" class="zaqa-btn zaqa-btn-secondary px-3 py-2 text-xs" :disabled="submittingForForm.processing" @click="saveSubmittingFor">
-                Save
-              </button>
+              <InputError :message="(submittingForForm.errors as any).submitting_for" />
             </div>
 
-            <div class="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
-              <label
-                v-if="!institutionOnlyOnBehalf"
-                class="zaqa-radio-card"
-                :class="submittingForForm.submitting_for === 'self' ? 'zaqa-radio-card-active' : ''"
-              >
-                <input v-model="submittingForForm.submitting_for" type="radio" value="self" class="mt-1 rounded border-border text-brand focus:ring-brand/25" />
+            <div
+              v-if="isIndividualSelfStep"
+              class="sm:col-span-2 rounded-2xl border border-border bg-surface-muted p-5 sm:p-6"
+            >
+              <div class="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
                 <div>
-                  <div class="text-sm font-semibold text-text-primary">Myself</div>
-                  <div class="mt-1 text-xs text-text-muted">Uses your profile biodata (name + NRC/Passport).</div>
+                  <div class="text-base font-semibold text-text-primary">Your details</div>
+                  <p class="mt-1 text-sm text-text-muted">Used for matching learner records and issuing certificates.</p>
                 </div>
-              </label>
-              <label class="zaqa-radio-card" :class="submittingForForm.submitting_for === 'other' ? 'zaqa-radio-card-active' : ''">
-                <input v-model="submittingForForm.submitting_for" type="radio" value="other" class="mt-1 rounded border-border text-brand focus:ring-brand/25" />
-                <div>
-                  <div class="text-sm font-semibold text-text-primary">On behalf of someone</div>
-                  <div class="mt-1 text-xs text-text-muted">Capture the subject’s biodata for this application.</div>
-                </div>
-              </label>
-            </div>
-            <InputError :message="(submittingForForm.errors as any).submitting_for" class="mt-2" />
+                <span v-if="profileHasIdentityUpload" class="zaqa-badge zaqa-badge-success shrink-0">Identity document on file</span>
+              </div>
 
-            <div v-if="submittingForForm.submitting_for === 'self' && !institutionOnlyOnBehalf" class="mt-4 space-y-3">
-              <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                <div class="rounded-xl border border-border bg-surface px-4 py-3">
-                  <div class="text-[11px] font-semibold uppercase tracking-wider text-text-muted">Name</div>
-                  <div class="mt-1 text-sm font-semibold text-text-primary">
-                    {{ props.applicant?.name ?? '—' }}
+              <div class="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-3">
+                <div class="rounded-xl border border-border bg-surface px-4 py-3 text-sm">
+                  <div class="text-[11px] font-semibold uppercase tracking-wider text-text-muted">First name</div>
+                  <div class="mt-1 font-semibold text-text-primary">
+                    {{ props.applicant?.applicant_profile?.first_name ?? '—' }}
+                  </div>
+                </div>
+                <div class="rounded-xl border border-border bg-surface px-4 py-3 text-sm">
+                  <div class="text-[11px] font-semibold uppercase tracking-wider text-text-muted">Other names</div>
+                  <div class="mt-1 font-semibold text-text-primary">
+                    {{ props.applicant?.applicant_profile?.middle_name ?? '—' }}
+                  </div>
+                </div>
+                <div class="rounded-xl border border-border bg-surface px-4 py-3 text-sm">
+                  <div class="text-[11px] font-semibold uppercase tracking-wider text-text-muted">Last name</div>
+                  <div class="mt-1 font-semibold text-text-primary">
+                    {{ props.applicant?.applicant_profile?.surname ?? '—' }}
                   </div>
                 </div>
               </div>
-              <p
-                v-if="applicantType === 'individual'"
-                class="mt-3 rounded-lg border border-border bg-surface px-3 py-2 text-xs text-text-muted"
-              >
-                Your NRC or passport number is entered once under <span class="font-semibold text-text-primary">Biodata</span> below — the same values apply to this application.
-              </p>
+
+              <div class="mt-5 grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <div>
+                  <label class="text-sm font-medium text-text-primary">Gender</label>
+                  <select v-model="applicantForm.gender" class="zaqa-input">
+                    <option value="" disabled>Select gender</option>
+                    <option value="male">Male</option>
+                    <option value="female">Female</option>
+                  </select>
+                  <InputError :message="applicantForm.errors.gender" />
+                </div>
+
+                <div>
+                  <label class="text-sm font-medium text-text-primary">Identity type</label>
+                  <select v-model="applicantForm.identity_type" class="zaqa-input">
+                    <option value="nrc">NRC</option>
+                    <option value="passport">Passport</option>
+                  </select>
+                  <InputError :message="applicantForm.errors.identity_type" />
+                </div>
+
+                <div class="sm:col-span-2">
+                  <label class="text-sm font-medium text-text-primary">{{ applicantIdentityNumberLabel }}</label>
+                  <input v-model="applicantForm.identity_number" class="zaqa-input" autocomplete="off" />
+                  <InputError :message="applicantForm.errors.identity_number" />
+                </div>
+
+                <div class="sm:col-span-2 rounded-xl border border-border bg-surface px-4 py-4">
+                  <div class="text-sm font-semibold text-text-primary">
+                    {{ identityUploadLabel }} <span v-if="!hasIdentityOnFile" class="text-danger">*</span>
+                  </div>
+                  <p class="mt-1 text-xs text-text-muted">
+                    {{ hasIdentityOnFile ? 'Optional if you need to replace the document already on file.' : 'Required for your first application.' }}
+                  </p>
+                  <div v-if="identityUploadDisabled" class="mt-3 rounded-lg border border-warning/25 bg-warning/10 px-3 py-2 text-xs text-warning">
+                    Save your selection above before uploading an identity document.
+                  </div>
+                  <div class="mt-3">
+                    <input
+                      type="file"
+                      class="zaqa-input"
+                      accept=".pdf,.jpg,.jpeg,.png,.webp,application/pdf,image/jpeg,image/png,image/webp"
+                      :disabled="identityUploadDisabled"
+                      @change="(e) => {
+                        const t = e.target as HTMLInputElement
+                        identityUploadForm.file = t.files?.[0] ?? null
+                      }"
+                    />
+                    <InputError :message="identityUploadForm.errors.file" />
+                    <div v-if="identityUploadForm.file" class="mt-3">
+                      <button
+                        type="button"
+                        class="zaqa-btn zaqa-btn-secondary px-4 py-2 text-sm"
+                        :disabled="identityUploadDisabled"
+                        @click="uploadIdentityDocument"
+                      >
+                        Upload document
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
             </div>
 
-            <div v-else class="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <template v-else-if="effectiveSubmittingFor === 'other' && !institutionOnlyOnBehalf">
+              <div class="sm:col-span-2">
+                <div class="text-sm font-medium text-text-primary">Holder details</div>
+                <p class="mt-1 text-xs text-text-muted">These details should match the holder’s NRC/Passport.</p>
+              </div>
+
               <div>
-                <label class="text-sm font-medium">First name</label>
+                <label class="text-sm font-medium text-text-primary">First name</label>
                 <input v-model="submittingForForm.subject_first_name" class="zaqa-input" autocomplete="off" />
                 <InputError :message="(submittingForForm.errors as any).subject_first_name" />
               </div>
               <div>
-                <label class="text-sm font-medium">Other names (optional)</label>
+                <label class="text-sm font-medium text-text-primary">Other names (optional)</label>
                 <input v-model="submittingForForm.subject_other_names" class="zaqa-input" autocomplete="off" />
                 <InputError :message="(submittingForForm.errors as any).subject_other_names" />
               </div>
               <div>
-                <label class="text-sm font-medium">Last name</label>
+                <label class="text-sm font-medium text-text-primary">Last name</label>
                 <input v-model="submittingForForm.subject_last_name" class="zaqa-input" autocomplete="off" />
                 <InputError :message="(submittingForForm.errors as any).subject_last_name" />
               </div>
               <div>
-                <label class="text-sm font-medium">Gender</label>
+                <label class="text-sm font-medium text-text-primary">Gender</label>
                 <select v-model="submittingForForm.gender" class="zaqa-input">
                   <option value="" disabled>Select gender</option>
                   <option value="male">Male</option>
@@ -1442,7 +1599,7 @@ onBeforeUnmount(() => {
               </div>
 
               <div>
-                <label class="text-sm font-medium">Identity type</label>
+                <label class="text-sm font-medium text-text-primary">Identity type</label>
                 <select v-model="submittingForForm.identity_type" class="zaqa-input">
                   <option value="nrc">NRC</option>
                   <option value="passport">Passport</option>
@@ -1450,7 +1607,7 @@ onBeforeUnmount(() => {
                 <InputError :message="(submittingForForm.errors as any).identity_type" />
               </div>
               <div>
-                <label class="text-sm font-medium">{{ submittingForIdentityNumberLabel }}</label>
+                <label class="text-sm font-medium text-text-primary">{{ submittingForIdentityNumberLabel }}</label>
                 <input v-model="submittingForForm.identity_number" class="zaqa-input" autocomplete="off" />
                 <InputError :message="(submittingForForm.errors as any).identity_number" />
               </div>
@@ -1520,150 +1677,92 @@ onBeforeUnmount(() => {
                   </div>
                 </div>
               </div>
-            </div>
-          </div>
 
-          <div class="mt-6 rounded-2xl border border-border bg-surface-muted/40 p-5">
-            <div class="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-              <div>
-                <div class="text-sm font-semibold text-text-primary">Holder identity document</div>
-                <p class="mt-1 text-xs text-text-muted">
-                  A clear copy of the holder’s NRC or passport is required before you can submit. If you apply for yourself and already uploaded an identity document on your profile, you do not need to upload again here.
-                </p>
-              </div>
-            </div>
-
-            <div
-              v-if="
-                (props.application?.metadata?.submitting_for ?? 'self') === 'other'
-                  ? !hasApplicationIdentityDoc()
-                  : !hasApplicationIdentityDoc() && !props.applicant?.applicant_profile?.identity_document_uploaded_at
-              "
-              class="mt-4"
-            >
-              <div v-if="identityUploadDisabled" class="mb-3 rounded-lg border border-warning/25 bg-warning/10 px-3 py-2 text-xs text-warning">
-                Save the verification subject selection above before uploading an identity document.
-              </div>
-
-              <label class="text-sm font-medium text-text-primary">{{ identityUploadLabel }}</label>
-              <input
-                type="file"
-                class="zaqa-input mt-2"
-                accept=".pdf,.jpg,.jpeg,.png,.webp,application/pdf,image/jpeg,image/png,image/webp"
-                :disabled="identityUploadDisabled"
-                @change="(e) => {
-                  const t = e.target as HTMLInputElement
-                  identityUploadForm.file = t.files?.[0] ?? null
-                }"
-              />
-              <InputError :message="identityUploadForm.errors.file" class="mt-1" />
-
-              <div class="mt-3 flex flex-wrap gap-2">
-                <button
-                  type="button"
-                  class="zaqa-btn zaqa-btn-primary px-4 py-2 text-sm"
-                  :disabled="identityUploadDisabled || !identityUploadForm.file"
-                  @click="uploadIdentityDocument"
+              <div class="sm:col-span-2 rounded-xl border border-border bg-surface-muted/40 px-4 py-4">
+                <div class="text-sm font-semibold text-text-primary">{{ identityUploadLabel }} <span class="text-danger">*</span></div>
+                <p class="mt-1 text-xs text-text-muted">Required when applying on behalf of someone else.</p>
+                <div v-if="!hasIdentityOnFile" class="mt-3">
+                  <div v-if="identityUploadDisabled" class="mb-3 rounded-lg border border-warning/25 bg-warning/10 px-3 py-2 text-xs text-warning">
+                    Save your selection above before uploading an identity document.
+                  </div>
+                  <input
+                    type="file"
+                    class="zaqa-input"
+                    accept=".pdf,.jpg,.jpeg,.png,.webp,application/pdf,image/jpeg,image/png,image/webp"
+                    :disabled="identityUploadDisabled"
+                    @change="(e) => {
+                      const t = e.target as HTMLInputElement
+                      identityUploadForm.file = t.files?.[0] ?? null
+                    }"
+                  />
+                  <InputError :message="identityUploadForm.errors.file" />
+                  <div class="mt-3">
+                    <button
+                      type="button"
+                      class="zaqa-btn zaqa-btn-secondary px-4 py-2 text-sm"
+                      :disabled="identityUploadDisabled || !identityUploadForm.file"
+                      @click="uploadIdentityDocument"
+                    >
+                      Upload document
+                    </button>
+                  </div>
+                </div>
+                <div
+                  v-else
+                  class="mt-3 flex items-start gap-3 rounded-xl border border-success/25 bg-success/10 px-4 py-3 text-sm text-text-primary"
                 >
-                  Upload document
-                </button>
-              </div>
-            </div>
-            <div
-              v-else
-              class="mt-4 flex items-start gap-3 rounded-xl border border-success/25 bg-success/10 px-4 py-3 text-sm text-text-primary"
-            >
-              <CheckCircle2 class="mt-0.5 h-5 w-5 shrink-0 text-success" aria-hidden="true" />
-              <div>
-                <div class="font-semibold">Identity document on file</div>
-                <p class="mt-1 text-xs text-text-muted">
-                  {{
-                    hasApplicationIdentityDoc()
-                      ? 'Stored on this application.'
-                      : 'Using the identity document saved on your applicant profile.'
-                  }}
-                </p>
-              </div>
-            </div>
-          </div>
-
-          <form class="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2" @submit.prevent="saveApplicantDetails">
-            <div class="sm:col-span-2">
-              <label class="text-sm font-medium">Email (required if no phone number provided)</label>
-              <input v-model="applicantForm.email" type="email" class="zaqa-input" />
-              <InputError :message="applicantForm.errors.email" />
-            </div>
-
-            <div>
-              <label class="text-sm font-medium">Primary phone (required if no email provided)</label>
-              <input v-model="applicantForm.phone_primary" class="zaqa-input" />
-              <InputError :message="applicantForm.errors.phone_primary" />
-            </div>
-            <div>
-              <label class="text-sm font-medium">Secondary phone (optional)</label>
-              <input v-model="applicantForm.phone_secondary" class="zaqa-input" />
-              <InputError :message="applicantForm.errors.phone_secondary" />
-            </div>
-
-            <div class="sm:col-span-2 text-xs text-text-muted">
-              Provide at least one contact method: <span class="font-semibold text-text-primary">email</span> or <span class="font-semibold text-text-primary">primary phone</span>.
-            </div>
-
-            <template v-if="applicantType === 'institution'">
-              <div class="sm:col-span-2">
-                <label class="text-sm font-medium">Institution name</label>
-                <input v-model="applicantForm.institution_name" class="zaqa-input" />
-                <InputError :message="applicantForm.errors.institution_name" />
-              </div>
-              <div>
-                <label class="text-sm font-medium">TPIN (optional)</label>
-                <input v-model="applicantForm.tpin" class="zaqa-input" />
-                <InputError :message="applicantForm.errors.tpin" />
-              </div>
-              <div>
-                <label class="text-sm font-medium">Contact person</label>
-                <input v-model="applicantForm.contact_person_name" class="zaqa-input" />
-                <InputError :message="applicantForm.errors.contact_person_name" />
+                  <CheckCircle2 class="mt-0.5 h-5 w-5 shrink-0 text-success" aria-hidden="true" />
+                  <div>
+                    <div class="font-semibold">Identity document on file</div>
+                    <p class="mt-1 text-xs text-text-muted">Stored on this application.</p>
+                  </div>
+                </div>
               </div>
             </template>
 
-            <template v-else>
-              <div>
-                <label class="text-sm font-medium">First name</label>
-                <input v-model="applicantForm.first_name" class="zaqa-input" />
-                <InputError :message="applicantForm.errors.first_name" />
+            <template v-if="institutionOnlyOnBehalf || showApplicantContactFields">
+              <div v-if="institutionOnlyOnBehalf" class="sm:col-span-2">
+                <div class="text-sm font-medium text-text-primary">Institution details</div>
+                <p class="mt-1 text-xs text-text-muted">Contact information for this institutional application.</p>
               </div>
-              <div>
-                <label class="text-sm font-medium">Middle name (optional)</label>
-                <input v-model="applicantForm.middle_name" class="zaqa-input" />
-                <InputError :message="applicantForm.errors.middle_name" />
-              </div>
-              <div>
-                <label class="text-sm font-medium">Surname</label>
-                <input v-model="applicantForm.surname" class="zaqa-input" />
-                <InputError :message="applicantForm.errors.surname" />
-              </div>
-              <div>
-                <label class="text-sm font-medium">Gender</label>
-                <select v-model="applicantForm.gender" class="zaqa-input">
-                  <option value="" disabled>Select gender</option>
-                  <option value="male">Male</option>
-                  <option value="female">Female</option>
-                </select>
-                <InputError :message="applicantForm.errors.gender" />
-              </div>
-              <div>
-                <label class="text-sm font-medium">Identity type</label>
-                <select v-model="applicantForm.identity_type" class="zaqa-input">
-                  <option value="nrc">NRC</option>
-                  <option value="passport">Passport</option>
-                </select>
-                <InputError :message="applicantForm.errors.identity_type" />
-              </div>
+
+              <template v-if="institutionOnlyOnBehalf">
+                <div class="sm:col-span-2">
+                  <label class="text-sm font-medium">Institution name</label>
+                  <input v-model="applicantForm.institution_name" class="zaqa-input" />
+                  <InputError :message="applicantForm.errors.institution_name" />
+                </div>
+                <div>
+                  <label class="text-sm font-medium">TPIN (optional)</label>
+                  <input v-model="applicantForm.tpin" class="zaqa-input" />
+                  <InputError :message="applicantForm.errors.tpin" />
+                </div>
+                <div>
+                  <label class="text-sm font-medium">Contact person</label>
+                  <input v-model="applicantForm.contact_person_name" class="zaqa-input" />
+                  <InputError :message="applicantForm.errors.contact_person_name" />
+                </div>
+              </template>
+
               <div class="sm:col-span-2">
-                <label class="text-sm font-medium">{{ applicantIdentityNumberLabel }}</label>
-                <input v-model="applicantForm.identity_number" class="zaqa-input" autocomplete="off" />
-                <InputError :message="applicantForm.errors.identity_number" />
+                <label class="text-sm font-medium">Email (required if no phone number provided)</label>
+                <input v-model="applicantForm.email" type="email" class="zaqa-input" />
+                <InputError :message="applicantForm.errors.email" />
+              </div>
+
+              <div>
+                <label class="text-sm font-medium">Primary phone (required if no email provided)</label>
+                <input v-model="applicantForm.phone_primary" class="zaqa-input" />
+                <InputError :message="applicantForm.errors.phone_primary" />
+              </div>
+              <div>
+                <label class="text-sm font-medium">Secondary phone (optional)</label>
+                <input v-model="applicantForm.phone_secondary" class="zaqa-input" />
+                <InputError :message="applicantForm.errors.phone_secondary" />
+              </div>
+
+              <div class="sm:col-span-2 text-xs text-text-muted">
+                Provide at least one contact method: <span class="font-semibold text-text-primary">email</span> or <span class="font-semibold text-text-primary">primary phone</span>.
               </div>
             </template>
 
@@ -1677,10 +1776,9 @@ onBeforeUnmount(() => {
                 :on-next="() => goNext('applicant')"
               >
                 <button
-                  type="button"
-                  class="zaqa-btn zaqa-btn-secondary w-full sm:w-auto"
-                  :disabled="applicantForm.processing || (!applicantForm.isDirty && applicantStepGate.ok)"
-                  @click="saveApplicantDetails('qualification')"
+                  type="submit"
+                  class="zaqa-btn zaqa-btn-primary w-full sm:w-auto"
+                  :disabled="applicantForm.processing || submittingForForm.processing"
                 >
                   Save & continue
                 </button>
