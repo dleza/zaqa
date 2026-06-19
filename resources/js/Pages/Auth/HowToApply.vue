@@ -22,10 +22,11 @@ const steps = [
   },
   {
     title: 'Add qualification details and documents',
-    description: 'Enter your qualification information and upload the required supporting documents.',
+    description: 'Enter your qualification information and upload the required supporting documents. ',
+    note: 'Please note you will need  clear scanned copies of your qualification and NRC/Passport.',
   },
   {
-    title: 'Pay the application fee',
+    title: 'Pay the applicable fee',
     description: 'Complete payment for your application using the available payment options.',
   },
   {
@@ -66,7 +67,9 @@ const steps = [
           </span>
           <div>
             <h3 class="text-sm font-semibold text-text-primary sm:text-base">{{ step.title }}</h3>
-            <p class="mt-1 text-sm leading-relaxed text-text-muted">{{ step.description }}</p>
+            <p class="mt-1 text-sm leading-relaxed text-text-muted">
+              {{ step.description }}<span v-if="step.note" class="font-medium text-accent"> {{ step.note }}</span>
+            </p>
           </div>
         </li>
       </ol>
