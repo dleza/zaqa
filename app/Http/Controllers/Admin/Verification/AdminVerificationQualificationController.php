@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Admin\Verification;
 
 use App\Domain\Applications\ApplicationNotificationContact;
+use App\Support\Applications\QualificationHolderIdentityResolver;
 use App\Domain\Applications\QualificationCaptureService;
 use App\Domain\Certificates\QualificationCertificateService;
 use App\Domain\Documents\QualificationDocumentEvidence;
@@ -291,7 +292,9 @@ class AdminVerificationQualificationController extends Controller
                 'awarding_institution' => $qualification->awardingInstitution?->name ?? $qualification->awarding_institution_name_other ?? $qualification->awarding_institution_name,
                 'awarding_institution_id' => $qualification->awarding_institution_id,
                 'country' => $qualification->country?->name ?? $qualification->country_name_other,
-                'holder_name' => $qualification->qualification_holder_name,
+                'holder_name' => $qualification->application
+                    ? QualificationHolderIdentityResolver::resolveDisplayName($qualification, $qualification->application)
+                    : $qualification->qualification_holder_name,
                 'holder_nrc_passport' => $qualification->nrc_passport_number,
                 'student_number' => $qualification->student_number,
                 'certificate_number' => $qualification->certificate_number,

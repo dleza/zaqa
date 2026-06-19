@@ -26,6 +26,7 @@ class Qualification extends Model
         'awarding_body_id',
         'awarding_body_name_other',
         'nrc_passport_number',
+        'holder_identity',
         'certificate_number',
         'student_number',
         'examination_number',
@@ -107,6 +108,7 @@ class Qualification extends Model
         'level2_review_locked_at' => 'datetime',
         'fee_amount_cents' => 'int',
         'raw_subject_results' => AsArrayObject::class,
+        'holder_identity' => AsArrayObject::class,
         'created_at' => 'datetime',
         'updated_at' => 'datetime',
     ];

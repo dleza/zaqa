@@ -31,6 +31,12 @@ const props = defineProps<{
   awardingInstitutions: Array<{ id: number; name: string }>
   localConsent: { title: string; text: string; version: string }
   applicant: any
+  institutional_overview?: {
+    total_qualifications: number
+    in_review: number
+    returned_for_correction: number
+    completed: number
+  } | null
 }>()
 
 const copiedQualId = ref<number | null>(null)
@@ -248,8 +254,8 @@ function statusBadgeClass(status: string) {
 
 function qualStatusBadgeClass(label: string) {
   const s = (label ?? '').toLowerCase()
-  if (s === 'draft' || s === 'sent back') return 'zaqa-badge zaqa-badge-warning'
-  if (s === 'processing') return 'zaqa-badge zaqa-badge-info'
+  if (s === 'draft' || s === 'sent back' || s.includes('returned for correction')) return 'zaqa-badge zaqa-badge-warning'
+  if (s === 'processing' || s === 'in review') return 'zaqa-badge zaqa-badge-info'
   if (s === 'approved' || s === 'certificate issued' || s === 'closed') return 'zaqa-badge zaqa-badge-success'
   if (s === 'rejected') return 'zaqa-badge zaqa-badge-danger'
   return 'zaqa-badge'
@@ -430,6 +436,31 @@ function invoiceStatusLabel(status: unknown): string {
             class="border-b border-amber-300/40 bg-amber-50 px-5 py-4 sm:px-8"
           >
             <QualificationAmendmentBanner :application-id="application.id" :qualification="q" />
+          </div>
+
+          <div
+            v-if="institutional_overview"
+            class="border-b border-border/70 bg-surface px-5 py-6 sm:px-8"
+          >
+            <h2 class="text-base font-semibold text-text-primary">Qualification records overview</h2>
+            <div class="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
+              <div class="rounded-xl border border-border bg-surface-muted/40 px-3 py-3">
+                <div class="text-xs text-text-muted">Total qualifications</div>
+                <div class="text-xl font-semibold">{{ institutional_overview.total_qualifications }}</div>
+              </div>
+              <div class="rounded-xl border border-border bg-surface-muted/40 px-3 py-3">
+                <div class="text-xs text-text-muted">In review</div>
+                <div class="text-xl font-semibold">{{ institutional_overview.in_review }}</div>
+              </div>
+              <div class="rounded-xl border border-border bg-surface-muted/40 px-3 py-3">
+                <div class="text-xs text-text-muted">Returned for correction</div>
+                <div class="text-xl font-semibold">{{ institutional_overview.returned_for_correction }}</div>
+              </div>
+              <div class="rounded-xl border border-border bg-surface-muted/40 px-3 py-3">
+                <div class="text-xs text-text-muted">Completed</div>
+                <div class="text-xl font-semibold">{{ institutional_overview.completed }}</div>
+              </div>
+            </div>
           </div>
 
           <div
@@ -760,6 +791,42 @@ function invoiceStatusLabel(status: unknown): string {
                             {{ q.certificate_number || q.student_number || q.examination_number || '—' }}
                           </div>
                         </div>
+                        <div class="rounded-2xl border border-border/80 bg-surface-muted/40 p-4 sm:col-span-2">
+                          <div class="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-text-muted">
+                            <Shield class="h-3 w-3 opacity-60" aria-hidden="true" />
+                            Institution consent
+                          </div>
+                          <div class="mt-2 flex flex-wrap items-center gap-2">
+                            <span
+                              class="inline-flex rounded-full border px-3 py-1 text-[11px] font-semibold"
+                              :class="
+                                qualConsentLabel(q).ok
+                                  ? 'border-success/30 bg-success/10 text-emerald-800'
+                                  : qualNeedsForeignConsent(q)
+                                    ? 'border-warning/30 bg-warning/10 text-warning'
+                                    : 'border-border bg-surface text-text-muted'
+                              "
+                            >
+                              {{ qualConsentLabel(q).text }}
+                            </span>
+                            <span v-if="qualNeedsForeignConsent(q)" class="text-xs text-text-muted">
+                              Signed consent from the foreign awarding institution.
+                            </span>
+                          </div>
+                        </div>
+                        <div
+                          v-if="institutional_overview && q.qualification_holder_name"
+                          class="rounded-2xl border border-border/80 bg-surface-muted/40 p-4 sm:col-span-2"
+                        >
+                          <div class="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-text-muted">
+                            <UserRound class="h-3 w-3 opacity-60" aria-hidden="true" />
+                            Qualification holder
+                          </div>
+                          <div class="mt-2 text-sm font-semibold text-text-primary">{{ q.qualification_holder_name }}</div>
+                          <div v-if="q.nrc_passport_number" class="mt-1 font-mono text-xs text-text-muted">
+                            {{ q.nrc_passport_number }}
+                          </div>
+                        </div>
                       </div>
                       <div v-if="q.notes" class="rounded-2xl border border-border/70 bg-amber-500/[0.06] p-4">
                         <div class="text-[10px] font-semibold uppercase tracking-wider text-text-muted">Notes</div>
@@ -847,8 +914,14 @@ function invoiceStatusLabel(status: unknown): string {
               </div>
 
               <p class="mt-8 rounded-xl border border-border/60 bg-surface-muted/50 px-4 py-3 text-xs leading-relaxed text-text-muted">
-                Holder identity (NRC / passport) for verification is taken from the applicant / verification subject section
-                above and applies to all listed qualifications.
+                <template v-if="institutional_overview">
+                  Qualification holder identity (NRC / passport) is captured separately for each qualification record in this
+                  application.
+                </template>
+                <template v-else>
+                  Holder identity (NRC / passport) for verification is taken from the applicant / verification subject section
+                  above and applies to all listed qualifications.
+                </template>
               </p>
             </section>
 
@@ -894,47 +967,6 @@ function invoiceStatusLabel(status: unknown): string {
                       Download
                     </a>
                   </div>
-                </div>
-              </div>
-            </section>
-
-            <div class="my-10 h-px bg-gradient-to-r from-transparent via-border to-transparent" />
-
-            <!-- Consent -->
-            <section>
-              <div class="flex items-center gap-3 border-b border-border/60 pb-3">
-                <span class="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-500/15 text-emerald-800" aria-hidden="true">
-                  <Shield class="h-5 w-5" />
-                </span>
-                <div>
-                  <h2 class="text-base font-semibold text-text-primary">Institution consent</h2>
-                  <p class="text-xs text-text-muted">
-                    Foreign awarding institutions require signed institution consent; Zambian institutions do not require this per qualification.
-                  </p>
-                </div>
-              </div>
-              <div v-if="qualificationsList.length === 0" class="mt-5 text-sm text-text-muted">—</div>
-              <div v-else class="mt-5 space-y-3">
-                <div
-                  v-for="(q, idx) in qualificationsList"
-                  :key="`consent-${q.id ?? idx}`"
-                  class="flex flex-col gap-2 rounded-2xl border border-border/80 bg-surface-muted/50 px-5 py-4 sm:flex-row sm:items-center sm:justify-between"
-                >
-                  <div class="min-w-0 text-sm font-semibold text-text-primary">
-                    {{ idx + 1 }}. {{ q.title_of_qualification || 'Qualification' }}
-                  </div>
-                  <span
-                    class="inline-flex w-fit shrink-0 rounded-full border px-3 py-1 text-[11px] font-semibold"
-                    :class="
-                      qualConsentLabel(q).ok
-                        ? 'border-success/30 bg-success/10 text-emerald-800'
-                        : qualNeedsForeignConsent(q)
-                          ? 'border-warning/30 bg-warning/10 text-warning'
-                          : 'border-border bg-surface text-text-muted'
-                    "
-                  >
-                    {{ qualConsentLabel(q).text }}
-                  </span>
                 </div>
               </div>
             </section>

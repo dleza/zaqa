@@ -9,6 +9,7 @@ import {
   CreditCard,
   UserCircle,
   KeyRound,
+  Layers,
 } from 'lucide-vue-next'
 
 export type ApplicantNavItem = {
@@ -17,6 +18,8 @@ export type ApplicantNavItem = {
   href: string
   icon: Component
   badgeKey?: string
+  /** Visible only when applicant_type is institution */
+  institutionOnly?: boolean
 }
 
 export type ApplicantNavSection = {
@@ -36,6 +39,13 @@ export const applicantNavSections: ApplicantNavSection[] = [
     label: 'Verification',
     items: [
       { key: 'submit', label: 'Submit Application', href: '/applicant/applications/new', icon: FilePlus },
+      {
+        key: 'multiple',
+        label: 'Multiple Applications',
+        href: '/applicant/applications/multiple/new',
+        icon: Layers,
+        institutionOnly: true,
+      },
       { key: 'applications', label: 'My Applications', href: '/applicant/applications', icon: Files, badgeKey: 'applications' },
     ],
   },

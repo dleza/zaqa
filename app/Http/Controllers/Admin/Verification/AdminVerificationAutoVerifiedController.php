@@ -7,6 +7,7 @@ use App\Enums\VerificationState;
 use App\Http\Controllers\Controller;
 use App\Models\AwardingInstitution;
 use App\Models\Qualification;
+use App\Support\Applications\QualificationHolderIdentityResolver;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -99,7 +100,9 @@ class AdminVerificationAutoVerifiedController extends Controller
                 $isLocked = (bool) $qual->level2_review_locked_by && ! $lockExpired;
                 $expiresAt = $qual->level2_review_locked_at ? $qual->level2_review_locked_at->copy()->addMinutes($locks->ttlMinutes()) : null;
 
-                $holderName = $qual->qualification_holder_name ?: ($qual->application?->metadata['verification_subject']['full_name'] ?? null);
+                $holderName = $qual->application
+                    ? QualificationHolderIdentityResolver::resolveDisplayName($qual, $qual->application)
+                    : $qual->qualification_holder_name;
                 $yearAwarded = $qual->award_date ? (int) $qual->award_date->format('Y') : null;
 
                 return [

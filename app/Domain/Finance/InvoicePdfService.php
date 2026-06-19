@@ -6,6 +6,8 @@ use App\Enums\InvoiceStatus;
 use App\Models\ApplicantProfile;
 use App\Models\Invoice;
 use App\Models\Qualification;
+use App\Support\Applications\ApplicationSubmissionMode;
+use App\Support\Applications\QualificationHolderIdentityResolver;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\Response;
 use Illuminate\Support\Collection;
@@ -20,6 +22,7 @@ class InvoicePdfService
     {
         $invoice->loadMissing([
             'application.applicant.applicantProfile',
+            'application.applicant.institutionProfile',
             'application.qualifications',
         ]);
 
@@ -113,18 +116,26 @@ class InvoicePdfService
             $qualifications = $invoice->application?->qualifications?->keyBy('id') ?? collect();
             $breakdownCount = count($breakdown);
 
-            return collect($breakdown)->values()->map(function (array $line, int $index) use ($qualifications, $breakdownCount) {
+            return collect($breakdown)->values()->map(function (array $line, int $index) use ($qualifications, $breakdownCount, $invoice) {
                 $qualificationId = (int) ($line['qualification_id'] ?? 0);
                 /** @var Qualification|null $qualification */
                 $qualification = $qualificationId > 0 ? $qualifications->get($qualificationId) : null;
                 $title = trim((string) ($qualification?->title_of_qualification ?? ''));
                 $feeLabel = trim((string) ($line['fee_label_snapshot'] ?? ''));
+                $application = $invoice->application;
 
-                $description = $title !== ''
-                    ? 'Verification for '.$title
-                    : ($feeLabel !== '' ? $feeLabel : 'Verification fee');
+                if ($application && ApplicationSubmissionMode::isInstitutionalMultiple($application) && $qualification) {
+                    $holder = QualificationHolderIdentityResolver::resolveDisplayName($qualification, $application);
+                    $description = $title !== ''
+                        ? 'Verification for '.$title.' — '.$holder
+                        : ($feeLabel !== '' ? $feeLabel : 'Verification fee');
+                } elseif ($title !== '') {
+                    $description = 'Verification for '.$title;
+                } else {
+                    $description = $feeLabel !== '' ? $feeLabel : 'Verification fee';
+                }
 
-                if ($breakdownCount > 1) {
+                if ($breakdownCount > 1 && ! ($application && ApplicationSubmissionMode::isInstitutionalMultiple($application))) {
                     $description .= ' No '.($index + 1);
                 }
 
@@ -163,6 +174,10 @@ class InvoicePdfService
 
     private function billToName($application, $applicant, ?ApplicantProfile $profile): string
     {
+        if ($application && ApplicationSubmissionMode::isInstitutionalMultiple($application)) {
+            return QualificationHolderIdentityResolver::resolveBillToName($application, $applicant);
+        }
+
         $meta = is_array($application?->metadata) ? $application->metadata : [];
         $subject = is_array($meta['verification_subject'] ?? null) ? $meta['verification_subject'] : [];
         $fromSubject = trim((string) ($subject['full_name'] ?? ''));

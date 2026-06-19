@@ -68,7 +68,7 @@ const supportItems = [
   {
     icon: Headphones,
     title: 'Need Help?',
-    description: 'info@zaqa.gov.zm  |  +260 211 225 087',
+    description: 'info@zaqa.gov.zm  |  +260 630 371 870',
   },
 ]
 

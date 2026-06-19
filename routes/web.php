@@ -51,6 +51,8 @@ use App\Http\Controllers\Admin\Verification\AdminVerificationPoolController;
 use App\Http\Controllers\Admin\Verification\AdminVerificationQualificationController;
 use App\Http\Controllers\Admin\Verification\AdminVerificationQualificationDocumentController;
 use App\Http\Controllers\Applicant\ApplicantApplicationController;
+use App\Http\Controllers\Applicant\ApplicantInstitutionalMultipleApplicationController;
+use App\Http\Controllers\Applicant\ApplicantInstitutionalQualificationController;
 use App\Http\Controllers\Applicant\ApplicantApplicationIdentityDocumentController;
 use App\Http\Controllers\Applicant\ApplicantApplicationTrackingController;
 use App\Http\Controllers\Applicant\ApplicantBillingController;
@@ -162,6 +164,20 @@ Route::middleware('auth')->group(function () {
         Route::patch('/applications/{application}', [ApplicantApplicationController::class, 'update'])->name('applications.update');
         Route::patch('/applications/{application}/wizard-declarations', [ApplicantApplicationController::class, 'saveWizardDeclarations'])->name('applications.wizard_declarations.update');
         Route::delete('/applications/{application}', [ApplicantApplicationController::class, 'destroy'])->name('applications.destroy');
+
+        Route::middleware('institution.applicant')->prefix('applications/multiple')->name('applications.multiple.')->group(function () {
+            Route::get('/new', [ApplicantInstitutionalMultipleApplicationController::class, 'create'])->name('create');
+            Route::post('/', [ApplicantInstitutionalMultipleApplicationController::class, 'store'])->name('store');
+            Route::get('/{application}/edit', [ApplicantInstitutionalMultipleApplicationController::class, 'edit'])->name('edit');
+            Route::patch('/{application}', [ApplicantInstitutionalMultipleApplicationController::class, 'update'])->name('update');
+            Route::patch('/{application}/wizard-declarations', [ApplicantInstitutionalMultipleApplicationController::class, 'saveDeclarations'])->name('wizard_declarations.update');
+            Route::get('/{application}/qualifications/create', [ApplicantInstitutionalMultipleApplicationController::class, 'createQualificationWorkspace'])->name('qualifications.create');
+            Route::get('/{application}/qualifications/{qualification}/edit', [ApplicantInstitutionalMultipleApplicationController::class, 'editQualificationWorkspace'])->name('qualifications.edit');
+            Route::post('/{application}/qualifications', [ApplicantInstitutionalQualificationController::class, 'store'])->name('qualifications.store');
+            Route::put('/{application}/qualifications/{qualification}', [ApplicantInstitutionalQualificationController::class, 'upsert'])->name('qualifications.upsert');
+            Route::delete('/{application}/qualifications/{qualification}', [ApplicantInstitutionalQualificationController::class, 'destroy'])->name('qualifications.destroy');
+        });
+
         Route::get('/applications/{application}/feedback', [ApplicantServiceFeedbackController::class, 'show'])->name('applications.feedback.show');
         Route::post('/applications/{application}/feedback', [ApplicantServiceFeedbackController::class, 'store'])->name('applications.feedback.store');
         Route::post('/applications/{application}/feedback/skip', [ApplicantServiceFeedbackController::class, 'skip'])->name('applications.feedback.skip');

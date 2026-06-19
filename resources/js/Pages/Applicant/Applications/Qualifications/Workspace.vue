@@ -16,7 +16,7 @@ import {
   isAllowedApplicantDocumentFile,
 } from '@/lib/applicantDocumentUpload'
 import 'sweetalert2/dist/sweetalert2.min.css'
-import { Building2, FileStack, GraduationCap, MapPin, Shield, Sparkles, Trash2 } from 'lucide-vue-next'
+import { Building2, FileStack, GraduationCap, MapPin, Shield, Sparkles, Trash2, UserRound } from 'lucide-vue-next'
 
 const inertiaPage = usePage()
 
@@ -28,7 +28,11 @@ const props = defineProps<{
   /** Active rows from `certificate_subjects` (admin-managed). */
   certificateSubjects: Array<{ id: number; name: string }>
   subjectGradeOptions?: string[]
+  /** Institution multiple flow: per-qualification holder identity + docs. */
+  institutionalMode?: boolean
 }>()
+
+const institutionalMode = computed(() => props.institutionalMode === true)
 
 const mode = computed<'add' | 'edit'>(() => (props.qualificationId ? 'edit' : 'add'))
 
@@ -39,6 +43,9 @@ const returnUrl = computed(() => {
     if (v) return v
   } catch {
     // ignore
+  }
+  if (institutionalMode.value) {
+    return `/applicant/applications/multiple/${props.application.id}/edit?step=qualification_records`
   }
   return `/applicant/applications/${props.application.id}/edit?step=qualification`
 })
@@ -84,7 +91,7 @@ const identifierType = ref<IdentifierType>('certificate_number')
 const identifierValue = ref('')
 
 function blankQualificationForm() {
-  return {
+  const base: Record<string, any> = {
     qualification_id: null as number | null,
     country_id: '' as number | string | '',
     country_name_other: '',
@@ -104,6 +111,22 @@ function blankQualificationForm() {
     transcript_reason: '',
     subject_results: [] as Array<{ certificate_subject_id: number | ''; grade: string; saved_grade?: string }>,
   }
+
+  if (institutionalMode.value) {
+    Object.assign(base, {
+      holder_first_name: '',
+      holder_middle_name: '',
+      holder_surname: '',
+      holder_identity_type: 'nrc',
+      holder_date_of_birth: '',
+      holder_gender: '',
+      holder_phone: '',
+      holder_email: '',
+      nrc_passport_number: '',
+    })
+  }
+
+  return base
 }
 
 const form = useForm(blankQualificationForm())
@@ -114,7 +137,10 @@ const isHydratingForm = ref(false)
 const pendingCertificateFile = ref<File | null>(null)
 const pendingTranscriptFile = ref<File | null>(null)
 const pendingConsentFile = ref<File | null>(null)
+const pendingIdentityFile = ref<File | null>(null)
 const savingAll = ref(false)
+
+const identityFileInputEl = ref<HTMLInputElement | null>(null)
 
 const certificateFileInputEl = ref<HTMLInputElement | null>(null)
 const transcriptFileInputEl = ref<HTMLInputElement | null>(null)
@@ -124,6 +150,7 @@ function clearFileInputs() {
   if (certificateFileInputEl.value) certificateFileInputEl.value.value = ''
   if (transcriptFileInputEl.value) transcriptFileInputEl.value.value = ''
   if (consentFileInputEl.value) consentFileInputEl.value.value = ''
+  if (identityFileInputEl.value) identityFileInputEl.value.value = ''
 }
 
 function syncIdentifierFromForm() {
@@ -304,6 +331,19 @@ async function loadFromQualification(q: any) {
       ? (q.applicant_entered_qualification_title ?? q.title_of_qualification ?? '')
       : (q.title_of_qualification ?? '')
 
+    if (institutionalMode.value) {
+      const hi = q.holder_identity ?? {}
+      form.holder_first_name = hi.first_name ?? ''
+      form.holder_middle_name = hi.middle_name ?? ''
+      form.holder_surname = hi.surname ?? ''
+      form.holder_identity_type = hi.identity_type ?? 'nrc'
+      form.holder_date_of_birth = hi.date_of_birth ?? ''
+      form.holder_gender = hi.gender ?? ''
+      form.holder_phone = hi.phone ?? ''
+      form.holder_email = hi.email ?? ''
+      form.nrc_passport_number = q.nrc_passport_number ?? ''
+    }
+
     institutionMeta.value = {
       name:
         (q.awarding_institution?.name ?? '').trim() ||
@@ -477,7 +517,12 @@ async function confirmDeleteDocument(doc: { id: number; original_name?: string |
 }
 
 function hasPendingUploads(): boolean {
-  return !!(pendingCertificateFile.value || pendingTranscriptFile.value || pendingConsentFile.value)
+  return !!(
+    pendingCertificateFile.value ||
+    pendingTranscriptFile.value ||
+    pendingConsentFile.value ||
+    pendingIdentityFile.value
+  )
 }
 
 function assignPendingFile(
@@ -525,11 +570,19 @@ function onPendingConsentChange(e: Event) {
   })
 }
 
+function onPendingIdentityChange(e: Event) {
+  const t = e.target as HTMLInputElement
+  assignPendingFile(t.files?.[0] ?? null, t, (value) => {
+    pendingIdentityFile.value = value
+  })
+}
+
 function validatePendingUploadFiles(): boolean {
   const pending = [
     pendingCertificateFile.value,
     pendingTranscriptFile.value,
     pendingConsentFile.value,
+    pendingIdentityFile.value,
   ].filter((file): file is File => file instanceof File)
 
   const invalid = pending.find((file) => !isAllowedApplicantDocumentFile(file))
@@ -571,9 +624,21 @@ async function runPendingUploads(qid: number): Promise<void> {
       source_awarding_institution_name: awardingDisplayName() || '',
     })
   }
+
+  if (institutionalMode.value && pendingIdentityFile.value) {
+    const docType = (form.holder_identity_type ?? 'nrc').toString() === 'passport' ? 'passport_copy' : 'nrc_copy'
+    await routerPostMultipart(`${base}/documents`, {
+      document_type: docType,
+      qualification_id: qid,
+      file: pendingIdentityFile.value,
+    })
+  }
 }
 
 function stripHolderFields(data: Record<string, unknown>) {
+  if (institutionalMode.value) {
+    return { ...data }
+  }
   const o = { ...data }
   delete (o as any).qualification_holder_name
   delete (o as any).nrc_passport_number
@@ -647,6 +712,18 @@ function collectQualificationValidationErrors(): string[] {
         errors.push(`Complete subject and grade for row ${idx + 1}.`)
       }
     })
+  }
+
+  if (institutionalMode.value) {
+    if (!form.holder_first_name?.toString().trim()) errors.push('Enter the qualification holder first name.')
+    if (!form.holder_surname?.toString().trim()) errors.push('Enter the qualification holder surname.')
+    if (!form.nrc_passport_number?.toString().trim()) errors.push('Enter the qualification holder NRC or passport number.')
+    if (mode.value === 'add' && !pendingIdentityFile.value) {
+      errors.push('Upload the qualification holder NRC or passport copy.')
+    }
+    if (mode.value === 'add' && !pendingCertificateFile.value) {
+      errors.push('Upload the qualification certificate/document.')
+    }
   }
 
   return errors
@@ -759,6 +836,10 @@ function submitQualificationAndDocuments() {
     },
   }
 
+  const basePath = institutionalMode.value
+    ? `/applicant/applications/multiple/${props.application.id}`
+    : `/applicant/applications/${props.application.id}`
+
   if (mode.value === 'add') {
     form
       .transform((data) => {
@@ -766,11 +847,11 @@ function submitQualificationAndDocuments() {
         o.create_new = true
         return o
       })
-      .post(`/applicant/applications/${props.application.id}/qualifications`, visitOpts)
+      .post(`${basePath}/qualifications`, visitOpts)
   } else {
     form
       .transform((data) => prepareQualificationPayload({ ...data }))
-      .put(`/applicant/applications/${props.application.id}/qualification`, visitOpts)
+      .put(`${basePath}/qualifications/${props.qualificationId}`, visitOpts)
   }
 }
 
@@ -796,6 +877,7 @@ const holderSummaryId = computed(() => {
 })
 
 const pendingCertificateName = computed(() => pendingCertificateFile.value?.name ?? '')
+const pendingIdentityName = computed(() => pendingIdentityFile.value?.name ?? '')
 const pendingTranscriptName = computed(() => pendingTranscriptFile.value?.name ?? '')
 const pendingConsentName = computed(() => pendingConsentFile.value?.name ?? '')
 </script>
@@ -848,6 +930,66 @@ const pendingConsentName = computed(() => pendingConsentFile.value?.name ?? '')
             <QualificationAmendmentBanner :application-id="application.id" :qualification="editingQualification" compact />
           </div>
           <div class="space-y-8 px-6 py-6 sm:px-8 sm:py-8">
+          <!-- Qualification holder (institutional multiple) -->
+          <section
+            v-if="institutionalMode"
+            class="rounded-2xl border border-border bg-surface-muted/40 p-5 ring-1 ring-black/[0.03]"
+          >
+            <div class="flex items-center gap-2 text-text-primary">
+              <UserRound class="h-5 w-5 shrink-0 text-brand" aria-hidden="true" />
+              <h3 class="text-base font-semibold">Qualification holder</h3>
+            </div>
+            <p class="mt-1 text-sm text-text-muted">Enter the identity details for this qualification record.</p>
+            <div class="mt-5 grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <div>
+                <label class="text-sm font-medium text-text-primary">First name *</label>
+                <input v-model="form.holder_first_name" type="text" class="zaqa-input" :disabled="locked" />
+                <InputError :message="form.errors.holder_first_name" />
+              </div>
+              <div>
+                <label class="text-sm font-medium text-text-primary">Middle name</label>
+                <input v-model="form.holder_middle_name" type="text" class="zaqa-input" :disabled="locked" />
+              </div>
+              <div>
+                <label class="text-sm font-medium text-text-primary">Surname *</label>
+                <input v-model="form.holder_surname" type="text" class="zaqa-input" :disabled="locked" />
+                <InputError :message="form.errors.holder_surname" />
+              </div>
+              <div>
+                <label class="text-sm font-medium text-text-primary">NRC / Passport number *</label>
+                <input v-model="form.nrc_passport_number" type="text" class="zaqa-input" :disabled="locked" />
+                <InputError :message="form.errors.nrc_passport_number" />
+              </div>
+              <div>
+                <label class="text-sm font-medium text-text-primary">Identity document type</label>
+                <select v-model="form.holder_identity_type" class="zaqa-input" :disabled="locked">
+                  <option value="nrc">NRC</option>
+                  <option value="passport">Passport</option>
+                </select>
+              </div>
+              <div>
+                <label class="text-sm font-medium text-text-primary">Date of birth</label>
+                <input v-model="form.holder_date_of_birth" type="date" class="zaqa-input" :disabled="locked" />
+              </div>
+              <div>
+                <label class="text-sm font-medium text-text-primary">Gender</label>
+                <select v-model="form.holder_gender" class="zaqa-input" :disabled="locked">
+                  <option value="">Select</option>
+                  <option value="male">Male</option>
+                  <option value="female">Female</option>
+                  <option value="other">Other</option>
+                </select>
+              </div>
+              <div>
+                <label class="text-sm font-medium text-text-primary">Phone</label>
+                <input v-model="form.holder_phone" type="text" class="zaqa-input" :disabled="locked" />
+              </div>
+              <div class="sm:col-span-2">
+                <label class="text-sm font-medium text-text-primary">Email</label>
+                <input v-model="form.holder_email" type="email" class="zaqa-input" :disabled="locked" />
+              </div>
+            </div>
+          </section>
           <!-- Location -->
           <section class="rounded-2xl border border-border bg-surface-muted/40 p-5 ring-1 ring-black/[0.03]">
             <div class="flex items-center gap-2 text-text-primary">
@@ -1082,6 +1224,41 @@ const pendingConsentName = computed(() => pendingConsentFile.value?.name ?? '')
                   <p class="mt-1 text-xs text-text-muted">PDF or image files only (JPG, PNG, WEBP).</p>
                   <p v-if="pendingCertificateName" class="mt-2 text-xs text-text-muted">
                     Selected: <span class="font-semibold text-text-primary">{{ pendingCertificateName }}</span>
+                  </p>
+                </div>
+                <div v-if="institutionalMode" class="sm:col-span-2">
+                  <label class="text-sm font-medium">NRC or passport copy *</label>
+                  <div
+                    v-if="existingDocument('nrc_copy') || existingDocument('passport_copy')"
+                    class="mt-2 flex items-center justify-between gap-3 rounded-lg border border-success/25 bg-success/5 px-3 py-2"
+                  >
+                    <p class="min-w-0 text-xs text-text-primary">
+                      On file:
+                      <span class="font-semibold">{{
+                        existingDocument('nrc_copy')?.original_name ||
+                        existingDocument('passport_copy')?.original_name ||
+                        'Identity document'
+                      }}</span>
+                    </p>
+                    <button
+                      type="button"
+                      class="zaqa-btn shrink-0 border border-danger/20 bg-danger/10 px-2.5 py-2 text-danger hover:bg-danger/15"
+                      :disabled="locked"
+                      @click="confirmDeleteDocument(existingDocument('nrc_copy') || existingDocument('passport_copy'))"
+                    >
+                      <Trash2 class="h-4 w-4" aria-hidden="true" />
+                    </button>
+                  </div>
+                  <input
+                    ref="identityFileInputEl"
+                    type="file"
+                    class="zaqa-input mt-2"
+                    :accept="APPLICANT_DOCUMENT_ACCEPT"
+                    :disabled="locked"
+                    @change="onPendingIdentityChange"
+                  />
+                  <p v-if="pendingIdentityName" class="mt-2 text-xs text-text-muted">
+                    Selected: <span class="font-semibold text-text-primary">{{ pendingIdentityName }}</span>
                   </p>
                 </div>
                 <div v-if="transcriptRequiredForDocs" class="sm:col-span-2">

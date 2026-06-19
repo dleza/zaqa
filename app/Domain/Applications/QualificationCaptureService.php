@@ -19,6 +19,8 @@ use App\Models\Qualification;
 use App\Models\QualificationTitle;
 use App\Models\QualificationType;
 use App\Models\User;
+use App\Support\Applications\ApplicationSubmissionMode;
+use App\Support\Applications\QualificationHolderIdentityResolver;
 use App\Support\CountryIso;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
@@ -100,7 +102,17 @@ class QualificationCaptureService
             }
             $transcriptRequired = (bool) $isForeignQualification || (bool) $qualificationType->requires_subject_results;
 
-            $holderIdentity = $this->holderIdentityFromApplication($application, $actor);
+            if (ApplicationSubmissionMode::isInstitutionalMultiple($application)) {
+                $composed = QualificationHolderIdentityResolver::composeHolderIdentityFromPayload($data);
+                $holderIdentity = [
+                    'holder_name' => $composed['holder_name'],
+                    'nrc_passport_number' => $composed['nrc_passport_number'],
+                ];
+                $holderIdentityJson = $composed['holder_identity'];
+            } else {
+                $holderIdentity = $this->holderIdentityFromApplication($application, $actor);
+                $holderIdentityJson = null;
+            }
 
             $titleSourceRaw = array_key_exists('qualification_title_source', $data)
                 ? trim((string) ($data['qualification_title_source'] ?? ''))
@@ -134,6 +146,10 @@ class QualificationCaptureService
                     : ($qualification?->notes),
                 'raw_subject_results' => $subjectResults,
             ];
+
+            if ($holderIdentityJson !== null) {
+                $payload['holder_identity'] = $holderIdentityJson;
+            }
 
             if ($titleSourceRaw !== '' || $manualTitleRaw !== '' || array_key_exists('qualification_title_id', $data)) {
                 $this->applyQualificationTitleFields($payload, $data, $titleSourceRaw, $manualTitleRaw);

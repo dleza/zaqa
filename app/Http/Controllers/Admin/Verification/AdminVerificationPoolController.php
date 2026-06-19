@@ -4,6 +4,8 @@ namespace App\Http\Controllers\Admin\Verification;
 
 use App\Domain\Verification\QualificationsPoolService;
 use App\Http\Controllers\Controller;
+use App\Models\Qualification;
+use App\Support\Applications\QualificationHolderIdentityResolver;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -31,16 +33,15 @@ class AdminVerificationPoolController extends Controller
                     'payment_status' => $q->application?->paid_at ? 'paid' : 'unpaid',
                     'submitted_at' => optional($q->application?->submitted_at)?->toIso8601String(),
                 ],
-                'applicant_name' => $q->application?->metadata['verification_subject']['full_name'] ?? $q->application?->applicant?->name,
-                'holder_name' => $q->qualification_holder_name ?: ($q->application?->metadata['verification_subject']['full_name'] ?? null),
-                'holder_nrc_passport' => $q->nrc_passport_number ?: (function () use ($q) {
-                    $subject = $q->application?->metadata['verification_subject'] ?? null;
-                    if (! is_array($subject)) {
-                        return null;
-                    }
-
-                    return ($subject['nrc_number'] ?? null) ?: ($subject['passport_number'] ?? null);
-                })(),
+                'applicant_name' => $q->application
+                    ? QualificationHolderIdentityResolver::resolveAdminApplicantLabel($q, $q->application)
+                    : ($q->application?->applicant?->name),
+                'holder_name' => $q->application
+                    ? QualificationHolderIdentityResolver::resolveDisplayName($q, $q->application)
+                    : $q->qualification_holder_name,
+                'holder_nrc_passport' => $q->application
+                    ? QualificationHolderIdentityResolver::resolveIdentityNumber($q, $q->application)
+                    : $q->nrc_passport_number,
                 'qualification_title' => $q->title_of_qualification,
                 'qualification_type' => $q->qualificationTypeMaster?->name,
                 'country_of_award' => $q->country?->name ?? $q->country_name_other,

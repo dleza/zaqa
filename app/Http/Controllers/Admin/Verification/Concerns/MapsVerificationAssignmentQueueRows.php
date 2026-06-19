@@ -3,6 +3,8 @@
 namespace App\Http\Controllers\Admin\Verification\Concerns;
 
 use App\Models\Qualification;
+use App\Support\Applications\ApplicationSubmissionMode;
+use App\Support\Applications\QualificationHolderIdentityResolver;
 
 trait MapsVerificationAssignmentQueueRows
 {
@@ -27,8 +29,12 @@ trait MapsVerificationAssignmentQueueRows
                 'application_number' => $q->application?->application_number,
                 'submitted_at' => optional($q->application?->submitted_at)?->toIso8601String(),
             ],
-            'applicant_name' => $q->application?->metadata['verification_subject']['full_name'] ?? $q->application?->applicant?->name,
-            'holder_name' => $q->qualification_holder_name ?: ($q->application?->metadata['verification_subject']['full_name'] ?? null),
+            'applicant_name' => $q->application
+                ? QualificationHolderIdentityResolver::resolveAdminApplicantLabel($q, $q->application)
+                : null,
+            'holder_name' => $q->application
+                ? QualificationHolderIdentityResolver::resolveDisplayName($q, $q->application)
+                : ($q->qualification_holder_name ?: null),
             'country_of_award' => $q->country?->name ?? $q->country_name_other,
             'awarding_institution' => $q->awardingInstitution?->name ?? $q->awarding_institution_name_other ?? $q->awarding_institution_name,
             'is_foreign' => (bool) $q->is_foreign_qualification,

@@ -43,6 +43,16 @@ const page = usePage()
 
 const mobileSidebarOpen = ref(false)
 const user = computed(() => (page.props as any).auth?.user)
+
+const navSections = computed(() => {
+  const isInstitution = (user.value?.applicant_type ?? '') === 'institution'
+  return applicantNavSections
+    .map((section) => ({
+      ...section,
+      items: section.items.filter((item) => !item.institutionOnly || isInstitution),
+    }))
+    .filter((section) => section.items.length > 0)
+})
 </script>
 
 <template>
@@ -84,7 +94,7 @@ const user = computed(() => (page.props as any).auth?.user)
     <div class="flex min-h-screen">
       <!-- Desktop sidebar -->
       <div class="hidden lg:block lg:sticky lg:top-0 lg:h-screen">
-        <ApplicantSidebar :sections="applicantNavSections" />
+        <ApplicantSidebar :sections="navSections" />
       </div>
 
       <!-- Mobile sidebar overlay -->
@@ -132,7 +142,7 @@ const user = computed(() => (page.props as any).auth?.user)
                 </button>
               </div>
 
-              <ApplicantSidebar :sections="applicantNavSections" :is-mobile="true" @navigate="mobileSidebarOpen = false" />
+              <ApplicantSidebar :sections="navSections" :is-mobile="true" @navigate="mobileSidebarOpen = false" />
             </div>
           </transition>
         </div>

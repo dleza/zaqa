@@ -37,6 +37,9 @@ use App\Models\QualificationCertificate;
 use App\Models\QualificationType;
 use App\Support\Qualifications\CertificateSubjectGrade;
 use App\Support\Qualifications\QualificationAwardingInstitutionFormState;
+use App\Support\Applications\ApplicationSubmissionMode;
+use App\Domain\Applications\InstitutionalMultipleOverviewService;
+use App\Domain\Applications\InstitutionalMultipleWizardService;
 use App\Models\User;
 use App\Support\CountryIso;
 use Illuminate\Http\RedirectResponse;
@@ -112,6 +115,10 @@ class ApplicantApplicationController extends Controller
      */
     private function wizardSummary(Application $application, User $user): array
     {
+        if (ApplicationSubmissionMode::isInstitutionalMultiple($application)) {
+            return app(InstitutionalMultipleWizardService::class)->wizardSummary($application, $user);
+        }
+
         if (! $user->can('update', $application)) {
             return [
                 'current_step' => null,
@@ -422,18 +429,31 @@ class ApplicantApplicationController extends Controller
         ]);
         $request->user()?->loadMissing(['applicantProfile', 'institutionProfile']);
 
+        $institutionalOverview = null;
+        if (ApplicationSubmissionMode::isInstitutionalMultiple($application)) {
+            $institutionalOverview = app(InstitutionalMultipleOverviewService::class)->build($application);
+        }
+
         return Inertia::render('Applicant/Applications/Show', [
             'application' => $this->applicationPayload($request, $application),
             'countries' => $this->countryOptions(),
             'awardingInstitutions' => $this->awardingInstitutionOptions(),
             'localConsent' => (array) config('consent.local'),
             'applicant' => $this->applicantPayload($request),
+            'institutional_overview' => $institutionalOverview,
         ]);
     }
 
     public function edit(Request $request, Application $application): Response|RedirectResponse
     {
         $this->authorize('view', $application);
+
+        if (ApplicationSubmissionMode::isInstitutionalMultiple($application)) {
+            return redirect()->route('applicant.applications.multiple.edit', [
+                'application' => $application->id,
+                'step' => $request->query('step'),
+            ]);
+        }
 
         if (! $request->user()->can('update', $application)) {
             return redirect()->route('applicant.applications.show', $application);
@@ -458,6 +478,13 @@ class ApplicantApplicationController extends Controller
             return redirect()->route('applicant.applications.show', $application);
         }
 
+        if (ApplicationSubmissionMode::isInstitutionalMultiple($application)) {
+            return redirect()->route('applicant.applications.multiple.qualifications.edit', [
+                'application' => $application->id,
+                'qualification' => $qualification->id,
+            ]);
+        }
+
         return $this->buildEditInertiaResponse($request, $application, $qualification->id);
     }
 
@@ -467,6 +494,10 @@ class ApplicantApplicationController extends Controller
 
         if (! $request->user()->can('update', $application)) {
             return redirect()->route('applicant.applications.show', $application);
+        }
+
+        if (ApplicationSubmissionMode::isInstitutionalMultiple($application)) {
+            return redirect()->route('applicant.applications.multiple.qualifications.create', $application);
         }
 
         try {
@@ -492,6 +523,13 @@ class ApplicantApplicationController extends Controller
 
         if (! $request->user()->can('update', $application)) {
             return redirect()->route('applicant.applications.show', $application);
+        }
+
+        if (ApplicationSubmissionMode::isInstitutionalMultiple($application)) {
+            return redirect()->route('applicant.applications.multiple.qualifications.edit', [
+                'application' => $application,
+                'qualification' => $qualification,
+            ]);
         }
 
         try {
@@ -709,7 +747,7 @@ class ApplicantApplicationController extends Controller
     /**
      * @return array{deposit_account: array{bank_name: string, account_name: string, account_number: string, branch_code: string}}
      */
-    private function bankTransferConfigPayload(): array
+    public function bankTransferConfigPayload(): array
     {
         $account = (array) config('payments.bank_transfer.deposit_account', []);
 
@@ -723,7 +761,7 @@ class ApplicantApplicationController extends Controller
         ];
     }
 
-    private function applicationPayload(Request $request, Application $application): array
+    public function applicationPayload(Request $request, Application $application): array
     {
         $application = app(ApplicationQualificationOutcomeSyncService::class)->syncIfNeeded($application);
         $application->loadMissing('qualifications.certificates', 'payments', 'payments.latestAttempt', 'invoice');
@@ -863,6 +901,7 @@ class ApplicantApplicationController extends Controller
                         : null,
                     'qualification_holder_name' => $q->qualification_holder_name,
                     'nrc_passport_number' => $q->nrc_passport_number,
+                    'holder_identity' => $q->holder_identity ? (array) $q->holder_identity : null,
                     'country_id' => $q->country_id,
                     'country_name_other' => $q->country_name_other,
                     'country' => $q->country
@@ -1110,7 +1149,7 @@ class ApplicantApplicationController extends Controller
     /**
      * @return array<string, mixed>
      */
-    private function invoicePayloadForApplicant(Invoice $invoice): array
+    public function invoicePayloadForApplicant(Invoice $invoice): array
     {
         $invoice->loadMissing('application.qualifications');
 
@@ -1133,7 +1172,7 @@ class ApplicantApplicationController extends Controller
         ];
     }
 
-    private function wizardDeclarationsPayload(Application $application): array
+    public function wizardDeclarationsPayload(Application $application): array
     {
         $wd = (array) (($application->metadata ?? [])['wizard_declarations'] ?? []);
 
@@ -1145,7 +1184,7 @@ class ApplicantApplicationController extends Controller
         ];
     }
 
-    private function applicantPayload(Request $request): array
+    public function applicantPayload(Request $request): array
     {
         $user = $request->user();
         if (! $user) {
@@ -1189,7 +1228,7 @@ class ApplicantApplicationController extends Controller
         ];
     }
 
-    private function countryOptions(): array
+    public function countryOptions(): array
     {
         return Country::query()
             ->where('is_active', true)
@@ -1200,7 +1239,7 @@ class ApplicantApplicationController extends Controller
             ->all();
     }
 
-    private function awardingInstitutionOptions(): array
+    public function awardingInstitutionOptions(): array
     {
         return AwardingInstitution::query()
             ->where('is_active', true)

@@ -31,8 +31,11 @@ function isActive(href: string) {
   if (href === '/applicant/applications/new') {
     return path === '/applicant/applications/new'
   }
+  if (href === '/applicant/applications/multiple/new') {
+    return path === '/applicant/applications/multiple/new' || path.startsWith('/applicant/applications/multiple/')
+  }
   if (href === '/applicant/applications') {
-    return path === '/applicant/applications' || (path.startsWith('/applicant/applications/') && !path.startsWith('/applicant/applications/new'))
+    return path === '/applicant/applications' || (path.startsWith('/applicant/applications/') && !path.startsWith('/applicant/applications/new') && !path.startsWith('/applicant/applications/multiple/'))
   }
 
   return path === href || path.startsWith(`${href}/`)

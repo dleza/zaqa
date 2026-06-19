@@ -9,6 +9,7 @@ use App\Models\Application;
 use App\Models\Qualification;
 use App\Models\QualificationDocument;
 use App\Models\User;
+use App\Support\Applications\ApplicationSubmissionMode;
 use App\Support\CountryIso;
 use Illuminate\Validation\ValidationException;
 
@@ -71,6 +72,10 @@ class ApplicationSubmissionReadinessService
      */
     private function missingDocumentTypes(Application $application): array
     {
+        if (ApplicationSubmissionMode::isInstitutionalMultiple($application)) {
+            return $this->missingDocumentTypesForInstitutionalMultiple($application);
+        }
+
         $currentDocsByType = $application->documents
             ->filter(fn (QualificationDocument $doc) => QualificationDocumentEvidence::isActiveEvidence($doc))
             ->groupBy(fn (QualificationDocument $doc) => $doc->document_type?->value ?? (string) $doc->document_type);
@@ -100,11 +105,45 @@ class ApplicationSubmissionReadinessService
             /** @var Qualification $q */
             $hasCertificate = $application->documents
                 ->filter(fn (QualificationDocument $doc) => QualificationDocumentEvidence::isActiveEvidence($doc))
-                ->where('document_type', DocumentType::CertificateCopy->value)
-                ->where('qualification_id', $q->id)
-                ->count() > 0;
+                ->contains(fn (QualificationDocument $doc) => (int) ($doc->qualification_id ?? 0) === (int) $q->id
+                    && ($doc->document_type?->value ?? (string) $doc->document_type) === DocumentType::CertificateCopy->value);
             if (! $hasCertificate) {
                 $missing[] = 'certificate_copy (qualification_id='.$q->id.')';
+            }
+        }
+
+        return $missing;
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    private function missingDocumentTypesForInstitutionalMultiple(Application $application): array
+    {
+        $missing = [];
+
+        foreach ($application->qualifications as $q) {
+            /** @var Qualification $q */
+            $label = trim((string) ($q->title_of_qualification ?? '')) ?: 'qualification #'.$q->id;
+
+            $hasCertificate = $application->documents
+                ->filter(fn (QualificationDocument $doc) => QualificationDocumentEvidence::isActiveEvidence($doc))
+                ->contains(fn (QualificationDocument $doc) => (int) ($doc->qualification_id ?? 0) === (int) $q->id
+                    && ($doc->document_type?->value ?? (string) $doc->document_type) === DocumentType::CertificateCopy->value);
+
+            if (! $hasCertificate) {
+                $missing[] = "certificate_copy for {$label}";
+            }
+
+            $hasIdentity = $application->documents
+                ->filter(fn (QualificationDocument $doc) => QualificationDocumentEvidence::isActiveEvidence($doc))
+                ->contains(fn (QualificationDocument $doc) => (int) ($doc->qualification_id ?? 0) === (int) $q->id
+                    && in_array($doc->document_type?->value ?? (string) $doc->document_type, [
+                        DocumentType::NrcCopy->value,
+                        DocumentType::PassportCopy->value,
+                    ], true));
+            if (! $hasIdentity) {
+                $missing[] = "nrc_copy or passport_copy for {$label}";
             }
         }
 

@@ -3,6 +3,8 @@
 namespace App\Http\Controllers\Admin\Verification;
 
 use App\Domain\Applications\ApplicationNotificationContact;
+use App\Support\Applications\ApplicationSubmissionMode;
+use App\Support\Applications\QualificationHolderIdentityResolver;
 use App\Domain\Documents\QualificationDocumentEvidence;
 use App\Domain\Tracking\ApplicationLifecycleService;
 use App\Domain\Verification\DecisionService;
@@ -113,6 +115,8 @@ class AdminVerificationApplicationController extends Controller
             ->values()
             ->all();
 
+        $isInstitutionalMultiple = ApplicationSubmissionMode::isInstitutionalMultiple($application);
+
         return Inertia::render('Admin/Verification/Applications/Show', [
             'application' => [
                 'id' => $application->id,
@@ -120,6 +124,7 @@ class AdminVerificationApplicationController extends Controller
                 'current_status' => $application->current_status?->value ?? (string) $application->current_status,
                 'verification_state' => $application->verification_state?->value ?? null,
                 'is_foreign' => (bool) $application->is_foreign,
+                'is_institutional_multiple' => $isInstitutionalMultiple,
                 'service_deadline_at' => optional($application->service_deadline_at)?->toIso8601String(),
                 'assigned_level1_user_id' => $application->assigned_level1_user_id,
                 'assigned_by_level2_user_id' => $application->assigned_by_level2_user_id,
@@ -128,8 +133,13 @@ class AdminVerificationApplicationController extends Controller
                 'completed_at' => optional($application->completed_at)?->toIso8601String(),
                 'applicant' => [
                     'id' => $application->applicant?->id,
-                    'name' => $application->metadata['verification_subject']['full_name'] ?? $application->applicant?->name,
-                    'gender' => (function () use ($application) {
+                    'name' => $isInstitutionalMultiple && $primaryQualification
+                        ? QualificationHolderIdentityResolver::resolveAdminApplicantLabel($primaryQualification, $application)
+                        : ($application->metadata['verification_subject']['full_name'] ?? $application->applicant?->name),
+                    'gender' => (function () use ($application, $isInstitutionalMultiple) {
+                        if ($isInstitutionalMultiple) {
+                            return null;
+                        }
                         $subject = $application->metadata['verification_subject'] ?? null;
                         if (is_array($subject)) {
                             $g = trim((string) ($subject['gender'] ?? ''));
@@ -142,21 +152,23 @@ class AdminVerificationApplicationController extends Controller
                     })(),
                     'email' => $application->applicant?->email,
                     'phone' => $application->applicant?->phone_primary,
-                    'nrc_passport' => ($restricted ? $primaryQualification?->nrc_passport_number : $application->qualification?->nrc_passport_number)
-                        ?: (function () use ($application) {
-                            $subject = $application->metadata['verification_subject'] ?? null;
-                            if (! is_array($subject)) {
-                                return null;
-                            }
+                    'nrc_passport' => $isInstitutionalMultiple
+                        ? null
+                        : (($restricted ? $primaryQualification?->nrc_passport_number : $application->qualification?->nrc_passport_number)
+                            ?: (function () use ($application) {
+                                $subject = $application->metadata['verification_subject'] ?? null;
+                                if (! is_array($subject)) {
+                                    return null;
+                                }
 
-                            return ($subject['nrc_number'] ?? null) ?: ($subject['passport_number'] ?? null);
-                        })(),
+                                return ($subject['nrc_number'] ?? null) ?: ($subject['passport_number'] ?? null);
+                            })()),
                 ],
                 'notification_contact_label' => ApplicationNotificationContact::adminLabel($application),
                 'qualification' => $primaryQualification
                     ? [
                         'title' => $primaryQualification->title_of_qualification,
-                        'holder_name' => $primaryQualification->qualification_holder_name,
+                        'holder_name' => QualificationHolderIdentityResolver::resolveDisplayName($primaryQualification, $application),
                         'award_date' => $primaryQualification->award_date,
                         'country' => $primaryQualification->country?->name ?? $primaryQualification->country_name_other,
                         'awarding_institution' => $primaryQualification->awardingInstitution?->name ?? $primaryQualification->awarding_institution_name_other,
@@ -167,7 +179,8 @@ class AdminVerificationApplicationController extends Controller
                     ->map(fn ($q) => [
                         'id' => $q->id,
                         'title' => $q->title_of_qualification,
-                        'holder_name' => $q->qualification_holder_name,
+                        'holder_name' => QualificationHolderIdentityResolver::resolveDisplayName($q, $application),
+                        'nrc_passport' => QualificationHolderIdentityResolver::resolveIdentityNumber($q, $application),
                         'award_date' => $q->award_date,
                         'country' => $q->country?->name ?? $q->country_name_other,
                         'awarding_institution' => $q->awardingInstitution?->name ?? $q->awarding_institution_name_other,
