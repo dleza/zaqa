@@ -4,6 +4,8 @@ namespace App\Domain\Payments\Gateways\CyberSource;
 
 use App\Domain\Payments\Exceptions\CyberSourceConfigurationException;
 use CyberSource\ApiClient;
+use CyberSource\Api\MicroformIntegrationApi;
+use CyberSource\Api\PaymentsApi;
 use CyberSource\Authentication\Core\MerchantConfiguration;
 use CyberSource\Configuration;
 
@@ -15,6 +17,20 @@ final class CyberSourceClientFactory
             Configuration::getDefaultConfiguration(),
             $this->merchantConfiguration(),
         );
+    }
+
+    public function microformApi(): MicroformIntegrationApi
+    {
+        $this->assertEnabled();
+
+        return new MicroformIntegrationApi($this->make());
+    }
+
+    public function paymentsApi(): PaymentsApi
+    {
+        $this->assertEnabled();
+
+        return new PaymentsApi($this->make());
     }
 
     public function merchantConfiguration(): MerchantConfiguration
@@ -30,6 +46,15 @@ final class CyberSourceClientFactory
         $config->setSecretKey($this->configString('secret_key'));
 
         return $config;
+    }
+
+    public function assertEnabled(): void
+    {
+        if (! (bool) config('cybersource.enabled', false)) {
+            throw CyberSourceConfigurationException::disabled();
+        }
+
+        $this->validateEnabledConfiguration();
     }
 
     public function validateEnabledConfiguration(): void
