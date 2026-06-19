@@ -140,8 +140,13 @@ class PaymentService
                 ->first();
 
             if ($existingDraft) {
-                if ($method === PaymentMethod::MobileMoney && $existingDraft->provider !== 'cgrate') {
-                    $existingDraft->forceFill(['provider' => 'cgrate'])->save();
+                $expectedProvider = $this->providerForDraftPaymentMethod($method);
+
+                if (
+                    in_array($method, [PaymentMethod::Card, PaymentMethod::MobileMoney], true)
+                    && $existingDraft->provider !== $expectedProvider
+                ) {
+                    $existingDraft->forceFill(['provider' => $expectedProvider])->save();
                 }
 
                 return $existingDraft;
@@ -154,7 +159,7 @@ class PaymentService
                 'status' => PaymentStatus::Draft,
                 'currency' => $invoice->currency,
                 'amount_cents' => $invoice->amount_cents,
-                'provider' => $method === PaymentMethod::MobileMoney ? 'cgrate' : 'test',
+                'provider' => $this->providerForDraftPaymentMethod($method),
                 'provider_reference' => null,
                 'provider_transaction_id' => null,
                 'mobile_number' => null,
@@ -196,6 +201,15 @@ class PaymentService
 
             return $payment;
         });
+    }
+
+    private function providerForDraftPaymentMethod(PaymentMethod $method): string
+    {
+        return match ($method) {
+            PaymentMethod::Card => 'cybersource',
+            PaymentMethod::MobileMoney => 'cgrate',
+            PaymentMethod::BankDeposit, PaymentMethod::BankTransfer => 'test',
+        };
     }
 
     public function paymentForManualProofUpload(Application $application, User $actor): Payment
