@@ -6,6 +6,11 @@ import InlineDocumentPreview from '@/Components/Admin/InlineDocumentPreview.vue'
 import Level2DecisionLevel1Fields from '@/Components/Admin/Verification/Level2DecisionLevel1Fields.vue'
 import CollapsiblePanel from '@/Components/CollapsiblePanel.vue'
 import type { InlinePreviewDocument } from '@/lib/inlineDocumentPreview'
+import {
+  APPLICANT_DOCUMENT_ACCEPT,
+  APPLICANT_DOCUMENT_FILE_ERROR,
+  isAllowedApplicantDocumentFile,
+} from '@/lib/applicantDocumentUpload'
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import {
   ArrowRight,
@@ -177,6 +182,29 @@ function clearLevel1CompleteFiles() {
   }
 }
 
+function onLevel1CompleteFileChange(
+  event: Event,
+  field: 'evaluation_report' | 'attachment',
+) {
+  const target = event.target as HTMLInputElement
+  const file = target.files?.[0] ?? null
+
+  if (!file) {
+    level1CompleteForm[field] = null
+    return
+  }
+
+  if (!isAllowedApplicantDocumentFile(file)) {
+    level1CompleteForm[field] = null
+    target.value = ''
+    level1CompleteForm.setError(field, APPLICANT_DOCUMENT_FILE_ERROR)
+    return
+  }
+
+  level1CompleteForm.clearErrors(field)
+  level1CompleteForm[field] = file
+}
+
 function openLevel1CompleteModal() {
   const review = props.qualification.level1_review
   level1CompleteForm.qualification_type_id = props.qualification.qualification_type_id ?? ''
@@ -271,6 +299,26 @@ function clearSendBackToLevel1Attachment() {
   if (sendBackToLevel1AttachmentInput.value) {
     sendBackToLevel1AttachmentInput.value.value = ''
   }
+}
+
+function onSendBackToLevel1AttachmentChange(event: Event) {
+  const target = event.target as HTMLInputElement
+  const file = target.files?.[0] ?? null
+
+  if (!file) {
+    sendBackToLevel1Form.attachment = null
+    return
+  }
+
+  if (!isAllowedApplicantDocumentFile(file)) {
+    sendBackToLevel1Form.attachment = null
+    target.value = ''
+    sendBackToLevel1Form.setError('attachment', APPLICANT_DOCUMENT_FILE_ERROR)
+    return
+  }
+
+  sendBackToLevel1Form.clearErrors('attachment')
+  sendBackToLevel1Form.attachment = file
 }
 
 const isLevel1AccreditationRequired = computed(
@@ -975,21 +1023,6 @@ const autoVerificationCollapsedSummary = computed(() => {
 
           <div class="mt-5 border-t border-white/15 pt-4">
             <div class="flex flex-wrap gap-2">
-              <Link
-                :href="`/admin/verification/applications/${qualification.application?.id}`"
-                class="inline-flex items-center gap-2 rounded-xl border border-slate-200/30 bg-slate-950/25 px-3.5 py-2 text-sm font-semibold text-white transition hover:bg-slate-950/35"
-              >
-                <ExternalLink class="h-4 w-4 shrink-0 opacity-90" aria-hidden="true" />
-                Parent application
-              </Link>
-              <Link
-                href="/admin/verification/pool"
-                class="inline-flex items-center gap-2 rounded-xl border border-slate-200/30 bg-slate-800/30 px-3.5 py-2 text-sm font-semibold text-white transition hover:bg-slate-800/40"
-              >
-                <LayoutList class="h-4 w-4 shrink-0 opacity-90" aria-hidden="true" />
-                Verification pool
-              </Link>
-
               <button
                 v-if="sendBackTimeline.length > 0"
                 type="button"
@@ -1171,6 +1204,21 @@ const autoVerificationCollapsedSummary = computed(() => {
       <section class="rounded-2xl border border-border/70 bg-surface px-5 py-4 shadow-sm">
         <div class="text-xs font-bold uppercase tracking-wider text-text-muted">More details</div>
         <div class="mt-3 flex flex-wrap gap-2">
+          <Link
+            v-if="qualification.application?.id"
+            :href="`/admin/verification/applications/${qualification.application.id}`"
+            class="zaqa-btn zaqa-btn-secondary inline-flex items-center gap-2 px-3.5 py-2 text-sm"
+          >
+            <ExternalLink class="h-4 w-4 shrink-0" aria-hidden="true" />
+            Parent application
+          </Link>
+          <Link
+            href="/admin/verification/pool"
+            class="zaqa-btn zaqa-btn-secondary inline-flex items-center gap-2 px-3.5 py-2 text-sm"
+          >
+            <LayoutList class="h-4 w-4 shrink-0" aria-hidden="true" />
+            Verification pool
+          </Link>
           <button
             type="button"
             class="zaqa-btn zaqa-btn-secondary inline-flex items-center gap-2 px-3.5 py-2 text-sm"
@@ -2365,15 +2413,13 @@ const autoVerificationCollapsedSummary = computed(() => {
         </div>
         <div>
           <label class="text-sm font-semibold text-text-primary">Optional attachment</label>
+          <p class="mt-1 text-xs text-text-secondary">PDF or image files only (JPG, PNG, WEBP), max 10&nbsp;MB.</p>
           <input
             ref="sendBackToLevel1AttachmentInput"
             type="file"
             class="zaqa-input mt-2"
-            accept=".pdf,.doc,.docx,.jpg,.jpeg,.png,.gif,.webp"
-            @change="(e) => {
-              const t = e.target as HTMLInputElement
-              sendBackToLevel1Form.attachment = t.files?.[0] ?? null
-            }"
+            :accept="APPLICANT_DOCUMENT_ACCEPT"
+            @change="onSendBackToLevel1AttachmentChange"
           />
           <div v-if="sendBackToLevel1Form.errors.attachment" class="mt-1 text-xs text-danger">{{ sendBackToLevel1Form.errors.attachment }}</div>
         </div>
@@ -2526,35 +2572,25 @@ const autoVerificationCollapsedSummary = computed(() => {
         <div class="grid grid-cols-1 gap-4 lg:grid-cols-2">
           <div>
             <label class="text-sm font-semibold text-text-primary">Evaluation report attachment</label>
-            <p class="mt-1 text-xs text-text-secondary">Upload the Level 1 evaluation report (PDF, Word, or image) — max 10&nbsp;MB.</p>
+            <p class="mt-1 text-xs text-text-secondary">Upload the Level 1 evaluation report — PDF or image files only (JPG, PNG, WEBP), max 10&nbsp;MB.</p>
             <input
               ref="level1EvaluationReportInput"
               type="file"
               class="zaqa-input mt-1.5"
-              accept=".pdf,.doc,.docx,image/jpeg,image/png,image/gif,image/webp"
-              @change="
-                (e) => {
-                  const t = e.target as HTMLInputElement
-                  level1CompleteForm.evaluation_report = t.files?.[0] ?? null
-                }
-              "
+              :accept="APPLICANT_DOCUMENT_ACCEPT"
+              @change="onLevel1CompleteFileChange($event, 'evaluation_report')"
             />
             <div v-if="level1CompleteForm.errors.evaluation_report" class="mt-1 text-xs text-danger">{{ level1CompleteForm.errors.evaluation_report }}</div>
           </div>
           <div>
             <label class="text-sm font-semibold text-text-primary">Confirmation (optional)</label>
-            <p class="mt-1 text-xs text-text-secondary">Upload the confirmation file for Level 2 — max 10&nbsp;MB.</p>
+            <p class="mt-1 text-xs text-text-secondary">Upload the confirmation file for Level 2 — PDF or image files only (JPG, PNG, WEBP), max 10&nbsp;MB.</p>
             <input
               ref="level1AttachmentInput"
               type="file"
               class="zaqa-input mt-1.5"
-              accept=".pdf,.doc,.docx,image/jpeg,image/png,image/gif,image/webp"
-              @change="
-                (e) => {
-                  const t = e.target as HTMLInputElement
-                  level1CompleteForm.attachment = t.files?.[0] ?? null
-                }
-              "
+              :accept="APPLICANT_DOCUMENT_ACCEPT"
+              @change="onLevel1CompleteFileChange($event, 'attachment')"
             />
             <div v-if="level1CompleteForm.errors.attachment" class="mt-1 text-xs text-danger">{{ level1CompleteForm.errors.attachment }}</div>
           </div>

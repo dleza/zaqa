@@ -141,6 +141,108 @@ class QualificationsPoolService
             ->withQueryString();
     }
 
+    public function awaitingLevel1Assignment(Request $request): LengthAwarePaginator
+    {
+        $query = $this->qualificationListQuery($request);
+        VerificationAssignmentQueueScopes::applyAwaitingLevel1AssignmentScope($query);
+        $this->applyAssignmentQueueSort($query, $request);
+
+        return $query->paginate(25)->withQueryString();
+    }
+
+    public function awaitingLevel2Assignment(Request $request): LengthAwarePaginator
+    {
+        $query = $this->qualificationListQuery($request);
+        VerificationAssignmentQueueScopes::applyAwaitingLevel2AssignmentScope($query);
+        $this->applyAssignmentQueueSort($query, $request);
+
+        return $query->paginate(25)->withQueryString();
+    }
+
+    public function countAwaitingLevel1Assignment(): int
+    {
+        $query = Qualification::query();
+        VerificationAssignmentQueueScopes::applyAwaitingLevel1AssignmentScope($query);
+
+        return $query->count();
+    }
+
+    public function countAwaitingLevel2Assignment(): int
+    {
+        $query = Qualification::query();
+        VerificationAssignmentQueueScopes::applyAwaitingLevel2AssignmentScope($query);
+
+        return $query->count();
+    }
+
+    /**
+     * @param  list<int>  $qualificationIds
+     * @return list<int>
+     */
+    public function filterQualificationIdsInAwaitingLevel1Assignment(array $qualificationIds): array
+    {
+        if ($qualificationIds === []) {
+            return [];
+        }
+
+        $query = Qualification::query()->whereIn('qualifications.id', $qualificationIds);
+        VerificationAssignmentQueueScopes::applyAwaitingLevel1AssignmentScope($query);
+
+        return $query->pluck('qualifications.id')->map(fn ($id) => (int) $id)->values()->all();
+    }
+
+    /**
+     * Manual Level 2 owner assignment only (excludes auto-verified pending lock queue items).
+     *
+     * @param  list<int>  $qualificationIds
+     * @return list<int>
+     */
+    public function filterQualificationIdsEligibleForLevel2OwnerAssignment(array $qualificationIds): array
+    {
+        if ($qualificationIds === []) {
+            return [];
+        }
+
+        $query = Qualification::query()
+            ->whereIn('qualifications.id', $qualificationIds)
+            ->where('qualifications.verification_state', VerificationState::UnderLevel2Review->value)
+            ->whereNull('qualifications.level2_review_owner_id');
+
+        VerificationAssignmentQueueScopes::applyActiveSubmittedApplicationScope($query);
+
+        return $query->pluck('qualifications.id')->map(fn ($id) => (int) $id)->values()->all();
+    }
+
+    /**
+     * @param  Builder<Qualification>  $query
+     */
+    private function applyAssignmentQueueSort(Builder $query, Request $request): void
+    {
+        $sort = trim((string) $request->query('sort', 'deadline'));
+        $direction = strtolower((string) $request->query('direction', 'asc')) === 'desc' ? 'desc' : 'asc';
+
+        $query->leftJoin('applications as assignment_queue_apps', 'assignment_queue_apps.id', '=', 'qualifications.application_id');
+        $query->select('qualifications.*');
+
+        match ($sort) {
+            'submitted' => $query->orderBy('assignment_queue_apps.submitted_at', $direction),
+            'application' => $query->orderBy('assignment_queue_apps.application_number', $direction),
+            'reference' => $query->orderBy('qualifications.verification_reference_number', $direction),
+            'country' => $query->orderBy('qualifications.country_id', $direction),
+            'institution' => $query->orderBy('qualifications.awarding_institution_id', $direction),
+            'type' => $query->orderBy('qualifications.qualification_type_id', $direction),
+            default => $query
+                ->orderByRaw(
+                    'CASE WHEN COALESCE(qualifications.service_deadline_at, assignment_queue_apps.service_deadline_at) IS NULL THEN 1 ELSE 0 END'
+                )
+                ->orderByRaw(
+                    'COALESCE(qualifications.service_deadline_at, assignment_queue_apps.service_deadline_at) '.$direction
+                ),
+        };
+
+        $query->orderBy('qualifications.id', 'asc');
+    }
+
     /**
      * @param  Builder<Qualification>  $query
      */
@@ -196,6 +298,7 @@ class QualificationsPoolService
                 'awardingInstitution',
                 'country',
                 'assignedVerifier',
+                'level2ReviewOwner',
             ])
             ->whereHas('application', function ($aq) use ($submittedFrom, $submittedTo, $paymentStatus) {
                 $aq->whereIn('current_status', [

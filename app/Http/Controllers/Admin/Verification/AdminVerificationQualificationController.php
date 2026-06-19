@@ -28,6 +28,7 @@ use App\Enums\VerificationState;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Admin\Verification\AdminUpdateVerificationQualificationRequest;
 use App\Http\Requests\Admin\Verification\AssignApplicationRequest;
+use App\Http\Requests\Admin\Verification\AssignLevel2ReviewOwnerRequest;
 use App\Http\Requests\Admin\Verification\IssueQualificationCertificateRequest;
 use App\Http\Requests\Admin\Verification\QualificationDecisionApproveRequest;
 use App\Http\Requests\Admin\Verification\QualificationDecisionRejectRequest;
@@ -642,6 +643,24 @@ class AdminVerificationQualificationController extends Controller
         $assignments->assign($qualification, $request->user(), $assignee, $request->validated('comment'));
 
         return back()->with('success', 'Assigned to verifier.');
+    }
+
+    public function assignLevel2(AssignLevel2ReviewOwnerRequest $request, Qualification $qualification, AssignmentService $assignments): RedirectResponse
+    {
+        /** @var User $assignee */
+        $assignee = User::query()->findOrFail((int) $request->validated('assigned_to_user_id'));
+
+        $assignments->assignLevel2ReviewOwnerWithContext(
+            $qualification,
+            $request->user(),
+            $assignee,
+            [
+                'source' => 'manual',
+                'reason' => $request->validated('comment'),
+            ],
+        );
+
+        return back()->with('success', 'Assigned to Level 2 reviewer.');
     }
 
     public function revokeAssignment(RevokeQualificationAssignmentRequest $request, Qualification $qualification, AssignmentService $assignments): RedirectResponse

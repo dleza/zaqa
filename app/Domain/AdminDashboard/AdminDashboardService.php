@@ -164,7 +164,7 @@ class AdminDashboardService
                     'icon' => 'user-plus',
                     'hint' => 'Current queue · waiting for Level 1 officer',
                     'metric_scope' => 'current_queue',
-                    'href' => '/admin/verification/pool?verification_state=awaiting_assignment',
+                    'href' => '/admin/verification/awaiting-level1-assignment',
                 ];
 
                 $kpis[] = [
@@ -174,7 +174,7 @@ class AdminDashboardService
                     'icon' => 'user-plus',
                     'hint' => 'Current queue · waiting for Level 2 officer',
                     'metric_scope' => 'current_queue',
-                    'href' => '/admin/verification/pool?verification_state=under_level2_review',
+                    'href' => '/admin/verification/awaiting-level2-assignment',
                 ];
 
                 $kpis[] = [
@@ -989,7 +989,7 @@ class AdminDashboardService
                 'date_range' => $range->toArray(),
                 'workflow_entry_date_field' => 'qualifications.service_started_at, else applications.submitted_at, else qualifications.created_at',
                 'l2_metrics_explainer' => $this->isLevel2ScopedDashboard($user)
-                    ? 'Total counts all qualifications that entered workflow in the selected period, including those already processed. Processed shows final decisions in the period. Queue cards show current live workload.'
+                    ? 'Qualifications work flow tasks.'
                     : null,
                 'l1_metrics_explainer' => $this->isLevel1ScopedDashboard($user)
                     ? 'Your dashboard shows your Level 1 workload only. Completed and sent-back counts use the selected period; queue cards show your current assigned work.'
@@ -1008,10 +1008,10 @@ class AdminDashboardService
     private function resolveSubtitle(User $user): string
     {
         if ($this->isLevel1ScopedDashboard($user)) {
-            return 'Your Level 1 workload at a glance.';
+            return '';
         }
         if ($this->isLevel2ScopedDashboard($user)) {
-            return 'Total includes open and processed qualifications from the selected period; queue cards show live workload by assignment stage.';
+            return '';
         }
         if ($this->isFinanceScopedDashboard($user)) {
             return 'Here is your finance operations summary for the selected period.';

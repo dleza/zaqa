@@ -41,6 +41,8 @@ use App\Http\Controllers\Admin\Settings\AdminSmsLogsController;
 use App\Http\Controllers\Admin\Verification\AdminVerificationApplicationController;
 use App\Http\Controllers\Admin\Verification\AdminVerificationAssignedToMeController;
 use App\Http\Controllers\Admin\Verification\AdminVerificationAwaitingApplicantResubmissionController;
+use App\Http\Controllers\Admin\Verification\AdminVerificationAwaitingLevel1AssignmentController;
+use App\Http\Controllers\Admin\Verification\AdminVerificationAwaitingLevel2AssignmentController;
 use App\Http\Controllers\Admin\Verification\AdminVerificationAutoVerifiedController;
 use App\Http\Controllers\Admin\Verification\AdminVerificationAssignmentCategoriesController;
 use App\Http\Controllers\Admin\Verification\AdminVerificationCategoryController;
@@ -530,6 +532,19 @@ Route::middleware('auth')->group(function () {
                 ->middleware(['can:verification.pool.view', 'can:verification.send_back'])
                 ->name('awaiting_applicant_resubmission');
 
+            Route::get('/awaiting-level1-assignment', [AdminVerificationAwaitingLevel1AssignmentController::class, 'index'])
+                ->middleware('can:verification.assign')
+                ->name('awaiting_level1_assignment');
+            Route::post('/awaiting-level1-assignment/bulk-assign', [AdminVerificationAwaitingLevel1AssignmentController::class, 'bulkAssign'])
+                ->middleware('can:verification.assign')
+                ->name('awaiting_level1_assignment.bulk_assign');
+            Route::get('/awaiting-level2-assignment', [AdminVerificationAwaitingLevel2AssignmentController::class, 'index'])
+                ->middleware('can:verification.assign')
+                ->name('awaiting_level2_assignment');
+            Route::post('/awaiting-level2-assignment/bulk-assign', [AdminVerificationAwaitingLevel2AssignmentController::class, 'bulkAssign'])
+                ->middleware('can:verification.assign')
+                ->name('awaiting_level2_assignment.bulk_assign');
+
             Route::get('/auto-verified', [AdminVerificationAutoVerifiedController::class, 'index'])
                 ->middleware('can:verification.level2.review')
                 ->name('auto_verified.index');
@@ -627,6 +642,9 @@ Route::middleware('auth')->group(function () {
             Route::post('/qualifications/{qualification}/assign', [AdminVerificationQualificationController::class, 'assign'])
                 ->middleware('can:verification.assign')
                 ->name('qualifications.assign');
+            Route::post('/qualifications/{qualification}/assign-level2', [AdminVerificationQualificationController::class, 'assignLevel2'])
+                ->middleware('can:verification.assign')
+                ->name('qualifications.assign_level2');
             Route::post('/qualifications/{qualification}/revoke-assignment', [AdminVerificationQualificationController::class, 'revokeAssignment'])
                 ->middleware('can:verification.assign')
                 ->name('qualifications.revoke_assignment');

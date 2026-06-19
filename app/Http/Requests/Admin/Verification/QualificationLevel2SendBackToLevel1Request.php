@@ -19,7 +19,7 @@ class QualificationLevel2SendBackToLevel1Request extends FormRequest
                 'nullable',
                 'file',
                 'max:10240',
-                'mimes:pdf,doc,docx,jpg,jpeg,png,gif,webp',
+                'mimes:pdf,jpg,jpeg,png,webp',
             ],
         ];
     }

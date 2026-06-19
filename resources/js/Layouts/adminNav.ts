@@ -11,6 +11,7 @@ import {
   ShieldCheck,
   Sparkles,
   Users,
+  UserPlus,
   Building2,
   GraduationCap,
   Coins,
@@ -130,6 +131,20 @@ export const adminNavSections: AdminNavSection[] = [
         icon: ShieldCheck,
         activeStartsWith: '/admin/verification/pool',
         requiredAnyPermissions: ['verification.pool.view'],
+      },
+      {
+        label: 'Awaiting Level 1 Assignment',
+        href: '/admin/verification/awaiting-level1-assignment',
+        icon: UserPlus,
+        activeStartsWith: '/admin/verification/awaiting-level1-assignment',
+        requiredAnyPermissions: ['verification.assign'],
+      },
+      {
+        label: 'Awaiting Level 2 Assignment',
+        href: '/admin/verification/awaiting-level2-assignment',
+        icon: UserPlus,
+        activeStartsWith: '/admin/verification/awaiting-level2-assignment',
+        requiredAnyPermissions: ['verification.assign'],
       },
       {
         label: 'Category by Country',

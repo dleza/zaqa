@@ -177,6 +177,7 @@ const dateRange = computed(() => props.meta.date_range)
 const isLevel1Scope = computed(() => props.meta.dashboard_scope === 'level1_assigned')
 const isLevel2Scope = computed(() => props.meta.dashboard_scope === 'level2_qualifications')
 const isFinanceScope = computed(() => props.meta.dashboard_scope === 'finance')
+const isVerificationOfficerScope = computed(() => isLevel1Scope.value || isLevel2Scope.value)
 const feeStructureRows = computed(() => props.finance_breakdowns?.revenue_by_fee_structure ?? [])
 const reportsOverviewHref = computed(() => (isFinanceScope.value ? '/admin/reports' : '/admin/reports/applications'))
 
@@ -397,7 +398,7 @@ function dashboardUrl(rangeDays: number) {
     </div>
 
     <!-- Charts -->
-    <div v-if="charts.length" class="mt-10">
+    <div v-if="charts.length && !isVerificationOfficerScope" class="mt-10">
       <h2 class="text-sm font-semibold uppercase tracking-wider text-text-muted">Trends &amp; breakdowns</h2>
       <p class="mt-1 text-xs text-text-muted">Today / this week use the application timezone ({{ meta.timezone }}).</p>
       <div class="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
@@ -415,7 +416,7 @@ function dashboardUrl(rangeDays: number) {
     </div>
 
     <!-- Queues + quick actions -->
-    <div class="mt-10 grid grid-cols-1 gap-6 xl:grid-cols-3">
+    <div v-if="!isVerificationOfficerScope" class="mt-10 grid grid-cols-1 gap-6 xl:grid-cols-3">
       <div class="space-y-6 xl:col-span-2">
         <div v-for="q in queues" :key="q.key" class="rounded-2xl border border-border bg-surface shadow-sm">
           <div class="border-b border-border px-5 py-4">
