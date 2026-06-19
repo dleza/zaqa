@@ -1084,9 +1084,29 @@ const activePaymentTab = ref<PaymentTabKey>(paymentTabFromMethod(payment.value?.
 const bankDepositAccount = computed(() => props.bankTransfer?.deposit_account ?? null)
 
 const bankDepositReference = computed(() => {
-  const invoiceNumber = (invoice.value?.invoice_number ?? '').toString().trim()
-  if (invoiceNumber) return invoiceNumber
+  const docNumber = (invoice.value?.document_number ?? invoice.value?.invoice_number ?? '').toString().trim()
+  if (docNumber) return docNumber
   return (props.application?.application_number ?? '').toString().trim() || '—'
+})
+
+const billingDocumentLabel = computed(() => {
+  const title = (invoice.value?.document_title ?? '').toString().trim()
+  if (title) return title
+  return invoice.value?.document_type === 'quotation' ? 'Quotation' : 'Invoice'
+})
+
+const billingDownloadLabel = computed(() => {
+  const label = (invoice.value?.download_label ?? '').toString().trim()
+  if (label) return label
+  return invoice.value?.document_type === 'quotation' ? 'Download quotation' : 'Download invoice'
+})
+
+const quotationExpiryDisplay = computed(() => {
+  const raw = (invoice.value?.expires_at ?? '').toString().trim()
+  if (!raw || invoice.value?.document_type !== 'quotation') return null
+  const date = new Date(raw)
+  if (Number.isNaN(date.getTime())) return null
+  return new Intl.DateTimeFormat(undefined, { dateStyle: 'long' }).format(date)
 })
 
 function bankDepositField(value: string | null | undefined): string {
@@ -2144,9 +2164,9 @@ onBeforeUnmount(() => {
 	            <div class="flex flex-col gap-2.5 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between sm:gap-x-4 sm:gap-y-2">
 	              <div class="flex min-w-0 flex-1 flex-col gap-1.5 text-xs sm:flex-row sm:flex-wrap sm:items-baseline sm:gap-x-4 sm:gap-y-1">
 	                <div class="min-w-0">
-	                  <span class="text-text-muted">Invoice:</span>
+	                  <span class="text-text-muted">{{ billingDocumentLabel }}:</span>
 	                  <span class="ml-1 font-semibold text-text-primary">
-	                    {{ invoice?.invoice_number ?? (paymentInvoiceReady ? 'Preparing…' : '—') }}
+	                    {{ invoice?.document_number ?? invoice?.invoice_number ?? (paymentInvoiceReady ? 'Preparing…' : '—') }}
 	                  </span>
 	                </div>
 	                <div class="min-w-0">
@@ -2164,7 +2184,7 @@ onBeforeUnmount(() => {
 	                  :href="invoice.download_url"
 	                  class="zaqa-btn zaqa-btn-secondary inline-flex items-center gap-1.5 px-3 py-1.5 text-xs"
 	                >
-	                  Download invoice
+	                  {{ billingDownloadLabel }}
 	                </a>
 	                <a
 	                  v-if="payment?.receipt_download_url"
@@ -2175,6 +2195,10 @@ onBeforeUnmount(() => {
 	                </a>
 	              </div>
 	            </div>
+
+	            <p v-if="quotationExpiryDisplay" class="mt-3 text-xs text-text-muted">
+	              This quotation expires on <span class="font-semibold text-text-primary">{{ quotationExpiryDisplay }}</span>.
+	            </p>
 
 	            <div
 	              v-if="invoice && invoiceLineItems.length > 0"

@@ -14,5 +14,6 @@ enum ApplicationStatus: string
     case Rejected = 'rejected';
     case CertificateReady = 'certificate_ready';
     case Completed = 'completed';
+    case ExpiredUnpaid = 'expired_unpaid';
 }
 

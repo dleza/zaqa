@@ -9,6 +9,7 @@ use App\Domain\Applications\ApplicationQualificationOutcomeSyncService;
 use App\Domain\Documents\QualificationDocumentEvidence;
 use App\Domain\Applicant\ApplicantQualificationsService;
 use App\Domain\Documents\ApplicantDocumentService;
+use App\Domain\Finance\InvoiceDocumentPresenter;
 use App\Domain\Finance\InvoicePdfService;
 use App\Domain\Finance\PaymentReceiptPdfService;
 use App\Domain\Payments\ApplicationPaymentSatisfaction;
@@ -1152,15 +1153,16 @@ class ApplicantApplicationController extends Controller
     public function invoicePayloadForApplicant(Invoice $invoice): array
     {
         $invoice->loadMissing('application.qualifications');
+        $presenter = app(InvoiceDocumentPresenter::class);
 
         $lineItems = app(InvoicePdfService::class)
             ->lineItems($invoice)
             ->values()
             ->all();
 
-        return [
+        return array_merge([
             'id' => $invoice->id,
-            'invoice_number' => $invoice->invoice_number,
+            'invoice_number' => $presenter->documentNumber($invoice),
             'currency' => $invoice->currency,
             'amount_cents' => $invoice->amount_cents,
             'status' => $invoice->status?->value ?? (string) $invoice->status,
@@ -1169,7 +1171,7 @@ class ApplicantApplicationController extends Controller
             'paid_at' => optional($invoice->paid_at)?->toIso8601String(),
             'download_url' => route('applicant.invoices.download', $invoice),
             'line_items' => $lineItems,
-        ];
+        ], $presenter->applicantPayload($invoice));
     }
 
     public function wizardDeclarationsPayload(Application $application): array

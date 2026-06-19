@@ -24,6 +24,11 @@ return Application::configure(basePath: dirname(__DIR__))
             ->everyMinute()
             ->name('cgrate.poll_due_attempts')
             ->withoutOverlapping();
+
+        $schedule->command('quotations:expire')
+            ->daily()
+            ->name('quotations.expire_due')
+            ->withoutOverlapping();
     })
     ->withMiddleware(function (Middleware $middleware): void {
         $middleware->web(append: [

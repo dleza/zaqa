@@ -2,6 +2,7 @@
 
 namespace App\Domain\Reports;
 
+use App\Enums\InvoiceDocumentType;
 use App\Enums\InvoiceStatus;
 use App\Enums\PaymentStatus;
 use App\Models\Invoice;
@@ -34,6 +35,7 @@ final class PaymentsRevenueReportService
     private function invoiceBase(Carbon $from, Carbon $to, ?string $invoiceStatus): Builder
     {
         $q = Invoice::query()
+            ->where('document_type', InvoiceDocumentType::Invoice)
             ->whereNotNull('issued_at')
             ->whereBetween('issued_at', [$from, $to]);
 
@@ -90,6 +92,7 @@ final class PaymentsRevenueReportService
     {
         $month = SqlDialect::monthBucket('paid_at');
         $rows = Invoice::query()
+            ->where('document_type', InvoiceDocumentType::Invoice)
             ->where('status', InvoiceStatus::Paid)
             ->whereNotNull('paid_at')
             ->whereBetween('paid_at', [$from, $to])

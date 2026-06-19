@@ -53,7 +53,7 @@ export const applicantNavSections: ApplicantNavSection[] = [
     key: 'payments',
     label: 'Payments',
     items: [
-      { key: 'invoices', label: 'Invoices', href: '/applicant/invoices', icon: ReceiptText, badgeKey: 'invoices' },
+      { key: 'invoices', label: 'Invoices & quotations', href: '/applicant/invoices', icon: ReceiptText, badgeKey: 'invoices' },
       { key: 'payments', label: 'Payments', href: '/applicant/payments', icon: CreditCard },
       { key: 'receipts', label: 'Receipts', href: '/applicant/receipts', icon: Receipt },
     ],

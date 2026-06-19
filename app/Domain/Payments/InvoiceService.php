@@ -6,6 +6,7 @@ use App\Domain\Audit\AuditLogService;
 use App\Domain\Fees\QualificationFeeResolver;
 use App\Domain\Tracking\ApplicationLifecycleService;
 use App\Enums\ApplicationStatus;
+use App\Enums\InvoiceDocumentType;
 use App\Enums\InvoiceStatus;
 use App\Enums\LifecycleStage;
 use App\Enums\LifecycleVisibility;
@@ -45,7 +46,7 @@ class InvoiceService
             if (
                 $application->current_status === ApplicationStatus::Draft
                 && $primary
-                && $primary->status === InvoiceStatus::Issued
+                && in_array($primary->status, [InvoiceStatus::Issued, InvoiceStatus::Draft], true)
             ) {
                 $application->forceFill(['current_status' => ApplicationStatus::PendingPayment])->save();
             }
@@ -206,6 +207,8 @@ class InvoiceService
                 return $this->resolveInvoiceForPaymentFlow($application, $primary);
             }
 
+            $quotationNumber = $this->generateQuotationNumber();
+
             $invoice = Invoice::create([
                 'application_id' => $application->id,
                 'supplementary_of_invoice_id' => null,
@@ -215,12 +218,15 @@ class InvoiceService
                 'is_foreign_snapshot' => (bool) $application->is_foreign,
                 'processing_days_snapshot' => null,
                 'fee_label_snapshot' => 'Multiple qualifications',
-                'invoice_number' => $this->generateInvoiceNumber($application),
+                'document_type' => InvoiceDocumentType::Quotation,
+                'quotation_number' => $quotationNumber,
+                'invoice_number' => $quotationNumber,
                 'currency' => $currency,
                 'amount_cents' => $totalCents,
                 'status' => InvoiceStatus::Issued,
                 'issued_at' => now(),
                 'due_at' => null,
+                'expires_at' => now()->addDays(60),
                 'paid_at' => null,
                 'metadata' => [
                     'generated_by' => 'wizard_payment_step',
@@ -234,22 +240,18 @@ class InvoiceService
             }
 
             $this->audit->record(
-                eventType: 'finance.invoice_issued',
+                eventType: 'finance.quotation_issued',
                 module: 'Finance',
-                actionName: 'invoice_issued',
-                message: 'Invoice issued for application (fee resolved).',
+                actionName: 'quotation_issued',
+                message: 'Quotation issued for application (fee resolved).',
                 entityType: Invoice::class,
                 entityId: $invoice->id,
                 metadata: [
                     'application_id' => $application->id,
-                    'invoice_number' => $invoice->invoice_number,
+                    'quotation_number' => $invoice->quotation_number,
                     'amount_cents' => $invoice->amount_cents,
                     'currency' => $invoice->currency,
-                    'billing_category_id' => $invoice->billing_category_id,
-                    'qualification_type_id' => $invoice->qualification_type_id,
-                    'fee_structure_id' => $invoice->fee_structure_id,
-                    'is_foreign' => $invoice->is_foreign_snapshot,
-                    'processing_days' => $invoice->processing_days_snapshot,
+                    'expires_at' => optional($invoice->expires_at)?->toIso8601String(),
                 ],
                 actor: $actor,
             );
@@ -257,17 +259,18 @@ class InvoiceService
             $this->lifecycle->milestone(
                 application: $application,
                 eventType: 'payment',
-                eventCode: 'payment.invoice_issued',
+                eventCode: 'payment.quotation_issued',
                 stage: LifecycleStage::Payment,
-                title: 'Invoice generated',
-                description: 'An invoice was generated for this application.',
+                title: 'Quotation generated',
+                description: 'A quotation was generated for this application.',
                 visibility: LifecycleVisibility::Both,
                 actor: $actor,
                 metadata: [
                     'invoice_id' => $invoice->id,
-                    'invoice_number' => $invoice->invoice_number,
+                    'quotation_number' => $invoice->quotation_number,
                     'amount_cents' => $invoice->amount_cents,
                     'currency' => $invoice->currency,
+                    'expires_at' => optional($invoice->expires_at)?->toIso8601String(),
                 ],
                 occurredAt: now(),
             );
@@ -390,6 +393,7 @@ class InvoiceService
             'is_foreign_snapshot' => (bool) $application->is_foreign,
             'processing_days_snapshot' => null,
             'fee_label_snapshot' => 'Supplementary invoice (top-up)',
+            'document_type' => InvoiceDocumentType::Invoice,
             'invoice_number' => $this->generateSupplementaryInvoiceNumber(),
             'currency' => $currency,
             'amount_cents' => $outstanding,
@@ -505,6 +509,11 @@ class InvoiceService
         $meta = (array) ($application->metadata ?? []);
         unset($meta['fee_amendment_overpayment_notice']);
         $application->forceFill(['metadata' => $meta])->save();
+    }
+
+    private function generateQuotationNumber(): string
+    {
+        return 'QUO-'.now()->format('Y').'-'.Str::upper(Str::random(10));
     }
 
     private function generateInvoiceNumber(Application $application): string

@@ -2,6 +2,7 @@
 
 namespace App\Domain\Payments;
 
+use App\Domain\Finance\QuotationConversionService;
 use App\Domain\Applications\ApplicationAutoSubmissionService;
 use App\Domain\Applications\ApplicationSubmissionReadinessService;
 use App\Domain\Audit\AuditLogService;
@@ -38,6 +39,7 @@ class PaymentService
         private readonly ApplicationLifecycleService $lifecycle,
         private readonly ApplicationSubmissionReadinessService $submissionReadiness,
         private readonly ApplicationAutoSubmissionService $autoSubmission,
+        private readonly QuotationConversionService $quotationConversion,
     ) {
     }
 
@@ -51,6 +53,7 @@ class PaymentService
 
     public function rememberSelectedMethod(Application $application, PaymentMethod $method, User $actor): void
     {
+        $this->assertApplicationEligibleForPayment($application);
         $this->assertApplicationNotLockedByPendingProofReview($application);
 
         // Persist the choice for UX (tabs), but don't create a payment attempt.
@@ -100,6 +103,7 @@ class PaymentService
 
     public function createDraftPayment(Application $application, PaymentMethod $method, User $actor): Payment
     {
+        $this->assertApplicationEligibleForPayment($application);
         $this->assertApplicationNotLockedByPendingProofReview($application);
 
         $invoice = $this->invoices->ensureInvoice($application, $actor);
@@ -1162,10 +1166,9 @@ class PaymentService
 
         $invoice = $payment->invoice;
         if ($invoice && $invoice->status !== InvoiceStatus::Paid) {
-            $invoice->forceFill([
-                'status' => InvoiceStatus::Paid,
-                'paid_at' => $invoice->paid_at ?? now(),
-            ])->save();
+            $invoice = $this->quotationConversion->convertToInvoiceOnPayment($invoice);
+        } elseif ($invoice && $invoice->status === InvoiceStatus::Paid && $invoice->document_type?->value !== 'invoice') {
+            $invoice = $this->quotationConversion->convertToInvoiceOnPayment($invoice);
         }
 
         // Payment satisfaction is the submission trigger (idempotent).
@@ -1255,6 +1258,15 @@ class PaymentService
             || $applicationStatus !== ApplicationStatus::Submitted
             || ! $application?->paid_at
             || ($invoice !== null && $invoice->status !== InvoiceStatus::Paid);
+    }
+
+    private function assertApplicationEligibleForPayment(Application $application): void
+    {
+        if ($application->current_status === ApplicationStatus::ExpiredUnpaid) {
+            throw ValidationException::withMessages([
+                'payment' => 'This application quotation has expired and can no longer be paid.',
+            ]);
+        }
     }
 
     private function assertApplicationNotLockedByPendingProofReview(Application $application, ?Payment $ignoringPayment = null): void

@@ -2,6 +2,7 @@
 
 namespace App\Domain\Finance;
 
+use App\Enums\InvoiceDocumentType;
 use App\Enums\InvoiceStatus;
 use App\Models\ApplicantProfile;
 use App\Models\Invoice;
@@ -15,6 +16,10 @@ use Symfony\Component\HttpFoundation\Response as SymfonyResponse;
 
 class InvoicePdfService
 {
+    public function __construct(
+        private readonly InvoiceDocumentPresenter $presenter,
+    ) {}
+
     /**
      * @return array<string, mixed>
      */
@@ -36,18 +41,27 @@ class InvoicePdfService
         $vatCents = (int) data_get($invoice->metadata, 'vat_cents', 0);
         $discountCents = (int) data_get($invoice->metadata, 'discount_cents', 0);
         $totalCents = (int) $invoice->amount_cents;
+        $documentTitle = $this->presenter->documentTitle($invoice);
+        $documentNumber = $this->presenter->documentNumber($invoice);
 
         return [
             'logo_data_uri' => $this->logoDataUri(),
             'organization' => config('zaqa.organization', []),
+            'document_title' => $documentTitle,
+            'document_number_label' => $this->presenter->numberFieldLabel($invoice),
+            'document_date_label' => $this->presenter->dateFieldLabel($invoice),
             'bill_to' => [
                 'name' => $this->billToName($application, $applicant, $profile),
                 'address' => $this->billToAddress($profile),
                 'phone' => trim((string) ($profile?->phone_primary ?? $applicant?->phone_primary ?? '')),
                 'email' => trim((string) ($profile?->email ?? $applicant?->email ?? '')),
             ],
-            'invoice_number' => $invoice->invoice_number,
+            'invoice_number' => $documentNumber,
+            'document_number' => $documentNumber,
             'invoice_date' => optional($invoice->issued_at)?->timezone(config('app.timezone'))->format('d/m/Y'),
+            'expires_at' => $this->presenter->isQuotation($invoice)
+                ? optional($invoice->expires_at)?->timezone(config('app.timezone'))->format('d/m/Y')
+                : null,
             'status_label' => $this->statusLabel($invoice),
             'application_reference' => $application?->application_number,
             'application_id' => $application?->id,
@@ -98,10 +112,12 @@ class InvoicePdfService
 
     public function filename(Invoice $invoice): string
     {
-        $slug = preg_replace('/[^A-Za-z0-9._-]+/', '-', (string) $invoice->invoice_number) ?? 'invoice';
+        $number = $this->presenter->documentNumber($invoice);
+        $slug = preg_replace('/[^A-Za-z0-9._-]+/', '-', $number) ?? 'document';
         $slug = trim((string) $slug, '-');
+        $prefix = $this->presenter->filenamePrefix($invoice);
 
-        return 'invoice-'.($slug !== '' ? $slug : $invoice->id).'.pdf';
+        return $prefix.'-'.($slug !== '' ? $slug : $invoice->id).'.pdf';
     }
 
     /**
@@ -163,11 +179,20 @@ class InvoicePdfService
 
     private function statusLabel(Invoice $invoice): string
     {
+        if ($this->presenter->isQuotation($invoice)) {
+            return match ($invoice->status) {
+                InvoiceStatus::Expired => 'Expired',
+                InvoiceStatus::Void => 'Cancelled',
+                default => 'Pending',
+            };
+        }
+
         return match ($invoice->status) {
             InvoiceStatus::Paid => 'Paid',
             InvoiceStatus::Void => 'Cancelled',
             InvoiceStatus::Draft => 'Draft',
             InvoiceStatus::Issued => 'Pending',
+            InvoiceStatus::Expired => 'Expired',
             default => ucfirst((string) ($invoice->status?->value ?? $invoice->status ?? 'Pending')),
         };
     }

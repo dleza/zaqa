@@ -46,7 +46,8 @@ class InvoicePdfDownloadTest extends TestCase
 
         $response->assertOk();
         $response->assertHeader('content-type', 'application/pdf');
-        $this->assertStringContainsString('invoice-'.$invoice->invoice_number.'.pdf', (string) $response->headers->get('content-disposition'));
+        $prefix = app(\App\Domain\Finance\InvoiceDocumentPresenter::class)->filenamePrefix($invoice);
+        $this->assertStringContainsString($prefix.'-'.$invoice->invoice_number.'.pdf', (string) $response->headers->get('content-disposition'));
     }
 
     public function test_applicant_cannot_download_another_applicants_invoice_pdf(): void
@@ -96,7 +97,11 @@ class InvoicePdfDownloadTest extends TestCase
     public function test_paid_invoice_pdf_shows_paid_status(): void
     {
         [$invoice] = $this->issuedInvoicePair(status: InvoiceStatus::Paid);
-        $invoice->forceFill(['paid_at' => now()])->save();
+        $invoice->forceFill([
+            'paid_at' => now(),
+            'document_type' => \App\Enums\InvoiceDocumentType::Invoice,
+            'invoice_number' => 'INV-TEST-PAID-'.random_int(1000, 9999),
+        ])->save();
 
         $data = app(InvoicePdfService::class)->buildViewData($invoice->fresh());
         $this->assertSame('Paid', $data['status_label']);

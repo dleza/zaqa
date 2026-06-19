@@ -8,5 +8,6 @@ enum InvoiceStatus: string
     case Issued = 'issued';
     case Paid = 'paid';
     case Void = 'void';
+    case Expired = 'expired';
 }
 

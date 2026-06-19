@@ -114,15 +114,32 @@ const applicationRef = props.document.application_reference || (props.document.a
           class="inline-flex items-center gap-1.5 text-sm font-medium text-text-muted transition hover:text-brand"
         >
           <ArrowLeft class="h-4 w-4" aria-hidden="true" />
-          All invoices
+          All invoices &amp; quotations
         </Link>
 
         <div class="mt-6 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <div class="min-w-0">
             <p class="text-xs font-semibold uppercase tracking-[0.18em] text-text-muted">Billing</p>
             <h1 class="mt-2 font-mono text-2xl font-semibold tracking-tight text-text-primary sm:text-3xl">
-              {{ invoice.invoice_number }}
+              {{ invoice.document_number ?? invoice.invoice_number }}
             </h1>
+            <p v-if="invoice.document_type === 'quotation' && invoice.expires_at" class="mt-2 text-sm text-text-muted">
+              This quotation expires on
+              <span class="font-semibold text-text-primary">{{ new Date(invoice.expires_at).toLocaleDateString(undefined, { dateStyle: 'long' }) }}</span>.
+            </p>
+            <p
+              v-else-if="invoice.document_type === 'invoice' && invoice.quotation_number"
+              class="mt-2 text-sm text-text-muted"
+            >
+              Converted from quotation
+              <span class="font-mono font-semibold text-text-primary">{{ invoice.quotation_number }}</span>
+              <span v-if="invoice.converted_to_invoice_at">
+                on
+                <span class="font-semibold text-text-primary">{{
+                  new Date(invoice.converted_to_invoice_at).toLocaleDateString(undefined, { dateStyle: 'long' })
+                }}</span>
+              </span>.
+            </p>
             <p v-if="invoice.application" class="mt-2 max-w-2xl text-sm text-text-muted">
               Application
               <span class="font-mono font-semibold text-text-primary">{{ invoice.application.application_number }}</span>
@@ -139,7 +156,7 @@ const applicationRef = props.document.application_reference || (props.document.a
               class="zaqa-btn zaqa-btn-primary inline-flex items-center gap-2 px-4 py-2 text-sm"
             >
               <FileDown class="h-4 w-4" aria-hidden="true" />
-              Download PDF
+              {{ invoice.download_label ?? 'Download PDF' }}
             </a>
 
             <template v-if="invoice.application">

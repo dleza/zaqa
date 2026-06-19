@@ -61,9 +61,29 @@ const paymentAwaitingFinanceReview = computed(
 
 const bankDepositAccount = computed(() => props.bankTransfer?.deposit_account ?? null)
 const bankDepositReference = computed(() => {
-  const invoiceNumber = (invoice.value?.invoice_number ?? '').toString().trim()
-  if (invoiceNumber) return invoiceNumber
+  const docNumber = (invoice.value?.document_number ?? invoice.value?.invoice_number ?? '').toString().trim()
+  if (docNumber) return docNumber
   return (props.application?.application_number ?? '').toString().trim() || '—'
+})
+
+const billingDocumentLabel = computed(() => {
+  const title = (invoice.value?.document_title ?? '').toString().trim()
+  if (title) return title
+  return invoice.value?.document_type === 'quotation' ? 'Quotation' : 'Invoice'
+})
+
+const billingDownloadLabel = computed(() => {
+  const label = (invoice.value?.download_label ?? '').toString().trim()
+  if (label) return label
+  return invoice.value?.document_type === 'quotation' ? 'Download quotation' : 'Download invoice'
+})
+
+const quotationExpiryDisplay = computed(() => {
+  const raw = (invoice.value?.expires_at ?? '').toString().trim()
+  if (!raw || invoice.value?.document_type !== 'quotation') return null
+  const date = new Date(raw)
+  if (Number.isNaN(date.getTime())) return null
+  return new Intl.DateTimeFormat(undefined, { dateStyle: 'long' }).format(date)
 })
 
 function formatMoneyCents(cents: number) {
@@ -216,8 +236,8 @@ onBeforeUnmount(() => stopMobileMoneyPolling())
     <div class="rounded-xl border border-border bg-surface p-3 shadow-sm ring-1 ring-black/[0.04] sm:p-4">
       <div class="flex flex-wrap items-center justify-between gap-3">
         <div class="text-xs">
-          <span class="text-text-muted">Invoice:</span>
-          <span class="ml-1 font-semibold text-text-primary">{{ invoice?.invoice_number ?? '—' }}</span>
+          <span class="text-text-muted">{{ billingDocumentLabel }}:</span>
+          <span class="ml-1 font-semibold text-text-primary">{{ invoice?.document_number ?? invoice?.invoice_number ?? '—' }}</span>
         </div>
         <div class="flex flex-wrap items-center gap-2">
           <span class="zaqa-badge text-xs" :class="paymentStatusBadgeClass(payment?.status)">
@@ -225,10 +245,14 @@ onBeforeUnmount(() => stopMobileMoneyPolling())
             {{ paymentStatusLabel(payment?.status) }}
           </span>
           <a v-if="invoice?.download_url" :href="invoice.download_url" class="zaqa-btn zaqa-btn-secondary px-3 py-1.5 text-xs">
-            Download invoice
+            {{ billingDownloadLabel }}
           </a>
         </div>
       </div>
+
+      <p v-if="quotationExpiryDisplay" class="mt-3 text-xs text-text-muted">
+        This quotation expires on <span class="font-semibold text-text-primary">{{ quotationExpiryDisplay }}</span>.
+      </p>
 
       <div v-if="invoice && invoiceLineItems.length > 0" class="mt-3 border-t border-border/50 pt-3">
         <div class="text-[10px] font-semibold uppercase tracking-wider text-text-muted">Fee breakdown</div>
@@ -246,12 +270,12 @@ onBeforeUnmount(() => stopMobileMoneyPolling())
 
       <div v-if="!invoice && !applicationLocked" class="mt-3 border-t border-border/50 pt-3 text-xs text-text-muted">
         <span v-if="paymentBlocked">Complete {{ blockedStepLabel ?? 'previous steps' }} to unlock payment.</span>
-        <span v-else-if="prepareInvoiceForm.processing">Preparing your invoice…</span>
+        <span v-else-if="prepareInvoiceForm.processing">Preparing your quotation…</span>
         <span v-else-if="invoicePreparation.auto_failed">
-          Could not prepare invoice.
+          Could not prepare quotation.
           <button type="button" class="zaqa-link ml-1" @click="prepareInvoice(false)">Retry</button>
         </span>
-        <span v-else>Preparing your invoice…</span>
+        <span v-else>Preparing your quotation…</span>
         <button
           v-if="paymentBlocked"
           type="button"

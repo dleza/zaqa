@@ -117,7 +117,7 @@
     </style>
 </head>
 <body>
-    <div class="header-bar">Invoice</div>
+    <div class="header-bar">{{ $document_title ?? 'Invoice' }}</div>
 
     <div class="content">
         <div class="brand-block">
@@ -155,13 +155,19 @@
 
         <table class="meta-table">
             <tr>
-                <td class="meta-label">Invoice Number :</td>
-                <td class="meta-value">#{{ $invoice_number }}</td>
+                <td class="meta-label">{{ $document_number_label ?? 'Invoice Number' }} :</td>
+                <td class="meta-value">#{{ $document_number ?? $invoice_number }}</td>
             </tr>
             <tr>
-                <td class="meta-label">Invoice Date :</td>
+                <td class="meta-label">{{ $document_date_label ?? 'Invoice Date' }} :</td>
                 <td class="meta-value">{{ $invoice_date ?: 'N/A' }}</td>
             </tr>
+            @if (!empty($expires_at))
+            <tr>
+                <td class="meta-label">Valid Until :</td>
+                <td class="meta-value">{{ $expires_at }}</td>
+            </tr>
+            @endif
             <tr>
                 <td class="meta-label">Status :</td>
                 <td class="meta-value">{{ $status_label }}</td>

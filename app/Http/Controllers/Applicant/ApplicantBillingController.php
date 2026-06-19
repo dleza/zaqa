@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Applicant;
 
+use App\Domain\Finance\InvoiceDocumentPresenter;
 use App\Domain\Finance\InvoicePdfService;
 use App\Domain\Finance\PaymentReceiptPdfService;
 use App\Enums\PaymentStatus;
@@ -20,15 +21,16 @@ class ApplicantBillingController extends Controller
     public function invoices(Request $request): Response
     {
         $user = $request->user();
+        $presenter = app(InvoiceDocumentPresenter::class);
 
         $invoices = Invoice::query()
             ->with(['application'])
             ->whereHas('application', fn ($q) => $q->where('applicant_user_id', $user->id))
             ->latest('id')
             ->get()
-            ->map(fn (Invoice $inv) => [
+            ->map(fn (Invoice $inv) => array_merge([
                 'id' => $inv->id,
-                'invoice_number' => $inv->invoice_number,
+                'invoice_number' => $presenter->documentNumber($inv),
                 'currency' => $inv->currency,
                 'amount_cents' => $inv->amount_cents,
                 'status' => $inv->status?->value ?? (string) $inv->status,
@@ -42,7 +44,7 @@ class ApplicantBillingController extends Controller
                     ]
                     : null,
                 'download_url' => route('applicant.invoices.download', $inv),
-            ]);
+            ], $presenter->applicantPayload($inv)));
 
         return Inertia::render('Applicant/Invoices', [
             'invoices' => $invoices,
@@ -104,12 +106,13 @@ class ApplicantBillingController extends Controller
         ]);
 
         $this->assertApplicantOwnsApplication($request, $invoice->application);
+        $presenter = app(InvoiceDocumentPresenter::class);
 
         return Inertia::render('Applicant/InvoiceShow', [
             'document' => $pdf->buildWebViewData($invoice),
-            'invoice' => [
+            'invoice' => array_merge([
                 'id' => $invoice->id,
-                'invoice_number' => $invoice->invoice_number,
+                'invoice_number' => $presenter->documentNumber($invoice),
                 'currency' => $invoice->currency,
                 'amount_cents' => $invoice->amount_cents,
                 'status' => $invoice->status?->value ?? (string) $invoice->status,
@@ -142,7 +145,7 @@ class ApplicantBillingController extends Controller
                     'receipt_download_url' => app(PaymentReceiptPdfService::class)->receiptDownloadUrl($p, 'applicant.payments.receipt.download'),
                 ])->values()->all(),
                 'download_url' => route('applicant.invoices.download', $invoice),
-            ],
+            ], $presenter->applicantPayload($invoice)),
         ]);
     }
 
