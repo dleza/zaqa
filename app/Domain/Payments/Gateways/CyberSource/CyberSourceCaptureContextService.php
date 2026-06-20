@@ -67,7 +67,7 @@ final class CyberSourceCaptureContextService
 
     private function clientVersion(): string
     {
-        return trim((string) config('cybersource.microform_client_version', '2.0')) ?: '2.0';
+        return trim((string) config('cybersource.microform_client_version', 'v2')) ?: 'v2';
     }
 
     /**

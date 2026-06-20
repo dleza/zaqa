@@ -19,7 +19,7 @@ class CyberSourceCaptureContextServiceTest extends TestCase
         $service = new CyberSourceCaptureContextService(app(CyberSourceClientFactory::class));
         $request = $service->buildCaptureContextRequest($this->payment());
 
-        $this->assertSame('2.0', $request->getClientVersion());
+        $this->assertSame('v2', $request->getClientVersion());
         $this->assertSame(['https://example.test'], $request->getTargetOrigins());
         $this->assertSame(['VISA', 'MASTERCARD'], $request->getAllowedCardNetworks());
         $this->assertSame(['CARD'], $request->getAllowedPaymentTypes());
@@ -79,6 +79,7 @@ class CyberSourceCaptureContextServiceTest extends TestCase
             'cybersource.auth_type' => 'JWT',
             'cybersource.jwt_key_type' => 'SHARED_SECRET',
             'cybersource.target_origins' => ['https://example.test'],
+            'cybersource.microform_client_version' => 'v2',
             'cybersource.allowed_card_networks' => ['VISA', 'MASTERCARD'],
             'cybersource.allowed_payment_types' => ['CARD'],
         ]);

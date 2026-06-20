@@ -32,6 +32,7 @@ return [
     'jwt_key_type' => env('CYBERSOURCE_JWT_KEY_TYPE', 'SHARED_SECRET'),
 
     'target_origins' => $csv(env('CYBERSOURCE_TARGET_ORIGINS', '')),
+    'microform_client_version' => env('CYBERSOURCE_MICROFORM_CLIENT_VERSION', 'v2'),
     'allowed_card_networks' => $csv(env('CYBERSOURCE_ALLOWED_CARD_NETWORKS', 'VISA,MASTERCARD'), ['VISA', 'MASTERCARD']),
     'allowed_payment_types' => $csv(env('CYBERSOURCE_ALLOWED_PAYMENT_TYPES', 'CARD'), ['CARD']),
 
