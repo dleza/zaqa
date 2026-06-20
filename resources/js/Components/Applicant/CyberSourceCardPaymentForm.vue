@@ -294,7 +294,7 @@ function transientTokenFromResponse(token: unknown): string {
 
 function decodeCaptureContext(captureContext: string): CaptureContextMetadata {
   const payload = decodeJwtPayload(captureContext)
-  const data = payload?.data && typeof payload.data === 'object' ? payload.data as Record<string, unknown> : {}
+  const data = captureContextData(payload)
   const clientLibrary = typeof data.clientLibrary === 'string' ? data.clientLibrary : ''
   const clientLibraryIntegrity = typeof data.clientLibraryIntegrity === 'string' ? data.clientLibraryIntegrity : ''
 
@@ -306,6 +306,24 @@ function decodeCaptureContext(captureContext: string): CaptureContextMetadata {
     clientLibrary,
     clientLibraryIntegrity: clientLibraryIntegrity || undefined,
   }
+}
+
+function captureContextData(payload: Record<string, unknown>): Record<string, unknown> {
+  if (payload.data && typeof payload.data === 'object') {
+    return payload.data as Record<string, unknown>
+  }
+
+  const contexts = Array.isArray(payload.ctx) ? payload.ctx : []
+  for (const context of contexts) {
+    if (!context || typeof context !== 'object') continue
+
+    const data = (context as Record<string, unknown>).data
+    if (data && typeof data === 'object') {
+      return data as Record<string, unknown>
+    }
+  }
+
+  return {}
 }
 
 function decodeJwtPayload(jwt: string): Record<string, unknown> {
