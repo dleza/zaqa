@@ -9,6 +9,7 @@ import WizardShell from '@/Components/WizardShell.vue'
 import WizardFooterBar from '@/Components/WizardFooterBar.vue'
 import DocumentManager from '@/Components/DocumentManager.vue'
 import ActionModal from '@/Components/ActionModal.vue'
+import CyberSourceCardPaymentForm from '@/Components/Applicant/CyberSourceCardPaymentForm.vue'
 import Swal from 'sweetalert2'
 import { isAllowedCertificateSubjectGrade } from '@/lib/certificateSubjectGrades'
 import { useUploadLimits } from '@/lib/uploadLimits'
@@ -1036,18 +1037,6 @@ watch(
 )
 
 onBeforeUnmount(() => stopMobileMoneyPolling())
-
-const cardInitiateForm = useForm({})
-function initiateCardPayment() {
-  setSaving('Redirecting to card payment…')
-  cardInitiateForm.post(`/applicant/applications/${props.application.id}/payment/initiate-card`, {
-    preserveScroll: true,
-    onError: () => setError('Could not initiate card payment.'),
-    onFinish: () => {
-      if (saveState.value.state === 'saving') saveState.value = { state: 'idle' }
-    },
-  })
-}
 
 type PaymentTabKey = 'card' | 'bank_transfer' | 'mobile_money'
 
@@ -2444,22 +2433,7 @@ onBeforeUnmount(() => {
 		              <div class="mt-3 rounded-2xl bg-surface p-4 shadow-sm ring-1 ring-black/[0.04] sm:mt-4 sm:p-5">
               <!-- Card -->
               <div v-if="activePaymentTab === 'card'">
-                <div class="text-sm font-semibold text-text-primary">Pay by card</div>
-                <div class="mt-1 text-xs text-text-muted">You’ll be redirected to the payment gateway and returned here after the attempt.</div>
-
-	                <div class="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-	                  <button
-	                    type="button"
-	                    class="zaqa-btn zaqa-btn-primary w-full sm:w-auto"
-	                    :disabled="(payment?.status ?? '') === 'confirmed' || cardInitiateForm.processing"
-	                    @click="initiateCardPayment"
-	                  >
-	                    Pay by card
-	                  </button>
-		                  <div class="text-xs text-text-muted">
-		                    Status: <span class="font-semibold text-text-primary">{{ paymentStatusLabel(payment?.status) }}</span>
-		                  </div>
-		                </div>
+                <CyberSourceCardPaymentForm :application="application" />
 		              </div>
 
               <!-- Bank transfer -->

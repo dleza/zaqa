@@ -2,6 +2,7 @@
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { router, useForm } from '@inertiajs/vue3'
 import InputError from '@/Components/InputError.vue'
+import CyberSourceCardPaymentForm from '@/Components/Applicant/CyberSourceCardPaymentForm.vue'
 import {
   AlertCircle,
   CheckCircle2,
@@ -27,7 +28,6 @@ const emit = defineEmits<{
 }>()
 
 const prepareInvoiceForm = useForm({})
-const cardInitiateForm = useForm({})
 const proofForm = useForm<{ file: File | null }>({ file: null })
 const mobileMoneyForm = useForm({ mobile_number: '' })
 
@@ -134,12 +134,6 @@ watch(
   },
   { immediate: true },
 )
-
-function initiateCardPayment() {
-  cardInitiateForm.post(`/applicant/applications/${props.application.id}/payment/initiate-card`, {
-    preserveScroll: true,
-  })
-}
 
 function onProofFileChange(e: Event) {
   const target = e.target as HTMLInputElement
@@ -337,15 +331,7 @@ onBeforeUnmount(() => stopMobileMoneyPolling())
 
         <div class="mt-3 rounded-2xl bg-surface p-4 ring-1 ring-black/[0.04]">
           <div v-if="activePaymentTab === 'card'">
-            <div class="text-sm font-semibold">Pay by card</div>
-            <button
-              type="button"
-              class="zaqa-btn zaqa-btn-primary mt-3"
-              :disabled="cardInitiateForm.processing"
-              @click="initiateCardPayment"
-            >
-              Pay by card
-            </button>
+            <CyberSourceCardPaymentForm :application="application" />
           </div>
 
           <div v-else-if="activePaymentTab === 'bank_transfer'">
