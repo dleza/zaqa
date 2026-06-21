@@ -2,8 +2,9 @@
 import AdminLayout from '@/Layouts/AdminLayout.vue'
 import AdminActionModal from '@/Components/AdminActionModal.vue'
 import AdminTablePagination from '@/Components/AdminTablePagination.vue'
+import ReferenceSearchFilters from '@/Components/Admin/ReferenceSearchFilters.vue'
 import { Link, router, useForm, usePage } from '@inertiajs/vue3'
-import { Search, UserPlus } from 'lucide-vue-next'
+import { UserPlus } from 'lucide-vue-next'
 import { computed, ref, watch } from 'vue'
 
 type QueueRow = {
@@ -17,12 +18,12 @@ const props = defineProps<{
   qualifications: any
   pageVariant: 'level1' | 'level2'
   filters: {
-    q?: string
+    application_reference?: string
+    qualification_reference?: string
     overdue?: string | null
     overdue_days?: string | null
     submitted_from?: string | null
     submitted_to?: string | null
-    qualification_q?: string | null
     foreign?: string | null
     qualification_type_id?: string | null
     awarding_institution_id?: string | null
@@ -69,12 +70,12 @@ const canBulkAssign = computed(() =>
   props.pageVariant === 'level1' ? props.can.assign_level1 : props.can.assign_level2,
 )
 
-const q = ref((props.filters.q ?? '').toString())
+const applicationReference = ref((props.filters.application_reference ?? '').toString())
+const qualificationReference = ref((props.filters.qualification_reference ?? '').toString())
 const overdue = ref((props.filters.overdue ?? '').toString())
 const overdueDays = ref((props.filters.overdue_days ?? '').toString())
 const submittedFrom = ref((props.filters.submitted_from ?? '').toString())
 const submittedTo = ref((props.filters.submitted_to ?? '').toString())
-const qualificationQ = ref((props.filters.qualification_q ?? '').toString())
 const foreign = ref((props.filters.foreign ?? '').toString())
 const sort = ref((props.filters.sort ?? 'deadline').toString())
 const direction = ref((props.filters.direction ?? 'asc').toString())
@@ -239,12 +240,12 @@ function toggleDirection(nextSort: string) {
 }
 
 function clearFilters() {
-  q.value = ''
+  applicationReference.value = ''
+  qualificationReference.value = ''
   overdue.value = ''
   overdueDays.value = ''
   submittedFrom.value = ''
   submittedTo.value = ''
-  qualificationQ.value = ''
   foreign.value = ''
   sort.value = 'deadline'
   direction.value = 'asc'
@@ -258,16 +259,12 @@ watch(
   },
 )
 
-watch([q, overdue, overdueDays, submittedFrom, submittedTo, qualificationQ, foreign, sort, direction, listBasePath], () => {
+watch([applicationReference, qualificationReference, overdue, overdueDays, submittedFrom, submittedTo, foreign, sort, direction, listBasePath], () => {
   router.get(
     listBasePath.value,
     {
-      q: q.value || null,
-      overdue: overdue.value || null,
-      overdue_days: overdueDays.value || null,
-      submitted_from: submittedFrom.value || null,
-      submitted_to: submittedTo.value || null,
-      qualification_q: qualificationQ.value || null,
+      application_reference: applicationReference.value || null,
+      qualification_reference: qualificationReference.value || null,
       foreign: foreign.value || null,
       sort: sort.value || null,
       direction: direction.value || null,
@@ -303,14 +300,14 @@ watch([q, overdue, overdueDays, submittedFrom, submittedTo, qualificationQ, fore
     <div class="mt-6 overflow-hidden rounded-2xl border border-border bg-surface shadow-sm">
       <div class="border-b border-border bg-surface-muted px-5 py-4">
         <div class="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
-          <div class="relative xl:col-span-1">
-            <label class="mb-1 block text-xs font-semibold text-text-muted">Search</label>
-            <Search class="pointer-events-none absolute left-3 top-[2.05rem] h-4 w-4 -translate-y-1/2 text-text-muted" aria-hidden="true" />
-            <input v-model="q" class="zaqa-input h-10 w-full pl-9" placeholder="Application #, holder, reference…" />
-          </div>
-          <div>
-            <label class="mb-1 block text-xs font-semibold text-text-muted">Qualification title</label>
-            <input v-model="qualificationQ" type="text" class="zaqa-input h-10 w-full" placeholder="Contains…" />
+          <div class="xl:col-span-2">
+            <label class="mb-1 block text-xs font-semibold text-text-muted">Reference search</label>
+            <ReferenceSearchFilters
+              v-model:application-reference="applicationReference"
+              v-model:qualification-reference="qualificationReference"
+              compact
+            />
+            <p class="mt-1 text-xs text-text-muted">Search is limited to application or qualification reference for faster results.</p>
           </div>
           <div>
             <label class="mb-1 block text-xs font-semibold text-text-muted">Submitted from</label>

@@ -168,7 +168,7 @@ That means the UI must feel modern and fast, while still staying tightly integra
 - **MySQL**
 - **Redis**
 - **Object storage** for uploads and generated certificates
-- **Queue workers** for PDF generation, notifications, document processing, reminders, and integrations
+- **Laravel Horizon** (Supervisor-managed) for PDF generation, notifications, document processing, reminders, and integrations
 - Optional:
   - **Meilisearch/Elasticsearch** for advanced search
   - **MinIO/S3** for file storage
@@ -746,7 +746,7 @@ Phase 1:
 - monolith Laravel app
 
 Phase 2:
-- separate queue workers and storage
+- scale Horizon supervisor settings and storage (not separate `queue:work` pools)
 
 Phase 3:
 - extract notifications/integrations/reporting into services if needed

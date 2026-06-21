@@ -1,18 +1,20 @@
 <script setup lang="ts">
 import AdminLayout from '@/Layouts/AdminLayout.vue'
 import AdminPagination from '@/Components/AdminPagination.vue'
+import ReferenceSearchFilters from '@/Components/Admin/ReferenceSearchFilters.vue'
 import { Link, router } from '@inertiajs/vue3'
-import { ClipboardList, Search } from 'lucide-vue-next'
+import { ClipboardList } from 'lucide-vue-next'
 import { computed, ref, watch } from 'vue'
 import { formatMoneyFromCents } from '@/utils/money'
 
 const props = defineProps<{
   applications: any
-  filters: { q: string; status?: string | null }
+  filters: { application_reference: string; qualification_reference: string; status?: string | null }
   can: { finance_view: boolean }
 }>()
 
-const q = ref(props.filters.q ?? '')
+const applicationReference = ref(props.filters.application_reference ?? '')
+const qualificationReference = ref(props.filters.qualification_reference ?? '')
 const status = ref<string>(props.filters.status ?? '')
 
 const statusBadgeClass = computed(() => {
@@ -26,10 +28,14 @@ const statusBadgeClass = computed(() => {
   }
 })
 
-watch([q, status], () => {
+watch([applicationReference, qualificationReference, status], () => {
   router.get(
     '/admin/applications',
-    { q: q.value || null, status: status.value || null },
+    {
+      application_reference: applicationReference.value || null,
+      qualification_reference: qualificationReference.value || null,
+      status: status.value || null,
+    },
     { preserveState: true, replace: true, preserveScroll: true },
   )
 })
@@ -67,7 +73,7 @@ function formatDateTime(iso: string | null | undefined) {
         <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <div class="text-sm font-semibold text-text-primary">Closed application registry</div>
-            <div class="mt-1 text-xs text-text-muted">Search by application #, applicant name, qualification holder, title, or invoice #.</div>
+            <div class="mt-1 text-xs text-text-muted">Search is limited to application or qualification reference for faster results.</div>
           </div>
           <div class="flex flex-col gap-2 sm:flex-row sm:items-center">
             <select v-model="status" class="zaqa-input h-10">
@@ -77,10 +83,11 @@ function formatDateTime(iso: string | null | undefined) {
               <option value="certificate_ready">Certificate ready</option>
               <option value="completed">Completed</option>
             </select>
-            <div class="relative">
-              <Search class="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-text-muted" aria-hidden="true" />
-              <input v-model="q" class="zaqa-input h-10 pl-9" placeholder="Search applications..." />
-            </div>
+            <ReferenceSearchFilters
+              v-model:application-reference="applicationReference"
+              v-model:qualification-reference="qualificationReference"
+              compact
+            />
           </div>
         </div>
       </div>

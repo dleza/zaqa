@@ -74,8 +74,9 @@ It is **not required** for the normal VPS deployment (Nginx/Apache + Supervisor 
    - `docker compose up -d --build`
 3. Run migrations:
    - `docker compose exec app php artisan migrate --force`
-4. (Optional) run queue worker and scheduler as separate services:
+4. (Optional) run **Horizon** (queue processing) and scheduler as separate Docker services:
    - `docker compose --profile worker --profile scheduler up -d`
+   - The `worker` service runs `php artisan horizon` (requires Redis; see `docker-compose.yml`)
 
 App will be available on:
 - `http://localhost:8080` (or set `DOCKER_WEB_PORT`)
@@ -84,6 +85,7 @@ App will be available on:
 - Database host in Docker is `mysql` (see `.env.docker.example`).
 - `storage/` and `bootstrap/cache/` are mounted as writable volumes.
 - The `nginx` container only serves the `public/` directory and proxies PHP to the `app` (php-fpm) container.
+- Production queue architecture uses **Laravel Horizon + Redis** (see `docs/05_MOBILE_MONEY_PAYMENTS_PRODUCTION.md`). The optional `worker` Compose profile runs Horizon, not raw `queue:work` workers.
 
 ### Render / single-container PaaS
 Some platforms (like Render) run a **single** Docker container and do not support Docker Compose networking.

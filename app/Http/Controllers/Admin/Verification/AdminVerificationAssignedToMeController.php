@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Admin\Verification;
 
 use App\Domain\Verification\QualificationsPoolService;
+use App\Http\Controllers\Admin\Verification\Concerns\ProvidesVerificationReferenceFilters;
 use App\Http\Controllers\Controller;
 use App\Models\Qualification;
 use App\Support\Applications\QualificationHolderIdentityResolver;
@@ -12,6 +13,8 @@ use Inertia\Response;
 
 class AdminVerificationAssignedToMeController extends Controller
 {
+    use ProvidesVerificationReferenceFilters;
+
     public function index(Request $request, QualificationsPoolService $pool): Response
     {
         $user = $request->user();
@@ -51,14 +54,12 @@ class AdminVerificationAssignedToMeController extends Controller
                 'awarding_institution' => $q->awardingInstitution?->name ?? $q->awarding_institution_name_other ?? $q->awarding_institution_name,
                 'is_foreign' => (bool) $q->is_foreign_qualification,
             ]),
-            'filters' => [
-                'q' => (string) $request->query('q', ''),
+            'filters' => $this->referenceSearchFilters($request, [
                 'overdue' => $request->query('overdue'),
                 'overdue_days' => $request->query('overdue_days'),
                 'submitted_from' => $request->query('submitted_from'),
                 'submitted_to' => $request->query('submitted_to'),
-                'qualification_q' => $request->query('qualification_q'),
-            ],
+            ]),
         ]);
     }
 }

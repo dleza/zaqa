@@ -126,6 +126,9 @@ function formatDateTimeValue(iso: string | null | undefined): string {
 
 function goToStep(key: StepKey) {
   activeStep.value = key
+  if (key === 'payment') {
+    applyDefaultPaymentTab()
+  }
   try {
     localStorage.setItem(`zaqa:wizard:${props.application.id}:step`, key)
     const url = new URL(window.location.href)
@@ -1047,30 +1050,19 @@ function paymentTabFromMethod(method: any): PaymentTabKey | null {
   return null
 }
 
-function loadPaymentTabPreference(): PaymentTabKey | null {
-  try {
-    const v = localStorage.getItem(`zaqa:wizard:${props.application.id}:payment_tab`)
-    if (v === 'card' || v === 'bank_transfer' || v === 'mobile_money') return v
-  } catch {
-    // ignore
-  }
-  return null
-}
-
-function storePaymentTabPreference(tab: PaymentTabKey) {
-  try {
-    localStorage.setItem(`zaqa:wizard:${props.application.id}:payment_tab`, tab)
-  } catch {
-    // ignore
-  }
+function resolvePaymentTab(): PaymentTabKey {
+  return paymentTabFromMethod(payment.value?.method) ?? 'mobile_money'
 }
 
 function setPaymentTab(tab: PaymentTabKey) {
   activePaymentTab.value = tab
-  storePaymentTabPreference(tab)
 }
 
-const activePaymentTab = ref<PaymentTabKey>(paymentTabFromMethod(payment.value?.method) ?? loadPaymentTabPreference() ?? 'card')
+function applyDefaultPaymentTab() {
+  activePaymentTab.value = resolvePaymentTab()
+}
+
+const activePaymentTab = ref<PaymentTabKey>(resolvePaymentTab())
 
 const bankDepositAccount = computed(() => props.bankTransfer?.deposit_account ?? null)
 
@@ -1268,6 +1260,7 @@ watch(
   () => activeStep.value,
   (step) => {
     if (step !== 'payment') return
+    applyDefaultPaymentTab()
     if (paymentInvoiceMissingSteps.value.length > 0) return
     prepareInvoice(true)
   },
@@ -2398,6 +2391,17 @@ onBeforeUnmount(() => {
 		                <button
 		                  type="button"
 		                  role="tab"
+		                  :aria-selected="activePaymentTab === 'mobile_money'"
+		                  class="flex min-w-[9.5rem] shrink-0 items-center gap-2 rounded-xl px-3 py-2 text-left text-sm font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background sm:min-w-0 sm:w-full"
+		                  :class="activePaymentTab === 'mobile_money' ? 'bg-brand/10 text-brand ring-1 ring-brand/20 shadow-sm' : 'text-text-muted hover:bg-surface-muted'"
+		                  @click="setPaymentTab('mobile_money')"
+		                >
+		                  <Smartphone class="h-4 w-4" aria-hidden="true" />
+	                  <span>Mobile Money</span>
+	                </button>
+		                <button
+		                  type="button"
+		                  role="tab"
 		                  :aria-selected="activePaymentTab === 'card'"
 		                  class="flex min-w-[9.5rem] shrink-0 items-center gap-2 rounded-xl px-3 py-2 text-left text-sm font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background sm:min-w-0 sm:w-full"
 		                  :class="activePaymentTab === 'card' ? 'bg-brand/10 text-brand ring-1 ring-brand/20 shadow-sm' : 'text-text-muted hover:bg-surface-muted'"
@@ -2417,103 +2421,11 @@ onBeforeUnmount(() => {
 		                  <Landmark class="h-4 w-4" aria-hidden="true" />
 	                  <span>Bank Deposit or Transfer</span>
 	                </button>
-		                <button
-		                  type="button"
-		                  role="tab"
-		                  :aria-selected="activePaymentTab === 'mobile_money'"
-		                  class="flex min-w-[9.5rem] shrink-0 items-center gap-2 rounded-xl px-3 py-2 text-left text-sm font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background sm:min-w-0 sm:w-full"
-		                  :class="activePaymentTab === 'mobile_money' ? 'bg-brand/10 text-brand ring-1 ring-brand/20 shadow-sm' : 'text-text-muted hover:bg-surface-muted'"
-		                  @click="setPaymentTab('mobile_money')"
-		                >
-		                  <Smartphone class="h-4 w-4" aria-hidden="true" />
-	                  <span>Mobile Money</span>
-	                </button>
 	              </div>
 	
 		              <div class="mt-3 rounded-2xl bg-surface p-4 shadow-sm ring-1 ring-black/[0.04] sm:mt-4 sm:p-5">
-              <!-- Card -->
-              <div v-if="activePaymentTab === 'card'">
-                <CyberSourceCardPaymentForm :application="application" />
-		              </div>
-
-              <!-- Bank transfer -->
-	              <div v-else-if="activePaymentTab === 'bank_transfer'">
-	                <div class="text-sm font-semibold text-text-primary">Pay by bank transfer or deposit</div>
-	                <div class="mt-1 text-xs text-text-muted">
-	                  Transfer the invoice amount to the ZAQA account below, then upload your proof of payment for finance review.
-	                </div>
-
-	                <div class="mt-4 rounded-xl border border-brand/15 bg-brand/5 p-4">
-	                  <div class="text-[11px] font-semibold uppercase tracking-wider text-text-muted">Deposit account details</div>
-	                  <dl class="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
-	                    <div>
-	                      <dt class="text-xs font-medium text-text-muted">Bank name</dt>
-	                      <dd class="mt-1 text-sm font-semibold text-text-primary">{{ bankDepositField(bankDepositAccount?.bank_name) }}</dd>
-	                    </div>
-	                    <div>
-	                      <dt class="text-xs font-medium text-text-muted">Branch code</dt>
-	                      <dd class="mt-1 font-mono text-sm font-semibold text-text-primary">{{ bankDepositField(bankDepositAccount?.branch_code) }}</dd>
-	                    </div>
-	                    <div>
-	                      <dt class="text-xs font-medium text-text-muted">Account name</dt>
-	                      <dd class="mt-1 text-sm font-semibold text-text-primary">{{ bankDepositField(bankDepositAccount?.account_name) }}</dd>
-	                    </div>
-	                    <div>
-	                      <dt class="text-xs font-medium text-text-muted">Account number</dt>
-	                      <dd class="mt-1 font-mono text-sm font-semibold text-text-primary">{{ bankDepositField(bankDepositAccount?.account_number) }}</dd>
-	                    </div>
-	                  </dl>
-	                  <p class="mt-3 text-xs leading-relaxed text-text-muted">
-	                    Use
-	                    <span class="font-mono font-semibold text-text-primary">{{ bankDepositReference }}</span>
-	                    as your payment reference where possible.
-	                  </p>
-	                </div>
-
-	                <div class="mt-4 text-sm font-semibold text-text-primary">Upload proof of payment</div>
-	                <div class="mt-1 text-xs text-text-muted">
-	                  Upload your bank transfer proof or bank deposit slip once payment has been made.
-	                </div>
-	
-	                <div class="mt-3 flex items-center justify-between gap-3">
-		                  <span class="zaqa-badge" :class="paymentStatusBadgeClass(payment?.status)">
-		                    {{ paymentStatusLabel(payment?.status) }}
-		                  </span>
-		                  <div v-if="payment?.proof_document" class="flex flex-wrap gap-2 text-xs">
-		                    <a :href="payment.proof_document.preview_url" target="_blank" rel="noopener" class="zaqa-link">Preview proof</a>
-		                    <a :href="payment.proof_document.download_url" target="_blank" rel="noopener" class="zaqa-link">Download proof</a>
-		                  </div>
-	                </div>
-
-                <div v-if="payment?.rejection_reason" class="mt-3 rounded-lg border border-danger/20 bg-danger/10 px-3 py-2 text-xs text-danger">
-                  Rejected: {{ payment.rejection_reason }}
-                </div>
-
-                <div class="mt-4">
-                  <label class="text-sm font-medium">Proof file (PDF or image)</label>
-                  <p class="mt-1 text-xs text-text-muted">{{ pdfOrImageHint }}</p>
-                  <input type="file" accept="application/pdf,image/*" class="zaqa-input mt-2" @change="onProofFileChange" />
-                  <InputError :message="proofForm.errors.file" />
-                </div>
-
-                <div class="mt-3 flex flex-col gap-2 sm:flex-row">
-                  <button type="button" class="zaqa-btn zaqa-btn-primary w-full sm:w-auto" :disabled="proofForm.processing || !proofForm.file" @click="uploadPaymentProof">
-                    <Upload class="h-4 w-4" aria-hidden="true" />
-                    Upload proof
-                  </button>
-	                  <button
-	                    type="button"
-	                    class="zaqa-btn zaqa-btn-secondary w-full sm:w-auto"
-	                    :disabled="(payment?.status ?? '') === 'confirmed'"
-	                    @click="refreshPaymentStatus"
-	                  >
-	                    Refresh status
-	                  </button>
-	                </div>
-              </div>
-
               <!-- Mobile money -->
-              <div v-else>
+              <div v-if="activePaymentTab === 'mobile_money'">
                 <div class="text-sm font-semibold text-text-primary">Mobile Money</div>
                 <div v-if="!props.cgrate?.enabled" class="mt-2 rounded-xl border border-border bg-surface-muted p-4 text-sm text-text-muted">
                   Mobile Money is temporarily unavailable. Please try again later.
@@ -2606,6 +2518,87 @@ onBeforeUnmount(() => {
                       Try again
                     </button>
                   </div>
+                </div>
+              </div>
+
+              <!-- Card -->
+              <div v-else-if="activePaymentTab === 'card'">
+                <CyberSourceCardPaymentForm :application="application" />
+              </div>
+
+              <!-- Bank transfer -->
+              <div v-else-if="activePaymentTab === 'bank_transfer'">
+                <div class="text-sm font-semibold text-text-primary">Pay by bank transfer or deposit</div>
+                <div class="mt-1 text-xs text-text-muted">
+                  Transfer the invoice amount to the ZAQA account below, then upload your proof of payment for finance review.
+                </div>
+
+                <div class="mt-4 rounded-xl border border-brand/15 bg-brand/5 p-4">
+                  <div class="text-[11px] font-semibold uppercase tracking-wider text-text-muted">Deposit account details</div>
+                  <dl class="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
+                    <div>
+                      <dt class="text-xs font-medium text-text-muted">Bank name</dt>
+                      <dd class="mt-1 text-sm font-semibold text-text-primary">{{ bankDepositField(bankDepositAccount?.bank_name) }}</dd>
+                    </div>
+                    <div>
+                      <dt class="text-xs font-medium text-text-muted">Branch code</dt>
+                      <dd class="mt-1 font-mono text-sm font-semibold text-text-primary">{{ bankDepositField(bankDepositAccount?.branch_code) }}</dd>
+                    </div>
+                    <div>
+                      <dt class="text-xs font-medium text-text-muted">Account name</dt>
+                      <dd class="mt-1 text-sm font-semibold text-text-primary">{{ bankDepositField(bankDepositAccount?.account_name) }}</dd>
+                    </div>
+                    <div>
+                      <dt class="text-xs font-medium text-text-muted">Account number</dt>
+                      <dd class="mt-1 font-mono text-sm font-semibold text-text-primary">{{ bankDepositField(bankDepositAccount?.account_number) }}</dd>
+                    </div>
+                  </dl>
+                  <p class="mt-3 text-xs leading-relaxed text-text-muted">
+                    Use
+                    <span class="font-mono font-semibold text-text-primary">{{ bankDepositReference }}</span>
+                    as your payment reference where possible.
+                  </p>
+                </div>
+
+                <div class="mt-4 text-sm font-semibold text-text-primary">Upload proof of payment</div>
+                <div class="mt-1 text-xs text-text-muted">
+                  Upload your bank transfer proof or bank deposit slip once payment has been made.
+                </div>
+
+                <div class="mt-3 flex items-center justify-between gap-3">
+                  <span class="zaqa-badge" :class="paymentStatusBadgeClass(payment?.status)">
+                    {{ paymentStatusLabel(payment?.status) }}
+                  </span>
+                  <div v-if="payment?.proof_document" class="flex flex-wrap gap-2 text-xs">
+                    <a :href="payment.proof_document.preview_url" target="_blank" rel="noopener" class="zaqa-link">Preview proof</a>
+                    <a :href="payment.proof_document.download_url" target="_blank" rel="noopener" class="zaqa-link">Download proof</a>
+                  </div>
+                </div>
+
+                <div v-if="payment?.rejection_reason" class="mt-3 rounded-lg border border-danger/20 bg-danger/10 px-3 py-2 text-xs text-danger">
+                  Rejected: {{ payment.rejection_reason }}
+                </div>
+
+                <div class="mt-4">
+                  <label class="text-sm font-medium">Proof file (PDF or image)</label>
+                  <p class="mt-1 text-xs text-text-muted">{{ pdfOrImageHint }}</p>
+                  <input type="file" accept="application/pdf,image/*" class="zaqa-input mt-2" @change="onProofFileChange" />
+                  <InputError :message="proofForm.errors.file" />
+                </div>
+
+                <div class="mt-3 flex flex-col gap-2 sm:flex-row">
+                  <button type="button" class="zaqa-btn zaqa-btn-primary w-full sm:w-auto" :disabled="proofForm.processing || !proofForm.file" @click="uploadPaymentProof">
+                    <Upload class="h-4 w-4" aria-hidden="true" />
+                    Upload proof
+                  </button>
+                  <button
+                    type="button"
+                    class="zaqa-btn zaqa-btn-secondary w-full sm:w-auto"
+                    :disabled="(payment?.status ?? '') === 'confirmed'"
+                    @click="refreshPaymentStatus"
+                  >
+                    Refresh status
+                  </button>
                 </div>
               </div>
 

@@ -294,8 +294,8 @@ class VerificationAssignmentQueuesTest extends TestCase
         $l2 = $this->makeLevel2Officer();
 
         $response = $this->actingAs($l2)->get(route('admin.verification.awaiting_level1_assignment', [
-            'q' => 'ZAQA',
-            'qualification_q' => 'Diploma',
+            'application_reference' => 'ZAQA',
+            'qualification_reference' => '2026-000245-01',
             'submitted_from' => '2026-01-01',
             'submitted_to' => '2026-06-01',
             'foreign' => '0',
@@ -307,8 +307,8 @@ class VerificationAssignmentQueuesTest extends TestCase
         $response->assertOk();
         $filters = $this->inertiaProps($response)['filters'];
 
-        $this->assertSame('ZAQA', $filters['q']);
-        $this->assertSame('Diploma', $filters['qualification_q']);
+        $this->assertSame('ZAQA', $filters['application_reference']);
+        $this->assertSame('2026-000245-01', $filters['qualification_reference']);
         $this->assertSame('2026-01-01', $filters['submitted_from']);
         $this->assertSame('2026-06-01', $filters['submitted_to']);
         $this->assertSame('0', $filters['foreign']);

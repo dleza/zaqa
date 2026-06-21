@@ -91,6 +91,14 @@ const identityNumberLabel = computed(() =>
 const identityUploadLabel = computed(() =>
   form.identity_type === 'passport' ? 'Upload passport copy' : 'Upload NRC copy',
 )
+const identityReplacementUploadLabel = computed(() =>
+  form.identity_type === 'passport' ? 'Upload replacement passport copy' : 'Upload replacement NRC copy',
+)
+const identityDocumentKindLabel = computed(() =>
+  form.identity_type === 'passport' ? 'passport' : 'NRC',
+)
+
+const showReplaceIdentityUpload = ref(false)
 
 const canSubmit = computed(() => {
   if (form.processing) return false
@@ -135,6 +143,7 @@ const additionalEmailMatchesAccount = computed(() => {
 watch(
   () => form.submitting_for,
   (val) => {
+    showReplaceIdentityUpload.value = false
     if (val === 'self') {
       form.subject_first_name = ''
       form.subject_other_names = ''
@@ -284,24 +293,78 @@ watch(
                 <InputError :message="(form.errors as any).identity_number" />
               </div>
 
-              <div class="sm:col-span-2 rounded-xl border border-border bg-surface px-4 py-4">
-                <div class="text-sm font-semibold text-text-primary">
-                  {{ identityUploadLabel }} <span v-if="!profileHasIdentityUpload" class="text-danger">*</span>
-                </div>
-                <p class="mt-1 text-xs text-text-muted">
-                  {{ profileHasIdentityUpload ? 'Optional (you already have a document on file).' : 'Required for your first application.' }}
-                </p>
-                <div class="mt-3">
-                  <input
-                    type="file"
-                    class="zaqa-input"
-                    accept=".pdf,.jpg,.jpeg,.png,.webp,application/pdf,image/jpeg,image/png,image/webp"
-                    @change="(e) => {
-                      const t = e.target as HTMLInputElement
-                      form.identity_file = t.files?.[0] ?? null
-                    }"
-                  />
-                  <InputError :message="(form.errors as any).identity_file" />
+              <div class="sm:col-span-2">
+                <template v-if="profileHasIdentityUpload">
+                  <div class="rounded-xl border border-success/25 bg-success/10 px-4 py-4 sm:px-5 sm:py-5">
+                    <div class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                      <div class="flex items-start gap-3">
+                        <CheckCircle2 class="mt-0.5 h-5 w-5 shrink-0 text-success" aria-hidden="true" />
+                        <div>
+                          <div class="text-sm font-semibold text-text-primary">Identity document already on file</div>
+                          <p class="mt-1 text-sm leading-relaxed text-text-muted">
+                            We already have a copy of your {{ identityDocumentKindLabel }}/Passport document associated with your profile and it will be used for this application.
+                          </p>
+                          <p class="mt-2 text-xs text-text-muted">No further action is required unless you need to upload a replacement.</p>
+                        </div>
+                      </div>
+                      <button
+                        v-if="!showReplaceIdentityUpload"
+                        type="button"
+                        class="zaqa-btn zaqa-btn-secondary shrink-0 self-start px-4 py-2 text-sm"
+                        @click="showReplaceIdentityUpload = true"
+                      >
+                        Replace document
+                      </button>
+                    </div>
+                  </div>
+
+                  <Transition
+                    enter-active-class="transition-all duration-300 ease-out overflow-hidden"
+                    enter-from-class="max-h-0 opacity-0"
+                    enter-to-class="max-h-48 opacity-100"
+                    leave-active-class="transition-all duration-200 ease-in overflow-hidden"
+                    leave-from-class="max-h-48 opacity-100"
+                    leave-to-class="max-h-0 opacity-0"
+                  >
+                    <div
+                      v-if="showReplaceIdentityUpload"
+                      class="mt-4 rounded-xl border border-border bg-surface px-4 py-4"
+                    >
+                      <div class="text-sm font-semibold text-text-primary">{{ identityReplacementUploadLabel }}</div>
+                      <p class="mt-1 text-xs text-text-muted">Optional. Leave blank to keep using the document already on your profile.</p>
+                      <div class="mt-3">
+                        <input
+                          type="file"
+                          class="zaqa-input"
+                          accept=".pdf,.jpg,.jpeg,.png,.webp,application/pdf,image/jpeg,image/png,image/webp"
+                          @change="(e) => {
+                            const t = e.target as HTMLInputElement
+                            form.identity_file = t.files?.[0] ?? null
+                          }"
+                        />
+                        <InputError :message="(form.errors as any).identity_file" />
+                      </div>
+                    </div>
+                  </Transition>
+                </template>
+
+                <div v-else class="rounded-xl border border-border bg-surface px-4 py-4">
+                  <div class="text-sm font-semibold text-text-primary">
+                    {{ identityUploadLabel }} <span class="text-danger">*</span>
+                  </div>
+                  <p class="mt-1 text-xs text-text-muted">Required for your first application.</p>
+                  <div class="mt-3">
+                    <input
+                      type="file"
+                      class="zaqa-input"
+                      accept=".pdf,.jpg,.jpeg,.png,.webp,application/pdf,image/jpeg,image/png,image/webp"
+                      @change="(e) => {
+                        const t = e.target as HTMLInputElement
+                        form.identity_file = t.files?.[0] ?? null
+                      }"
+                    />
+                    <InputError :message="(form.errors as any).identity_file" />
+                  </div>
                 </div>
               </div>
             </div>

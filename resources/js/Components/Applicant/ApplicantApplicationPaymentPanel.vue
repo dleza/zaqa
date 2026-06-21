@@ -37,7 +37,7 @@ const invoiceSettled = computed(() => props.application?.payment_satisfied === t
 const applicationLocked = computed(() => invoiceSettled.value)
 
 type PaymentTabKey = 'card' | 'bank_transfer' | 'mobile_money'
-const activePaymentTab = ref<PaymentTabKey>('card')
+const activePaymentTab = ref<PaymentTabKey>('mobile_money')
 
 const invoicePreparation = ref({ auto_attempted: false, auto_failed: false })
 
@@ -303,6 +303,15 @@ onBeforeUnmount(() => stopMobileMoneyPolling())
           <button
             type="button"
             class="flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-semibold"
+            :class="activePaymentTab === 'mobile_money' ? 'bg-brand/10 text-brand ring-1 ring-brand/20' : 'text-text-muted'"
+            @click="activePaymentTab = 'mobile_money'"
+          >
+            <Smartphone class="h-4 w-4" aria-hidden="true" />
+            Mobile money
+          </button>
+          <button
+            type="button"
+            class="flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-semibold"
             :class="activePaymentTab === 'card' ? 'bg-brand/10 text-brand ring-1 ring-brand/20' : 'text-text-muted'"
             @click="activePaymentTab = 'card'"
           >
@@ -318,19 +327,28 @@ onBeforeUnmount(() => stopMobileMoneyPolling())
             <Landmark class="h-4 w-4" aria-hidden="true" />
             Bank transfer
           </button>
-          <button
-            type="button"
-            class="flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-semibold"
-            :class="activePaymentTab === 'mobile_money' ? 'bg-brand/10 text-brand ring-1 ring-brand/20' : 'text-text-muted'"
-            @click="activePaymentTab = 'mobile_money'"
-          >
-            <Smartphone class="h-4 w-4" aria-hidden="true" />
-            Mobile money
-          </button>
         </div>
 
         <div class="mt-3 rounded-2xl bg-surface p-4 ring-1 ring-black/[0.04]">
-          <div v-if="activePaymentTab === 'card'">
+          <div v-if="activePaymentTab === 'mobile_money'">
+            <div class="text-sm font-semibold">Mobile money</div>
+            <div v-if="!cgrate?.enabled" class="mt-2 text-sm text-text-muted">Mobile money is not available right now.</div>
+            <template v-else>
+              <label class="mt-3 block text-sm font-medium">Mobile number</label>
+              <input v-model="mobileMoneyForm.mobile_number" type="text" class="zaqa-input mt-1" placeholder="e.g. 0971234567" />
+              <InputError :message="mobileMoneyForm.errors.mobile_number" />
+              <button
+                type="button"
+                class="zaqa-btn zaqa-btn-primary mt-3"
+                :disabled="mobileMoneySubmitting"
+                @click="initiateMobileMoney"
+              >
+                Send payment prompt
+              </button>
+            </template>
+          </div>
+
+          <div v-else-if="activePaymentTab === 'card'">
             <CyberSourceCardPaymentForm :application="application" />
           </div>
 
@@ -366,24 +384,6 @@ onBeforeUnmount(() => stopMobileMoneyPolling())
                 Upload proof
               </button>
             </div>
-          </div>
-
-          <div v-else>
-            <div class="text-sm font-semibold">Mobile money</div>
-            <div v-if="!cgrate?.enabled" class="mt-2 text-sm text-text-muted">Mobile money is not available right now.</div>
-            <template v-else>
-              <label class="mt-3 block text-sm font-medium">Mobile number</label>
-              <input v-model="mobileMoneyForm.mobile_number" type="text" class="zaqa-input mt-1" placeholder="e.g. 0971234567" />
-              <InputError :message="mobileMoneyForm.errors.mobile_number" />
-              <button
-                type="button"
-                class="zaqa-btn zaqa-btn-primary mt-3"
-                :disabled="mobileMoneySubmitting"
-                @click="initiateMobileMoney"
-              >
-                Send payment prompt
-              </button>
-            </template>
           </div>
         </div>
 

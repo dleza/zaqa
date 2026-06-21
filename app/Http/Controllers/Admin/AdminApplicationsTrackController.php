@@ -6,6 +6,7 @@ use App\Enums\VerificationState;
 use App\Http\Controllers\Controller;
 use App\Models\Application;
 use App\Models\Qualification;
+use App\Support\Search\ReferenceSearch;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
@@ -16,8 +17,30 @@ class AdminApplicationsTrackController extends Controller
 {
     public function index(Request $request): Response
     {
+        $applicationReference = (string) $request->query('application_reference', '');
+        $qualificationReference = (string) $request->query('qualification_reference', '');
         $id = $request->query('application_id');
         $application = null;
+
+        $appRef = ReferenceSearch::normalize($applicationReference);
+        $qualRef = ReferenceSearch::normalize($qualificationReference);
+        $canViewVerification = (bool) $request->user()?->can('verification.pool.view');
+
+        $searchPerformed = false;
+        $searchResults = [];
+        $searchError = null;
+
+        if ($id === null || $id === '') {
+            if ($applicationReference !== '' || $qualificationReference !== '') {
+                $searchPerformed = true;
+
+                if (! ReferenceSearch::isUsablePrefix($appRef) && ! ReferenceSearch::isUsablePrefix($qualRef)) {
+                    $searchError = 'Enter at least three characters in the application reference or qualification reference field.';
+                } else {
+                    $searchResults = $this->searchByReferences($appRef, $qualRef, $canViewVerification);
+                }
+            }
+        }
 
         if (is_string($id) && $id !== '') {
             /** @var Application $application */
@@ -33,8 +56,6 @@ class AdminApplicationsTrackController extends Controller
                 ])
                 ->findOrFail((int) $id);
         }
-
-        $canViewVerification = (bool) $request->user()?->can('verification.pool.view');
 
         $timeline = $application
             ? $application->lifecycleEvents
@@ -123,8 +144,15 @@ class AdminApplicationsTrackController extends Controller
             'statuses' => $statuses,
             'activity_feed' => $activityFeed,
             'qualifications' => $qualifications,
+            'search' => [
+                'performed' => $searchPerformed,
+                'results' => $searchResults,
+                'error' => $searchError,
+            ],
             'filters' => [
                 'application_id' => $request->query('application_id'),
+                'application_reference' => $applicationReference,
+                'qualification_reference' => $qualificationReference,
             ],
             'can' => [
                 'view_verification' => $canViewVerification,
@@ -134,42 +162,129 @@ class AdminApplicationsTrackController extends Controller
 
     public function suggest(Request $request): JsonResponse
     {
-        $term = trim((string) $request->query('q', ''));
-        if (mb_strlen($term) < 3) {
+        $appRef = ReferenceSearch::normalize((string) $request->query('application_reference', ''));
+        $qualRef = ReferenceSearch::normalize((string) $request->query('qualification_reference', ''));
+
+        if (! ReferenceSearch::isUsablePrefix($appRef) && ! ReferenceSearch::isUsablePrefix($qualRef)) {
             return response()->json(['data' => []]);
         }
 
-        $like = '%'.$term.'%';
+        $canViewVerification = (bool) $request->user()?->can('verification.pool.view');
 
-        $apps = Application::query()
-            ->with(['applicant', 'qualification'])
-            ->where(function ($q) use ($like) {
-                $q->where('applications.application_number', 'like', $like)
-                    ->orWhereHas('qualification', fn ($qq) => $qq->where('nrc_passport_number', 'like', $like)
-                        ->orWhere('verification_reference_number', 'like', $like))
-                    ->orWhereHas('qualifications', fn ($qq) => $qq->where('verification_reference_number', 'like', $like))
-                    ->orWhereRaw('JSON_UNQUOTE(JSON_EXTRACT(applications.metadata, "$.verification_subject.nrc_number")) like ?', [$like])
-                    ->orWhereRaw('JSON_UNQUOTE(JSON_EXTRACT(applications.metadata, "$.verification_subject.passport_number")) like ?', [$like]);
-            })
+        return response()->json([
+            'data' => $this->searchByReferences($appRef, $qualRef, $canViewVerification),
+        ]);
+    }
+
+    /**
+     * @return list<array{
+     *   id: int,
+     *   application_number: string,
+     *   status: string,
+     *   status_label: string,
+     *   applicant_name: string|null,
+     *   submitted_at: string|null,
+     *   qualification_count: int,
+     *   matched_qualification_id: int|null,
+     *   matched_qualification_reference: string|null,
+     *   matched_qualification_title: string|null,
+     *   view_url: string|null,
+     *   view_label: string
+     * }>
+     */
+    private function searchByReferences(?string $appRef, ?string $qualRef, bool $canViewVerification): array
+    {
+        $query = Application::query()
+            ->with([
+                'applicant:id,name',
+                'qualification:id,application_id,verification_reference_number,title_of_qualification',
+                'qualifications:id,application_id,verification_reference_number,title_of_qualification',
+            ]);
+
+        if (ReferenceSearch::isUsablePrefix($appRef)) {
+            ReferenceSearch::applyApplicationReference($query, $appRef);
+        }
+
+        if (ReferenceSearch::isUsablePrefix($qualRef)) {
+            $query->where(function ($inner) use ($qualRef) {
+                $inner->whereHas('qualifications', fn ($qq) => ReferenceSearch::applyQualificationReference($qq, $qualRef))
+                    ->orWhereHas('qualification', fn ($qq) => ReferenceSearch::applyQualificationReference($qq, $qualRef));
+            });
+        }
+
+        return $query
             ->orderByDesc('applications.id')
-            ->limit(8)
-            ->get(['applications.*']);
+            ->limit(25)
+            ->get(['applications.*'])
+            ->map(fn (Application $application) => $this->mapSearchResultRow($application, $qualRef, $canViewVerification))
+            ->values()
+            ->all();
+    }
 
-        $data = $apps->map(function (Application $a) {
-            $subject = $a->metadata['verification_subject'] ?? null;
-            $subjectNrc = is_array($subject) ? (($subject['nrc_number'] ?? '') ?: ($subject['passport_number'] ?? '')) : '';
+    private function mapSearchResultRow(Application $application, ?string $qualRef, bool $canViewVerification): array
+    {
+        $matchedQualification = null;
+        if (ReferenceSearch::isUsablePrefix($qualRef)) {
+            $matchedQualification = $application->qualifications
+                ->first(fn (Qualification $qualification) => $this->qualificationMatchesReference($qualification, $qualRef))
+                ?? ($application->qualification && $this->qualificationMatchesReference($application->qualification, $qualRef)
+                    ? $application->qualification
+                    : null);
+        }
 
-            return [
-                'id' => $a->id,
-                'application_number' => $a->application_number,
-                'status' => $a->current_status?->value ?? (string) $a->current_status,
-                'name' => $a->metadata['verification_subject']['full_name'] ?? $a->applicant?->name,
-                'nrc_passport' => $a->qualification?->nrc_passport_number ?: $subjectNrc,
-                'qualification_title' => $a->qualification?->title_of_qualification,
-            ];
-        })->values();
+        $status = $application->current_status?->value ?? (string) $application->current_status;
 
-        return response()->json(['data' => $data]);
+        return [
+            'id' => $application->id,
+            'application_number' => $application->application_number,
+            'status' => $status,
+            'status_label' => $this->applicationStatusLabel($status),
+            'applicant_name' => $application->metadata['verification_subject']['full_name'] ?? $application->applicant?->name,
+            'submitted_at' => optional($application->submitted_at)?->toIso8601String(),
+            'qualification_count' => $application->qualifications->count(),
+            'matched_qualification_id' => $matchedQualification?->id,
+            'matched_qualification_reference' => $matchedQualification?->verification_reference_number,
+            'matched_qualification_title' => $matchedQualification?->title_of_qualification,
+            'view_url' => $this->resolveSearchResultViewUrl($application, $matchedQualification, $qualRef, $canViewVerification),
+            'view_label' => $this->resolveSearchResultViewLabel($matchedQualification, $qualRef),
+        ];
+    }
+
+    private function resolveSearchResultViewUrl(
+        Application $application,
+        ?Qualification $matchedQualification,
+        ?string $qualRef,
+        bool $canViewVerification,
+    ): ?string {
+        if (! $canViewVerification) {
+            return null;
+        }
+
+        if (ReferenceSearch::isUsablePrefix($qualRef) && $matchedQualification !== null) {
+            return route('admin.verification.qualifications.show', $matchedQualification);
+        }
+
+        return route('admin.verification.applications.show', $application);
+    }
+
+    private function resolveSearchResultViewLabel(?Qualification $matchedQualification, ?string $qualRef): string
+    {
+        if (ReferenceSearch::isUsablePrefix($qualRef) && $matchedQualification !== null) {
+            return 'Open qualification';
+        }
+
+        return 'Open application';
+    }
+
+    private function qualificationMatchesReference(Qualification $qualification, ?string $qualRef): bool
+    {
+        if (! ReferenceSearch::isUsablePrefix($qualRef)) {
+            return false;
+        }
+
+        $reference = trim((string) ($qualification->verification_reference_number ?? ''));
+
+        return $reference !== '' && str_starts_with(strtoupper($reference), strtoupper($qualRef));
     }
 
     /**

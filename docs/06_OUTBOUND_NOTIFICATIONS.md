@@ -4,6 +4,8 @@
 
 All production email and SMS notifications are dispatched through background queues so HTTP requests return quickly. Delivery failures are logged and **never break** the calling workflow.
 
+Production queue processing uses **Laravel Horizon + Redis + Supervisor managing Horizon**. See `docs/05_MOBILE_MONEY_PAYMENTS_PRODUCTION.md` for deployment, operations, and monitoring.
+
 ## Central services
 
 | Service | Purpose |
@@ -21,14 +23,46 @@ Both services catch exceptions, log warnings, and return `true`/`false` instead 
 | `notifications` | `NOTIFICATIONS_SMS_QUEUE` | Reserved for future dedicated SMS jobs |
 | `default` | `NOTIFICATIONS_LISTENER_QUEUE` | Event listeners (`Send*Notification`) |
 
+Horizon supervisors (`config/horizon.php`):
+
+- `supervisor-notifications` → `notifications` queue
+- `supervisor-default` → `default` queue (listeners and fallback jobs)
+
 ```env
+QUEUE_CONNECTION=redis
+REDIS_CLIENT=phpredis
+HORIZON_PREFIX=zaqa_horizon
 NOTIFICATIONS_MAIL_QUEUE=notifications
 NOTIFICATIONS_SMS_QUEUE=notifications
 NOTIFICATIONS_LISTENER_QUEUE=default
-QUEUE_CONNECTION=redis
 ```
 
-## Supervisor example
+## Supervisor (Horizon) — production
+
+```ini
+[program:zaqa-horizon]
+process_name=%(program_name)s
+command=php /var/www/html/zaqa-portal/artisan horizon
+autostart=true
+autorestart=true
+user=www-data
+redirect_stderr=true
+stdout_logfile=/var/log/zaqa-horizon.log
+stopwaitsecs=3600
+```
+
+After deploy:
+
+```bash
+php artisan config:cache
+php artisan horizon:terminate
+```
+
+## Legacy `queue:work` configuration (fallback only)
+
+> **Warning:** Do not run these workers when Horizon is enabled.
+>
+> Running Horizon and `queue:work` against the same queues can cause duplicate processing, monitoring confusion, and unpredictable worker balancing.
 
 ```ini
 [program:zaqa-worker-notifications]
@@ -41,7 +75,7 @@ redirect_stderr=true
 stdout_logfile=/var/log/zaqa/worker-notifications.log
 ```
 
-After deploy: `php artisan queue:restart`
+Legacy deploy restart: `php artisan queue:restart`
 
 ## Covered flows
 
@@ -68,4 +102,4 @@ Local/dev uses `SMS_PROVIDER=log` (writes to Laravel log). Production gateways p
 
 - Listener jobs complete even if mail/SMS dispatch fails
 - Failed entries appear in `email_logs` / `sms_logs`
-- Monitor `failed_jobs` for mail worker issues: `php artisan queue:failed`
+- Monitor failed jobs via Horizon dashboard (`/horizon`) or CLI: `php artisan queue:failed`

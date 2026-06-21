@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Admin\Verification;
 
 use App\Domain\Verification\QualificationsPoolService;
+use App\Http\Controllers\Admin\Verification\Concerns\ProvidesVerificationReferenceFilters;
 use App\Http\Controllers\Controller;
 use App\Models\Qualification;
 use App\Support\Applications\QualificationHolderIdentityResolver;
@@ -12,6 +13,8 @@ use Inertia\Response;
 
 class AdminVerificationPoolController extends Controller
 {
+    use ProvidesVerificationReferenceFilters;
+
     public function index(Request $request, QualificationsPoolService $pool): Response
     {
         $rows = $pool->pool($request, $request->user()?->id);
@@ -47,8 +50,7 @@ class AdminVerificationPoolController extends Controller
                 'country_of_award' => $q->country?->name ?? $q->country_name_other,
                 'awarding_institution' => $q->awardingInstitution?->name ?? $q->awarding_institution_name_other ?? $q->awarding_institution_name,
             ]),
-            'filters' => [
-                'q' => (string) $request->query('q', ''),
+            'filters' => $this->referenceSearchFilters($request, [
                 'assigned' => $request->query('assigned'),
                 'mine' => $request->query('mine'),
                 'foreign' => $request->query('foreign'),
@@ -60,7 +62,7 @@ class AdminVerificationPoolController extends Controller
                 'country_id' => $request->query('country_id'),
                 'submitted_from' => $request->query('submitted_from'),
                 'submitted_to' => $request->query('submitted_to'),
-            ],
+            ]),
             'can' => [
                 'assign' => (bool) $request->user()?->can('verification.assign'),
             ],

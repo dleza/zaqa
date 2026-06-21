@@ -122,7 +122,7 @@ Confirmation rules:
 
 ## Mobile Money gateway: cGrate (Konik) (implemented)
 
-Production async architecture, queue workers, and applicant-safe status mapping:
+Production async architecture, Horizon-managed Redis queues, and applicant-safe status mapping:
 see `docs/05_MOBILE_MONEY_PAYMENTS_PRODUCTION.md`.
 
 The applicant Mobile Money flow is implemented using cGrate’s Konik SOAP webservice (push + poll):

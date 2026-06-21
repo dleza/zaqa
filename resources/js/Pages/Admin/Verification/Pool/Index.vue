@@ -1,14 +1,16 @@
 <script setup lang="ts">
 import AdminLayout from '@/Layouts/AdminLayout.vue'
 import AdminTablePagination from '@/Components/AdminTablePagination.vue'
+import ReferenceSearchFilters from '@/Components/Admin/ReferenceSearchFilters.vue'
 import { Link, router } from '@inertiajs/vue3'
-import { Search, ShieldCheck, UserCheck } from 'lucide-vue-next'
+import { ShieldCheck, UserCheck } from 'lucide-vue-next'
 import { computed, ref, watch } from 'vue'
 
 const props = defineProps<{
   qualifications: any
   filters: {
-    q: string
+    application_reference: string
+    qualification_reference: string
     assigned?: string | null
     mine?: string | null
     foreign?: string | null
@@ -24,7 +26,8 @@ const props = defineProps<{
   can: { assign: boolean }
 }>()
 
-const q = ref(props.filters.q ?? '')
+const applicationReference = ref(props.filters.application_reference ?? '')
+const qualificationReference = ref(props.filters.qualification_reference ?? '')
 const assigned = ref<string>(props.filters.assigned ?? '')
 const mine = ref<string>(props.filters.mine ?? '')
 const foreign = ref<string>(props.filters.foreign ?? '')
@@ -51,7 +54,8 @@ const submittedTo = ref<string>(props.filters.submitted_to ?? '')
 
 watch(
   [
-    q,
+    applicationReference,
+    qualificationReference,
     assigned,
     mine,
     foreign,
@@ -68,7 +72,8 @@ watch(
   router.get(
     '/admin/verification/pool',
     {
-      q: q.value,
+      application_reference: applicationReference.value || null,
+      qualification_reference: qualificationReference.value || null,
       assigned: assigned.value || null,
       mine: mine.value || null,
       foreign: foreign.value || null,
@@ -114,13 +119,13 @@ watch(
         <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <div class="text-sm font-semibold text-text-primary">Pool</div>
-            <div class="mt-1 text-xs text-text-muted">Search and filter qualification verification tasks.</div>
+            <div class="mt-1 text-xs text-text-muted">Search is limited to application or qualification reference for faster results.</div>
           </div>
           <div class="flex flex-col gap-2 sm:flex-row sm:items-center">
-            <div class="relative">
-              <Search class="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-text-muted" aria-hidden="true" />
-              <input v-model="q" class="zaqa-input h-10 pl-9" placeholder="Search application #, holder, NRC/Passport..." />
-            </div>
+            <ReferenceSearchFilters
+              v-model:application-reference="applicationReference"
+              v-model:qualification-reference="qualificationReference"
+            />
             <input v-model="submittedFrom" type="date" class="zaqa-input h-10" />
             <input v-model="submittedTo" type="date" class="zaqa-input h-10" />
             <select v-model="assigned" class="zaqa-input h-10">

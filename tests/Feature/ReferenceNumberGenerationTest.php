@@ -172,8 +172,8 @@ class ReferenceNumberGenerationTest extends TestCase
 
         $service = app(ApplicationsPoolService::class);
 
-        $oldResults = $service->pool(new Request(['q' => 'ZAQA-2026-OLDFINDME']))->getCollection();
-        $newResults = $service->pool(new Request(['q' => '2026-000888']))->getCollection();
+        $oldResults = $service->pool(new Request(['application_reference' => 'ZAQA-2026-OLDFINDME']))->getCollection();
+        $newResults = $service->pool(new Request(['application_reference' => '2026-000888']))->getCollection();
 
         $this->assertTrue($oldResults->contains(fn (Application $app) => $app->id === $old->id));
         $this->assertTrue($newResults->contains(fn (Application $app) => $app->id === $new->id));
@@ -186,8 +186,8 @@ class ReferenceNumberGenerationTest extends TestCase
 
         $service = app(QualificationsPoolService::class);
 
-        $oldResults = $service->pool(new Request(['q' => 'ZAQA-Q-2026-QUALFIND1']))->getCollection();
-        $newResults = $service->pool(new Request(['q' => '2026-000777-02']))->getCollection();
+        $oldResults = $service->pool(new Request(['qualification_reference' => 'ZAQA-Q-2026-QUALFIND1']))->getCollection();
+        $newResults = $service->pool(new Request(['qualification_reference' => '2026-000777-02']))->getCollection();
 
         $this->assertTrue($oldResults->contains(fn (Qualification $qualification) => $qualification->application_id === $old->id));
         $this->assertTrue($newResults->contains(fn (Qualification $qualification) => $qualification->application_id === $new->id));

@@ -15,8 +15,24 @@ import {
   Search,
   Shield,
   User,
+  X,
 } from 'lucide-vue-next'
 import { computed, ref, watch } from 'vue'
+
+type SearchResult = {
+  id: number
+  application_number: string
+  status: string
+  status_label: string
+  applicant_name: string | null
+  submitted_at: string | null
+  qualification_count: number
+  matched_qualification_id: number | null
+  matched_qualification_reference: string | null
+  matched_qualification_title: string | null
+  view_url: string | null
+  view_label: string
+}
 
 const props = defineProps<{
   selected?: any | null
@@ -42,47 +58,90 @@ const props = defineProps<{
     updated_at: string | null
     verification_url: string | null
   }>
-  filters?: { application_id?: string | null }
+  search?: {
+    performed: boolean
+    results: SearchResult[]
+    error: string | null
+  }
+  filters?: {
+    application_id?: string | null
+    application_reference?: string | null
+    qualification_reference?: string | null
+  }
   can?: { view_verification: boolean }
 }>()
 
-const query = ref('')
-const loading = ref(false)
-const suggestions = ref<Array<any>>([])
-const open = ref(false)
+const applicationReference = ref('')
+const qualificationReference = ref('')
+const searching = ref(false)
 
-let debounce: number | null = null
 watch(
-  () => query.value,
-  () => {
-    if (debounce) window.clearTimeout(debounce)
-    const q = query.value.trim()
-    if (q.length < 3) {
-      suggestions.value = []
-      open.value = false
-      return
-    }
-    debounce = window.setTimeout(async () => {
-      loading.value = true
-      try {
-        const res = await fetch(`/admin/applications/track/suggest?q=${encodeURIComponent(q)}`, {
-          headers: { Accept: 'application/json' },
-        })
-        const json = await res.json()
-        suggestions.value = Array.isArray(json?.data) ? json.data : []
-        open.value = true
-      } finally {
-        loading.value = false
-      }
-    }, 250)
+  () => props.filters,
+  (filters) => {
+    applicationReference.value = filters?.application_reference ?? ''
+    qualificationReference.value = filters?.qualification_reference ?? ''
   },
+  { immediate: true, deep: true },
 )
 
-function selectSuggestion(s: any) {
-  open.value = false
-  suggestions.value = []
-  query.value = ''
-  router.get('/admin/applications/track', { application_id: s.id }, { preserveScroll: true })
+function hasUsableReference(value: string): boolean {
+  return value.trim().length >= 3
+}
+
+function submitSearch() {
+  const appRef = applicationReference.value.trim()
+  const qualRef = qualificationReference.value.trim()
+
+  if (!hasUsableReference(appRef) && !hasUsableReference(qualRef)) {
+    return
+  }
+
+  searching.value = true
+  router.get(
+    '/admin/applications/track',
+    {
+      application_reference: appRef || undefined,
+      qualification_reference: qualRef || undefined,
+    },
+    {
+      preserveScroll: true,
+      onFinish: () => {
+        searching.value = false
+      },
+    },
+  )
+}
+
+function clearSearch() {
+  applicationReference.value = ''
+  qualificationReference.value = ''
+  searching.value = true
+  router.get(
+    '/admin/applications/track',
+    {},
+    {
+      preserveScroll: true,
+      onFinish: () => {
+        searching.value = false
+      },
+    },
+  )
+}
+
+const searchResults = computed(() => props.search?.results ?? [])
+const searchPerformed = computed(() => props.search?.performed ?? false)
+const searchError = computed(() => props.search?.error ?? null)
+
+const highlightQualificationRef = computed(() => {
+  const ref = (props.filters?.qualification_reference ?? '').trim().toUpperCase()
+  return ref.length >= 3 ? ref : null
+})
+
+function isHighlightedQualification(verificationReference: string | null | undefined): boolean {
+  const ref = highlightQualificationRef.value
+  if (!ref) return false
+  const qref = (verificationReference ?? '').trim().toUpperCase()
+  return qref !== '' && qref.startsWith(ref)
 }
 
 const viewHref = computed(() => {
@@ -224,69 +283,161 @@ function activityIcon(kind: string) {
             <FileText class="h-4 w-4" aria-hidden="true" />
             Applications
           </div>
-          <h1 class="mt-2 text-2xl font-semibold tracking-tight text-text-primary">Application tracker</h1>
+          <h1 class="mt-2 text-2xl font-semibold tracking-tight text-text-primary">Search For Application</h1>
           <p class="mt-1 text-sm leading-relaxed text-text-muted">
-            Search any application, then see qualifications, lifecycle milestones, and status changes in one place—with the latest updates surfaced first.
+            Look up an application or qualification by its official reference number. Each field is independent—search runs only when you click Search, not while you type.
           </p>
         </div>
       </div>
 
-      <div
+      <section
         class="mt-6 overflow-hidden rounded-2xl border border-border bg-surface shadow-sm ring-1 ring-black/[0.03]"
+        aria-labelledby="application-search-heading"
       >
         <div class="border-b border-border bg-gradient-to-r from-brand/[0.06] via-transparent to-accent/[0.05] px-5 py-5 sm:px-6">
-          <div class="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between lg:gap-10">
-            <div class="shrink-0 lg:max-w-md">
-              <div class="text-sm font-semibold text-text-primary">Find an application</div>
-              <div class="mt-1 text-xs text-text-muted">
-                Search by application number, NRC, or passport. Type at least three characters.
-              </div>
-            </div>
+          <h2 id="application-search-heading" class="text-sm font-semibold text-text-primary">Reference search</h2>
+          <p class="mt-1 max-w-3xl text-xs leading-relaxed text-text-muted">
+            Use the application reference for the whole submission (e.g. <span class="font-mono">2026-000245</span>) or the qualification reference for a single verification task (e.g. <span class="font-mono">2026-000245-01</span>). Names and NRC numbers are not searched here.
+          </p>
+        </div>
 
-            <div class="relative min-w-0 w-full flex-1">
-              <Search
-                class="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-text-muted"
-                aria-hidden="true"
-              />
+        <form class="px-5 py-5 sm:px-6" @submit.prevent="submitSearch">
+          <div class="grid gap-5 lg:grid-cols-2">
+            <div>
+              <label for="application-reference" class="block text-sm font-semibold text-text-primary">
+                Application reference
+              </label>
+              <p class="mt-1 text-xs text-text-muted">ZAQA application number assigned at submission.</p>
               <input
-                v-model="query"
-                class="zaqa-input h-11 border-border/80 pl-9 shadow-inner shadow-black/[0.02]"
-                placeholder="e.g. ZAQA-VER-1234, 111111/11/1, P1234567"
+                id="application-reference"
+                v-model="applicationReference"
+                type="text"
                 autocomplete="off"
-                @focus="open = suggestions.length > 0"
-                @keydown.escape="open = false"
+                spellcheck="false"
+                class="zaqa-input mt-3 h-11 w-full font-mono text-sm"
+                placeholder="2026-000245"
               />
-
-              <div
-                v-if="open"
-                class="absolute z-20 mt-2 max-h-72 w-full overflow-auto rounded-xl border border-border bg-surface shadow-lg"
-              >
-                <div v-if="loading" class="px-4 py-3 text-sm text-text-muted">Searching…</div>
-                <div v-else-if="suggestions.length === 0" class="px-4 py-3 text-sm text-text-muted">
-                  No matches.
-                </div>
-                <button
-                  v-for="s in suggestions"
-                  :key="s.id"
-                  type="button"
-                  class="flex w-full items-start justify-between gap-3 border-t border-border/60 px-4 py-3 text-left text-sm transition first:border-t-0 hover:bg-surface-muted"
-                  @click="selectSuggestion(s)"
-                >
-                  <div class="min-w-0">
-                    <div class="font-semibold text-text-primary">{{ s.application_number }}</div>
-                    <div class="mt-0.5 truncate text-xs text-text-muted">
-                      {{ s.name ?? '—' }} • {{ s.nrc_passport ?? '—' }} • {{ s.qualification_title ?? '—' }}
-                    </div>
-                  </div>
-                  <div class="shrink-0">
-                    <span class="zaqa-badge" :class="statusBadgeClass(s.status)">{{ s.status }}</span>
-                  </div>
-                </button>
-              </div>
+            </div>
+            <div>
+              <label for="qualification-reference" class="block text-sm font-semibold text-text-primary">
+                Qualification reference
+              </label>
+              <p class="mt-1 text-xs text-text-muted">Verification task reference for one qualification on an application.</p>
+              <input
+                id="qualification-reference"
+                v-model="qualificationReference"
+                type="text"
+                autocomplete="off"
+                spellcheck="false"
+                class="zaqa-input mt-3 h-11 w-full font-mono text-sm"
+                placeholder="2026-000245-01"
+              />
             </div>
           </div>
+
+          <div class="mt-5 flex flex-wrap items-center gap-3">
+            <button
+              type="submit"
+              class="zaqa-btn zaqa-btn-primary inline-flex h-10 items-center gap-2 px-4 text-sm"
+              :disabled="searching"
+            >
+              <Search class="h-4 w-4" aria-hidden="true" />
+              {{ searching ? 'Searching…' : 'Search' }}
+            </button>
+            <button
+              type="button"
+              class="zaqa-btn zaqa-btn-secondary inline-flex h-10 items-center gap-2 px-4 text-sm"
+              :disabled="searching"
+              @click="clearSearch"
+            >
+              <X class="h-4 w-4" aria-hidden="true" />
+              Clear
+            </button>
+            <p class="text-xs text-text-muted">Minimum three characters in at least one field. Up to 25 results.</p>
+          </div>
+        </form>
+
+        <div v-if="searchError" class="border-t border-border bg-danger/5 px-5 py-4 text-sm text-danger sm:px-6">
+          {{ searchError }}
         </div>
-      </div>
+
+        <div v-else-if="searchPerformed" class="border-t border-border">
+          <div class="flex items-center justify-between gap-3 px-5 py-4 sm:px-6">
+            <div class="text-sm font-semibold text-text-primary">Search results</div>
+            <div class="text-xs text-text-muted">{{ searchResults.length }} match{{ searchResults.length === 1 ? '' : 'es' }}</div>
+          </div>
+
+          <div v-if="searchResults.length === 0" class="border-t border-border px-5 py-10 text-center sm:px-6">
+            <FileSearch class="mx-auto h-8 w-8 text-text-muted/70" aria-hidden="true" />
+            <p class="mt-3 text-sm font-medium text-text-primary">No applications matched those references</p>
+            <p class="mt-1 text-sm text-text-muted">Check the reference format and try again, or search using the other field.</p>
+          </div>
+
+          <div v-else class="overflow-x-auto border-t border-border">
+            <table class="min-w-full divide-y divide-border text-sm">
+              <thead class="bg-surface-muted/60">
+                <tr>
+                  <th scope="col" class="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wide text-text-muted sm:px-6">
+                    Application
+                  </th>
+                  <th scope="col" class="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wide text-text-muted">
+                    Qualification
+                  </th>
+                  <th scope="col" class="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wide text-text-muted">
+                    Applicant
+                  </th>
+                  <th scope="col" class="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wide text-text-muted">
+                    Status
+                  </th>
+                  <th scope="col" class="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wide text-text-muted">
+                    Submitted
+                  </th>
+                  <th scope="col" class="px-5 py-3 text-right text-xs font-semibold uppercase tracking-wide text-text-muted sm:px-6">
+                    Action
+                  </th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-border bg-surface">
+                <tr v-for="result in searchResults" :key="result.id" class="transition hover:bg-surface-muted/50">
+                  <td class="whitespace-nowrap px-5 py-4 font-mono font-semibold text-brand sm:px-6">
+                    {{ result.application_number }}
+                    <div v-if="result.qualification_count > 1" class="mt-0.5 font-sans text-[11px] font-normal text-text-muted">
+                      {{ result.qualification_count }} qualifications
+                    </div>
+                  </td>
+                  <td class="px-5 py-4">
+                    <div v-if="result.matched_qualification_reference" class="font-mono text-xs font-semibold text-text-primary">
+                      {{ result.matched_qualification_reference }}
+                    </div>
+                    <div v-else class="text-xs text-text-muted">—</div>
+                    <div v-if="result.matched_qualification_title" class="mt-1 max-w-xs truncate text-xs text-text-muted">
+                      {{ result.matched_qualification_title }}
+                    </div>
+                  </td>
+                  <td class="px-5 py-4 text-text-primary">{{ result.applicant_name ?? '—' }}</td>
+                  <td class="px-5 py-4">
+                    <span class="zaqa-badge" :class="statusBadgeClass(result.status)">{{ result.status_label }}</span>
+                  </td>
+                  <td class="whitespace-nowrap px-5 py-4 text-xs text-text-muted">
+                    {{ formatDateOnly(result.submitted_at) }}
+                  </td>
+                  <td class="whitespace-nowrap px-5 py-4 text-right sm:px-6">
+                    <Link
+                      v-if="result.view_url"
+                      :href="result.view_url"
+                      class="zaqa-btn zaqa-btn-secondary inline-flex h-9 items-center gap-1.5 px-3 text-xs"
+                    >
+                      {{ result.view_label }}
+                      <ArrowRight class="h-3.5 w-3.5" aria-hidden="true" />
+                    </Link>
+                    <span v-else class="text-xs text-text-muted">No access</span>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
 
       <div v-if="selected" class="mt-8 space-y-8">
         <!-- Hero summary -->
@@ -534,7 +685,12 @@ function activityIcon(kind: string) {
                 <article
                   v-for="q in quals"
                   :key="q.id"
-                  class="group relative overflow-hidden rounded-xl border border-border bg-gradient-to-br from-surface to-surface-muted/60 p-4 transition hover:border-brand/35 hover:shadow-md"
+                  class="group relative overflow-hidden rounded-xl border p-4 transition hover:shadow-md"
+                  :class="
+                    isHighlightedQualification(q.verification_reference_number)
+                      ? 'border-brand bg-gradient-to-br from-brand/10 to-surface-muted/60 ring-2 ring-brand/30'
+                      : 'border-border bg-gradient-to-br from-surface to-surface-muted/60 hover:border-brand/35'
+                  "
                 >
                   <div class="flex items-start justify-between gap-3">
                     <div class="min-w-0 flex-1">
@@ -600,11 +756,11 @@ function activityIcon(kind: string) {
         </div>
       </div>
 
-      <div v-else class="mt-10 rounded-2xl border border-dashed border-border bg-surface-muted/40 px-6 py-14 text-center">
+      <div v-else-if="!searchPerformed" class="mt-10 rounded-2xl border border-dashed border-border bg-surface-muted/40 px-6 py-14 text-center">
         <FileSearch class="mx-auto h-10 w-10 text-text-muted/80" aria-hidden="true" />
-        <p class="mt-4 text-sm font-semibold text-text-primary">Select an application to see the full tracker</p>
+        <p class="mt-4 text-sm font-semibold text-text-primary">Search by reference to open the tracker</p>
         <p class="mt-2 text-sm text-text-muted">
-          Use the search above, or open this page with <span class="font-mono text-xs">?application_id=</span> in the URL.
+          Enter an application or qualification reference above and click Search, then choose a result to view qualifications, milestones, and status history.
         </p>
       </div>
     </div>

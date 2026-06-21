@@ -52,7 +52,7 @@ ZAMTEL_SMS_VERIFY_SSL=true
 | `SMS_PROVIDER` | `zamtel` | If `log`, no HTTP call is made to Zamtel |
 | `ZAMTEL_SMS_API_KEY` | Your Zamtel API key | From Zamtel Bulk SMS portal |
 | `ZAMTEL_SMS_SENDER_ID` | Approved sender ID | Must be registered with Zamtel (e.g. `ZAQA`) |
-| `QUEUE_CONNECTION` | `redis` | Recommended for production workers |
+| `QUEUE_CONNECTION` | `redis` | Required for production; Horizon manages workers |
 
 ```env
 # --- Enable Zamtel SMS ---
@@ -89,7 +89,8 @@ After any `.env` change on the server:
 
 ```bash
 php artisan config:clear
-php artisan queue:restart
+php artisan config:cache
+php artisan horizon:terminate
 ```
 
 The admin **Settings → SMS Balance** page reads these values. When production is configured correctly you should see:
@@ -97,7 +98,7 @@ The admin **Settings → SMS Balance** page reads these values. When production 
 - **SMS provider:** `zamtel`
 - **SMS sending:** `Enabled`
 
-If you still see `log` / `Disabled`, check `SMS_ENABLED`, `SMS_PROVIDER`, run `config:clear`, and confirm the web/queue processes were restarted.
+If you still see `log` / `Disabled`, check `SMS_ENABLED`, `SMS_PROVIDER`, run `config:clear`, and confirm Horizon was restarted (`php artisan horizon:terminate`).
 
 ## Production go-live checklist
 
@@ -106,7 +107,7 @@ If you still see `log` / `Disabled`, check `SMS_ENABLED`, `SMS_PROVIDER`, run `c
 3. Run `php artisan sms:test` — confirms host reachability and credentials are present (does not send an SMS).
 4. Use **Admin → Settings → SMS Balance → Test provider connection** for the same check in the UI.
 5. **Add SMS balance** (Admin → Settings → SMS Balance) — balance must be **> 0** or sends are skipped as `insufficient_balance`.
-6. Start **queue workers** (Supervisor example below). Without a worker, jobs stay `queued` in `sms_logs`.
+6. Ensure **Horizon is running** (Supervisor `[program:zaqa-horizon]`). Without Horizon, SMS jobs stay `queued` in `sms_logs`. See `docs/05_MOBILE_MONEY_PAYMENTS_PRODUCTION.md` for setup.
 7. Trigger a test notification (e.g. account OTP or payment approved) and review **Reports → SMS logs**.
 8. Confirm success: HTTP **200 or 202** and response body **`success: true`** — only then is balance debited.
 
@@ -121,11 +122,20 @@ An SMS is successful only when:
 
 Only successful sends decrement internal balance by 1.
 
-## Queues
+## Queues and Horizon
+
+SMS and notification jobs are processed by **Laravel Horizon** (same production architecture as payments). Horizon supervisors in `config/horizon.php` include:
+
+| Queue | Horizon supervisor | Used for |
+|-------|-------------------|----------|
+| `notifications` | `supervisor-notifications` | Outbound email (including balance alert emails) |
+| `default` | `supervisor-default` | Event listeners; `SendSmsJob` when `NOTIFICATIONS_SMS_QUEUE` is empty |
+
+If `NOTIFICATIONS_SMS_QUEUE` is set to a dedicated queue name (e.g. `sms`), ensure that queue is supervised in Horizon or leave it empty so SMS uses `default`.
 
 | Queue | Env variable | Used for |
 |-------|--------------|----------|
-| `sms` (optional) | `NOTIFICATIONS_SMS_QUEUE` | `SendSmsJob` |
+| `sms` (optional) | `NOTIFICATIONS_SMS_QUEUE` | `SendSmsJob` when explicitly configured |
 | `default` | fallback | `SendSmsJob` when SMS queue unset |
 | `default` | `NOTIFICATIONS_LISTENER_QUEUE` | Event listeners |
 | `notifications` | `NOTIFICATIONS_MAIL_QUEUE` | Outbound email (including balance alert emails) |
@@ -134,12 +144,43 @@ Recommended production setup:
 
 ```env
 QUEUE_CONNECTION=redis
+REDIS_CLIENT=phpredis
+HORIZON_PREFIX=zaqa_horizon
 NOTIFICATIONS_MAIL_QUEUE=notifications
-NOTIFICATIONS_SMS_QUEUE=sms
+NOTIFICATIONS_SMS_QUEUE=
 NOTIFICATIONS_LISTENER_QUEUE=default
 ```
 
-## Supervisor example
+## Supervisor (Horizon) — production
+
+Run **one** Horizon program per application server (not separate notification workers):
+
+```ini
+[program:zaqa-horizon]
+process_name=%(program_name)s
+command=php /var/www/html/zaqa-portal/artisan horizon
+autostart=true
+autorestart=true
+user=www-data
+redirect_stderr=true
+stdout_logfile=/var/log/zaqa-horizon.log
+stopwaitsecs=3600
+```
+
+After deploy:
+
+```bash
+php artisan config:cache
+php artisan horizon:terminate
+```
+
+Full deployment, operations, and monitoring: `docs/05_MOBILE_MONEY_PAYMENTS_PRODUCTION.md`.
+
+## Legacy `queue:work` configuration (fallback only)
+
+> **Warning:** Do not run these workers when Horizon is enabled.
+>
+> Running Horizon and `queue:work` against the same queues can cause duplicate processing, monitoring confusion, and unpredictable worker balancing.
 
 ```ini
 [program:zaqa-worker-notifications]
@@ -152,13 +193,15 @@ redirect_stderr=true
 stdout_logfile=/var/log/zaqa/worker-notifications.log
 ```
 
-After deploy:
+Legacy deploy restart:
 
 ```bash
 php artisan queue:restart
 ```
 
-For local development with `QUEUE_CONNECTION=database`, run a worker manually:
+## Local development (non-Horizon)
+
+For local development with `QUEUE_CONNECTION=database`, run a worker manually (not used in production):
 
 ```bash
 php artisan queue:work --queue=default --tries=3 --timeout=90

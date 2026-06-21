@@ -8,6 +8,7 @@ use App\Http\Controllers\Controller;
 use App\Models\AwardingInstitution;
 use App\Models\Qualification;
 use App\Support\Applications\QualificationHolderIdentityResolver;
+use App\Support\Search\ReferenceSearch;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -18,7 +19,8 @@ class AdminVerificationAutoVerifiedController extends Controller
     {
         abort_unless((bool) $request->user()?->can('verification.level2.review'), 403);
 
-        $q = trim((string) $request->query('q', ''));
+        $applicationReference = (string) $request->query('application_reference', '');
+        $qualificationReference = (string) $request->query('qualification_reference', '');
         $institutionId = $request->query('awarding_institution_id');
         $source = trim((string) $request->query('verification_source', ''));
         $confidenceMin = $request->query('confidence_min');
@@ -62,20 +64,7 @@ class AdminVerificationAutoVerifiedController extends Controller
             });
         }
 
-        if ($q !== '') {
-            $query->where(function ($w) use ($q) {
-                $w->where('qualification_holder_name', 'like', '%'.$q.'%')
-                    ->orWhere('nrc_passport_number', 'like', '%'.$q.'%')
-                    ->orWhere('student_number', 'like', '%'.$q.'%')
-                    ->orWhere('certificate_number', 'like', '%'.$q.'%')
-                    ->orWhere('title_of_qualification', 'like', '%'.$q.'%')
-                    ->orWhereHas('application', function ($aq) use ($q) {
-                        $aq->where('application_number', 'like', '%'.$q.'%')
-                            ->orWhere('metadata->verification_subject->full_name', 'like', '%'.$q.'%')
-                            ->orWhereHas('applicant', fn ($uq) => $uq->where('name', 'like', '%'.$q.'%'));
-                    });
-            });
-        }
+        ReferenceSearch::applyToQualificationQuery($query, $applicationReference, $qualificationReference);
 
         if ($locked === '1') {
             $threshold = now()->subMinutes($locks->ttlMinutes());
@@ -150,8 +139,7 @@ class AdminVerificationAutoVerifiedController extends Controller
         return Inertia::render('Admin/Verification/AutoVerified/Index', [
             'qualifications' => $rows,
             'institutions' => $institutions,
-            'filters' => [
-                'q' => $q,
+            'filters' => array_merge(ReferenceSearch::filterPayloadFromRequest($request), [
                 'awarding_institution_id' => is_string($institutionId) ? $institutionId : null,
                 'verification_source' => $source !== '' ? $source : null,
                 'confidence_min' => is_string($confidenceMin) ? $confidenceMin : null,
@@ -159,7 +147,7 @@ class AdminVerificationAutoVerifiedController extends Controller
                 'locked' => is_string($locked) ? $locked : null,
                 'submitted_from' => $submittedFrom !== '' ? $submittedFrom : null,
                 'submitted_to' => $submittedTo !== '' ? $submittedTo : null,
-            ],
+            ]),
             'lock_ttl_minutes' => $locks->ttlMinutes(),
         ]);
     }

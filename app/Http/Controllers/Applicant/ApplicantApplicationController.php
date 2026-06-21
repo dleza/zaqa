@@ -17,6 +17,7 @@ use App\Domain\Applications\ApplicationSubmissionReadinessService;
 use App\Domain\Payments\InvoiceService;
 use App\Domain\Payments\Presenters\ApplicantPaymentAttemptStatusPresenter;
 use App\Enums\ApplicantType;
+use App\Enums\ApplicationStatus;
 use App\Enums\DocumentType;
 use App\Enums\InvoiceStatus;
 use App\Enums\PaymentStatus;
@@ -93,6 +94,7 @@ class ApplicantApplicationController extends Controller
                     'display_status_label' => ((int) ($application->returned_qualifications_count ?? 0)) > 0
                         ? 'Correction required'
                         : $application->applicantDisplayStatusLabel(),
+                    'list_status_label' => $this->applicantApplicationsListStatusLabel($application),
                     'correction_required' => ((int) ($application->returned_qualifications_count ?? 0)) > 0,
                     'service_type' => $application->service_type?->value ?? (string) $application->service_type,
                     'qualification_category' => $application->qualification_category,
@@ -108,6 +110,25 @@ class ApplicantApplicationController extends Controller
         return Inertia::render('Applicant/Applications/Index', [
             'applications' => $applications,
         ]);
+    }
+
+    private function applicantApplicationsListStatusLabel(Application $application): string
+    {
+        if ($application->hasQualificationsAwaitingCorrection()) {
+            return 'Correction required';
+        }
+
+        $status = $application->current_status?->value ?? (string) $application->current_status;
+
+        if (in_array($status, [
+            ApplicationStatus::Submitted->value,
+            ApplicationStatus::Resubmitted->value,
+            ApplicationStatus::InProgress->value,
+        ], true)) {
+            return 'Processing';
+        }
+
+        return $application->applicantDisplayStatusLabel();
     }
 
     /**

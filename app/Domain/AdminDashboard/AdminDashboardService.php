@@ -1060,7 +1060,7 @@ class AdminDashboardService
             $push('Applications pool', '/admin/verification/pool', 'layers', 'verification.pool.view');
             $push('Assigned to me', '/admin/verification/assigned-to-me', 'user-check', 'verification.level1.process');
             $push('Application outcomes', '/admin/applications', 'clipboard', 'admin.applications.view');
-            $push('Track application', '/admin/applications/track', 'search', 'admin.applications.view');
+            $push('Search For Application', '/admin/applications/track', 'search', 'admin.applications.view');
         }
         if (! $this->isFinanceScopedDashboard($user)) {
             $push('Finance dashboard', '/admin/finance', 'banknote', 'finance.dashboard.view');

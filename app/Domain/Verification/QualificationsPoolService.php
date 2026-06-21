@@ -6,6 +6,7 @@ use App\Enums\ApplicationStatus;
 use App\Enums\VerificationState;
 use App\Models\Qualification;
 use App\Models\User;
+use App\Support\Search\ReferenceSearch;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Http\Request;
@@ -64,7 +65,8 @@ class QualificationsPoolService
      * Qualification-centric pool query for verification users.
      *
      * Filters:
-     * - q: application number / applicant / holder identifiers
+     * - application_reference: application number prefix/exact
+     * - qualification_reference: verification reference prefix/exact
      * - qualification_type_id: int
      * - awarding_institution_id: int
      * - country_id: int
@@ -279,7 +281,8 @@ class QualificationsPoolService
      */
     private function qualificationListQuery(Request $request): Builder
     {
-        $q = trim((string) $request->query('q', ''));
+        $applicationReference = (string) $request->query('application_reference', '');
+        $qualificationReference = (string) $request->query('qualification_reference', '');
         $qualificationTypeId = $request->query('qualification_type_id');
         $awardingInstitutionId = $request->query('awarding_institution_id');
         $countryId = $request->query('country_id');
@@ -287,7 +290,6 @@ class QualificationsPoolService
         $paymentStatus = trim((string) $request->query('payment_status', ''));
         $submittedFrom = trim((string) $request->query('submitted_from', ''));
         $submittedTo = trim((string) $request->query('submitted_to', ''));
-        $qualificationQ = trim((string) $request->query('qualification_q', ''));
         $overdue = $request->query('overdue');
         $overdueDays = $request->query('overdue_days');
 
@@ -333,27 +335,7 @@ class QualificationsPoolService
             }
         }
 
-        if ($q !== '') {
-            $query->where(function ($inner) use ($q) {
-                $inner->whereHas('application', function ($aq) use ($q) {
-                    $aq->where('application_number', 'like', '%'.$q.'%')
-                        ->orWhere('metadata->verification_subject->full_name', 'like', '%'.$q.'%')
-                        ->orWhere('metadata->verification_subject->nrc_number', 'like', '%'.$q.'%')
-                        ->orWhere('metadata->verification_subject->passport_number', 'like', '%'.$q.'%');
-                })
-                    ->orWhere('qualification_holder_name', 'like', '%'.$q.'%')
-                    ->orWhere('nrc_passport_number', 'like', '%'.$q.'%')
-                    ->orWhere('title_of_qualification', 'like', '%'.$q.'%')
-                    ->orWhere('certificate_number', 'like', '%'.$q.'%')
-                    ->orWhere('student_number', 'like', '%'.$q.'%')
-                    ->orWhere('examination_number', 'like', '%'.$q.'%')
-                    ->orWhere('verification_reference_number', 'like', '%'.$q.'%');
-            });
-        }
-
-        if ($qualificationQ !== '') {
-            $query->where('title_of_qualification', 'like', '%'.$qualificationQ.'%');
-        }
+        ReferenceSearch::applyToQualificationQuery($query, $applicationReference, $qualificationReference);
 
         if (is_string($qualificationTypeId) && $qualificationTypeId !== '') {
             $query->where('qualification_type_id', (int) $qualificationTypeId);

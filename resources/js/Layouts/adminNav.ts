@@ -113,7 +113,7 @@ export const adminNavSections: AdminNavSection[] = [
         requiredAnyPermissions: ['admin.applications.view'],
       },
       {
-        label: 'Track applications',
+        label: 'Search For Application',
         href: '/admin/applications/track',
         icon: FileText,
         activeStartsWith: '/admin/applications/track',

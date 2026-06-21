@@ -5,6 +5,7 @@ namespace App\Domain\Verification;
 use App\Enums\ApplicationStatus;
 use App\Models\Application;
 use App\Models\User;
+use App\Support\Search\ReferenceSearch;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Http\Request;
@@ -16,7 +17,8 @@ class ApplicationsPoolService
      * Pool query for verification users.
      *
      * Filters:
-     * - q: application number
+     * - application_reference: application number prefix/exact
+     * - qualification_reference: verification reference prefix/exact
      * - assigned: 1|0
      * - mine: 1
      * - overdue: 1
@@ -34,7 +36,8 @@ class ApplicationsPoolService
         $viewer = $request->user();
         $restrictLevel1 = VerificationQualificationAccess::mustRestrictToAssignedQualifications($viewer);
 
-        $q = trim((string) $request->query('q', ''));
+        $applicationReference = (string) $request->query('application_reference', '');
+        $qualificationReference = (string) $request->query('qualification_reference', '');
         $assigned = $request->query('assigned');
         $mine = $request->query('mine');
         $overdue = $request->query('overdue');
@@ -46,7 +49,6 @@ class ApplicationsPoolService
         $countryId = $request->query('country_id');
         $submittedFrom = trim((string) $request->query('submitted_from', ''));
         $submittedTo = trim((string) $request->query('submitted_to', ''));
-        $qualificationQ = trim((string) $request->query('qualification_q', ''));
 
         $query = Application::query()
             ->with([
@@ -71,26 +73,7 @@ class ApplicationsPoolService
             );
         }
 
-        if ($q !== '') {
-            $query->where(function ($inner) use ($q) {
-                $inner->where('application_number', 'like', '%'.$q.'%')
-                    ->orWhere('metadata->verification_subject->full_name', 'like', '%'.$q.'%')
-                    ->orWhere('metadata->verification_subject->nrc_number', 'like', '%'.$q.'%')
-                    ->orWhere('metadata->verification_subject->passport_number', 'like', '%'.$q.'%')
-                    ->orWhereHas('qualification', function ($qq) use ($q) {
-                        $qq->where('qualification_holder_name', 'like', '%'.$q.'%')
-                            ->orWhere('nrc_passport_number', 'like', '%'.$q.'%')
-                            ->orWhere('title_of_qualification', 'like', '%'.$q.'%')
-                            ->orWhere('certificate_number', 'like', '%'.$q.'%')
-                            ->orWhere('student_number', 'like', '%'.$q.'%')
-                            ->orWhere('examination_number', 'like', '%'.$q.'%')
-                            ->orWhere('verification_reference_number', 'like', '%'.$q.'%');
-                    })
-                    ->orWhereHas('qualifications', function ($qq) use ($q) {
-                        $qq->where('verification_reference_number', 'like', '%'.$q.'%');
-                    });
-            });
-        }
+        ReferenceSearch::applyToApplicationQuery($query, $applicationReference, $qualificationReference);
 
         if ($assigned === '1') {
             $query->whereNotNull('assigned_level1_user_id');
@@ -130,10 +113,6 @@ class ApplicationsPoolService
             $query->whereDate('submitted_at', '<=', $submittedTo);
         }
 
-        if ($qualificationQ !== '') {
-            $query->whereHas('qualification', fn ($q) => $q->where('title_of_qualification', 'like', '%'.$qualificationQ.'%'));
-        }
-
         $institutionFilter = null;
         if (is_string($awardingInstitutionId) && $awardingInstitutionId !== '') {
             $institutionFilter = (int) $awardingInstitutionId;
@@ -168,7 +147,7 @@ class ApplicationsPoolService
     {
         $submittedFrom = trim((string) ($filters['submitted_from'] ?? ''));
         $submittedTo = trim((string) ($filters['submitted_to'] ?? ''));
-        $qualificationQ = trim((string) ($filters['qualification_q'] ?? ''));
+        $qualificationReference = trim((string) ($filters['qualification_reference'] ?? ''));
         $overdueDays = (int) ($filters['overdue_days'] ?? 0);
 
         $rows = Application::query()
@@ -184,7 +163,10 @@ class ApplicationsPoolService
             ->when($hideZambia, fn ($q) => $q->whereRaw('coalesce(upper(countries.iso_code), "") != ?', ['ZMB']))
             ->when($submittedFrom !== '', fn ($q) => $q->whereDate('applications.submitted_at', '>=', $submittedFrom))
             ->when($submittedTo !== '', fn ($q) => $q->whereDate('applications.submitted_at', '<=', $submittedTo))
-            ->when($qualificationQ !== '', fn ($q) => $q->where('qualifications.title_of_qualification', 'like', '%'.$qualificationQ.'%'))
+            ->when(
+                ReferenceSearch::isUsablePrefix(ReferenceSearch::normalize($qualificationReference)),
+                fn ($q) => $q->where('qualifications.verification_reference_number', 'like', ReferenceSearch::normalize($qualificationReference).'%')
+            )
             ->when(in_array($overdueDays, [30, 60, 90], true), fn ($q) => $this->applyJoinedQualificationOverdueCutoff($q, now()->subDays($overdueDays)))
             ->groupBy('qualifications.country_id', 'countries.name')
             ->orderByDesc(DB::raw('count(*)'))
@@ -216,7 +198,7 @@ class ApplicationsPoolService
     {
         $submittedFrom = trim((string) ($filters['submitted_from'] ?? ''));
         $submittedTo = trim((string) ($filters['submitted_to'] ?? ''));
-        $qualificationQ = trim((string) ($filters['qualification_q'] ?? ''));
+        $qualificationReference = trim((string) ($filters['qualification_reference'] ?? ''));
         $overdueDays = (int) ($filters['overdue_days'] ?? 0);
         $locality = trim((string) ($filters['locality'] ?? ''));
         if (! in_array($locality, ['local', 'foreign'], true)) {
@@ -235,7 +217,10 @@ class ApplicationsPoolService
             ])
             ->when($submittedFrom !== '', fn ($q) => $q->whereDate('applications.submitted_at', '>=', $submittedFrom))
             ->when($submittedTo !== '', fn ($q) => $q->whereDate('applications.submitted_at', '<=', $submittedTo))
-            ->when($qualificationQ !== '', fn ($q) => $q->where('qualifications.title_of_qualification', 'like', '%'.$qualificationQ.'%'))
+            ->when(
+                ReferenceSearch::isUsablePrefix(ReferenceSearch::normalize($qualificationReference)),
+                fn ($q) => $q->where('qualifications.verification_reference_number', 'like', ReferenceSearch::normalize($qualificationReference).'%')
+            )
             ->when(in_array($overdueDays, [30, 60, 90], true), fn ($q) => $this->applyJoinedQualificationOverdueCutoff($q, now()->subDays($overdueDays)))
             ->groupBy('qualifications.awarding_institution_id', 'awarding_institutions.name', 'qualifications.awarding_institution_name_other')
             ->orderByDesc(DB::raw('count(*)'))

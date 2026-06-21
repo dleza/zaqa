@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Admin\Verification;
 
 use App\Domain\Verification\QualificationsPoolService;
 use App\Domain\Verification\VerificationAssignmentBulkService;
+use App\Http\Controllers\Admin\Verification\Concerns\ProvidesVerificationReferenceFilters;
 use App\Http\Controllers\Admin\Verification\Concerns\HandlesAwaitingAssignmentBulkAssign;
 use App\Http\Controllers\Admin\Verification\Concerns\MapsVerificationAssignmentQueueRows;
 use App\Http\Controllers\Controller;
@@ -19,6 +20,7 @@ class AdminVerificationAwaitingLevel2AssignmentController extends Controller
 {
     use HandlesAwaitingAssignmentBulkAssign;
     use MapsVerificationAssignmentQueueRows;
+    use ProvidesVerificationReferenceFilters;
 
     public function index(Request $request, QualificationsPoolService $pool): Response
     {
@@ -54,20 +56,18 @@ class AdminVerificationAwaitingLevel2AssignmentController extends Controller
      */
     private function filtersPayload(Request $request): array
     {
-        return [
-            'q' => (string) $request->query('q', ''),
+        return $this->referenceSearchFilters($request, [
             'overdue' => $request->query('overdue'),
             'overdue_days' => $request->query('overdue_days'),
             'submitted_from' => $request->query('submitted_from'),
             'submitted_to' => $request->query('submitted_to'),
-            'qualification_q' => $request->query('qualification_q'),
             'foreign' => $request->query('foreign'),
             'qualification_type_id' => $request->query('qualification_type_id'),
             'awarding_institution_id' => $request->query('awarding_institution_id'),
             'country_id' => $request->query('country_id'),
             'sort' => (string) $request->query('sort', 'deadline'),
             'direction' => (string) $request->query('direction', 'asc'),
-        ];
+        ]);
     }
 
     /**

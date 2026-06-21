@@ -8,6 +8,7 @@ use App\Models\Qualification;
 use App\Enums\ApplicationStatus;
 use App\Enums\PaymentStatus;
 use App\Enums\VerificationState;
+use App\Support\Search\ReferenceSearch;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -16,7 +17,8 @@ class AdminApplicationsController extends Controller
 {
     public function index(Request $request): Response
     {
-        $q = trim((string) $request->query('q', ''));
+        $applicationReference = (string) $request->query('application_reference', '');
+        $qualificationReference = (string) $request->query('qualification_reference', '');
         $status = (string) $request->query('status', '');
 
         $terminalQualificationStates = $this->terminalQualificationStates();
@@ -52,22 +54,11 @@ class AdminApplicationsController extends Controller
                 if (in_array($status, $allowed, true)) {
                     $query->where('current_status', $status);
                 }
-            })
-            ->when($q !== '', function ($query) use ($q) {
-                $query->where(function ($inner) use ($q) {
-                    $inner
-                        ->where('application_number', 'like', '%'.$q.'%')
-                        ->orWhere('metadata->verification_subject->full_name', 'like', '%'.$q.'%')
-                        ->orWhereHas('qualification', function ($qq) use ($q) {
-                            $qq->where('qualification_holder_name', 'like', '%'.$q.'%')
-                                ->orWhere('title_of_qualification', 'like', '%'.$q.'%')
-                                ->orWhere('certificate_number', 'like', '%'.$q.'%')
-                                ->orWhere('student_number', 'like', '%'.$q.'%')
-                                ->orWhere('examination_number', 'like', '%'.$q.'%');
-                        })
-                        ->orWhereHas('invoice', fn ($inv) => $inv->where('invoice_number', 'like', '%'.$q.'%'));
-                });
-            })
+            });
+
+        ReferenceSearch::applyToApplicationQuery($applications, $applicationReference, $qualificationReference);
+
+        $applications = $applications
             ->orderByDesc('updated_at')
             ->orderByDesc('id')
             ->paginate(25)
@@ -129,7 +120,8 @@ class AdminApplicationsController extends Controller
         return Inertia::render('Admin/Applications/Index', [
             'applications' => $applications,
             'filters' => [
-                'q' => $q,
+                'application_reference' => $applicationReference,
+                'qualification_reference' => $qualificationReference,
                 'status' => $status !== '' ? $status : null,
             ],
             'can' => [
@@ -140,7 +132,8 @@ class AdminApplicationsController extends Controller
 
     public function qualifications(Request $request): Response
     {
-        $q = trim((string) $request->query('q', ''));
+        $applicationReference = (string) $request->query('application_reference', '');
+        $qualificationReference = (string) $request->query('qualification_reference', '');
         $status = (string) $request->query('status', '');
         $terminalQualificationStates = $this->terminalQualificationStates();
 
@@ -156,22 +149,11 @@ class AdminApplicationsController extends Controller
                 if (in_array($status, $terminalQualificationStates, true)) {
                     $query->where('verification_state', $status);
                 }
-            })
-            ->when($q !== '', function ($query) use ($q) {
-                $like = '%'.$q.'%';
+            });
 
-                $query->where(function ($inner) use ($like) {
-                    $inner
-                        ->where('verification_reference_number', 'like', $like)
-                        ->orWhere('qualification_holder_name', 'like', $like)
-                        ->orWhere('title_of_qualification', 'like', $like)
-                        ->orWhere('certificate_number', 'like', $like)
-                        ->orWhere('student_number', 'like', $like)
-                        ->orWhere('examination_number', 'like', $like)
-                        ->orWhereHas('application', fn ($app) => $app->where('application_number', 'like', $like))
-                        ->orWhereHas('awardingInstitution', fn ($institution) => $institution->where('name', 'like', $like));
-                });
-            })
+        ReferenceSearch::applyToQualificationQuery($qualifications, $applicationReference, $qualificationReference);
+
+        $qualifications = $qualifications
             ->orderByDesc('updated_at')
             ->orderByDesc('id')
             ->paginate(25)
@@ -200,7 +182,8 @@ class AdminApplicationsController extends Controller
         return Inertia::render('Admin/Applications/Qualifications', [
             'qualifications' => $qualifications,
             'filters' => [
-                'q' => $q,
+                'application_reference' => $applicationReference,
+                'qualification_reference' => $qualificationReference,
                 'status' => $status !== '' ? $status : null,
             ],
         ]);

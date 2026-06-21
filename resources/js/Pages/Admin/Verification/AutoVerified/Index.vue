@@ -1,15 +1,17 @@
 <script setup lang="ts">
 import AdminLayout from '@/Layouts/AdminLayout.vue'
 import AdminTablePagination from '@/Components/AdminTablePagination.vue'
+import ReferenceSearchFilters from '@/Components/Admin/ReferenceSearchFilters.vue'
 import { Link, router } from '@inertiajs/vue3'
-import { Search, Sparkles } from 'lucide-vue-next'
+import { Sparkles } from 'lucide-vue-next'
 import { computed, ref, watch } from 'vue'
 
 const props = defineProps<{
   qualifications: any
   institutions: Array<{ id: number; name: string }>
   filters: {
-    q: string
+    application_reference: string
+    qualification_reference: string
     awarding_institution_id?: string | null
     verification_source?: string | null
     confidence_min?: string | null
@@ -21,7 +23,8 @@ const props = defineProps<{
   lock_ttl_minutes: number
 }>()
 
-const q = ref(props.filters.q ?? '')
+const applicationReference = ref(props.filters.application_reference ?? '')
+const qualificationReference = ref(props.filters.qualification_reference ?? '')
 const awardingInstitutionId = ref<string>(props.filters.awarding_institution_id ?? '')
 const verificationSource = ref<string>(props.filters.verification_source ?? '')
 const confidenceMin = ref<string>(props.filters.confidence_min ?? '')
@@ -30,11 +33,12 @@ const locked = ref<string>(props.filters.locked ?? '')
 const submittedFrom = ref<string>(props.filters.submitted_from ?? '')
 const submittedTo = ref<string>(props.filters.submitted_to ?? '')
 
-watch([q, awardingInstitutionId, verificationSource, confidenceMin, confidenceMax, locked, submittedFrom, submittedTo], () => {
+watch([applicationReference, qualificationReference, awardingInstitutionId, verificationSource, confidenceMin, confidenceMax, locked, submittedFrom, submittedTo], () => {
   router.get(
     '/admin/verification/auto-verified',
     {
-      q: q.value || null,
+      application_reference: applicationReference.value || null,
+      qualification_reference: qualificationReference.value || null,
       awarding_institution_id: awardingInstitutionId.value || null,
       verification_source: verificationSource.value || null,
       confidence_min: confidenceMin.value || null,
@@ -76,14 +80,10 @@ const lockBadgeClass = computed(() => {
             <div class="mt-1 text-xs text-text-muted">Search, filter, lock, and review auto-verified tasks.</div>
           </div>
           <div class="flex flex-col gap-2 sm:flex-row sm:items-center">
-            <div class="relative">
-              <Search class="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-text-muted" aria-hidden="true" />
-              <input
-                v-model="q"
-                class="zaqa-input h-10 pl-9"
-                placeholder="Search application #, holder, student/cert #..."
-              />
-            </div>
+            <ReferenceSearchFilters
+              v-model:application-reference="applicationReference"
+              v-model:qualification-reference="qualificationReference"
+            />
             <input v-model="submittedFrom" type="date" class="zaqa-input h-10" />
             <input v-model="submittedTo" type="date" class="zaqa-input h-10" />
             <select v-model="awardingInstitutionId" class="zaqa-input h-10">

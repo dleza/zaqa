@@ -137,9 +137,11 @@ routes/
 - Laravel application containers or servers
 - MySQL database
 - Redis for cache, queues, locks, rate-limits, OTP expiry, and notification orchestration
-- Queue workers
-- Horizon dashboard
+- **Laravel Horizon** — single Supervisor-managed process (`php artisan horizon`) that runs all queue workers
+- Horizon dashboard (`/horizon`, Super Admin access in production)
 - Object storage for uploaded files, receipts, and certificates
+
+Production queue processing uses **Redis + Laravel Horizon + Supervisor managing Horizon**. Do not run separate `queue:work` workers for the same queues. See `docs/05_MOBILE_MONEY_PAYMENTS_PRODUCTION.md` for deployment, operations, and monitoring.
 
 ### Optional future additions
 - Meilisearch or Elasticsearch for advanced search
