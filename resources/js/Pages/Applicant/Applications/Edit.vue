@@ -2613,15 +2613,13 @@ onBeforeUnmount(() => {
                   </p>
                 </div>
 
-                <div class="mt-4 text-sm font-semibold text-text-primary">Upload proof of payment</div>
+                <div class="mt-4 text-sm font-semibold text-text-primary">Upload proof of payment (PDF or image) </div>
                 <div class="mt-1 text-xs text-text-muted">
                   Upload your bank transfer proof or bank deposit slip once payment has been made.
                 </div>
 
                 <div class="mt-3 flex items-center justify-between gap-3">
-                  <span class="zaqa-badge" :class="paymentStatusBadgeClass(payment?.status)">
-                    {{ paymentStatusLabel(payment?.status) }}
-                  </span>
+
                   <div v-if="payment?.proof_document" class="flex flex-wrap gap-2 text-xs">
                     <a :href="payment.proof_document.preview_url" target="_blank" rel="noopener" class="zaqa-link">Preview proof</a>
                     <a :href="payment.proof_document.download_url" target="_blank" rel="noopener" class="zaqa-link">Download proof</a>
@@ -2633,8 +2631,6 @@ onBeforeUnmount(() => {
                 </div>
 
                 <div class="mt-4">
-                  <label class="text-sm font-medium">Proof file (PDF or image)</label>
-                  <p class="mt-1 text-xs text-text-muted">{{ pdfOrImageHint }}</p>
                   <input type="file" accept="application/pdf,image/*" class="zaqa-input mt-2" @change="onProofFileChange" />
                   <InputError :message="proofForm.errors.file" />
                 </div>

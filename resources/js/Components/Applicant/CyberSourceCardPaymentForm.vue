@@ -444,7 +444,7 @@ function paymentMessage(status: unknown): string {
 </script>
 
 <template>
-  <div class="space-y-4">
+  <div :class="compact ? 'space-y-3' : 'space-y-4'">
     <div v-if="!compact" class="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
       <div>
         <div class="flex items-center gap-2 text-sm font-semibold text-text-primary">
@@ -480,7 +480,7 @@ function paymentMessage(status: unknown): string {
         <span>Preparing card payment.</span>
       </div>
 
-      <div class="grid gap-4 sm:grid-cols-[minmax(0,1fr)_8rem]">
+      <div class="grid gap-3 sm:grid-cols-[minmax(0,1fr)_7rem]">
         <div>
           <label class="text-sm font-medium text-text-primary">Card number</label>
           <div
@@ -548,19 +548,38 @@ function paymentMessage(status: unknown): string {
 
 <style scoped>
 .cybersource-field {
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  height: 3rem;
   min-height: 3rem;
+  max-height: 3rem;
+  overflow: hidden;
   border: 1px solid var(--zaqa-border, #d6e2ea);
-  border-radius: 0.5rem;
+  border-radius: 0.375rem;
   background: var(--zaqa-surface, #ffffff);
-  padding: 0.75rem;
+  padding: 0 1rem;
+}
+
+.cybersource-field :deep(iframe) {
+  display: block;
+  width: 100%;
+  height: 1.5rem;
+  border: 0;
 }
 
 .cybersource-field:focus-within {
-  outline: 2px solid var(--zaqa-accent, #f18230);
-  outline-offset: 2px;
+  outline: none;
+  border-color: var(--zaqa-brand, #0076bd);
+  box-shadow: 0 0 0 2px rgb(0 118 189 / 0.25);
 }
 
 .cybersource-field-valid {
   border-color: var(--zaqa-success, #15803d);
+}
+
+.cybersource-field-valid:focus-within {
+  border-color: var(--zaqa-success, #15803d);
+  box-shadow: 0 0 0 2px rgb(21 128 61 / 0.25);
 }
 </style>
