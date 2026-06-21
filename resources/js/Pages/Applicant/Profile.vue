@@ -34,7 +34,7 @@ const accountKindDescription = computed(() => {
   if (isInstitution.value) {
     return 'Your organization’s registered profile for submitting verification requests on behalf of students or staff.'
   }
-  return 'Your personal profile for qualification verification — biodata, identity, and contact details ZAQA uses across applications.'
+  return 'Your personal profile for qualification verification.'
 })
 
 function labelOrDash(v: any) {
@@ -107,10 +107,10 @@ const identityDocOnFile = computed(() => !!props.profile?.applicant_profile?.ide
 
         <!-- Hero identity card -->
         <div
-          class="mt-8 overflow-hidden rounded-3xl border border-border/80 bg-surface shadow-[0_24px_60px_-16px_rgba(11,58,102,0.14)] ring-1 ring-black/[0.04]"
+          class="mt-8 overflow-hidden rounded-3xl border border-border/80 bg-surface shadow-[0_24px_60px_-16px_rgba(0,115,186,0.14)] ring-1 ring-black/[0.04]"
         >
           <div
-            class="relative border-b border-white/10 bg-gradient-to-br from-brand-dark via-brand-dark to-brand px-6 py-8 text-text-on-dark sm:px-10 sm:py-10"
+            class="zaqa-brand-hero relative border-b border-white/10 px-6 py-8 text-text-on-dark sm:px-10 sm:py-10"
           >
             <div
               class="pointer-events-none absolute inset-0 opacity-[0.1]"

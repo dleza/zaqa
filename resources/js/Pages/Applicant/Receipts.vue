@@ -55,10 +55,7 @@ function humanMethod(m: string) {
           <div>
             <p class="text-xs font-semibold uppercase tracking-[0.18em] text-text-muted">Billing</p>
             <h1 class="mt-2 text-2xl font-semibold tracking-tight text-text-primary sm:text-3xl">Receipts</h1>
-            <p class="mt-2 max-w-2xl text-sm text-text-muted">
-              Official receipts for successful payments only. Download a PDF for your records or open
-              <strong class="text-text-primary">View</strong> to preview the receipt on screen.
-            </p>
+
           </div>
           <Link
             href="/applicant/payments"

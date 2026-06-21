@@ -138,11 +138,7 @@ function viewLabel(row: BillingDocument): string {
           <div>
             <p class="text-xs font-semibold uppercase tracking-[0.18em] text-text-muted">Billing</p>
             <h1 class="mt-2 text-2xl font-semibold tracking-tight text-text-primary sm:text-3xl">Invoices &amp; quotations</h1>
-            <p class="mt-2 max-w-2xl text-sm text-text-muted">
-              Before payment you receive a <strong class="text-text-primary">quotation</strong>. After payment is confirmed, it becomes an
-              <strong class="text-text-primary">invoice</strong>. Use <strong class="text-text-primary">View</strong> for full details, linked
-              application, and payment history.
-            </p>
+           
             <div v-if="hasDocuments" class="mt-4 flex flex-wrap gap-2 text-xs">
               <span class="rounded-full border border-warning/30 bg-warning/10 px-3 py-1 font-semibold text-warning">
                 {{ quotationCount }} quotation{{ quotationCount === 1 ? '' : 's' }}

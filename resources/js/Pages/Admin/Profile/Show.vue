@@ -121,7 +121,7 @@ function removePhoto() {
 <template>
   <AdminLayout>
     <!-- Header -->
-    <div class="rounded-2xl border border-[#0B3A66]/15 bg-gradient-to-br from-[#0B3A66] via-[#0B3A66] to-[#0076BD] p-6 text-white shadow-lg sm:p-8">
+    <div class="zaqa-admin-hero rounded-2xl border p-6 text-white shadow-lg sm:p-8">
       <div class="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
         <div class="flex min-w-0 items-start gap-4">
           <div class="relative">

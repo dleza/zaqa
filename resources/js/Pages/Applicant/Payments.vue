@@ -76,11 +76,7 @@ function humanMethod(m: string) {
           <div>
             <p class="text-xs font-semibold uppercase tracking-[0.18em] text-text-muted">Billing</p>
             <h1 class="mt-2 text-2xl font-semibold tracking-tight text-text-primary sm:text-3xl">Payments</h1>
-            <p class="mt-2 max-w-2xl text-sm text-text-muted">
-              Every payment attempt for your verification applications, including pending and unsuccessful ones. Use
-              <strong class="text-text-primary">View</strong> for the full record, or see
-              <Link href="/applicant/receipts" class="zaqa-link font-semibold">Receipts</Link> for confirmed payments only.
-            </p>
+        
           </div>
           <div class="flex flex-wrap gap-2 self-start">
             <Link

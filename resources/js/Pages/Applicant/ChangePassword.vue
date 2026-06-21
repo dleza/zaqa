@@ -34,14 +34,14 @@ function submit() {
         <div class="mt-6 flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
           <div class="flex items-start gap-4">
             <span
-              class="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-brand to-brand-dark text-text-on-dark shadow-lg shadow-brand/25"
+              class="zaqa-brand-hero flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl text-text-on-dark shadow-lg shadow-brand/25"
             >
               <KeyRound class="h-6 w-6" aria-hidden="true" />
             </span>
             <div>
               <h1 class="text-2xl font-semibold tracking-tight text-text-primary sm:text-3xl">Change password</h1>
               <p class="mt-2 max-w-xl text-sm leading-relaxed text-text-muted">
-                Choose a strong password you don’t use elsewhere. After updating, continue using your email to sign in.
+                Choose a strong password.
               </p>
             </div>
           </div>

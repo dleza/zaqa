@@ -11,6 +11,19 @@
     --zaqa-brand: #0076bd;
     --zaqa-brand-foreground: #f9fafb;
     --zaqa-brand-dark: #0b3a66;
+    --zaqa-brand-hero-blue: #0073ba;
+    --zaqa-brand-hero-from: #005e96;
+    --zaqa-brand-hero-via: #005e96;
+    --zaqa-brand-hero-to: #0073ba;
+    --zaqa-brand-hero-border: rgb(0 115 186 / 0.15);
+    --zaqa-brand-hero-shadow: rgb(0 115 186 / 0.35);
+    /* Legacy aliases */
+    --zaqa-admin-hero-blue: var(--zaqa-brand-hero-blue);
+    --zaqa-admin-hero-from: var(--zaqa-brand-hero-from);
+    --zaqa-admin-hero-via: var(--zaqa-brand-hero-via);
+    --zaqa-admin-hero-to: var(--zaqa-brand-hero-to);
+    --zaqa-admin-hero-border: var(--zaqa-brand-hero-border);
+    --zaqa-admin-hero-shadow: var(--zaqa-brand-hero-shadow);
     --zaqa-accent: #f18230;
     --zaqa-accent-foreground: #1f2937;
     --zaqa-accent-deep: #d96a16;
@@ -117,6 +130,27 @@
 
     .zaqa-card-muted {
         @apply rounded-xl border border-border bg-surface-muted p-6;
+    }
+
+    .zaqa-brand-hero,
+    .zaqa-admin-hero {
+        border-color: var(--zaqa-brand-hero-border);
+        background-image: linear-gradient(
+            to bottom right,
+            var(--zaqa-brand-hero-from),
+            var(--zaqa-brand-hero-via),
+            var(--zaqa-brand-hero-to)
+        );
+    }
+
+    .zaqa-brand-hero-horizontal {
+        border-color: var(--zaqa-brand-hero-border);
+        background-image: linear-gradient(
+            to right,
+            var(--zaqa-brand-hero-from),
+            var(--zaqa-brand-hero-via),
+            var(--zaqa-brand-hero-to)
+        );
     }
 
     .zaqa-input {

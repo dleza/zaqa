@@ -51,7 +51,7 @@ function formatDate(iso: string | null | undefined, includeTime = false) {
 
   <GuestLayout :card="false" max-width-class="max-w-4xl" content-padding-class="px-4 py-8 sm:px-6" header-compact :center-content="false">
     <div class="overflow-hidden rounded-3xl border border-border/80 bg-surface shadow-lg">
-      <section class="border-b border-border/70 bg-gradient-to-r from-brand via-brand/95 to-brand-dark px-6 py-6 text-white">
+      <section class="zaqa-brand-hero-horizontal border-b border-border/70 px-6 py-6 text-white">
         <div class="flex items-start gap-4">
           <div class="rounded-xl bg-white/95 p-2.5">
             <img :src="zaqaLogoUrl" alt="ZAQA logo" class="h-10 w-auto object-contain" />

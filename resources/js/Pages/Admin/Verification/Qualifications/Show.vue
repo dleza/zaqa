@@ -932,7 +932,7 @@ const autoVerificationCollapsedSummary = computed(() => {
       <div class="space-y-6 px-4 pb-10 sm:px-6 lg:px-8">
       <!-- Command header: identity + status at a glance -->
       <section
-        class="relative overflow-hidden rounded-2xl border border-brand-dark/20 bg-gradient-to-br from-brand-dark via-[#0c4a7c] to-brand shadow-[0_4px_24px_-4px_rgba(11,58,102,0.35)]"
+        class="zaqa-admin-hero relative overflow-hidden rounded-2xl border shadow-[0_4px_24px_-4px_var(--zaqa-admin-hero-shadow)]"
       >
         <div
           class="pointer-events-none absolute -right-16 -top-16 h-48 w-48 rounded-full bg-brand/30 blur-3xl"

@@ -309,7 +309,7 @@ function invoiceStatusLabel(status: unknown): string {
             </Link>
             <div class="mt-4 flex items-center gap-2">
               <span
-                class="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-brand to-brand-dark text-text-on-dark shadow-md shadow-brand/25"
+                class="zaqa-brand-hero inline-flex h-9 w-9 items-center justify-center rounded-xl text-text-on-dark shadow-md shadow-brand/25"
               >
                 <Sparkles class="h-4 w-4" aria-hidden="true" />
               </span>
@@ -332,10 +332,7 @@ function invoiceStatusLabel(status: unknown): string {
                     Your verification application — complete the wizard and proceed to payment. Once payment is confirmed,
                     your application is automatically submitted for verification.
                   </template>
-                  <template v-else>
-                    Your submitted verification request with ZAQA — keep your references handy when you contact us about a
-                    specific qualification.
-                  </template>
+
                 </p>
               </div>
             </div>
@@ -361,10 +358,10 @@ function invoiceStatusLabel(status: unknown): string {
 
         <!-- Hero summary card -->
         <div
-          class="mt-8 overflow-hidden rounded-3xl border border-border/80 bg-surface shadow-[0_20px_50px_-12px_rgba(11,58,102,0.15)] ring-1 ring-black/[0.04]"
+          class="mt-8 overflow-hidden rounded-3xl border border-border/80 bg-surface shadow-[0_20px_50px_-12px_rgba(0,115,186,0.15)] ring-1 ring-black/[0.04]"
         >
           <div
-            class="relative border-b border-border/70 bg-gradient-to-br from-brand-dark via-brand-dark to-brand px-5 py-6 text-text-on-dark sm:px-8 sm:py-8"
+            class="zaqa-brand-hero relative border-b border-border/70 px-5 py-6 text-text-on-dark sm:px-8 sm:py-8"
           >
             <div
               class="pointer-events-none absolute inset-0 opacity-[0.12]"
@@ -471,11 +468,7 @@ function invoiceStatusLabel(status: unknown): string {
               <Hash class="mt-0.5 h-5 w-5 shrink-0 text-brand" aria-hidden="true" />
               <div class="min-w-0 flex-1">
                 <div class="text-sm font-semibold text-text-primary">Per-qualification verification references</div>
-                <p class="mt-1 text-xs leading-relaxed text-text-muted">
-                  Each programme or certificate you asked us to verify has its own code in the verification pool. Quote
-                  <strong class="text-text-primary">this qualification reference</strong> (not only the application
-                  number) when you follow up about that specific item.
-                </p>
+             
               </div>
             </div>
           </div>
@@ -572,7 +565,7 @@ function invoiceStatusLabel(status: unknown): string {
                   class="relative overflow-hidden rounded-3xl border border-border/90 bg-surface shadow-[0_8px_30px_-8px_rgba(0,0,0,0.08)] ring-1 ring-black/[0.03]"
                 >
                   <div
-                    class="absolute left-0 top-0 h-full w-1 bg-gradient-to-b from-brand via-brand to-brand-dark"
+                    class="absolute left-0 top-0 h-full w-1 bg-gradient-to-b from-[#0073BA] via-[#0073BA] to-[#005e96]"
                     aria-hidden="true"
                   />
 
