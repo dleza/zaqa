@@ -12,9 +12,9 @@ const user = computed(() => (page.props as any).auth?.user)
   <div class="zaqa-page flex min-h-screen flex-col">
     <header class="zaqa-topbar">
       <div class="zaqa-topbar-inner">
-        <Link href="/" class="zaqa-brand">
+        <Link href="/" class="zaqa-brand" aria-label="ZAQA Finance Portal">
           <Landmark class="h-6 w-6" aria-hidden="true" />
-          <div class="flex flex-col">
+          <div class="hidden flex-col sm:flex">
             <span class="zaqa-brand-kicker">ZAQA</span>
             <span class="zaqa-brand-name">Finance</span>
           </div>

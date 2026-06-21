@@ -69,12 +69,8 @@ const navSections = computed(() => {
           <Menu class="h-5 w-5" aria-hidden="true" />
         </button>
 
-        <Link href="/applicant/dashboard" class="zaqa-brand">
+        <Link href="/applicant/dashboard" class="zaqa-brand" aria-label="ZAQA Applicant Portal">
           <img :src="zaqaLogoUrl" alt="ZAQA logo" class="h-9 w-auto shrink-0 object-contain" />
-          <div class="flex flex-col">
-            <span class="zaqa-brand-kicker">ZAQA</span>
-            <span class="zaqa-brand-name">Applicant</span>
-          </div>
         </Link>
 
         <div class="flex items-center gap-2">
