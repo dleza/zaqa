@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
 import { router, useForm } from '@inertiajs/vue3'
 import InputError from '@/Components/InputError.vue'
+import ActionModal from '@/Components/ActionModal.vue'
 import CyberSourceCardPaymentForm from '@/Components/Applicant/CyberSourceCardPaymentForm.vue'
 import {
   AlertCircle,
@@ -38,6 +39,41 @@ const applicationLocked = computed(() => invoiceSettled.value)
 
 type PaymentTabKey = 'card' | 'bank_transfer' | 'mobile_money'
 const activePaymentTab = ref<PaymentTabKey>('mobile_money')
+
+const cardPaymentModalOpen = ref(false)
+const cardPaymentFormRef = ref<InstanceType<typeof CyberSourceCardPaymentForm> | null>(null)
+
+const cardPaymentAmountCents = computed(() => Number(invoice.value?.amount_cents ?? payment.value?.amount_cents ?? 0))
+
+const cardPaymentModalDescription = computed(() => {
+  const appRef = (props.application?.application_number ?? '—').toString()
+  const amount = formatMoneyCents(cardPaymentAmountCents.value)
+  return `Application: ${appRef}\nAmount: ${amount}`
+})
+
+function openCardPaymentModal() {
+  cardPaymentModalOpen.value = true
+}
+
+function closeCardPaymentModal() {
+  cardPaymentModalOpen.value = false
+}
+
+function onCardPaymentConfirmed() {
+  cardPaymentModalOpen.value = false
+}
+
+watch(cardPaymentModalOpen, async (open) => {
+  if (!open) return
+  await nextTick()
+  await cardPaymentFormRef.value?.prepareMicroform()
+})
+
+watch(activePaymentTab, (tab) => {
+  if (tab !== 'card') {
+    cardPaymentModalOpen.value = false
+  }
+})
 
 const invoicePreparation = ref({ auto_attempted: false, auto_failed: false })
 
@@ -349,7 +385,35 @@ onBeforeUnmount(() => stopMobileMoneyPolling())
           </div>
 
           <div v-else-if="activePaymentTab === 'card'">
-            <CyberSourceCardPaymentForm :application="application" />
+            <div v-if="invoiceSettled" class="rounded-lg border border-success/20 bg-success/10 px-3 py-2 text-sm text-success">
+              <CheckCircle2 class="mr-1 inline h-4 w-4" aria-hidden="true" />
+              Payment confirmed.
+            </div>
+            <template v-else>
+              <div class="text-sm font-semibold">Card Payment</div>
+              <div class="mt-1 text-xs text-text-muted">
+                Amount:
+                <span class="font-semibold text-text-primary">{{ formatMoneyCents(cardPaymentAmountCents) }}</span>
+              </div>
+              <div class="mt-4">
+                <div class="text-xs font-medium text-text-muted">Accepted Cards:</div>
+                <div class="mt-2 flex flex-wrap gap-1.5">
+                  <span class="rounded-md bg-surface-muted px-2 py-1 text-[11px] font-semibold text-text-muted ring-1 ring-black/[0.04]">VISA</span>
+                  <span class="rounded-md bg-surface-muted px-2 py-1 text-[11px] font-semibold text-text-muted ring-1 ring-black/[0.04]">MASTERCARD</span>
+                </div>
+              </div>
+              <div class="mt-4 flex items-start gap-2 rounded-xl bg-surface-muted px-3 py-2 text-xs text-text-muted">
+                <Lock class="mt-0.5 h-4 w-4 shrink-0 text-brand" aria-hidden="true" />
+                <span>Payments are securely processed. ZAQA does not store your card details.</span>
+              </div>
+              <button
+                type="button"
+                class="zaqa-btn zaqa-btn-primary mt-4 w-full sm:w-auto"
+                @click="openCardPaymentModal"
+              >
+                Pay with Card Now
+              </button>
+            </template>
           </div>
 
           <div v-else-if="activePaymentTab === 'bank_transfer'">
@@ -394,4 +458,26 @@ onBeforeUnmount(() => stopMobileMoneyPolling())
       </template>
     </div>
   </div>
+
+  <ActionModal
+    v-model="cardPaymentModalOpen"
+    title="Pay by Card"
+    :description="cardPaymentModalDescription"
+    max-width-class="max-w-2xl"
+    scrollable-body
+  >
+    <CyberSourceCardPaymentForm
+      v-if="cardPaymentModalOpen"
+      ref="cardPaymentFormRef"
+      :application="application"
+      compact
+      @payment-confirmed="onCardPaymentConfirmed"
+    />
+
+    <template #footer>
+      <button type="button" class="zaqa-btn zaqa-btn-secondary w-full px-4 py-2 text-sm sm:w-auto" @click="closeCardPaymentModal">
+        Cancel
+      </button>
+    </template>
+  </ActionModal>
 </template>

@@ -1064,6 +1064,41 @@ function applyDefaultPaymentTab() {
 
 const activePaymentTab = ref<PaymentTabKey>(resolvePaymentTab())
 
+const cardPaymentModalOpen = ref(false)
+const cardPaymentFormRef = ref<InstanceType<typeof CyberSourceCardPaymentForm> | null>(null)
+
+const cardPaymentAmountCents = computed(() => Number(invoice.value?.amount_cents ?? payment.value?.amount_cents ?? 0))
+
+const cardPaymentModalDescription = computed(() => {
+  const appRef = (props.application?.application_number ?? '—').toString()
+  const amount = formatMoneyCents(cardPaymentAmountCents.value)
+  return `Application: ${appRef}\nAmount: ${amount}`
+})
+
+function openCardPaymentModal() {
+  cardPaymentModalOpen.value = true
+}
+
+function closeCardPaymentModal() {
+  cardPaymentModalOpen.value = false
+}
+
+function onCardPaymentConfirmed() {
+  cardPaymentModalOpen.value = false
+}
+
+watch(cardPaymentModalOpen, async (open) => {
+  if (!open) return
+  await nextTick()
+  await cardPaymentFormRef.value?.prepareMicroform()
+})
+
+watch(activePaymentTab, (tab) => {
+  if (tab !== 'card') {
+    cardPaymentModalOpen.value = false
+  }
+})
+
 const bankDepositAccount = computed(() => props.bankTransfer?.deposit_account ?? null)
 
 const bankDepositReference = computed(() => {
@@ -2434,16 +2469,6 @@ onBeforeUnmount(() => {
                   Enter your mobile number and approve the payment prompt on your phone.
                 </div>
 
-                <div v-if="props.cgrate?.enabled" class="mt-4 rounded-xl border border-brand/15 bg-brand/5 p-4">
-                  <div class="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
-                    <div class="text-[11px] font-semibold uppercase tracking-wider text-text-muted">Amount to pay</div>
-                    <div class="text-lg font-semibold text-text-primary">
-                      {{ formatMoneyCents(Number(invoice?.amount_cents ?? payment?.amount_cents ?? 0)) }}
-                      {{ invoice?.currency ?? payment?.currency ?? 'ZMW' }}
-                    </div>
-                  </div>
-                </div>
-
                 <div v-if="props.cgrate?.enabled" class="mt-4">
                   <label class="text-sm font-medium">Mobile number</label>
                   <input
@@ -2523,7 +2548,35 @@ onBeforeUnmount(() => {
 
               <!-- Card -->
               <div v-else-if="activePaymentTab === 'card'">
-                <CyberSourceCardPaymentForm :application="application" />
+                <div v-if="invoiceSettled" class="rounded-lg border border-success/20 bg-success/10 px-3 py-2 text-sm text-success">
+                  <CheckCircle2 class="mr-1 inline h-4 w-4" aria-hidden="true" />
+                  Payment confirmed.
+                </div>
+                <template v-else>
+                  <div class="text-sm font-semibold text-text-primary">Card Payment</div>
+                  <div class="mt-1 text-xs text-text-muted">
+                    Amount:
+                    <span class="font-semibold text-text-primary">{{ formatMoneyCents(cardPaymentAmountCents) }}</span>
+                  </div>
+                  <div class="mt-4">
+                    <div class="text-xs font-medium text-text-muted">Accepted Cards:</div>
+                    <div class="mt-2 flex flex-wrap gap-1.5">
+                      <span class="rounded-md bg-surface-muted px-2 py-1 text-[11px] font-semibold text-text-muted ring-1 ring-black/[0.04]">VISA</span>
+                      <span class="rounded-md bg-surface-muted px-2 py-1 text-[11px] font-semibold text-text-muted ring-1 ring-black/[0.04]">MASTERCARD</span>
+                    </div>
+                  </div>
+                  <div class="mt-4 flex items-start gap-2 rounded-xl bg-surface-muted px-3 py-2 text-xs text-text-muted">
+                    <Lock class="mt-0.5 h-4 w-4 shrink-0 text-brand" aria-hidden="true" />
+                    <span>Payments are securely processed. ZAQA does not store your card details.</span>
+                  </div>
+                  <button
+                    type="button"
+                    class="zaqa-btn zaqa-btn-primary mt-4 w-full sm:w-auto"
+                    @click="openCardPaymentModal"
+                  >
+                    Pay with Card Now
+                  </button>
+                </template>
               </div>
 
               <!-- Bank transfer -->
@@ -2602,10 +2655,7 @@ onBeforeUnmount(() => {
                 </div>
               </div>
 
-              <div class="mt-4 inline-flex items-start gap-2 rounded-xl bg-surface-muted px-3 py-2 text-xs text-text-muted ring-1 ring-black/[0.04]">
-                <Lock class="mt-0.5 h-4 w-4 text-brand" aria-hidden="true" />
-                <span>Payments are securely processed and verified by ZAQA.</span>
-              </div>
+
             </div>
               </template>
           </div>
@@ -2969,6 +3019,28 @@ onBeforeUnmount(() => {
         </button>
         <button type="button" class="zaqa-btn zaqa-btn-primary w-full px-4 py-2 text-sm sm:w-auto" @click="closeMobileMoneyModal">
           Continue waiting
+        </button>
+      </template>
+    </ActionModal>
+
+    <ActionModal
+      v-model="cardPaymentModalOpen"
+      title="Pay by Card"
+      :description="cardPaymentModalDescription"
+      max-width-class="max-w-2xl"
+      scrollable-body
+    >
+      <CyberSourceCardPaymentForm
+        v-if="cardPaymentModalOpen"
+        ref="cardPaymentFormRef"
+        :application="application"
+        compact
+        @payment-confirmed="onCardPaymentConfirmed"
+      />
+
+      <template #footer>
+        <button type="button" class="zaqa-btn zaqa-btn-secondary w-full px-4 py-2 text-sm sm:w-auto" @click="closeCardPaymentModal">
+          Cancel
         </button>
       </template>
     </ActionModal>

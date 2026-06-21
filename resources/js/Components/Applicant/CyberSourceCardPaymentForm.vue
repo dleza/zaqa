@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch, withDefaults } from 'vue'
 import { router } from '@inertiajs/vue3'
 import { AlertCircle, CheckCircle2, CreditCard, LoaderCircle, RefreshCw, ShieldCheck } from 'lucide-vue-next'
 
@@ -42,8 +42,20 @@ type CaptureContextMetadata = {
 
 const scriptPromises = new Map<string, Promise<void>>()
 
-const props = defineProps<{
-  application: any
+const props = withDefaults(
+  defineProps<{
+    application: any
+    autoInit?: boolean
+    compact?: boolean
+  }>(),
+  {
+    autoInit: false,
+    compact: false,
+  },
+)
+
+const emit = defineEmits<{
+  paymentConfirmed: [result: ConfirmCardResponse]
 }>()
 
 const captureLoading = ref(false)
@@ -113,8 +125,12 @@ const statusClass = computed(() => {
 })
 
 onMounted(() => {
-  void prepareMicroform()
+  if (props.autoInit) {
+    void prepareMicroform()
+  }
 })
+
+defineExpose({ prepareMicroform })
 
 onBeforeUnmount(() => {
   disposeFields()
@@ -233,6 +249,10 @@ async function submitPayment() {
     const result = (response.data ?? {}) as ConfirmCardResponse
     message.value = result.message || paymentMessage(result.payment_status)
     messageTone.value = result.payment_status === 'confirmed' ? 'success' : result.payment_status === 'pending_confirmation' ? 'info' : 'error'
+
+    if (result.payment_status === 'confirmed') {
+      emit('paymentConfirmed', result)
+    }
 
     if (result.redirect_url) {
       window.location.assign(result.redirect_url)
@@ -425,7 +445,7 @@ function paymentMessage(status: unknown): string {
 
 <template>
   <div class="space-y-4">
-    <div class="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+    <div v-if="!compact" class="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
       <div>
         <div class="flex items-center gap-2 text-sm font-semibold text-text-primary">
           <CreditCard class="h-4 w-4 text-brand" aria-hidden="true" />
