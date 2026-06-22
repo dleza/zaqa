@@ -23,6 +23,7 @@ class InstitutionApiDocsSpecIsolationTest extends TestCase
 
         $body = (string) $res->getContent();
         $this->assertStringContainsString('/api/institution/v1/learner-records:', $body);
+        $this->assertStringContainsString('/api/institution/v1/verification-records/lookup:', $body);
         $this->assertStringNotContainsString('/admin/', $body);
         $this->assertStringNotContainsString('/applicant/', $body);
     }

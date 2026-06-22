@@ -9,7 +9,6 @@ import {
   CheckCircle2,
   FileCheck2,
   LockKeyhole,
-  Printer,
   ShieldCheck,
 } from 'lucide-vue-next'
 import { computed } from 'vue'
@@ -151,11 +150,6 @@ function formatDate(iso: string | null | undefined, includeTime = false) {
   }
 }
 
-function printVerification() {
-  if (typeof window !== 'undefined') {
-    window.print()
-  }
-}
 </script>
 
 <template>
@@ -199,14 +193,6 @@ function printVerification() {
                 <BadgeCheck class="h-4 w-4" aria-hidden="true" />
                 Official ZAQA registry
               </span>
-              <button
-                type="button"
-                class="inline-flex items-center gap-2 rounded-full bg-white/95 px-4 py-2 text-sm font-semibold text-brand shadow-sm transition hover:bg-white"
-                @click="printVerification"
-              >
-                <Printer class="h-4 w-4" aria-hidden="true" />
-                Print verification
-              </button>
             </div>
           </div>
         </section>

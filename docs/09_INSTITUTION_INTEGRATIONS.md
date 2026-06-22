@@ -15,6 +15,19 @@ Institutions push learner achievement records into ZAQA using the Institution In
 - Swagger UI: `/docs/institution-api` (public, feature-flag protected)
 - Auth: Bearer token (Sanctum) scoped to a single awarding institution and abilities.
 
+### Verification record lookup (ZAQA-hosted)
+
+Integrated institutions can look up ZAQA verification/certificate status by official reference:
+
+| Item | Value |
+|------|--------|
+| Endpoint | `GET /api/institution/v1/verification-records/lookup` |
+| Ability | `verification-records:lookup` |
+| Query | Exactly one of `application_reference` or `qualification_reference` (min 3 chars; prefix match) |
+| Scope | Results limited to the token’s awarding institution |
+
+Full request/response schemas and examples are in the Institution API Swagger spec (`resources/openapi/institution-api.yaml`, served at `/docs/institution-api/openapi.yaml`). See also `docs/10_INSTITUTION_VERIFICATION_LOOKUP.md`.
+
 ### Token handling
 
 - Tokens are shown only once at generation time.

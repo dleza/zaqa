@@ -194,16 +194,73 @@ function humanMethod(m: string) {
         </div>
 
         <div class="mt-8 space-y-8">
-          <div
-            v-if="!document.is_official_receipt"
-            class="rounded-xl border border-warning/30 bg-warning/10 px-4 py-3 text-sm text-warning"
-          >
-            This payment is not confirmed yet. The layout below is a preview; the official receipt PDF with verification QR code
-            is available once payment is confirmed.
-          </div>
+          <!-- Web-only: payment status & timeline -->
+          <section class="rounded-2xl border border-border bg-surface shadow-sm">
+            <div class="border-b border-border px-5 py-4 sm:px-6">
+              <div class="flex flex-wrap items-center gap-3">
+                <h2 class="text-sm font-semibold text-text-primary">Payment record</h2>
+                <span class="zaqa-badge inline-flex items-center gap-1.5 text-xs capitalize" :class="statusBadgeClass(payment.status)">
+                  <CheckCircle2 v-if="payment.status === 'confirmed'" class="h-3.5 w-3.5" aria-hidden="true" />
+                  <AlertCircle v-else class="h-3.5 w-3.5" aria-hidden="true" />
+                  {{ payment.status.replace(/_/g, ' ') }}
+                </span>
+              </div>
+            </div>
 
-          <!-- PDF-style receipt document -->
+            <dl class="grid grid-cols-1 gap-px bg-border sm:grid-cols-2 lg:grid-cols-3">
+              <div class="bg-surface px-5 py-3 sm:px-6">
+                <dt class="text-[10px] font-semibold uppercase tracking-wider text-text-muted">Method</dt>
+                <dd class="mt-1 capitalize text-sm font-semibold text-text-primary">{{ humanMethod(payment.method) }}</dd>
+              </div>
+              <div class="bg-surface px-5 py-3 sm:px-6">
+                <dt class="text-[10px] font-semibold uppercase tracking-wider text-text-muted">Provider</dt>
+                <dd class="mt-1 text-sm font-semibold text-text-primary">{{ payment.provider || '—' }}</dd>
+              </div>
+              <div class="bg-surface px-5 py-3 sm:px-6">
+                <dt class="text-[10px] font-semibold uppercase tracking-wider text-text-muted">Provider reference</dt>
+                <dd class="mt-1 font-mono text-sm font-semibold text-text-primary">{{ payment.provider_reference || '—' }}</dd>
+              </div>
+              <div class="bg-surface px-5 py-3 sm:px-6">
+                <dt class="text-[10px] font-semibold uppercase tracking-wider text-text-muted">Transaction ID</dt>
+                <dd class="mt-1 font-mono text-sm font-semibold text-text-primary">{{ payment.provider_transaction_id || '—' }}</dd>
+              </div>
+              <div v-if="payment.mobile_number" class="bg-surface px-5 py-3 sm:px-6">
+                <dt class="text-[10px] font-semibold uppercase tracking-wider text-text-muted">Mobile number</dt>
+                <dd class="mt-1 font-mono text-sm font-semibold text-text-primary">{{ payment.mobile_number }}</dd>
+              </div>
+              <div class="bg-surface px-5 py-3 sm:px-6">
+                <dt class="text-[10px] font-semibold uppercase tracking-wider text-text-muted">Created</dt>
+                <dd class="mt-1 text-sm font-semibold text-text-primary">{{ formatWhen(payment.created_at) }}</dd>
+              </div>
+              <div class="bg-surface px-5 py-3 sm:px-6">
+                <dt class="text-[10px] font-semibold uppercase tracking-wider text-text-muted">Initiated</dt>
+                <dd class="mt-1 text-sm font-semibold text-text-primary">{{ formatWhen(payment.initiated_at) }}</dd>
+              </div>
+              <div class="bg-surface px-5 py-3 sm:px-6">
+                <dt class="text-[10px] font-semibold uppercase tracking-wider text-text-muted">Confirmed</dt>
+                <dd class="mt-1 text-sm font-semibold text-text-primary">{{ formatWhen(payment.confirmed_at) }}</dd>
+              </div>
+            </dl>
+
+            <div
+              v-if="payment.rejection_reason"
+              class="border-t border-border px-5 py-4 text-sm text-danger sm:px-6"
+            >
+              <div class="font-semibold">Rejection reason</div>
+              <div class="mt-1">{{ payment.rejection_reason }}</div>
+            </div>
+            <div
+              v-if="payment.review_comment"
+              class="border-t border-border px-5 py-4 text-sm text-text-primary sm:px-6"
+            >
+              <div class="text-[10px] font-semibold uppercase tracking-wider text-text-muted">Review note</div>
+              <div class="mt-1">{{ payment.review_comment }}</div>
+            </div>
+          </section>
+
+          <!-- Official receipt document (confirmed payments only) -->
           <article
+            v-if="document.is_official_receipt"
             class="mx-auto w-full max-w-4xl border-[3px] border-black bg-white p-3 text-[10px] leading-snug text-black shadow-[0_8px_30px_rgba(15,23,42,0.08)] sm:p-4"
             aria-label="Receipt document"
           >
@@ -327,70 +384,6 @@ function humanMethod(m: string) {
               <div class="sm:text-right">You Learn, We Standardize</div>
             </div>
           </article>
-
-          <!-- Web-only: payment status & timeline -->
-          <section class="rounded-2xl border border-border bg-surface shadow-sm">
-            <div class="border-b border-border px-5 py-4 sm:px-6">
-              <div class="flex flex-wrap items-center gap-3">
-                <h2 class="text-sm font-semibold text-text-primary">Payment record</h2>
-                <span class="zaqa-badge inline-flex items-center gap-1.5 text-xs capitalize" :class="statusBadgeClass(payment.status)">
-                  <CheckCircle2 v-if="payment.status === 'confirmed'" class="h-3.5 w-3.5" aria-hidden="true" />
-                  <AlertCircle v-else class="h-3.5 w-3.5" aria-hidden="true" />
-                  {{ payment.status.replace(/_/g, ' ') }}
-                </span>
-              </div>
-            </div>
-
-            <dl class="grid grid-cols-1 gap-px bg-border sm:grid-cols-2 lg:grid-cols-3">
-              <div class="bg-surface px-5 py-3 sm:px-6">
-                <dt class="text-[10px] font-semibold uppercase tracking-wider text-text-muted">Method</dt>
-                <dd class="mt-1 capitalize text-sm font-semibold text-text-primary">{{ humanMethod(payment.method) }}</dd>
-              </div>
-              <div class="bg-surface px-5 py-3 sm:px-6">
-                <dt class="text-[10px] font-semibold uppercase tracking-wider text-text-muted">Provider</dt>
-                <dd class="mt-1 text-sm font-semibold text-text-primary">{{ payment.provider || '—' }}</dd>
-              </div>
-              <div class="bg-surface px-5 py-3 sm:px-6">
-                <dt class="text-[10px] font-semibold uppercase tracking-wider text-text-muted">Provider reference</dt>
-                <dd class="mt-1 font-mono text-sm font-semibold text-text-primary">{{ payment.provider_reference || '—' }}</dd>
-              </div>
-              <div class="bg-surface px-5 py-3 sm:px-6">
-                <dt class="text-[10px] font-semibold uppercase tracking-wider text-text-muted">Transaction ID</dt>
-                <dd class="mt-1 font-mono text-sm font-semibold text-text-primary">{{ payment.provider_transaction_id || '—' }}</dd>
-              </div>
-              <div v-if="payment.mobile_number" class="bg-surface px-5 py-3 sm:px-6">
-                <dt class="text-[10px] font-semibold uppercase tracking-wider text-text-muted">Mobile number</dt>
-                <dd class="mt-1 font-mono text-sm font-semibold text-text-primary">{{ payment.mobile_number }}</dd>
-              </div>
-              <div class="bg-surface px-5 py-3 sm:px-6">
-                <dt class="text-[10px] font-semibold uppercase tracking-wider text-text-muted">Created</dt>
-                <dd class="mt-1 text-sm font-semibold text-text-primary">{{ formatWhen(payment.created_at) }}</dd>
-              </div>
-              <div class="bg-surface px-5 py-3 sm:px-6">
-                <dt class="text-[10px] font-semibold uppercase tracking-wider text-text-muted">Initiated</dt>
-                <dd class="mt-1 text-sm font-semibold text-text-primary">{{ formatWhen(payment.initiated_at) }}</dd>
-              </div>
-              <div class="bg-surface px-5 py-3 sm:px-6">
-                <dt class="text-[10px] font-semibold uppercase tracking-wider text-text-muted">Confirmed</dt>
-                <dd class="mt-1 text-sm font-semibold text-text-primary">{{ formatWhen(payment.confirmed_at) }}</dd>
-              </div>
-            </dl>
-
-            <div
-              v-if="payment.rejection_reason"
-              class="border-t border-border px-5 py-4 text-sm text-danger sm:px-6"
-            >
-              <div class="font-semibold">Rejection reason</div>
-              <div class="mt-1">{{ payment.rejection_reason }}</div>
-            </div>
-            <div
-              v-if="payment.review_comment"
-              class="border-t border-border px-5 py-4 text-sm text-text-primary sm:px-6"
-            >
-              <div class="text-[10px] font-semibold uppercase tracking-wider text-text-muted">Review note</div>
-              <div class="mt-1">{{ payment.review_comment }}</div>
-            </div>
-          </section>
         </div>
       </div>
     </div>

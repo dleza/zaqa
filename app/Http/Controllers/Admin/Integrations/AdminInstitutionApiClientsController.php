@@ -36,6 +36,7 @@ class AdminInstitutionApiClientsController extends Controller
             'learner-records:lookup',
             'learner-records:batch',
             'learner-records:status',
+            'verification-records:lookup',
         ];
     }
 

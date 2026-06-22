@@ -51,6 +51,7 @@ use App\Http\Controllers\Admin\Verification\AdminVerificationPoolController;
 use App\Http\Controllers\Admin\Verification\AdminVerificationQualificationController;
 use App\Http\Controllers\Admin\Verification\AdminVerificationQualificationDocumentController;
 use App\Http\Controllers\Applicant\ApplicantApplicationController;
+use App\Http\Controllers\Applicant\ApplicantInstitutionVerificationLookupController;
 use App\Http\Controllers\Applicant\ApplicantInstitutionalMultipleApplicationController;
 use App\Http\Controllers\Applicant\ApplicantInstitutionalQualificationController;
 use App\Http\Controllers\Applicant\ApplicantApplicationIdentityDocumentController;
@@ -164,6 +165,11 @@ Route::middleware('auth')->group(function () {
         Route::patch('/applications/{application}', [ApplicantApplicationController::class, 'update'])->name('applications.update');
         Route::patch('/applications/{application}/wizard-declarations', [ApplicantApplicationController::class, 'saveWizardDeclarations'])->name('applications.wizard_declarations.update');
         Route::delete('/applications/{application}', [ApplicantApplicationController::class, 'destroy'])->name('applications.destroy');
+
+        Route::middleware('institution.applicant')->prefix('institution')->name('institution.')->group(function () {
+            Route::get('/verification-lookup', [ApplicantInstitutionVerificationLookupController::class, 'show'])->name('verification_lookup');
+            Route::post('/verification-lookup', [ApplicantInstitutionVerificationLookupController::class, 'search'])->name('verification_lookup.search');
+        });
 
         Route::middleware('institution.applicant')->prefix('applications/multiple')->name('applications.multiple.')->group(function () {
             Route::get('/new', [ApplicantInstitutionalMultipleApplicationController::class, 'create'])->name('create');

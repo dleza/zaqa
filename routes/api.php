@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\InstitutionApi\V1\BatchesController;
 use App\Http\Controllers\InstitutionApi\V1\LearnerRecordsController;
+use App\Http\Controllers\InstitutionApi\V1\VerificationRecordsController;
 use App\Http\Middleware\EnsureInstitutionApiClient;
 use App\Http\Middleware\ForceSanctumBearerToken;
 use App\Http\Middleware\LogInstitutionApiTraffic;
@@ -34,6 +35,9 @@ Route::prefix('institution/v1')
 
         Route::get('/learner-records/search', [LearnerRecordsController::class, 'search'])
             ->middleware('abilities:learner-records:lookup');
+
+        Route::get('/verification-records/lookup', [VerificationRecordsController::class, 'lookup'])
+            ->middleware('abilities:verification-records:lookup');
 
         Route::get('/learner-records/{id}', [LearnerRecordsController::class, 'show'])
             ->whereNumber('id')

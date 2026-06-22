@@ -10,6 +10,7 @@ import {
   UserCircle,
   KeyRound,
   Layers,
+  SearchCheck,
 } from 'lucide-vue-next'
 
 export type ApplicantNavItem = {
@@ -44,6 +45,13 @@ export const applicantNavSections: ApplicantNavSection[] = [
         label: 'Multiple Applications',
         href: '/applicant/applications/multiple/new',
         icon: Layers,
+        institutionOnly: true,
+      },
+      {
+        key: 'verification_lookup',
+        label: 'Certificate / Verification Lookup',
+        href: '/applicant/institution/verification-lookup',
+        icon: SearchCheck,
         institutionOnly: true,
       },
       { key: 'applications', label: 'My Applications', href: '/applicant/applications', icon: Files, badgeKey: 'applications' },

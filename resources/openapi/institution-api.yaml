@@ -3,13 +3,18 @@ info:
   title: ZAQA Institution Integration API
   version: "1.0.0"
   description: >
-    Institution-facing API for submitting and querying Learner Achievement Records.
+    Institution-facing API for submitting learner achievement records and looking up ZAQA verification status.
+
     This OpenAPI spec is intentionally limited to `/api/institution/v1/*` endpoints and does not expose internal admin/applicant APIs.
-    
+
+    **Authentication:** Bearer token (Sanctum) issued to an Institution API client. Each token is scoped to one awarding institution and a set of abilities (for example `learner-records:write`, `verification-records:lookup`).
+
     **Push vs Pull**
     - **Push (institution → ZAQA):** Institutions push learner achievement records using the endpoints in this spec. Records are staged as **pending submissions** and require ZAQA approval before entering the trusted learner records catalog.
     - **Pull (ZAQA → institution):** ZAQA may optionally configure a separate institution-specific pull lookup during auto-verification when internal records are not sufficient.
       That pull lookup endpoint is **not** part of this ZAQA Institution API spec.
+
+    **Verification lookup:** Use `GET /api/institution/v1/verification-records/lookup` with ability `verification-records:lookup` to check verification/certificate status by official application or qualification reference. Results are scoped to the authenticated awarding institution.
 
 servers:
   - url: /
@@ -17,6 +22,8 @@ servers:
 tags:
   - name: Learner Records
     description: Submit and query learner achievement records scoped to the authenticated awarding institution.
+  - name: Verification Records
+    description: Lookup ZAQA verification status by official application or qualification reference.
   - name: Batches
     description: Track asynchronous batch ingestion.
 
@@ -206,6 +213,160 @@ components:
                 type: integer
               message:
                 type: string
+    VerificationLookupQualification:
+      type: object
+      required: [holder_name, title, awarding_institution, country]
+      properties:
+        holder_name:
+          type: string
+          example: Martin Mwale
+        title:
+          type: string
+          example: Bachelor of Science in Information Systems and Technology
+        awarding_institution:
+          type: string
+          example: University of Lusaka
+        country:
+          type: string
+          example: Zambia
+        award_date:
+          type: string
+          format: date
+          nullable: true
+          example: "2020-11-06"
+    VerificationLookupCertificate:
+      type: object
+      required: [exists, revoked]
+      properties:
+        exists:
+          type: boolean
+          example: true
+        type:
+          type: string
+          nullable: true
+          enum: [verification, rejection]
+          example: verification
+        type_label:
+          type: string
+          nullable: true
+          example: Verification Certificate
+        number:
+          type: string
+          nullable: true
+          example: ZAQA-CVEQ-2026-000008
+        issued_at:
+          type: string
+          format: date
+          nullable: true
+          example: "2026-06-19"
+        revoked:
+          type: boolean
+          example: false
+        revoked_at:
+          type: string
+          format: date
+          nullable: true
+          example: null
+        public_verification_url:
+          type: string
+          format: uri
+          nullable: true
+          example: https://verify.example.test/certificates/api-lookup-token
+    VerificationLookupQualificationListItem:
+      type: object
+      properties:
+        qualification_reference:
+          type: string
+          example: "2026-000245-01"
+        application_reference:
+          type: string
+          example: "2026-000245"
+        holder_name:
+          type: string
+          example: Martin Mwale
+        qualification_title:
+          type: string
+          example: Bachelor of Science in Information Systems and Technology
+        awarding_institution:
+          type: string
+          example: University of Lusaka
+        status:
+          type: string
+          example: certificate_issued
+        status_label:
+          type: string
+          example: Certificate Issued
+        certificate_number:
+          type: string
+          nullable: true
+          example: ZAQA-CVEQ-2026-000008
+        public_verification_url:
+          type: string
+          format: uri
+          nullable: true
+    VerificationLookupFoundResponse:
+      type: object
+      required: [found, searched_by, status, status_label, message]
+      properties:
+        found:
+          type: boolean
+          example: true
+        searched_by:
+          type: string
+          enum: [application_reference, qualification_reference]
+          example: qualification_reference
+        application_reference:
+          type: string
+          nullable: true
+          example: "2026-000245"
+        qualification_reference:
+          type: string
+          nullable: true
+          example: "2026-000245-01"
+        status:
+          type: string
+          description: >
+            Applicant-safe status key. Common values: `in_review`, `returned_for_correction`, `approved`,
+            `rejected`, `certificate_issued`, `certificate_revoked`, `completed`.
+          example: certificate_issued
+        status_label:
+          type: string
+          example: Certificate Issued
+        message:
+          type: string
+          example: A ZAQA verification certificate has been issued for this qualification.
+        qualification:
+          $ref: '#/components/schemas/VerificationLookupQualification'
+        certificate:
+          $ref: '#/components/schemas/VerificationLookupCertificate'
+        qualifications:
+          type: array
+          description: Present when an application reference matches multiple qualification records.
+          items:
+            $ref: '#/components/schemas/VerificationLookupQualificationListItem'
+    VerificationLookupNotFoundResponse:
+      type: object
+      required: [found, message]
+      properties:
+        found:
+          type: boolean
+          example: false
+        message:
+          type: string
+          example: No ZAQA verification record was found for the supplied reference.
+    ValidationErrorResponse:
+      type: object
+      required: [message]
+      properties:
+        message:
+          type: string
+          example: The given data was invalid.
+        errors:
+          type: object
+          additionalProperties:
+            type: array
+            items:
+              type: string
 
 security:
   - BearerAuth: []
@@ -438,6 +599,167 @@ paths:
                 $ref: '#/components/schemas/SuccessEnvelope'
         "404":
           description: Not found
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+
+  /api/institution/v1/verification-records/lookup:
+    get:
+      tags: [Verification Records]
+      summary: Lookup verification record by reference
+      description: >
+        Search ZAQA verification records using **exactly one** of `application_reference` or
+        `qualification_reference`.
+
+        **Search rules**
+        - Provide one reference only (not both).
+        - Minimum three characters; exact or prefix match on indexed fields (`applications.application_number`, `qualifications.verification_reference_number`).
+        - No name, NRC, institution name, or qualification title search.
+
+        **Authorization**
+        - Requires bearer token ability `verification-records:lookup`.
+        - Results are scoped to qualifications awarded by the authenticated institution (`awarding_institution_id`).
+
+        **Privacy**
+        Responses are applicant-safe and never include NRC/passport, internal comments, payment data, officer names, or internal revocation reasons.
+      security:
+        - BearerAuth: []
+      parameters:
+        - in: query
+          name: application_reference
+          description: ZAQA application reference (e.g. whole submission).
+          schema:
+            type: string
+            minLength: 3
+            example: "2026-000245"
+        - in: query
+          name: qualification_reference
+          description: ZAQA qualification verification reference (single record).
+          schema:
+            type: string
+            minLength: 3
+            example: "2026-000245-01"
+      responses:
+        "200":
+          description: Verification record found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VerificationLookupFoundResponse'
+              examples:
+                qualificationReferenceFound:
+                  summary: Qualification reference — certificate issued
+                  value:
+                    found: true
+                    searched_by: qualification_reference
+                    application_reference: "2026-000245"
+                    qualification_reference: "2026-000245-01"
+                    status: certificate_issued
+                    status_label: Certificate Issued
+                    message: A ZAQA verification certificate has been issued for this qualification.
+                    qualification:
+                      holder_name: Martin Mwale
+                      title: Bachelor of Science in Information Systems and Technology
+                      awarding_institution: University of Lusaka
+                      country: Zambia
+                      award_date: "2020-11-06"
+                    certificate:
+                      exists: true
+                      type: verification
+                      type_label: Verification Certificate
+                      number: ZAQA-CVEQ-2026-000008
+                      issued_at: "2026-06-19"
+                      revoked: false
+                      revoked_at: null
+                      public_verification_url: https://verify.example.test/certificates/api-lookup-token
+                applicationReferenceMultiple:
+                  summary: Application reference — multiple qualifications
+                  value:
+                    found: true
+                    searched_by: application_reference
+                    application_reference: "2026-000245"
+                    qualification_reference: null
+                    status: in_review
+                    status_label: Multiple qualifications
+                    message: Multiple qualification records were found for this application reference.
+                    qualifications:
+                      - qualification_reference: "2026-000245-01"
+                        application_reference: "2026-000245"
+                        holder_name: Martin Mwale
+                        qualification_title: Bachelor of Science in Information Systems and Technology
+                        awarding_institution: University of Lusaka
+                        status: certificate_issued
+                        status_label: Certificate Issued
+                        certificate_number: ZAQA-CVEQ-2026-000008
+                        public_verification_url: https://verify.example.test/certificates/api-lookup-token
+                      - qualification_reference: "2026-000245-02"
+                        application_reference: "2026-000245"
+                        holder_name: Second Holder
+                        qualification_title: Diploma B
+                        awarding_institution: University of Lusaka
+                        status: in_review
+                        status_label: In Review
+                        certificate_number: null
+                        public_verification_url: null
+                certificateRevoked:
+                  summary: Qualification reference — certificate recalled
+                  value:
+                    found: true
+                    searched_by: qualification_reference
+                    application_reference: "2026-000245"
+                    qualification_reference: "2026-000245-01"
+                    status: certificate_revoked
+                    status_label: Certificate Recalled
+                    message: The reference is recognized, but the certificate is no longer valid.
+                    qualification:
+                      holder_name: Martin Mwale
+                      title: Bachelor of Science in Information Systems and Technology
+                      awarding_institution: University of Lusaka
+                      country: Zambia
+                      award_date: "2020-11-06"
+                    certificate:
+                      exists: true
+                      type: verification
+                      type_label: Verification Certificate
+                      number: ZAQA-CVEQ-2026-000008
+                      issued_at: "2026-06-19"
+                      revoked: true
+                      revoked_at: "2026-06-20"
+                      public_verification_url: https://verify.example.test/certificates/api-lookup-token
+        "401":
+          description: Unauthorized (missing or invalid bearer token)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        "403":
+          description: Forbidden (client disabled, inactive institution, or missing `verification-records:lookup` ability)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        "404":
+          description: No matching record for the supplied reference (within institution scope)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VerificationLookupNotFoundResponse'
+              example:
+                found: false
+                message: No ZAQA verification record was found for the supplied reference.
+        "422":
+          description: Validation error (both references supplied, neither supplied, or reference too short)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationErrorResponse'
+              example:
+                message: The given data was invalid.
+                errors:
+                  application_reference:
+                    - Provide either an application reference or a qualification reference, not both.
+                  qualification_reference:
+                    - Provide either an application reference or a qualification reference, not both.
+        "429":
+          description: Rate limited (`institution-api` limiter; default 60 requests/minute per token)
           content:
             application/json:
               schema: { $ref: '#/components/schemas/ErrorEnvelope' }
