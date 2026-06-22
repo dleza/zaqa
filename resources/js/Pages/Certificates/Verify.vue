@@ -160,6 +160,7 @@ function formatDate(iso: string | null | undefined, includeTime = false) {
     max-width-class="max-w-6xl"
     content-padding-class="px-4 py-6 sm:px-6 sm:py-8 lg:px-8 lg:py-10"
     header-compact
+    :hide-header="true"
     :center-content="false"
   >
     <div class="relative overflow-hidden rounded-[2rem] border border-brand/15 bg-white shadow-[0_35px_120px_-55px_rgba(11,58,102,0.45)]">
