@@ -3,7 +3,8 @@ import { Link, useForm } from '@inertiajs/vue3'
 import GuestLayout from '@/Layouts/GuestLayout.vue'
 import InputError from '@/Components/InputError.vue'
 import FlashMessages from '@/Components/FlashMessages.vue'
-import { Eye, EyeOff, Smartphone } from 'lucide-vue-next'
+import { zaqaLogoUrl } from '@/constants/zaqaLogo'
+import { Eye, EyeOff } from 'lucide-vue-next'
 import { ref } from 'vue'
 
 const props = defineProps<{
@@ -31,19 +32,19 @@ function resendCode() {
 </script>
 
 <template>
-  <GuestLayout>
-    <div class="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-brand/10">
-      <Smartphone class="h-6 w-6 text-brand" aria-hidden="true" />
+  <GuestLayout :hide-header="true">
+    <div class="flex justify-center">
+      <img :src="zaqaLogoUrl" alt="ZAQA logo" class="h-16 w-auto object-contain sm:h-[4.5rem]" />
     </div>
 
-    <h2 class="mt-5 text-xl font-semibold tracking-tight text-text-primary">Reset password with SMS code</h2>
-    <p class="mt-2 text-sm text-text-muted">
+    <h2 class="mt-4 text-center text-xl font-semibold tracking-tight text-text-primary">Reset password with SMS code</h2>
+    <p class="mt-2 text-center text-sm text-text-muted">
       Enter the 6-digit code sent to <span class="font-medium text-text-primary">{{ props.phone_hint }}</span> and choose a new password.
     </p>
 
     <FlashMessages class="mt-4" />
 
-    <form class="mt-6 space-y-4" @submit.prevent="submit">
+    <form class="mt-5 space-y-4" @submit.prevent="submit">
       <div>
         <label class="text-xs font-semibold uppercase tracking-wider text-text-muted">Verification code</label>
         <input
@@ -110,7 +111,7 @@ function resendCode() {
       </button>
     </form>
 
-    <div class="mt-4 flex flex-col items-center gap-2 text-sm">
+    <div class="mt-5 flex flex-col items-center gap-2 text-center text-sm">
       <button
         type="button"
         class="zaqa-link disabled:opacity-50"

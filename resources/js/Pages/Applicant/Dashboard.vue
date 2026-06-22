@@ -208,9 +208,9 @@ const statusCards = computed(() => [
               <Route class="h-7 w-7" />
             </span>
             <div class="min-w-0">
-              <div class="text-lg font-semibold text-text-primary sm:text-xl">Track application</div>
+              <div class="text-lg font-semibold text-text-primary sm:text-xl">Track Qualification</div>
               <p class="mt-1 text-sm text-text-muted">
-                Track applications and each qualification under them.
+                Track each qualification progress.
               </p>
             </div>
           </div>

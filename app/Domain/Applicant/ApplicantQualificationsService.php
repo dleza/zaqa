@@ -145,6 +145,20 @@ class ApplicantQualificationsService
     }
 
     /**
+     * Application statuses that are not yet submitted to ZAQA for verification.
+     *
+     * @return list<string>
+     */
+    private function draftApplicationStatuses(): array
+    {
+        return [
+            ApplicationStatus::Draft->value,
+            ApplicationStatus::PendingPayment->value,
+            ApplicationStatus::ExpiredUnpaid->value,
+        ];
+    }
+
+    /**
      * @param  Builder<Qualification>  $query
      * @return Builder<Qualification>
      */
@@ -153,7 +167,7 @@ class ApplicantQualificationsService
         return match ($this->normalizeFilter($filter)) {
             self::FILTER_DRAFT => $query->whereHas(
                 'application',
-                fn (Builder $q) => $q->where('current_status', ApplicationStatus::Draft)
+                fn (Builder $q) => $q->whereIn('current_status', $this->draftApplicationStatuses())
             ),
             self::FILTER_PROCESSING => $query
                 ->whereHas('application', fn (Builder $q) => $q->whereNotIn('current_status', $this->inactiveApplicationStatuses()))
@@ -165,7 +179,7 @@ class ApplicantQualificationsService
             self::FILTER_COMPLETED => $query->whereIn('verification_state', $this->closedQualificationStates()),
             default => $query->whereHas(
                 'application',
-                fn (Builder $q) => $q->where('current_status', '!=', ApplicationStatus::Draft)
+                fn (Builder $q) => $q->whereNotIn('current_status', $this->draftApplicationStatuses())
             ),
         };
     }
@@ -209,7 +223,7 @@ class ApplicantQualificationsService
     private function inactiveApplicationStatuses(): array
     {
         return [
-            ApplicationStatus::Draft->value,
+            ...$this->draftApplicationStatuses(),
             ApplicationStatus::Approved->value,
             ApplicationStatus::Rejected->value,
             ApplicationStatus::CertificateReady->value,
@@ -250,8 +264,18 @@ class ApplicantQualificationsService
 
     public function applicantStatusLabel(Qualification $qualification, Application $application): string
     {
-        if (($application->current_status?->value ?? (string) $application->current_status) === ApplicationStatus::Draft->value) {
+        $appStatus = $application->current_status?->value ?? (string) $application->current_status;
+
+        if ($appStatus === ApplicationStatus::Draft->value) {
             return 'Draft';
+        }
+
+        if ($appStatus === ApplicationStatus::PendingPayment->value) {
+            return 'Pending Payment';
+        }
+
+        if ($appStatus === ApplicationStatus::ExpiredUnpaid->value) {
+            return 'Expired unpaid';
         }
 
         $state = $qualification->verification_state;
@@ -283,7 +307,7 @@ class ApplicantQualificationsService
             ]);
         }
 
-        if ($appStatus === ApplicationStatus::Draft->value) {
+        if (in_array($appStatus, $this->draftApplicationStatuses(), true)) {
             return route('applicant.applications.edit', $application);
         }
 

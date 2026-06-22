@@ -37,7 +37,10 @@ class ApplicantDashboardService
 
         $continueDraft = Application::query()
             ->where('applicant_user_id', $userId)
-            ->where('current_status', ApplicationStatus::Draft)
+            ->whereIn('current_status', [
+                ApplicationStatus::Draft,
+                ApplicationStatus::PendingPayment,
+            ])
             ->latest('id')
             ->first();
 
@@ -172,9 +175,17 @@ class ApplicantDashboardService
     {
         $status = $application->current_status?->value ?? (string) $application->current_status;
 
-        if ($status === ApplicationStatus::Draft->value || $status === ApplicationStatus::SentBack->value) {
+        if (in_array($status, [
+            ApplicationStatus::Draft->value,
+            ApplicationStatus::PendingPayment->value,
+            ApplicationStatus::SentBack->value,
+        ], true)) {
             return [
-                'label' => $status === ApplicationStatus::SentBack->value ? 'Continue (sent back)' : 'Continue draft',
+                'label' => match ($status) {
+                    ApplicationStatus::SentBack->value => 'Continue (sent back)',
+                    ApplicationStatus::PendingPayment->value => 'Complete payment',
+                    default => 'Continue draft',
+                },
                 'href' => route('applicant.applications.edit', $application),
                 'kind' => 'continue',
             ];
@@ -235,11 +246,13 @@ class ApplicantDashboardService
                 continue;
             }
 
-            if ($status === ApplicationStatus::Draft->value) {
+            if ($status === ApplicationStatus::Draft->value || $status === ApplicationStatus::PendingPayment->value) {
                 $alerts[] = [
                     'type' => 'info',
-                    'title' => 'Draft pending',
-                    'message' => "Continue your draft application {$app->application_number}.",
+                    'title' => $status === ApplicationStatus::PendingPayment->value ? 'Payment pending' : 'Draft pending',
+                    'message' => $status === ApplicationStatus::PendingPayment->value
+                        ? "Complete payment for application {$app->application_number}."
+                        : "Continue your draft application {$app->application_number}.",
                     'application_id' => $app->id,
                     'application_number' => $app->application_number,
                     'href' => route('applicant.applications.edit', $app),

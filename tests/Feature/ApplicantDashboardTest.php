@@ -133,6 +133,46 @@ class ApplicantDashboardTest extends TestCase
         $this->assertSame(1, $payload['counts']['draft']);
     }
 
+    public function test_pending_payment_qualifications_count_as_draft_not_processing(): void
+    {
+        $applicant = $this->makeApplicant();
+
+        $pendingPayment = $this->makeApplication($applicant, [
+            'current_status' => ApplicationStatus::PendingPayment,
+        ]);
+        $this->makeQualification($pendingPayment, [
+            'verification_state' => VerificationState::AwaitingAssignment,
+            'title_of_qualification' => 'Awaiting payment',
+        ]);
+
+        $submitted = $this->makeApplication($applicant, [
+            'current_status' => ApplicationStatus::Submitted,
+            'submitted_at' => now(),
+        ]);
+        $this->makeQualification($submitted, [
+            'verification_state' => VerificationState::UnderLevel1Review,
+            'title_of_qualification' => 'Submitted qual',
+        ]);
+
+        $payload = app(ApplicantQualificationsService::class)->countsFor($applicant);
+
+        $this->assertSame(1, $payload['draft']);
+        $this->assertSame(1, $payload['processing']);
+        $this->assertSame(1, $payload['total']);
+
+        $this->actingAs($applicant)
+            ->get('/applicant/qualifications?filter=draft')
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->component('Applicant/Qualifications/Index', false)
+                ->where('filter', 'draft')
+                ->has('qualifications', 1)
+                ->where('qualifications.0.title_of_qualification', 'Awaiting payment')
+                ->where('qualifications.0.status_label', 'Pending Payment')
+                ->where('qualifications.0.href', route('applicant.applications.edit', $pendingPayment))
+            );
+    }
+
     public function test_completed_count_uses_terminal_qualification_states(): void
     {
         $applicant = $this->makeApplicant();

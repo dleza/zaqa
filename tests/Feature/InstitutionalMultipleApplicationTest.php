@@ -63,9 +63,7 @@ class InstitutionalMultipleApplicationTest extends TestCase
 
         $this->actingAs($user)
             ->patch(route('applicant.applications.multiple.update', $application), [
-                'institution_reference' => 'INST-REF-001',
-                'notification_contact_mode' => 'applicant_account',
-                'notification_contact_email' => '',
+                'notification_contact_email' => 'backup@institution.test',
             ])
             ->assertRedirect(route('applicant.applications.multiple.edit', [
                 'application' => $application,
@@ -74,7 +72,7 @@ class InstitutionalMultipleApplicationTest extends TestCase
             ->assertSessionHas('success');
 
         $application->refresh();
-        $this->assertSame('INST-REF-001', $application->metadata['institution_reference'] ?? null);
+        $this->assertSame('backup@institution.test', $application->metadata['notification_contact_email'] ?? null);
         $this->assertTrue(ApplicationSubmissionMode::isInstitutionalMultiple($application));
 
         $this->actingAs($user)

@@ -38,8 +38,6 @@ watch(
 )
 
 const infoForm = useForm({
-  institution_reference: props.application?.metadata?.institution_reference ?? '',
-  notification_contact_mode: props.application?.metadata?.notification_contact_mode ?? 'applicant_account',
   notification_contact_email: props.application?.metadata?.notification_contact_email ?? '',
 })
 
@@ -64,7 +62,6 @@ const consentInstitutionSummary = computed(() => ({
     'Your institution',
   applicationReference: (props.application?.application_number ?? '—').toString(),
   qualificationCount: qualifications.value.length,
-  institutionReference: (props.application?.metadata?.institution_reference ?? '').toString().trim(),
 }))
 
 const reviewSummary = computed(() => {
@@ -165,16 +162,17 @@ function openTermsModal() {
 
     <section v-if="activeStep === 'application_info'" class="rounded-2xl border border-border bg-surface p-6">
       <h2 class="text-lg font-semibold text-text-primary">Application information</h2>
-      <p class="mt-1 text-sm text-text-muted">Optional reference note and notification contact for this submission.</p>
+      <p class="mt-1 text-sm text-text-muted">
+        Application updates are sent to your institution account email. You can optionally add a backup email below.
+      </p>
       <div class="mt-5 grid gap-4 sm:grid-cols-2">
         <div class="sm:col-span-2">
-          <label class="text-sm font-medium">Institution reference (optional)</label>
-          <input v-model="infoForm.institution_reference" type="text" class="zaqa-input" :disabled="applicationLocked" />
-          <InputError :message="infoForm.errors.institution_reference" />
-        </div>
-        <div class="sm:col-span-2">
-          <label class="text-sm font-medium">Notification email (optional)</label>
+          <label class="text-sm font-medium">Backup notification email (optional)</label>
           <input v-model="infoForm.notification_contact_email" type="email" class="zaqa-input" :disabled="applicationLocked" />
+          <p class="mt-1.5 text-xs text-text-muted">
+            Use this only if you want a second copy of application notifications. Your institution account email remains the
+            primary contact.
+          </p>
           <InputError :message="infoForm.errors.notification_contact_email" />
         </div>
       </div>
@@ -341,11 +339,6 @@ function openTermsModal() {
                 </dd>
               </div>
             </dl>
-
-            <p v-if="consentInstitutionSummary.institutionReference" class="mt-4 text-sm text-text-muted">
-              Institution reference:
-              <span class="font-semibold text-text-primary">{{ consentInstitutionSummary.institutionReference }}</span>
-            </p>
           </div>
 
           <div class="px-6 py-5 sm:px-8">

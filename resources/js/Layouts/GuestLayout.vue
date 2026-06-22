@@ -33,13 +33,14 @@ const isLoginPage = computed(() => currentPath.value === '/login')
 const isRegisterPage = computed(() => currentPath.value === '/register')
 const isActivatePage = computed(() => currentPath.value === '/activate')
 const isForgotPasswordPage = computed(() => currentPath.value === '/forgot-password')
+const isResetPasswordPhonePage = computed(() => currentPath.value === '/reset-password/phone')
 const isHowToApplyPage = computed(() => currentPath.value === '/how-to-apply')
 const hideDecorativeBackground = computed(() => isLoginPage.value || isActivatePage.value)
 const hideFooter = computed(() => isLoginPage.value)
 const compactFooterOnMobile = computed(
   () =>
     !isLoginPage.value &&
-    (isRegisterPage.value || isActivatePage.value || isForgotPasswordPage.value || isHowToApplyPage.value),
+    (isRegisterPage.value || isActivatePage.value || isForgotPasswordPage.value || isResetPasswordPhonePage.value || isHowToApplyPage.value),
 )
 </script>
 

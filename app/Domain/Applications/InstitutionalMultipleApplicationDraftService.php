@@ -48,6 +48,7 @@ class InstitutionalMultipleApplicationDraftService
             }
 
             $metadata = ApplicationNotificationContact::mergeIntoMetadata($metadata, $data, 'self');
+            $metadata = $this->mergeBackupNotificationEmail($metadata, $data);
 
             $application = Application::create([
                 'uuid' => (string) Str::uuid(),
@@ -131,6 +132,7 @@ class InstitutionalMultipleApplicationDraftService
             }
 
             $meta = ApplicationNotificationContact::mergeIntoMetadata($meta, $data, 'self');
+            $meta = $this->mergeBackupNotificationEmail($meta, $data);
             $application->forceFill(['metadata' => $meta])->save();
 
             $this->audit->record(
@@ -145,5 +147,22 @@ class InstitutionalMultipleApplicationDraftService
 
             return $application->fresh();
         });
+    }
+
+    /**
+     * @param  array<string, mixed>  $metadata
+     * @param  array<string, mixed>  $data
+     * @return array<string, mixed>
+     */
+    private function mergeBackupNotificationEmail(array $metadata, array $data): array
+    {
+        $email = trim((string) ($data['notification_contact_email'] ?? ''));
+        if ($email !== '') {
+            $metadata['notification_contact_email'] = $email;
+        } elseif (array_key_exists('notification_contact_email', $data)) {
+            unset($metadata['notification_contact_email']);
+        }
+
+        return $metadata;
     }
 }
