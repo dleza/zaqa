@@ -301,12 +301,18 @@ class ApplicantPaymentController extends Controller
         $application = $payment->application;
 
         if ($payment->status === PaymentStatus::Confirmed && $application) {
+            if ($application->canReceiveApplicantServiceFeedback()) {
+                return redirect()
+                    ->route('applicant.applications.feedback.show', $application)
+                    ->with([
+                        'success' => 'Payment confirmed successfully. Your application has been submitted to ZAQA for verification.',
+                        'payment_completed' => true,
+                    ]);
+            }
+
             return redirect()
-                ->route('applicant.applications.feedback.show', $application)
-                ->with([
-                    'success' => 'Payment confirmed successfully. Your application has been submitted to ZAQA for verification.',
-                    'payment_completed' => true,
-                ]);
+                ->route('applicant.applications.show', $application)
+                ->with('success', 'Payment confirmed successfully.');
         }
 
         $isFailure = in_array($payment->status, [
@@ -387,7 +393,9 @@ class ApplicantPaymentController extends Controller
         $payment->loadMissing('application');
 
         if ($payment->status === PaymentStatus::Confirmed && $payment->application) {
-            return route('applicant.applications.feedback.show', $payment->application);
+            return $payment->application->canReceiveApplicantServiceFeedback()
+                ? route('applicant.applications.feedback.show', $payment->application)
+                : route('applicant.applications.show', $payment->application);
         }
 
         if (in_array($payment->status, [PaymentStatus::Failed, PaymentStatus::Rejected, PaymentStatus::Expired], true) && $payment->application) {

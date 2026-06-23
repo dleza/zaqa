@@ -15,9 +15,15 @@ use Inertia\Response;
 
 class ApplicantServiceFeedbackController extends Controller
 {
-    public function show(Request $request, Application $application, ServiceFeedbackService $service): Response
+    public function show(Request $request, Application $application, ServiceFeedbackService $service): Response|RedirectResponse
     {
         $this->authorize('view', $application);
+
+        if (! $application->canReceiveApplicantServiceFeedback()) {
+            return redirect()
+                ->route('applicant.applications.show', $application)
+                ->with('error', 'Feedback is available after your application has been submitted.');
+        }
 
         $application->loadMissing(['invoice', 'payments', 'serviceFeedback']);
 

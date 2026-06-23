@@ -18,9 +18,7 @@ class StoreServiceFeedbackRequest extends FormRequest
             return false;
         }
 
-        $status = (string) ($application->current_status?->value ?? (string) $application->current_status);
-
-        return in_array($status, ['submitted', 'resubmitted'], true);
+        return $application->canReceiveApplicantServiceFeedback();
     }
 
     /**

@@ -144,6 +144,15 @@ class Application extends Model
         return $this->hasOne(ServiceFeedback::class);
     }
 
+    /**
+     * Applicant service feedback is collected once after the application has been submitted.
+     * Status may advance to in_progress (or beyond) while the applicant is still on the form.
+     */
+    public function canReceiveApplicantServiceFeedback(): bool
+    {
+        return $this->submitted_at !== null;
+    }
+
     public function hasPendingFinanceProofReview(): bool
     {
         return $this->payments()
