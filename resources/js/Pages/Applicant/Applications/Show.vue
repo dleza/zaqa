@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { Link } from '@inertiajs/vue3'
 import ApplicantLayout from '@/Layouts/ApplicantLayout.vue'
 import QualificationAmendmentBanner from '@/Components/QualificationAmendmentBanner.vue'
@@ -10,6 +10,7 @@ import {
   CheckCircle2,
   ChevronDown,
   ChevronRight,
+  Clock,
   Copy,
   Check,
   CreditCard,
@@ -23,6 +24,7 @@ import {
   ScrollText,
   Shield,
   FileDown,
+  X,
 } from 'lucide-vue-next'
 
 const props = defineProps<{
@@ -43,6 +45,41 @@ const copiedQualId = ref<number | null>(null)
 let copyTimer: ReturnType<typeof setTimeout> | null = null
 const expandedQualificationIds = ref<Set<number>>(new Set())
 const paymentExpanded = ref(false)
+const financeReviewBannerDismissed = ref(false)
+
+const paymentAwaitingFinanceReview = computed(
+  () =>
+    props.application?.payment_review_pending === true
+    || (props.application?.payment?.status ?? '') === 'awaiting_finance_review',
+)
+
+const financeReviewBannerKey = computed(() => {
+  const paymentId = props.application?.payment?.id ?? 'unknown'
+  return `zaqa:application:${props.application.id}:payment:${paymentId}:finance-review-dismissed`
+})
+
+const showFinanceReviewBanner = computed(
+  () => paymentAwaitingFinanceReview.value && !financeReviewBannerDismissed.value,
+)
+
+const financeReviewSubmittedAt = computed(
+  () =>
+    props.application?.payment?.awaiting_finance_review_at
+    ?? props.application?.payment?.created_at
+    ?? null,
+)
+
+onMounted(() => {
+  if (paymentAwaitingFinanceReview.value) {
+    financeReviewBannerDismissed.value = localStorage.getItem(financeReviewBannerKey.value) === '1'
+    paymentExpanded.value = true
+  }
+})
+
+function dismissFinanceReviewBanner() {
+  financeReviewBannerDismissed.value = true
+  localStorage.setItem(financeReviewBannerKey.value, '1')
+}
 
 function qualificationKey(q: any, idx: number): number {
   return Number(q.id ?? idx)
@@ -89,8 +126,18 @@ const qualificationsList = computed<any[]>(() => {
 
 const correctionRequired = computed(() => props.application?.correction_required === true)
 
-const displayStatusLabel = computed(
-  () => props.application?.display_status_label ?? props.application?.status_label ?? '—',
+const displayStatusLabel = computed(() => {
+  if (paymentAwaitingFinanceReview.value) {
+    return 'Payment pending approval'
+  }
+
+  return props.application?.display_status_label ?? props.application?.status_label ?? '—'
+})
+
+const overviewStatusForBadge = computed(() =>
+  paymentAwaitingFinanceReview.value
+    ? 'pending_payment'
+    : (props.application?.current_status ?? '').toString(),
 )
 
 const qualificationsNeedingAmendment = computed(() =>
@@ -264,6 +311,12 @@ function qualStatusBadgeClass(label: string) {
 function paymentStatusLabel(status: unknown): string {
   const s = (status ?? '').toString().trim()
   if (!s) return 'Not paid yet'
+  if (s === 'awaiting_finance_review') return 'Pending finance approval'
+  if (s === 'pending_confirmation') return 'Pending confirmation'
+  if (s === 'confirmed') return 'Confirmed'
+  if (s === 'failed') return 'Failed'
+  if (s === 'rejected') return 'Rejected'
+  if (s === 'expired') return 'Expired'
   return s.replaceAll('_', ' ')
 }
 
@@ -320,15 +373,19 @@ function invoiceStatusLabel(status: unknown): string {
                 <div class="mt-2 flex flex-wrap items-center gap-2">
                   <span
                     class="zaqa-badge inline-flex items-center gap-1.5 text-xs"
-                    :class="statusBadgeClass(application.current_status)"
+                    :class="statusBadgeClass(overviewStatusForBadge)"
                   >
                     <CheckCircle2 class="h-3.5 w-3.5 shrink-0 opacity-80" aria-hidden="true" />
-                    {{ application.status_label }}
+                    {{ displayStatusLabel }}
                   </span>
                   <span class="font-mono text-xs text-text-muted">{{ application.application_number }}</span>
                 </div>
                 <p class="mt-2 max-w-xl text-sm text-text-muted">
-                  <template v-if="isDraftLike">
+                  <template v-if="paymentAwaitingFinanceReview">
+                    Your proof of payment has been submitted and is awaiting ZAQA finance approval. Your application
+                    is on hold until finance confirms payment — no further action is needed from you right now.
+                  </template>
+                  <template v-else-if="isDraftLike">
                     Your verification application — complete the wizard and proceed to payment. Once payment is confirmed,
                     your application is automatically submitted for verification.
                   </template>
@@ -353,6 +410,43 @@ function invoiceStatusLabel(status: unknown): string {
             >
               Continue editing
             </Link>
+          </div>
+        </div>
+
+        <div
+          v-if="showFinanceReviewBanner"
+          class="mt-6 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950 shadow-sm ring-1 ring-black/[0.04] sm:p-5"
+          role="status"
+        >
+          <div class="flex items-start gap-3">
+            <div
+              class="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-amber-200/80 bg-white text-amber-800"
+              aria-hidden="true"
+            >
+              <Clock class="h-4 w-4" />
+            </div>
+            <div class="min-w-0 flex-1">
+              <div class="text-sm font-semibold text-text-primary">Payment pending finance approval</div>
+              <p class="mt-1 text-sm leading-relaxed text-text-muted">
+                ZAQA finance is reviewing your uploaded proof of payment. Your application stays read-only until
+                approval is complete. You do not need to pay again or make changes — we will notify you once payment
+                is confirmed and your application is submitted for verification.
+              </p>
+              <p v-if="financeReviewSubmittedAt" class="mt-2 text-xs text-text-muted">
+                Proof submitted {{ formatDisplayDate(financeReviewSubmittedAt) }}
+                <span v-if="application.payment?.proof_document?.original_name">
+                  · {{ application.payment.proof_document.original_name }}
+                </span>
+              </p>
+            </div>
+            <button
+              type="button"
+              class="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-amber-200/80 bg-white text-text-muted transition hover:bg-amber-100 hover:text-text-primary"
+              aria-label="Dismiss payment approval notice"
+              @click="dismissFinanceReviewBanner"
+            >
+              <X class="h-4 w-4" aria-hidden="true" />
+            </button>
           </div>
         </div>
 
@@ -396,7 +490,10 @@ function invoiceStatusLabel(status: unknown): string {
                     {{ displayStatusLabel }}
                   </span>
                 </div>
-                <p v-if="isDraftLike" class="mt-2 text-xs leading-relaxed text-white/75">
+                <p v-if="paymentAwaitingFinanceReview" class="mt-2 text-xs leading-relaxed text-amber-100/90">
+                  Payment proof is with ZAQA finance for approval. No action needed from you right now.
+                </p>
+                <p v-else-if="isDraftLike" class="mt-2 text-xs leading-relaxed text-white/75">
                   Complete the wizard and pay to submit for verification.
                 </p>
                 <p v-else-if="correctionRequired" class="mt-2 text-xs leading-relaxed text-amber-100/90">
