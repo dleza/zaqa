@@ -127,7 +127,7 @@ function removeIdentityDocument() {
 
 <template>
   <ApplicantLayout>
-    <template #pageHeader>
+    <div class="zaqa-wizard-shell mx-auto w-full min-w-0 max-w-7xl 2xl:max-w-[1440px]">
       <div class="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <h1 class="text-2xl font-semibold tracking-tight text-text-primary">Update profile</h1>
@@ -137,11 +137,9 @@ function removeIdentityDocument() {
           <Link href="/applicant/profile" class="zaqa-btn zaqa-btn-secondary px-3 py-2 text-sm">Back</Link>
         </div>
       </div>
-    </template>
 
-    <div class="mx-auto w-full max-w-5xl">
-      <div class="grid grid-cols-1 gap-6 lg:grid-cols-3">
-        <form class="rounded-xl border border-border bg-surface p-6 lg:col-span-2" @submit.prevent="save">
+      <div class="mt-6 grid grid-cols-1 gap-6 xl:grid-cols-12">
+        <form class="rounded-xl border border-border bg-surface p-5 sm:p-6 xl:col-span-8" @submit.prevent="save">
         <div class="flex items-start justify-between gap-4">
           <div>
             <h2 class="text-base font-semibold text-text-primary">Account details</h2>
@@ -268,7 +266,7 @@ function removeIdentityDocument() {
             </button>
           </div>
 
-          <div v-else class="mt-4 grid grid-cols-1 gap-3 sm:max-w-lg">
+          <div v-else class="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:max-w-2xl">
             <div>
               <label class="text-sm font-medium text-text-primary">NRC or passport scan</label>
               <input type="file" class="zaqa-input" accept=".pdf,.jpg,.jpeg,.png,.webp" @change="onIdentityFile" />
@@ -324,16 +322,16 @@ function removeIdentityDocument() {
         </div>
 
         <div class="mt-8 flex flex-wrap gap-2">
-          <button type="submit" class="zaqa-btn zaqa-btn-primary" :disabled="form.processing">
+          <button type="submit" class="zaqa-btn zaqa-btn-primary w-full sm:w-auto" :disabled="form.processing">
             Save changes
           </button>
-          <Link href="/applicant/profile" class="zaqa-btn zaqa-btn-secondary">
+          <Link href="/applicant/profile" class="zaqa-btn zaqa-btn-secondary w-full sm:w-auto">
             Cancel
           </Link>
         </div>
       </form>
 
-        <aside class="rounded-xl border border-border bg-surface p-6 lg:sticky lg:top-6">
+        <aside class="rounded-xl border border-border bg-surface p-5 sm:p-6 xl:col-span-4 xl:sticky xl:top-6 xl:self-start">
           <div class="flex items-start justify-between gap-3">
             <div>
               <h2 class="text-base font-semibold text-text-primary">Change trail</h2>

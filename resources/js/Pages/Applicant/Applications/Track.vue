@@ -1,25 +1,26 @@
 <script setup lang="ts">
 import ApplicantLayout from '@/Layouts/ApplicantLayout.vue'
-import { Link, usePage } from '@inertiajs/vue3'
-import { computed } from 'vue'
 import {
-  ArrowDown,
-  BadgeCheck,
-  CalendarClock,
-  CheckCircle2,
-  CircleAlert,
-  Clock,
-  CreditCard,
-  FileEdit,
-  RefreshCcw,
-  Send,
-  ShieldCheck,
-  Sparkles,
-} from 'lucide-vue-next'
+  buildActionRequired,
+  buildProgressSteps,
+  buildTimeline,
+  formatTrackingDate,
+  formatTrackingDateTime,
+  isMilestoneTimelineEvent,
+  isTechnicalTimelineEvent,
+  milestoneDisplayTitle,
+  paymentStatusLabel,
+  resolveTrackingStatus,
+  type TimelineEvent,
+} from '@/lib/applicantApplicationTracking'
+import { formatMoneyFromCents } from '@/utils/money'
+import { Link, usePage } from '@inertiajs/vue3'
+import { computed, ref } from 'vue'
+import { ArrowLeft, Check, ChevronRight } from 'lucide-vue-next'
 
 const props = defineProps<{
   application: any
-  events: Array<any>
+  events: Array<TimelineEvent>
   statusHistoryFallback: Array<any>
   selectedQualification?: {
     id: number
@@ -30,6 +31,7 @@ const props = defineProps<{
 }>()
 
 const page = usePage()
+const showFullHistory = ref(false)
 
 const selectedQualificationId = computed(() => {
   const fromProps = Number(props.selectedQualification?.id ?? 0)
@@ -39,395 +41,270 @@ const selectedQualificationId = computed(() => {
   return parsed > 0 ? parsed : null
 })
 
-const selectedQualificationLabel = computed(() => {
-  if (props.selectedQualification?.title_of_qualification) {
-    return props.selectedQualification.title_of_qualification
-  }
-  const match = (props.application?.qualifications ?? []).find(
-    (q: any) => Number(q.id) === selectedQualificationId.value,
-  )
-  return match?.title_of_qualification ?? null
-})
-
-function eventQualificationId(ev: any): number | null {
-  const raw = ev?.qualification_id ?? ev?.metadata?.qualification_id
-  const parsed = Number(raw ?? 0)
-  return parsed > 0 ? parsed : null
-}
-
-function eventMatchesSelectedQualification(ev: any): boolean {
-  if (!selectedQualificationId.value) return true
-  const qid = eventQualificationId(ev)
-  return qid === null || qid === selectedQualificationId.value
-}
-
-function money(cents: number, currency: string) {
-  return new Intl.NumberFormat(undefined, { style: 'currency', currency: currency || 'ZMW' }).format((cents ?? 0) / 100)
-}
-
-const stageSteps = computed(() => {
-  const s = (props.application.current_status ?? '').toString()
-  const steps = [
-    { key: 'draft', label: 'Draft', done: s !== 'draft', icon: FileEdit },
-    {
-      key: 'payment',
-      label: 'Payment',
-      done: ['submitted', 'resubmitted', 'sent_back', 'approved', 'rejected'].includes(s),
-      icon: CreditCard,
-    },
-    {
-      key: 'submitted',
-      label: 'Submitted',
-      done: ['submitted', 'resubmitted', 'sent_back', 'approved', 'rejected'].includes(s),
-      icon: Send,
-    },
-    { key: 'review', label: 'Under review', done: ['approved', 'rejected'].includes(s), icon: ShieldCheck },
-    { key: 'decision', label: 'Decision', done: ['approved', 'rejected'].includes(s), icon: BadgeCheck },
-  ]
-  return steps
-})
-
-function statusBadgeClass(status: string) {
-  const s = (status ?? '').toString()
-  if (s === 'draft') return 'zaqa-badge zaqa-badge-warning'
-  if (s === 'sent_back') return 'zaqa-badge zaqa-badge-warning'
-  if (s === 'submitted' || s === 'resubmitted') return 'zaqa-badge zaqa-badge-info'
-  if (s === 'approved') return 'zaqa-badge zaqa-badge-success'
-  if (s === 'rejected') return 'zaqa-badge zaqa-badge-danger'
-  return 'zaqa-badge'
-}
-
-const displayStatusLabel = computed(
-  () => props.application?.display_status_label ?? props.application?.status_label ?? '—',
+const timeline = computed(() =>
+  buildTimeline(props.events ?? [], props.statusHistoryFallback ?? [], selectedQualificationId.value),
 )
 
-const correctionRequired = computed(() => props.application?.correction_required === true)
+const milestoneTimeline = computed(() =>
+  timeline.value.filter((event) => isMilestoneTimelineEvent(event.event_code)),
+)
 
-function eventDisplayTitle(ev: any): string {
-  const code = (ev?.event_code ?? '').toString()
-  const title = (ev?.title ?? '').toString()
-  const qualTitle = (ev?.qualification_title ?? '').toString().trim()
-  if (code.includes('qualification_sent_back') && qualTitle) {
-    return `Correction requested for ${qualTitle}`
+const visibleTimeline = computed(() => (showFullHistory.value ? timeline.value : milestoneTimeline.value))
+
+const tracking = computed(() =>
+  resolveTrackingStatus(props.application, props.selectedQualification ?? null, timeline.value),
+)
+
+const progressSteps = computed(() => buildProgressSteps(tracking.value.key, props.application))
+
+const actionRequired = computed(() =>
+  buildActionRequired(tracking.value.key, props.application.id, props.selectedQualification ?? null),
+)
+
+const actionToneClass = computed(() => {
+  switch (actionRequired.value.tone) {
+    case 'warning':
+      return 'border-amber-200 bg-amber-50'
+    case 'success':
+      return 'border-emerald-200 bg-emerald-50'
+    case 'danger':
+      return 'border-rose-200 bg-rose-50'
+    default:
+      return 'border-border bg-surface-muted/50'
   }
-  return title || 'Update'
-}
-
-function eventIcon(code: string | undefined) {
-  const c = (code ?? '').toString()
-  if (c.startsWith('draft.')) return FileEdit
-  if (c.startsWith('wizard.')) return RefreshCcw
-  if (c.startsWith('payment.')) return CreditCard
-  if (c.startsWith('submission.') || c.includes('submit')) return Send
-  if (c.startsWith('status.')) return Clock
-  return Clock
-}
-
-const timeline = computed(() => {
-  const base = (props.events ?? []).length > 0
-    ? props.events
-    : (props.statusHistoryFallback ?? []).map((h) => ({
-        id: `status-${h.id}`,
-        title: h.from_status ? `${h.from_status} → ${h.to_status}` : `Status: ${h.to_status}`,
-        description: h.comment ?? null,
-        occurred_at: h.changed_at,
-        event_code: 'status.fallback',
-        comment: null as string | null,
-      }))
-
-  if (!selectedQualificationId.value) {
-    return base
-  }
-
-  return base.filter((ev) => eventMatchesSelectedQualification(ev))
 })
 
-/** Newest-first from API — first item is always the latest activity. */
-const latestActivity = computed(() => timeline.value[0] ?? null)
-
-/** Earlier entries (excludes the latest so we don’t duplicate). */
-const earlierActivities = computed(() => timeline.value.slice(1))
-
-function formatDateTime(iso: string | undefined) {
-  if (!iso) return '—'
-  try {
-    const d = new Date(iso)
-    return new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(d)
-  } catch {
-    return iso
-  }
+function stepCircleClass(state: 'complete' | 'current' | 'upcoming') {
+  if (state === 'complete') return 'border-emerald-500 bg-emerald-500 text-white'
+  if (state === 'current') return 'border-brand bg-brand text-white shadow-md shadow-brand/25'
+  return 'border-border bg-surface text-text-muted'
 }
 
-function relativeLabel(iso: string | undefined): string | null {
-  if (!iso) return null
-  const d = new Date(iso).getTime()
-  if (Number.isNaN(d)) return null
-  const diffMs = Date.now() - d
-  const sec = Math.abs(Math.round(diffMs / 1000))
-  const past = diffMs >= 0
-  const rtf = new Intl.RelativeTimeFormat(undefined, { numeric: 'auto' })
+function stepLabelClass(state: 'complete' | 'current' | 'upcoming') {
+  if (state === 'complete') return 'text-emerald-700'
+  if (state === 'current') return 'text-brand'
+  return 'text-text-muted'
+}
 
-  const minute = 60
-  const hour = minute * 60
-  const day = hour * 24
-  const week = day * 7
-
-  if (sec < minute) return past ? 'Just now' : 'Soon'
-  if (sec < hour) return rtf.format(past ? -Math.round(sec / minute) : Math.round(sec / minute), 'minute')
-  if (sec < day) return rtf.format(past ? -Math.round(sec / hour) : Math.round(sec / hour), 'hour')
-  if (sec < week * 4) return rtf.format(past ? -Math.round(sec / day) : Math.round(sec / day), 'day')
-  if (sec < day * 365) return rtf.format(past ? -Math.round(sec / week) : Math.round(sec / week), 'week')
-  return rtf.format(past ? -Math.round(sec / (day * 30)) : Math.round(sec / (day * 30)), 'month')
+function stepConnectorClass(state: 'complete' | 'current' | 'upcoming') {
+  return state === 'upcoming' ? 'bg-border' : 'bg-emerald-400'
 }
 </script>
 
 <template>
   <ApplicantLayout>
-    <div class="zaqa-wizard-shell relative">
-      <!-- subtle ambient -->
-      <div
-        class="pointer-events-none absolute inset-x-0 -top-8 h-48 bg-gradient-to-b from-brand/[0.07] via-transparent to-transparent"
-        aria-hidden="true"
-      />
+    <div class="zaqa-wizard-shell mx-auto w-full min-w-0 max-w-7xl pb-8 2xl:max-w-[1440px]">
+      <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <Link
+          :href="`/applicant/applications/${application.id}`"
+          class="inline-flex items-center gap-1.5 text-sm font-medium text-text-muted transition hover:text-brand"
+        >
+          <ArrowLeft class="h-4 w-4" aria-hidden="true" />
+          Back to application
+        </Link>
+        <Link href="/applicant/applications" class="text-sm font-medium text-text-muted transition hover:text-brand">
+          All applications
+        </Link>
+      </div>
 
-      <div class="relative flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-        <div>
-          <div class="text-xs font-semibold uppercase tracking-wider text-text-muted">Track application</div>
-          <div class="mt-1 flex flex-wrap items-center gap-2">
-            <h1 class="text-2xl font-semibold tracking-tight text-text-primary">{{ application.application_number }}</h1>
-            <span :class="correctionRequired ? 'zaqa-badge zaqa-badge-warning' : statusBadgeClass(application.current_status)">
-              {{ displayStatusLabel }}
-            </span>
+      <!-- Hero status -->
+      <section class="mt-4 w-full overflow-hidden rounded-2xl bg-gradient-to-br from-brand via-[#0a4f86] to-[#083a66] px-4 py-5 text-white shadow-lg shadow-brand/20 sm:px-6 sm:py-5">
+        <div class="flex flex-col gap-5 xl:flex-row xl:items-start xl:justify-between">
+          <div class="min-w-0 flex-1">
+            <div class="text-[11px] font-semibold uppercase tracking-[0.18em] text-white/70">Application tracking</div>
+            <div class="mt-3 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+              <div class="min-w-0">
+                <div class="text-[10px] font-semibold uppercase tracking-wider text-white/60">Application reference</div>
+                <div class="mt-1 break-all font-mono text-sm font-semibold sm:text-base">{{ application.application_number }}</div>
+              </div>
+              <div v-if="selectedQualification?.verification_reference_number" class="min-w-0">
+                <div class="text-[10px] font-semibold uppercase tracking-wider text-white/60">Qualification reference</div>
+                <div class="mt-1 break-all font-mono text-sm font-semibold sm:text-base">
+                  {{ selectedQualification.verification_reference_number }}
+                </div>
+              </div>
+              <div v-if="selectedQualification?.title_of_qualification" class="min-w-0 sm:col-span-2 xl:col-span-1">
+                <div class="text-[10px] font-semibold uppercase tracking-wider text-white/60">Qualification</div>
+                <div class="mt-1 text-sm font-medium leading-snug sm:text-base">
+                  {{ selectedQualification.title_of_qualification }}
+                </div>
+              </div>
+            </div>
           </div>
-          <div class="mt-1 text-sm text-text-muted">
-            {{ application.is_foreign ? 'Foreign' : 'Local' }} • Submitted: {{ application.submitted_at ?? '—' }}
+
+          <div class="w-full shrink-0 border-t border-white/15 pt-4 xl:w-auto xl:min-w-[16rem] xl:border-t-0 xl:pt-0 xl:text-right 2xl:min-w-[18rem]">
+            <div class="text-[10px] font-semibold uppercase tracking-wider text-white/60">Current status</div>
+            <div class="mt-2 text-2xl font-bold tracking-tight sm:text-3xl">{{ tracking.headline }}</div>
           </div>
         </div>
 
-        <div class="flex flex-wrap gap-2">
-          <Link :href="`/applicant/applications/${application.id}`" class="zaqa-btn zaqa-btn-secondary">View details</Link>
-          <Link href="/applicant/applications" class="zaqa-btn zaqa-btn-ghost">All applications</Link>
+        <div class="mt-5 grid gap-4 border-t border-white/15 pt-4 sm:grid-cols-2 xl:grid-cols-2">
+          <div class="min-w-0">
+            <div class="text-[10px] font-semibold uppercase tracking-wider text-white/60">Current stage</div>
+            <div class="mt-1 text-sm font-semibold">{{ tracking.stage }}</div>
+          </div>
+          <div class="min-w-0">
+            <div class="text-[10px] font-semibold uppercase tracking-wider text-white/60">Next step</div>
+            <div class="mt-1 text-sm font-semibold">{{ tracking.nextStep }}</div>
+          </div>
         </div>
-      </div>
-
-      <div
-        v-if="selectedQualificationId && selectedQualificationLabel"
-        class="relative mt-4 rounded-2xl border border-[#EF7D00]/30 bg-[#EF7D00]/[0.08] px-5 py-4"
-      >
-        <div class="text-[11px] font-semibold uppercase tracking-wider text-[#EF7D00]">Tracking qualification</div>
-        <div class="mt-1 text-sm font-semibold text-text-primary">{{ selectedQualificationLabel }}</div>
-        <p class="mt-1 text-xs text-text-muted">Showing activity for this qualification and general application updates.</p>
-      </div>
+      </section>
 
       <!-- Progress tracker -->
-      <div class="relative mt-6 overflow-hidden rounded-2xl border border-border bg-surface shadow-sm ring-1 ring-black/[0.04]">
-        <div class="border-b border-border bg-gradient-to-r from-surface-muted to-surface px-5 py-4">
-          <div class="text-sm font-semibold text-text-primary">Where you are in the process</div>
-          <div class="mt-1 text-xs text-text-muted">Steps advance as your application moves forward.</div>
+      <section class="mt-4 w-full rounded-2xl border border-border/70 bg-surface px-3 py-4 sm:px-5">
+        <div class="-mx-1 overflow-x-auto px-1 sm:mx-0 sm:overflow-visible">
+          <div class="flex min-w-[36rem] items-center sm:min-w-0 sm:w-full">
+            <template v-for="(step, index) in progressSteps" :key="step.key">
+              <div class="flex min-w-[4.5rem] flex-1 flex-col items-center px-1 text-center sm:min-w-0 sm:px-2">
+                <div
+                  class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border-2 text-xs font-bold sm:h-9 sm:w-9"
+                  :class="stepCircleClass(step.state)"
+                >
+                  <Check v-if="step.state === 'complete'" class="h-4 w-4" aria-hidden="true" />
+                  <span v-else>{{ index + 1 }}</span>
+                </div>
+                <div
+                  class="mt-2 max-w-[5.5rem] text-[10px] font-semibold leading-tight sm:max-w-none sm:text-xs"
+                  :class="stepLabelClass(step.state)"
+                >
+                  {{ step.label }}
+                </div>
+              </div>
+              <div
+                v-if="index < progressSteps.length - 1"
+                class="mb-6 h-0.5 min-w-[1.25rem] flex-1 shrink-0"
+                :class="stepConnectorClass(step.state)"
+                aria-hidden="true"
+              />
+            </template>
+          </div>
         </div>
-        <div class="px-5 py-5">
-          <div class="grid grid-cols-1 gap-3 sm:grid-cols-5">
-            <div v-for="step in stageSteps" :key="step.key" class="rounded-2xl border border-border bg-surface-muted/80 px-4 py-4 ring-1 ring-black/[0.03]">
-              <div class="flex items-center justify-between">
-                <component :is="step.icon" class="h-4 w-4" :class="step.done ? 'text-success' : 'text-text-muted'" aria-hidden="true" />
-                <component
-                  :is="step.done ? CheckCircle2 : CircleAlert"
-                  class="h-4 w-4"
-                  :class="step.done ? 'text-success' : 'text-warning'"
+      </section>
+
+      <!-- Summary chips -->
+      <section class="mt-4 grid w-full grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <div class="rounded-xl border border-border/70 bg-surface px-4 py-3 sm:px-4">
+          <div class="text-[10px] font-semibold uppercase tracking-wider text-text-muted">Submitted</div>
+          <div class="mt-1 text-sm font-semibold text-text-primary">{{ formatTrackingDate(application.submitted_at) }}</div>
+        </div>
+        <div class="rounded-xl border border-border/70 bg-surface px-4 py-3 sm:px-4">
+          <div class="text-[10px] font-semibold uppercase tracking-wider text-text-muted">Target completion</div>
+          <div class="mt-1 text-sm font-semibold text-text-primary">
+            {{ formatTrackingDate(application.service_deadline_at) }}
+          </div>
+        </div>
+        <div class="rounded-xl border border-border/70 bg-surface px-4 py-3 sm:px-4">
+          <div class="text-[10px] font-semibold uppercase tracking-wider text-text-muted">Payment</div>
+          <div class="mt-1 text-sm font-semibold text-text-primary">
+            {{ paymentStatusLabel(application.payment?.status) }}
+          </div>
+        </div>
+        <div class="rounded-xl border border-border/70 bg-surface px-4 py-3 sm:px-4">
+          <div class="text-[10px] font-semibold uppercase tracking-wider text-text-muted">Amount</div>
+          <div class="mt-1 text-sm font-semibold text-text-primary">
+            {{
+              application.invoice
+                ? formatMoneyFromCents(application.invoice.amount_cents, application.invoice.currency)
+                : '—'
+            }}
+          </div>
+        </div>
+      </section>
+
+      <!-- Action + what next -->
+      <section class="mt-4 grid w-full grid-cols-1 gap-3 md:grid-cols-2">
+        <div class="rounded-2xl border p-4 sm:p-5" :class="actionToneClass">
+          <div class="text-xs font-semibold uppercase tracking-wider text-text-muted">Action required</div>
+          <div class="mt-2 text-lg font-semibold text-text-primary">{{ actionRequired.title }}</div>
+          <p class="mt-2 text-sm leading-relaxed text-text-muted">{{ actionRequired.body }}</p>
+          <Link
+            v-if="actionRequired.ctaHref"
+            :href="actionRequired.ctaHref"
+            class="zaqa-btn zaqa-btn-primary mt-4 inline-flex w-full items-center justify-center gap-2 px-4 py-2.5 text-sm sm:w-auto"
+          >
+            {{ actionRequired.ctaLabel }}
+            <ChevronRight class="h-4 w-4" aria-hidden="true" />
+          </Link>
+        </div>
+
+        <div class="rounded-2xl border border-border/70 bg-surface p-4 sm:p-5">
+          <div class="text-xs font-semibold uppercase tracking-wider text-text-muted">What happens next?</div>
+          <p class="mt-3 text-sm leading-relaxed text-text-primary">{{ tracking.whatNext }}</p>
+        </div>
+      </section>
+
+      <!-- Timeline -->
+      <section class="mt-4 w-full rounded-2xl border border-border/70 bg-surface">
+        <div class="flex flex-col gap-3 border-b border-border/70 px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-6">
+          <div class="min-w-0">
+            <h2 class="text-base font-semibold text-text-primary">Activity</h2>
+            <p class="mt-1 text-sm text-text-muted">
+              {{ showFullHistory ? 'Full activity history' : 'Key milestones only' }}
+            </p>
+          </div>
+          <button
+            type="button"
+            class="zaqa-btn zaqa-btn-secondary w-full shrink-0 px-4 py-2.5 text-sm sm:w-auto"
+            @click="showFullHistory = !showFullHistory"
+          >
+            {{ showFullHistory ? 'Show key milestones' : 'Show full activity history' }}
+          </button>
+        </div>
+
+        <div class="px-4 py-4 sm:px-6">
+          <div
+            v-if="visibleTimeline.length === 0"
+            class="rounded-xl border border-dashed border-border px-4 py-8 text-center text-sm text-text-muted"
+          >
+            No activity recorded yet. Updates will appear here as your application progresses.
+          </div>
+
+          <ol v-else class="space-y-0">
+            <li
+              v-for="(event, index) in visibleTimeline"
+              :key="event.id"
+              class="relative flex gap-3 pb-5 last:pb-0"
+            >
+              <div class="flex flex-col items-center">
+                <div
+                  class="mt-1 h-2.5 w-2.5 rounded-full"
+                  :class="index === 0 ? 'bg-brand ring-4 ring-brand/15' : 'bg-border'"
+                />
+                <div
+                  v-if="index < visibleTimeline.length - 1"
+                  class="mt-1 w-px flex-1 bg-border"
                   aria-hidden="true"
                 />
               </div>
-              <div class="mt-3 text-sm font-semibold text-text-primary">{{ step.label }}</div>
-              <div class="mt-1 text-xs" :class="step.done ? 'text-emerald-700' : 'text-text-muted'">
-                {{ step.done ? 'Completed' : 'Pending' }}
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div class="relative mt-8 grid grid-cols-1 gap-6 lg:grid-cols-3 lg:gap-8">
-        <!-- Activity timeline -->
-        <div class="lg:col-span-2">
-          <div class="overflow-hidden rounded-2xl border border-border bg-surface shadow-[0_24px_48px_-24px_rgba(11,58,102,0.18)] ring-1 ring-black/[0.05]">
-            <div class="border-b border-border bg-gradient-to-r from-brand/[0.06] via-surface-muted to-surface-muted px-6 py-5">
-              <div class="flex flex-wrap items-start justify-between gap-3">
-                <div>
-                  <div class="text-base font-semibold tracking-tight text-text-primary">Application activity</div>
-                  <p class="mt-1 max-w-xl text-sm leading-relaxed text-text-muted">
-                    Updates appear <span class="font-semibold text-text-primary">newest first</span>. The highlighted card is your
-                    <span class="font-semibold text-brand">most recent</span> activity; scroll down for older milestones — the last entry is the
-                    earliest recorded step.
-                  </p>
-                </div>
-                <div
-                  class="hidden shrink-0 items-center gap-1.5 rounded-full border border-border bg-surface px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-text-muted sm:flex"
-                >
-                  <CalendarClock class="h-3.5 w-3.5" aria-hidden="true" />
-                  Newest → oldest
-                </div>
-              </div>
-            </div>
-
-            <div class="px-5 py-6 sm:px-8 sm:py-8">
-              <div v-if="timeline.length === 0" class="rounded-2xl border border-dashed border-border bg-surface-muted/50 px-6 py-10 text-center">
-                <Clock class="mx-auto h-10 w-10 text-text-muted opacity-60" aria-hidden="true" />
-                <p class="mt-4 text-sm font-semibold text-text-primary">No activity recorded yet</p>
-                <p class="mt-2 text-sm text-text-muted">Your timeline will appear here as your application moves through verification.</p>
-              </div>
-
-              <template v-else>
-                <!-- Latest (newest) — always first in API order -->
-                <div v-if="latestActivity" class="relative">
-                  <div class="flex justify-end sm:pr-2">
-                    <span
-                      class="inline-flex items-center gap-1.5 rounded-full border border-brand/25 bg-brand/[0.08] px-3 py-1 text-[11px] font-bold uppercase tracking-wide text-brand"
-                    >
-                      <Sparkles class="h-3.5 w-3.5" aria-hidden="true" />
-                      Latest activity
-                    </span>
-                  </div>
-
-                  <div
-                    class="mt-3 rounded-2xl border border-brand/25 bg-gradient-to-br from-brand/[0.09] via-surface to-surface p-[1px] shadow-lg shadow-brand/[0.08]"
+              <div class="min-w-0 flex-1 pb-1">
+                <div class="flex flex-wrap items-center gap-2">
+                  <span class="text-sm font-semibold text-text-primary">
+                    {{ milestoneDisplayTitle(event) }}
+                  </span>
+                  <span
+                    v-if="isTechnicalTimelineEvent(event.event_code) && showFullHistory"
+                    class="rounded-full bg-surface-muted px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-text-muted"
                   >
-                    <div class="rounded-[15px] bg-surface px-5 py-5 sm:px-6 sm:py-6">
-                      <div class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-                        <div class="flex min-w-0 flex-1 gap-4">
-                          <div
-                            class="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border border-brand/20 bg-brand/[0.07] text-brand shadow-inner"
-                          >
-                            <component :is="eventIcon(latestActivity.event_code)" class="h-5 w-5" aria-hidden="true" />
-                          </div>
-                          <div class="min-w-0 flex-1">
-                            <h3 class="text-base font-semibold leading-snug text-text-primary">{{ eventDisplayTitle(latestActivity) }}</h3>
-                            <div class="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-text-muted">
-                              <time :datetime="latestActivity.occurred_at ?? undefined" class="font-medium text-text-primary">
-                                {{ formatDateTime(latestActivity.occurred_at) }}
-                              </time>
-                              <span v-if="relativeLabel(latestActivity.occurred_at)" class="text-text-muted">
-                                · {{ relativeLabel(latestActivity.occurred_at) }}
-                              </span>
-                            </div>
-                            <p v-if="latestActivity.description" class="mt-3 text-sm leading-relaxed text-text-muted">
-                              {{ latestActivity.description }}
-                            </p>
-                            <div
-                              v-if="latestActivity.comment"
-                              class="mt-4 rounded-xl border border-brand/15 bg-brand/[0.04] px-4 py-3 text-sm leading-relaxed text-text-primary"
-                            >
-                              {{ latestActivity.comment }}
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div v-if="earlierActivities.length > 0" class="mt-6 flex items-center justify-center gap-2 text-xs font-semibold uppercase tracking-wider text-text-muted">
-                    <ArrowDown class="h-4 w-4 text-brand/60" aria-hidden="true" />
-                    Earlier activity below
-                    <ArrowDown class="h-4 w-4 text-brand/60" aria-hidden="true" />
-                  </div>
+                    System
+                  </span>
                 </div>
-
-                <!-- Earlier milestones — vertical rail -->
-                <div v-if="earlierActivities.length > 0" class="relative mt-8">
-                  <div class="absolute bottom-6 left-[18px] top-0 w-px bg-gradient-to-b from-brand/35 via-border to-border/80" aria-hidden="true" />
-
-                  <ol class="relative space-y-0">
-                    <li v-for="(ev, idx) in earlierActivities" :key="ev.id" class="relative pb-10 pl-12 last:pb-0">
-                      <!-- node -->
-                      <div
-                        class="absolute left-3 top-2 flex h-4 w-4 items-center justify-center rounded-full border-2 bg-surface shadow-sm"
-                        :class="idx === earlierActivities.length - 1 ? 'border-emerald-500/80 ring-2 ring-emerald-500/15' : 'border-brand/40'"
-                      />
-
-                      <div
-                        class="rounded-2xl border border-border bg-surface-muted/60 px-4 py-4 shadow-sm ring-1 ring-black/[0.03] transition hover:border-border hover:bg-surface-muted"
-                      >
-                        <div class="flex flex-wrap items-start justify-between gap-3">
-                          <div class="flex min-w-0 flex-1 gap-3">
-                            <div class="mt-0.5 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-border bg-surface">
-                              <component :is="eventIcon(ev.event_code)" class="h-4 w-4 text-brand" aria-hidden="true" />
-                            </div>
-                            <div class="min-w-0">
-                              <div class="flex flex-wrap items-center gap-2">
-                                <span class="text-sm font-semibold text-text-primary">{{ eventDisplayTitle(ev) }}</span>
-                                <span
-                                  v-if="idx === earlierActivities.length - 1"
-                                  class="inline-flex rounded-full border border-emerald-500/25 bg-emerald-500/[0.08] px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-emerald-800"
-                                >
-                                  Earliest
-                                </span>
-                              </div>
-                              <div class="mt-1 flex flex-wrap items-center gap-x-2 text-[11px] text-text-muted">
-                                <time :datetime="ev.occurred_at ?? undefined">{{ formatDateTime(ev.occurred_at) }}</time>
-                                <span v-if="relativeLabel(ev.occurred_at)">· {{ relativeLabel(ev.occurred_at) }}</span>
-                              </div>
-                              <p v-if="ev.description" class="mt-2 text-xs leading-relaxed text-text-muted">{{ ev.description }}</p>
-                              <div
-                                v-if="ev.comment"
-                                class="mt-3 rounded-xl border border-border bg-surface px-3 py-2 text-xs text-text-primary"
-                              >
-                                {{ ev.comment }}
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    </li>
-                  </ol>
-
-                  <p class="mt-4 text-center text-[11px] text-text-muted">
-                    End of timeline — older items are closer to when your application began.
-                  </p>
-                </div>
-
-                <!-- Single event only -->
-                <p v-if="timeline.length === 1" class="mt-6 text-center text-sm text-text-muted">
-                  Only one activity has been recorded so far; more updates will appear here as your application progresses.
+                <time :datetime="event.occurred_at ?? undefined" class="mt-1 block text-xs text-text-muted">
+                  {{ formatTrackingDateTime(event.occurred_at) }}
+                </time>
+                <p v-if="event.description" class="mt-2 text-sm leading-relaxed text-text-muted">
+                  {{ event.description }}
                 </p>
-              </template>
-            </div>
-          </div>
+                <p
+                  v-if="event.comment"
+                  class="mt-2 rounded-lg border border-border/70 bg-surface-muted/60 px-3 py-2 text-sm text-text-primary"
+                >
+                  {{ event.comment }}
+                </p>
+              </div>
+            </li>
+          </ol>
         </div>
-
-        <!-- Summary -->
-        <aside class="space-y-4 lg:sticky lg:top-6 lg:self-start">
-          <div class="rounded-2xl border border-border bg-surface p-5 shadow-sm ring-1 ring-black/[0.04]">
-            <div class="text-sm font-semibold text-text-primary">Key dates</div>
-            <div class="mt-3 grid grid-cols-1 gap-3 text-sm">
-              <div class="rounded-xl border border-border bg-surface-muted px-4 py-3">
-                <div class="text-[11px] font-semibold uppercase tracking-wider text-text-muted">Created</div>
-                <div class="mt-1 font-semibold text-text-primary">{{ application.created_at ?? '—' }}</div>
-              </div>
-              <div class="rounded-xl border border-border bg-surface-muted px-4 py-3">
-                <div class="text-[11px] font-semibold uppercase tracking-wider text-text-muted">Submitted</div>
-                <div class="mt-1 font-semibold text-text-primary">{{ application.submitted_at ?? '—' }}</div>
-              </div>
-              <div class="rounded-xl border border-border bg-surface-muted px-4 py-3">
-                <div class="text-[11px] font-semibold uppercase tracking-wider text-text-muted">SLA deadline</div>
-                <div class="mt-1 font-semibold text-text-primary">{{ application.service_deadline_at ?? '—' }}</div>
-              </div>
-            </div>
-          </div>
-
-          <div class="rounded-2xl border border-border bg-surface p-5 shadow-sm ring-1 ring-black/[0.04]">
-            <div class="text-sm font-semibold text-text-primary">Payment</div>
-            <div class="mt-3 rounded-xl border border-border bg-surface-muted px-4 py-3 text-sm">
-              <div class="text-xs text-text-muted">Invoice</div>
-              <div class="mt-1 font-semibold text-text-primary">{{ application.invoice?.invoice_number ?? '—' }}</div>
-              <div class="mt-2 text-xs text-text-muted">Amount</div>
-              <div class="mt-1 font-semibold text-text-primary">
-                {{ application.invoice ? money(application.invoice.amount_cents, application.invoice.currency) : '—' }}
-              </div>
-              <div class="mt-2 text-xs text-text-muted">Payment status</div>
-              <div class="mt-1 font-semibold text-text-primary">{{ application.payment?.status ?? '—' }}</div>
-            </div>
-          </div>
-        </aside>
-      </div>
+      </section>
     </div>
   </ApplicantLayout>
 </template>
