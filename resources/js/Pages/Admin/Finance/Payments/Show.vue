@@ -18,6 +18,7 @@ import {
   Mail,
   Phone,
   Receipt,
+  RefreshCw,
   ScrollText,
   ShieldCheck,
   UserRound,
@@ -39,6 +40,11 @@ const props = defineProps<{
     disabled_reason: string | null
     status_options: Array<{ value: string; label: string }>
   }
+  gateway_recheck: {
+    can_recheck: boolean
+    can_apply: boolean
+    unsupported_reason: string | null
+  }
   navigation: {
     applicant: { name: string | null; href: string | null } | null
     qualifications: Array<{
@@ -56,6 +62,29 @@ const correctionOpen = ref(false)
 const correctionStatus = ref(props.correction.status_options[0]?.value ?? props.payment.status ?? '')
 const correctionNote = ref('')
 const correctionProviderTransactionId = ref(props.payment.provider_transaction_id ?? '')
+
+type GatewayRecheckResult = {
+  supported: boolean
+  unsupported_reason: string | null
+  local_status: string
+  local_status_label: string
+  gateway_status: string
+  gateway_status_label: string
+  status_changed: boolean
+  response_code: number | null
+  response_message: string | null
+  provider_transaction_id: string | null
+  will_submit_application: boolean
+  application_id: number | null
+  application_status: string | null
+}
+
+const gatewayRecheckOpen = ref(false)
+const gatewayRecheckLoading = ref(false)
+const gatewayRecheckError = ref<string | null>(null)
+const gatewayRecheckResult = ref<GatewayRecheckResult | null>(null)
+const gatewayRecheckNote = ref('')
+const gatewayRecheckInfo = ref<string | null>(null)
 
 const createdAt = computed(() => props.payment.created_at ?? props.payment.initiated_at ?? null)
 const confirmingPayment = computed(() => correctionStatus.value === 'confirmed')
@@ -226,6 +255,51 @@ function correctionSummary(entry: any) {
 
   return parts.length > 0 ? parts.join(' · ') : 'Recorded finance action'
 }
+
+async function recheckGatewayStatus() {
+  gatewayRecheckLoading.value = true
+  gatewayRecheckError.value = null
+  gatewayRecheckInfo.value = null
+  gatewayRecheckResult.value = null
+
+  try {
+    const response = await (window as any).axios.post(`/admin/finance/payments/${props.payment.id}/recheck-gateway`)
+    const result = response.data as GatewayRecheckResult
+
+    if (!result.supported) {
+      gatewayRecheckError.value = result.unsupported_reason ?? 'Gateway recheck is not available for this payment.'
+      return
+    }
+
+    if (!result.status_changed) {
+      gatewayRecheckInfo.value = `Gateway status matches the recorded payment status (${result.local_status_label}).`
+      return
+    }
+
+    gatewayRecheckResult.value = result
+    gatewayRecheckNote.value = ''
+    gatewayRecheckOpen.value = true
+  } catch (error: any) {
+    gatewayRecheckError.value = error?.response?.data?.message
+      ?? error?.response?.data?.errors?.gateway?.[0]
+      ?? 'Could not recheck the payment gateway.'
+  } finally {
+    gatewayRecheckLoading.value = false
+  }
+}
+
+function applyGatewayRecheck() {
+  router.post(`/admin/finance/payments/${props.payment.id}/apply-gateway-recheck`, {
+    note: gatewayRecheckNote.value,
+  }, {
+    preserveScroll: true,
+    onSuccess: () => {
+      gatewayRecheckOpen.value = false
+      gatewayRecheckResult.value = null
+      gatewayRecheckNote.value = ''
+    },
+  })
+}
 </script>
 
 <template>
@@ -273,6 +347,16 @@ function correctionSummary(entry: any) {
               Back to payments
             </Link>
             <button
+              v-if="gateway_recheck.can_recheck"
+              type="button"
+              class="zaqa-btn zaqa-btn-secondary inline-flex items-center gap-2 px-4 py-2 text-sm"
+              :disabled="gatewayRecheckLoading"
+              @click="recheckGatewayStatus"
+            >
+              <RefreshCw class="h-4 w-4" :class="gatewayRecheckLoading ? 'animate-spin' : ''" aria-hidden="true" />
+              Recheck gateway
+            </button>
+            <button
               v-if="can.correct && correction.enabled"
               type="button"
               class="zaqa-btn zaqa-btn-primary px-4 py-2 text-sm"
@@ -281,6 +365,25 @@ function correctionSummary(entry: any) {
               Update payment
             </button>
           </div>
+        </div>
+
+        <div
+          v-if="gatewayRecheckError"
+          class="mt-4 rounded-2xl border border-rose-200/80 bg-rose-50 px-4 py-3 text-sm text-rose-700"
+        >
+          {{ gatewayRecheckError }}
+        </div>
+        <div
+          v-else-if="gatewayRecheckInfo"
+          class="mt-4 rounded-2xl border border-emerald-200/80 bg-emerald-50 px-4 py-3 text-sm text-emerald-700"
+        >
+          {{ gatewayRecheckInfo }}
+        </div>
+        <div
+          v-else-if="gateway_recheck.unsupported_reason && payment.provider === 'cgrate'"
+          class="mt-4 rounded-2xl border border-border/70 bg-surface-muted/50 px-4 py-3 text-sm text-text-muted"
+        >
+          {{ gateway_recheck.unsupported_reason }}
         </div>
       </section>
 
@@ -793,6 +896,67 @@ function correctionSummary(entry: any) {
           })"
         >
           Save correction
+        </button>
+      </template>
+    </AdminActionModal>
+
+    <AdminActionModal
+      v-model="gatewayRecheckOpen"
+      title="Apply gateway status"
+      description="The payment gateway returned a different status from what is recorded in the portal."
+    >
+      <div v-if="gatewayRecheckResult" class="space-y-4">
+        <div class="grid gap-3 sm:grid-cols-2">
+          <div class="rounded-2xl border border-border/60 bg-surface-muted/35 px-4 py-4">
+            <div class="text-xs font-semibold uppercase tracking-[0.16em] text-text-muted">Recorded status</div>
+            <div class="mt-2 text-sm font-semibold text-text-primary">{{ gatewayRecheckResult.local_status_label }}</div>
+          </div>
+          <div class="rounded-2xl border border-sky-200/80 bg-sky-50/80 px-4 py-4">
+            <div class="text-xs font-semibold uppercase tracking-[0.16em] text-sky-700">Gateway status</div>
+            <div class="mt-2 text-sm font-semibold text-sky-900">{{ gatewayRecheckResult.gateway_status_label }}</div>
+          </div>
+        </div>
+
+        <div v-if="gatewayRecheckResult.response_message" class="rounded-2xl bg-surface-muted/35 px-4 py-3 text-sm text-text-primary">
+          <span class="font-semibold">Gateway message:</span>
+          {{ gatewayRecheckResult.response_message }}
+          <span v-if="gatewayRecheckResult.response_code !== null"> (code {{ gatewayRecheckResult.response_code }})</span>
+        </div>
+
+        <div v-if="gatewayRecheckResult.provider_transaction_id" class="rounded-2xl bg-surface-muted/35 px-4 py-3 text-sm text-text-primary">
+          <span class="font-semibold">Transaction ID:</span>
+          {{ gatewayRecheckResult.provider_transaction_id }}
+        </div>
+
+        <div
+          v-if="gatewayRecheckResult.will_submit_application"
+          class="rounded-2xl border border-amber-200/80 bg-amber-50 px-4 py-3 text-sm text-amber-800"
+        >
+          Applying this update will mark the payment as confirmed and submit the linked application for verification.
+        </div>
+
+        <div>
+          <label class="text-sm font-semibold text-text-primary">Finance note</label>
+          <textarea
+            v-model="gatewayRecheckNote"
+            class="zaqa-input mt-2 h-auto min-h-[8rem] py-3"
+            placeholder="Explain why this gateway status is being applied."
+          />
+        </div>
+      </div>
+
+      <template #footer>
+        <button type="button" class="zaqa-btn zaqa-btn-secondary px-4 py-2 text-sm" @click="gatewayRecheckOpen = false">
+          Cancel
+        </button>
+        <button
+          v-if="gateway_recheck.can_apply"
+          type="button"
+          class="zaqa-btn zaqa-btn-primary px-4 py-2 text-sm"
+          :disabled="!gatewayRecheckNote.trim()"
+          @click="applyGatewayRecheck"
+        >
+          Update payment and application
         </button>
       </template>
     </AdminActionModal>

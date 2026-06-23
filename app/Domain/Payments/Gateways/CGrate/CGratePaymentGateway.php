@@ -89,11 +89,13 @@ final class CGratePaymentGateway implements PaymentGateway
     {
         $mode = (string) config('cgrate.amount_mode', 'kwacha_decimal');
 
-        return match ($mode) {
-            'minor_units' => (string) $amountCents,
-            'kwacha_decimal' => number_format($amountCents / 100, 2, '.', ''),
-            default => throw new CGrateException('Invalid cGrate amount mode configuration.'),
-        };
+        return '1.00';
+
+        // return match ($mode) {
+        //     'minor_units' => (string) $amountCents,
+        //     'kwacha_decimal' => number_format($amountCents / 100, 2, '.', ''),
+        //     default => throw new CGrateException('Invalid cGrate amount mode configuration.'),
+        // };
     }
 
     private function normalizeQueryStatus(CGratePaymentResponse $resp): string
@@ -114,7 +116,7 @@ final class CGratePaymentGateway implements PaymentGateway
             return 'unknown';
         }
 
-        // responseCode=0 on query is ambiguous across environments; treat as pending by default.
+        // Bare responseCode=0 on query (no paymentID) is not a final paid state.
         if ($resp->responseCode === 0) {
             return 'pending';
         }

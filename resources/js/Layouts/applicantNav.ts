@@ -26,6 +26,8 @@ export type ApplicantNavItem = {
 export type ApplicantNavSection = {
   key: string
   label: string
+  /** Render as a single top-level link (no collapsible group). */
+  standalone?: boolean
   items: ApplicantNavItem[]
 }
 
@@ -47,13 +49,6 @@ export const applicantNavSections: ApplicantNavSection[] = [
         icon: Layers,
         institutionOnly: true,
       },
-      {
-        key: 'verification_lookup',
-        label: 'Certificate / Verification Lookup',
-        href: '/applicant/institution/verification-lookup',
-        icon: SearchCheck,
-        institutionOnly: true,
-      },
       { key: 'applications', label: 'My Applications', href: '/applicant/applications', icon: Files, badgeKey: 'applications' },
     ],
   },
@@ -64,6 +59,20 @@ export const applicantNavSections: ApplicantNavSection[] = [
       { key: 'invoices', label: 'Invoices & quotations', href: '/applicant/invoices', icon: ReceiptText, badgeKey: 'invoices' },
       { key: 'payments', label: 'Payments', href: '/applicant/payments', icon: CreditCard },
       { key: 'receipts', label: 'Receipts', href: '/applicant/receipts', icon: Receipt },
+    ],
+  },
+  {
+    key: 'verification_lookup',
+    label: 'Verification Lookup',
+    standalone: true,
+    items: [
+      {
+        key: 'verification_lookup',
+        label: 'Verification Lookup',
+        href: '/applicant/institution/verification-lookup',
+        icon: SearchCheck,
+        institutionOnly: true,
+      },
     ],
   },
 

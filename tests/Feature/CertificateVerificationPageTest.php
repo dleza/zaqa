@@ -78,7 +78,7 @@ class CertificateVerificationPageTest extends TestCase
         $certificate = QualificationCertificate::query()->create([
             'qualification_id' => $qualification->id,
             'application_id' => $application->id,
-            'certificate_number' => 'ZAQA-CVEQ-'.now()->year.'-'.random_int(100000, 999999),
+            'certificate_number' => 'CERT-'.now()->year.'-'.random_int(100000, 999999),
             'zaqa_reference_number' => $qualification->verification_reference_number,
             'verification_token' => Str::random(48),
             'file_path' => 'qualification-certificates/test.pdf',

@@ -19,8 +19,8 @@ class ApplicantInstitutionVerificationLookupController extends Controller
 
         return Inertia::render('Applicant/Institution/VerificationLookup', [
             'filters' => [
-                'application_reference' => (string) $request->old('application_reference', ''),
-                'qualification_reference' => (string) $request->old('qualification_reference', ''),
+                'reference_type' => (string) $request->old('reference_type', 'application_reference'),
+                'reference' => (string) $request->old('reference', ''),
             ],
             'result' => session('lookup_result'),
         ]);
@@ -33,10 +33,9 @@ class ApplicantInstitutionVerificationLookupController extends Controller
     ): RedirectResponse {
         $this->assertInstitutionApplicant($request);
 
-        $applicationReference = (string) $request->input('application_reference', '');
-        $qualificationReference = (string) $request->input('qualification_reference', '');
+        [$applicationReference, $qualificationReference, $certificateReference] = $request->lookupInputs();
 
-        $result = $lookup->lookup($applicationReference, $qualificationReference);
+        $result = $lookup->lookup($applicationReference, $qualificationReference, null, $certificateReference);
 
         $audit->record(
             eventType: 'institution_verification_lookup.performed',
@@ -48,8 +47,12 @@ class ApplicantInstitutionVerificationLookupController extends Controller
             metadata: [
                 'searched_by' => $result['searched_by'] ?? null,
                 'found' => (bool) ($result['found'] ?? false),
+                'reference_type' => $request->usesUnifiedReferenceInput()
+                    ? (string) $request->input('reference_type')
+                    : null,
                 'application_reference' => $applicationReference !== '' ? $applicationReference : null,
                 'qualification_reference' => $qualificationReference !== '' ? $qualificationReference : null,
+                'certificate_reference' => $certificateReference !== '' ? $certificateReference : null,
                 'status' => $result['status'] ?? null,
             ],
             actor: $request->user(),

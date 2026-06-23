@@ -305,6 +305,12 @@ Route::middleware('auth')->group(function () {
             Route::post('/payments/{payment}/correct', [AdminFinancePaymentsController::class, 'correct'])
                 ->middleware('can:finance.payments.correct')
                 ->name('payments.correct');
+            Route::post('/payments/{payment}/recheck-gateway', [AdminFinancePaymentsController::class, 'recheckGateway'])
+                ->middleware('can:finance.payments.detail')
+                ->name('payments.recheck_gateway');
+            Route::post('/payments/{payment}/apply-gateway-recheck', [AdminFinancePaymentsController::class, 'applyGatewayRecheck'])
+                ->middleware('can:finance.payments.correct')
+                ->name('payments.apply_gateway_recheck');
 
             Route::get('/payments/{payment}/receipt/download', [AdminFinancePaymentsController::class, 'downloadReceipt'])
                 ->middleware('can:finance.payments.view')

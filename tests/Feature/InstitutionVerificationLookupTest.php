@@ -114,7 +114,8 @@ class InstitutionVerificationLookupTest extends TestCase
 
         $response = $this->actingAs($user)
             ->post(route('applicant.institution.verification_lookup.search'), [
-                'application_reference' => $application->application_number,
+                'reference_type' => 'application_reference',
+                'reference' => $application->application_number,
             ]);
 
         $response->assertRedirect(route('applicant.institution.verification_lookup'))
@@ -133,7 +134,8 @@ class InstitutionVerificationLookupTest extends TestCase
 
         $response = $this->actingAs($user)
             ->post(route('applicant.institution.verification_lookup.search'), [
-                'qualification_reference' => $qualification->verification_reference_number,
+                'reference_type' => 'qualification_reference',
+                'reference' => $qualification->verification_reference_number,
             ]);
 
         $response->assertRedirect()
@@ -145,18 +147,18 @@ class InstitutionVerificationLookupTest extends TestCase
         $this->assertSame('Martin Mwale', $result['qualification']['holder_name']);
     }
 
-    public function test_both_fields_filled_returns_validation_error(): void
+    public function test_empty_reference_returns_validation_error(): void
     {
         $user = $this->makeInstitutionUser();
 
         $this->actingAs($user)
             ->from(route('applicant.institution.verification_lookup'))
             ->post(route('applicant.institution.verification_lookup.search'), [
-                'application_reference' => '2026-000245',
-                'qualification_reference' => '2026-000245-01',
+                'reference_type' => 'application_reference',
+                'reference' => '',
             ])
             ->assertRedirect(route('applicant.institution.verification_lookup'))
-            ->assertSessionHasErrors(['application_reference', 'qualification_reference']);
+            ->assertSessionHasErrors(['reference']);
     }
 
     public function test_no_fields_filled_returns_validation_error(): void
@@ -176,7 +178,8 @@ class InstitutionVerificationLookupTest extends TestCase
 
         $response = $this->actingAs($user)
             ->post(route('applicant.institution.verification_lookup.search'), [
-                'qualification_reference' => '2099-999999-99',
+                'reference_type' => 'qualification_reference',
+                'reference' => '2099-999999-99',
             ]);
 
         $response->assertRedirect()
@@ -198,7 +201,7 @@ class InstitutionVerificationLookupTest extends TestCase
         QualificationCertificate::query()->create([
             'qualification_id' => $qualification->id,
             'application_id' => $qualification->application_id,
-            'certificate_number' => 'ZAQA-CVEQ-2026-000008',
+            'certificate_number' => 'CERT-2026-000008',
             'zaqa_reference_number' => $qualification->verification_reference_number,
             'verification_token' => 'revoked-token-abc',
             'file_path' => 'certificates/test.pdf',
@@ -214,7 +217,8 @@ class InstitutionVerificationLookupTest extends TestCase
 
         $response = $this->actingAs($user)
             ->post(route('applicant.institution.verification_lookup.search'), [
-                'qualification_reference' => $qualification->verification_reference_number,
+                'reference_type' => 'qualification_reference',
+                'reference' => $qualification->verification_reference_number,
             ]);
 
         $response->assertRedirect()
@@ -250,7 +254,8 @@ class InstitutionVerificationLookupTest extends TestCase
 
         $response = $this->actingAs($user)
             ->post(route('applicant.institution.verification_lookup.search'), [
-                'application_reference' => $application->application_number,
+                'reference_type' => 'application_reference',
+                'reference' => $application->application_number,
             ]);
 
         $response->assertRedirect()
@@ -259,6 +264,44 @@ class InstitutionVerificationLookupTest extends TestCase
         $result = $response->getSession()->get('lookup_result');
         $this->assertTrue($result['found']);
         $this->assertCount(2, $result['qualifications']);
+    }
+
+    public function test_institution_user_can_search_by_certificate_reference(): void
+    {
+        [, $qualification] = $this->seedVerificationRecord([
+            'verification_state' => VerificationState::CertificateIssued,
+        ], [
+            'verification_state' => VerificationState::CertificateIssued,
+        ]);
+
+        QualificationCertificate::query()->create([
+            'qualification_id' => $qualification->id,
+            'application_id' => $qualification->application_id,
+            'certificate_number' => 'CERT-2026-000008',
+            'zaqa_reference_number' => $qualification->verification_reference_number,
+            'verification_token' => 'cert-lookup-token',
+            'file_path' => 'certificates/test.pdf',
+            'issued_by_user_id' => User::factory()->activated()->create()->id,
+            'issued_at' => now()->subDay(),
+            'status' => QualificationCertificate::STATUS_ISSUED,
+            'certificate_type' => QualificationCertificate::TYPE_VERIFICATION,
+        ]);
+
+        $user = $this->makeInstitutionUser();
+
+        $response = $this->actingAs($user)
+            ->post(route('applicant.institution.verification_lookup.search'), [
+                'reference_type' => 'certificate_reference',
+                'reference' => 'CERT-2026-000008',
+            ]);
+
+        $response->assertRedirect()
+            ->assertSessionHas('lookup_result');
+
+        $result = $response->getSession()->get('lookup_result');
+        $this->assertTrue($result['found']);
+        $this->assertSame('certificate_reference', $result['searched_by']);
+        $this->assertSame('CERT-2026-000008', $result['certificate']['number']);
     }
 
     public function test_result_does_not_expose_internal_officer_audit_payment_or_document_data(): void
@@ -271,7 +314,8 @@ class InstitutionVerificationLookupTest extends TestCase
 
         $response = $this->actingAs($user)
             ->post(route('applicant.institution.verification_lookup.search'), [
-                'qualification_reference' => $qualification->verification_reference_number,
+                'reference_type' => 'qualification_reference',
+                'reference' => $qualification->verification_reference_number,
             ]);
 
         $response->assertRedirect();
@@ -291,7 +335,8 @@ class InstitutionVerificationLookupTest extends TestCase
 
         $this->actingAs($user)
             ->post(route('applicant.institution.verification_lookup.search'), [
-                'qualification_reference' => $qualification->verification_reference_number,
+                'reference_type' => 'qualification_reference',
+                'reference' => $qualification->verification_reference_number,
             ]);
 
         $this->assertTrue(

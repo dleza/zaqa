@@ -48,6 +48,19 @@ final class ReferenceSearch
     }
 
     /**
+     * @param  Builder<\Illuminate\Database\Eloquent\Model>  $query
+     */
+    public static function applyCertificateReference(Builder $query, ?string $raw, string $column = 'certificate_number'): void
+    {
+        $term = self::normalize($raw);
+        if (! self::isUsablePrefix($term)) {
+            return;
+        }
+
+        $query->where($column, 'like', $term.'%');
+    }
+
+    /**
      * @param  Builder<\App\Models\Qualification>  $query
      */
     public static function applyToQualificationQuery(Builder $query, ?string $applicationReference, ?string $qualificationReference): void

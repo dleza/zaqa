@@ -2,7 +2,7 @@
 
 ## Applicant portal (institution accounts)
 
-Institution applicant users can open **Certificate / Verification Lookup** in the applicant sidebar.
+Institution applicant users can open **Verification Lookup** in the applicant sidebar.
 
 | Item | Value |
 |------|--------|

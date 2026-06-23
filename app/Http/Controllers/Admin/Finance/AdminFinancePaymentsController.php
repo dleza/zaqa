@@ -3,15 +3,18 @@
 namespace App\Http\Controllers\Admin\Finance;
 
 use App\Domain\Audit\AuditLogService;
+use App\Domain\Finance\FinancePaymentGatewayRecheckService;
 use App\Domain\Finance\PaymentReceiptPdfService;
 use App\Domain\Payments\PaymentService;
 use App\Enums\PaymentStatus;
+use App\Http\Requests\Finance\ApplyGatewayRecheckRequest;
 use App\Http\Requests\Finance\CorrectPaymentRequest;
 use App\Domain\Finance\PaymentSearchService;
 use App\Http\Controllers\Controller;
 use App\Models\AuditLog;
 use App\Models\Payment;
 use App\Models\PaymentWebhookLog;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -44,7 +47,7 @@ class AdminFinancePaymentsController extends Controller
         ]);
     }
 
-    public function show(Request $request, Payment $payment, AuditLogService $audit): Response
+    public function show(Request $request, Payment $payment, AuditLogService $audit, FinancePaymentGatewayRecheckService $gatewayRecheck): Response
     {
         $payment->loadMissing(['application.applicant', 'application.qualifications', 'invoice', 'proofDocument', 'reviewedBy', 'attempts']);
 
@@ -111,6 +114,7 @@ class AdminFinancePaymentsController extends Controller
             ->where('entity_id', $payment->id)
             ->whereIn('event_type', [
                 'finance.payment_corrected',
+                'finance.payment_gateway_recheck_applied',
                 'finance.payment_approved',
                 'finance.payment_rejected',
             ])
@@ -186,6 +190,11 @@ class AdminFinancePaymentsController extends Controller
                 'disabled_reason' => $correctionDisabledReason,
                 'status_options' => $correctionStatusOptions,
             ],
+            'gateway_recheck' => [
+                'can_recheck' => (bool) $request->user()?->can('finance.payments.detail') && $gatewayRecheck->canRecheck($payment),
+                'can_apply' => $canCorrectPayments && $payment->status !== PaymentStatus::Confirmed,
+                'unsupported_reason' => $gatewayRecheck->unsupportedReason($payment),
+            ],
             'navigation' => [
                 'applicant' => $payment->application?->applicant
                     ? [
@@ -217,6 +226,32 @@ class AdminFinancePaymentsController extends Controller
         );
 
         return back()->with('success', 'Payment correction saved.');
+    }
+
+    public function recheckGateway(
+        Request $request,
+        Payment $payment,
+        FinancePaymentGatewayRecheckService $gatewayRecheck,
+    ): JsonResponse {
+        if (! $request->user()?->can('finance.payments.detail')) {
+            abort(403);
+        }
+
+        return response()->json($gatewayRecheck->recheck($payment));
+    }
+
+    public function applyGatewayRecheck(
+        ApplyGatewayRecheckRequest $request,
+        Payment $payment,
+        FinancePaymentGatewayRecheckService $gatewayRecheck,
+    ): RedirectResponse {
+        $gatewayRecheck->apply(
+            payment: $payment,
+            actor: $request->user(),
+            note: (string) $request->validated('note'),
+        );
+
+        return back()->with('success', 'Payment status updated from the payment gateway.');
     }
 
     public function downloadReceipt(Request $request, Payment $payment, PaymentReceiptPdfService $pdf): SymfonyResponse

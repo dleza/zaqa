@@ -22,12 +22,32 @@ final class CGratePaymentResponse
 
     public function isPending(): bool
     {
-        return in_array($this->responseCode, [206, 8, 17], true);
+        return in_array($this->responseCode, [206, 8, 17, 106], true);
     }
 
     public function isApproved(): bool
     {
-        return in_array($this->responseCode, [207, 226], true);
+        if (in_array($this->responseCode, [207, 226], true)) {
+            return true;
+        }
+
+        // Sandbox/test environments may return responseCode=0 with a paymentID on query
+        // when the customer payment has completed (production often uses 207/226 instead).
+        return $this->isSuccessfulQueryPayment();
+    }
+
+    private function isSuccessfulQueryPayment(): bool
+    {
+        if ($this->responseCode !== 0) {
+            return false;
+        }
+
+        $operation = (string) ($this->raw['operation'] ?? '');
+        if ($operation !== 'queryCustomerPayment') {
+            return false;
+        }
+
+        return trim((string) ($this->paymentId ?? '')) !== '';
     }
 
     public function isRejected(): bool

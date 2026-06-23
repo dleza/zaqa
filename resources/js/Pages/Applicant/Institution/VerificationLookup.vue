@@ -5,6 +5,8 @@ import { useForm } from '@inertiajs/vue3'
 import { computed } from 'vue'
 import { AlertTriangle, CheckCircle2, ExternalLink, FileSearch, Info, Search, XCircle } from 'lucide-vue-next'
 
+type ReferenceType = 'application_reference' | 'qualification_reference' | 'certificate_reference'
+
 type LookupQualificationRow = {
   qualification_reference: string
   application_reference: string
@@ -51,23 +53,45 @@ type LookupResult = {
   certificate: LookupQualificationRow['certificate'] | null
 }
 
+const referenceTypeOptions: Array<{ value: ReferenceType; label: string; placeholder: string }> = [
+  {
+    value: 'application_reference',
+    label: 'Application reference',
+    placeholder: 'e.g. 2026-000245',
+  },
+  {
+    value: 'qualification_reference',
+    label: 'Qualification reference',
+    placeholder: 'e.g. 2026-000245-01',
+  },
+  {
+    value: 'certificate_reference',
+    label: 'Certificate reference',
+    placeholder: 'e.g. CERT-2026-000008',
+  },
+]
+
 const props = defineProps<{
   filters: {
-    application_reference: string
-    qualification_reference: string
+    reference_type: ReferenceType
+    reference: string
   }
   result: LookupResult | null
 }>()
 
 const form = useForm({
-  application_reference: props.filters.application_reference ?? '',
-  qualification_reference: props.filters.qualification_reference ?? '',
+  reference_type: props.filters.reference_type ?? 'application_reference',
+  reference: props.filters.reference ?? '',
 })
 
 const hasResult = computed(() => props.result !== null)
 const multipleRows = computed(() => (props.result?.qualifications?.length ?? 0) > 1)
 const singleRow = computed(() => props.result?.qualifications?.[0] ?? null)
 const showDetailCard = computed(() => hasResult.value && props.result?.found && !multipleRows.value)
+
+const selectedReferenceType = computed(
+  () => referenceTypeOptions.find((option) => option.value === form.reference_type) ?? referenceTypeOptions[0],
+)
 
 function submitSearch() {
   form.post('/applicant/institution/verification-lookup', {
@@ -76,8 +100,8 @@ function submitSearch() {
 }
 
 function clearForm() {
-  form.application_reference = ''
-  form.qualification_reference = ''
+  form.reference_type = 'application_reference'
+  form.reference = ''
 }
 
 function statusBadgeClass(tone: string) {
@@ -102,41 +126,40 @@ function alertClass(tone: string) {
         <p class="text-xs font-semibold uppercase tracking-wide text-text-muted">Institution tools</p>
         <h1 class="text-2xl font-semibold tracking-tight text-text-primary">Verification Lookup</h1>
         <p class="mt-1 max-w-2xl text-sm text-text-muted">
-          Search using a ZAQA application reference or qualification reference.
+          Search ZAQA records using an application reference, qualification reference, or certificate reference.
         </p>
       </div>
     </template>
 
     <div class="space-y-6">
       <section class="rounded-2xl border border-border bg-surface p-6">
-        <form class="grid gap-5 sm:grid-cols-2" @submit.prevent="submitSearch">
-          <div>
-            <label for="application_reference" class="text-sm font-medium text-text-primary">Application reference</label>
-            <input
-              id="application_reference"
-              v-model="form.application_reference"
-              type="text"
-              class="zaqa-input mt-1 font-mono"
-              placeholder="e.g. 2026-000245"
-              autocomplete="off"
-            />
-            <InputError :message="form.errors.application_reference" class="mt-1" />
+        <form class="space-y-5" @submit.prevent="submitSearch">
+          <div class="grid gap-5 sm:grid-cols-[minmax(0,14rem)_minmax(0,1fr)]">
+            <div>
+              <label for="reference_type" class="text-sm font-medium text-text-primary">Reference type</label>
+              <select id="reference_type" v-model="form.reference_type" class="zaqa-input mt-1">
+                <option v-for="option in referenceTypeOptions" :key="option.value" :value="option.value">
+                  {{ option.label }}
+                </option>
+              </select>
+              <InputError :message="form.errors.reference_type" class="mt-1" />
+            </div>
+
+            <div>
+              <label for="reference" class="text-sm font-medium text-text-primary">{{ selectedReferenceType.label }}</label>
+              <input
+                id="reference"
+                v-model="form.reference"
+                type="text"
+                class="zaqa-input mt-1 font-mono"
+                :placeholder="selectedReferenceType.placeholder"
+                autocomplete="off"
+              />
+              <InputError :message="form.errors.reference" class="mt-1" />
+            </div>
           </div>
 
-          <div>
-            <label for="qualification_reference" class="text-sm font-medium text-text-primary">Qualification reference</label>
-            <input
-              id="qualification_reference"
-              v-model="form.qualification_reference"
-              type="text"
-              class="zaqa-input mt-1 font-mono"
-              placeholder="e.g. 2026-000245-01"
-              autocomplete="off"
-            />
-            <InputError :message="form.errors.qualification_reference" class="mt-1" />
-          </div>
-
-          <div class="sm:col-span-2 flex flex-wrap gap-3">
+          <div class="flex flex-wrap gap-3">
             <button type="submit" class="zaqa-btn zaqa-btn-primary inline-flex items-center gap-2 px-4 py-2" :disabled="form.processing">
               <Search class="h-4 w-4" aria-hidden="true" />
               Search
@@ -144,8 +167,8 @@ function alertClass(tone: string) {
             <button type="button" class="zaqa-btn zaqa-btn-secondary px-4 py-2" @click="clearForm">Clear</button>
           </div>
 
-          <p class="sm:col-span-2 text-xs text-text-muted">
-            Use one field at a time. References are matched exactly or by prefix (minimum three characters). Names, NRC, and
+          <p class="text-xs text-text-muted">
+            Enter one reference only. Values are matched exactly or by prefix (minimum three characters). Names, NRC, and
             institution names are not searched.
           </p>
         </form>

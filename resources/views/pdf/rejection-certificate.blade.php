@@ -159,10 +159,6 @@
             <td class="value">{{ $application_number }}</td>
         </tr>
         <tr>
-            <td class="label">ZAQA reference</td>
-            <td class="value">{{ $zaqa_reference ?: '—' }}</td>
-        </tr>
-        <tr>
             <td class="label">Qualification holder</td>
             <td class="value">{{ $holder_name }}</td>
         </tr>

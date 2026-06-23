@@ -12,6 +12,7 @@ import {
   isAllowedApplicantDocumentFile,
 } from '@/lib/applicantDocumentUpload'
 import { useUploadLimits } from '@/lib/uploadLimits'
+import Swal from 'sweetalert2'
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import {
   ArrowRight,
@@ -353,14 +354,18 @@ function submitIssueRejection() {
   issueRejectionForm.post(props.qualification.issue_rejection_certificate_url, { preserveScroll: true })
 }
 
-function submitReissueCveq() {
-  if (
-    !confirm(
-      'Technical reissue creates a new CVEQ PDF and marks the previous certificate as superseded. Continue?',
-    )
-  ) {
-    return
-  }
+async function submitReissueCveq() {
+  const result = await Swal.fire({
+    icon: 'warning',
+    title: 'Reissue certificate?',
+    html: '<div class="text-left text-sm">This creates a new certificate PDF and marks the previous certificate as superseded.</div>',
+    showCancelButton: true,
+    confirmButtonText: 'Reissue certificate',
+    cancelButtonText: 'Cancel',
+    confirmButtonColor: '#B45309',
+  })
+  if (!result.isConfirmed) return
+
   router.post(
     props.qualification.issue_certificate_url,
     { reissue: true },
@@ -1197,7 +1202,7 @@ const autoVerificationCollapsedSummary = computed(() => {
                 class="inline-flex items-center gap-2 rounded-xl border border-amber-300/40 bg-amber-500/15 px-3.5 py-2 text-sm font-semibold text-white transition hover:bg-amber-500/25"
                 @click="submitReissueCveq"
               >
-                Technical reissue
+                Reissue Certificate
               </button>
             </div>
           </div>

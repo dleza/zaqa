@@ -24,9 +24,9 @@ return [
     'connect_timeout' => (int) env('CGRATE_CONNECT_TIMEOUT', 10),
     'verify_ssl' => (bool) env('CGRATE_VERIFY_SSL', true),
 
-    'poll_interval_seconds' => (int) env('CGRATE_POLL_INTERVAL_SECONDS', 10),
-    'max_query_attempts' => (int) env('CGRATE_MAX_QUERY_ATTEMPTS', 30),
-    'payment_expiry_minutes' => (int) env('CGRATE_PAYMENT_EXPIRY_MINUTES', 10),
+    'poll_interval_seconds' => (int) env('CGRATE_POLL_INTERVAL_SECONDS', 15),
+    'max_query_attempts' => (int) env('CGRATE_MAX_QUERY_ATTEMPTS', 20),
+    'payment_expiry_minutes' => (int) env('CGRATE_PAYMENT_EXPIRY_MINUTES', 5),
 
     'default_currency' => env('CGRATE_DEFAULT_CURRENCY', 'ZMW'),
 
@@ -56,10 +56,11 @@ return [
     ],
 
     /*
-     * Unknown/No-transaction codes may occur briefly immediately after initiation.
-     * Keep the attempt pending for N query attempts before classifying as unknown/failed.
+     * Unknown/no-transaction codes (12, 213) may occur briefly after initiation.
+     * Keep polling for N attempts before classifying as failed. With the defaults
+     * (15s interval, 20 attempts) this aligns with the 5-minute payment window.
      */
-    'unknown_fail_after_attempts' => (int) env('CGRATE_UNKNOWN_FAIL_AFTER_ATTEMPTS', 5),
+    'unknown_fail_after_attempts' => (int) env('CGRATE_UNKNOWN_FAIL_AFTER_ATTEMPTS', 20),
 
     /*
      * Safety: Artisan test command should not run in production unless explicitly allowed.

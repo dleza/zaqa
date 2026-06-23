@@ -461,7 +461,7 @@ class QualificationCertificateService
         $year = now()->year;
         $prefix = match ($type) {
             QualificationCertificate::TYPE_REJECTION => sprintf('ZAQA-REJ-%d-', $year),
-            default => sprintf('ZAQA-CVEQ-%d-', $year),
+            default => sprintf('CERT-%d-', $year),
         };
 
         $last = QualificationCertificate::query()
@@ -650,6 +650,13 @@ class QualificationCertificateService
 
         $issuedAt = $issue['issued_at']->timezone(config('app.timezone'));
         $issuedForFooter = $issuedAt->format('h:i A').' ('.$issuedAt->getTimezone()->getName().') on '.$issuedAt->format('d M Y');
+        $isSchoolSubjectsTemplate = $templateKey === QualificationType::CERTIFICATE_TEMPLATE_SCHOOL_SUBJECTS;
+        $awardYear = optional($qualification->award_date)?->format('Y') ?? '';
+        $qualificationExaminationNumber = $this->resolveQualificationExaminationNumber($qualification);
+        $nqfLevel = trim((string) ($type?->level_label ?? ''));
+        if ($nqfLevel === '') {
+            $nqfLevel = trim((string) ($qualification->qualification_type ?? ''));
+        }
 
         $viewData = [
             'qualification' => $qualification,
@@ -673,12 +680,16 @@ class QualificationCertificateService
             'coat_of_arms_watermark_data_uri' => $coatOfArmsWatermarkDataUri,
             'qr_data_uri' => $qrDataUri,
             'issued_for_footer' => $issuedForFooter,
-            'award_year' => optional($qualification->award_date)?->format('Y'),
+            'award_year' => $awardYear,
+            'date_verified' => $issuedAt->format('d/m/Y'),
+            'nqf_level' => $nqfLevel !== '' ? $nqfLevel : '—',
             'subject_results' => $subjectRows
                 ->map(fn (QualificationSubjectResult $row, int $index) => [
                     'index' => $index + 1,
                     'subject_name' => trim((string) $row->subject_name),
                     'grade' => trim((string) $row->grade),
+                    'examination_number' => $isSchoolSubjectsTemplate ? $qualificationExaminationNumber : null,
+                    'year' => $isSchoolSubjectsTemplate ? $awardYear : null,
                 ])
                 ->values()
                 ->all(),
@@ -812,6 +823,22 @@ class QualificationCertificateService
     private function subjectRowIsComplete(QualificationSubjectResult $row): bool
     {
         return trim((string) $row->subject_name) !== '' && trim((string) $row->grade) !== '';
+    }
+
+    private function resolveQualificationExaminationNumber(Qualification $qualification): string
+    {
+        foreach ([
+            $qualification->examination_number,
+            $qualification->certificate_number,
+            $qualification->student_number,
+        ] as $candidate) {
+            $value = trim((string) ($candidate ?? ''));
+            if ($value !== '') {
+                return $value;
+            }
+        }
+
+        return '';
     }
 
     private function buildCoatOfArmsWatermarkDataUri(Qualification $qualification): ?string

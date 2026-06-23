@@ -22,10 +22,11 @@ return [
         ))),
         'mail_attachment_max_bytes' => (int) env('BANK_TRANSFER_POP_EMAIL_ATTACHMENT_MAX_BYTES', 5 * 1024 * 1024),
         'deposit_account' => [
-            'bank_name' => env('BANK_TRANSFER_BANK_NAME', 'Zambia National Commercial Bank Plc'),
+            'bank_name' => env('BANK_TRANSFER_BANK_NAME', 'Indo Zambia Bank'),
             'account_name' => env('BANK_TRANSFER_ACCOUNT_NAME', 'Zambia Qualifications Authority'),
-            'account_number' => env('BANK_TRANSFER_ACCOUNT_NUMBER', ''),
-            'branch_code' => env('BANK_TRANSFER_BRANCH_CODE', ''),
+            'account_number' => env('BANK_TRANSFER_ACCOUNT_NUMBER', '0052020000027'),
+            'branch_code' => env('BANK_TRANSFER_BRANCH_CODE', '090005'),
+            'branch_name' => env('BANK_TRANSFER_BRANCH_NAME', 'NORTH END BRANCH'),
         ],
     ],
 ];

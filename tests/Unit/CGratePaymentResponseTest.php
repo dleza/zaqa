@@ -25,9 +25,55 @@ class CGratePaymentResponseTest extends TestCase
         $this->assertTrue($failed->isFailed());
         $this->assertTrue($failed->isTerminal());
 
+        $invalidReference = new CGratePaymentResponse(106, 'Invalid transaction reference', 'FSG3UKOI1');
+        $this->assertTrue($invalidReference->isPending());
+        $this->assertFalse($invalidReference->isFailed());
+        $this->assertFalse($invalidReference->isTerminal());
+
         $unknown = new CGratePaymentResponse(12, 'UNKNOWN_TRANSACTION', null);
         $this->assertTrue($unknown->isUnknown());
         $this->assertFalse($unknown->isTerminal());
+    }
+
+    public function test_query_response_code_zero_with_payment_id_is_approved(): void
+    {
+        $resp = new CGratePaymentResponse(
+            responseCode: 0,
+            responseMessage: 'Successful',
+            paymentId: 'MP260623.1058.Z36675',
+            raw: ['operation' => 'queryCustomerPayment'],
+        );
+
+        $this->assertTrue($resp->isApproved());
+        $this->assertTrue($resp->isTerminal());
+        $this->assertFalse($resp->isPending());
+    }
+
+    public function test_query_response_code_zero_without_payment_id_is_not_approved(): void
+    {
+        $resp = new CGratePaymentResponse(
+            responseCode: 0,
+            responseMessage: 'Successful',
+            paymentId: null,
+            raw: ['operation' => 'queryCustomerPayment'],
+        );
+
+        $this->assertFalse($resp->isApproved());
+        $this->assertFalse($resp->isTerminal());
+    }
+
+    public function test_initiation_response_code_zero_with_payment_id_is_not_approved(): void
+    {
+        $resp = new CGratePaymentResponse(
+            responseCode: 0,
+            responseMessage: 'Successful',
+            paymentId: 'FSG3P54U4',
+            raw: ['operation' => 'processCustomerPayment'],
+        );
+
+        $this->assertTrue($resp->isSuccessfulRequest());
+        $this->assertFalse($resp->isApproved());
+        $this->assertFalse($resp->isTerminal());
     }
 }
 

@@ -996,8 +996,13 @@ class PaymentService
      *
      * @param array{provider_transaction_id?: string|null, raw_payload?: array<string,mixed>|null} $verified
      */
-    public function applyGatewayVerificationResult(Payment $payment, string $status, array $verified, string $eventType = 'gateway.status'): Payment
-    {
+    public function applyGatewayVerificationResult(
+        Payment $payment,
+        string $status,
+        array $verified,
+        string $eventType = 'gateway.status',
+        ?User $actor = null,
+    ): Payment {
         $this->logWebhookLikeEvent($payment, $eventType, [
             'status' => $status,
             'ref' => (string) $payment->provider_reference,
@@ -1005,7 +1010,7 @@ class PaymentService
             'raw_payload' => $verified['raw_payload'] ?? null,
         ]);
 
-        return $this->applyVerifiedStatus($payment, $status, $verified);
+        return $this->applyVerifiedStatus($payment, $status, $verified, $actor);
     }
 
     public function handleGatewayWebhook(string $provider, array $payload): PaymentWebhookLog
@@ -1028,9 +1033,9 @@ class PaymentService
         return $log;
     }
 
-    private function applyVerifiedStatus(Payment $payment, string $status, array $verified): Payment
+    private function applyVerifiedStatus(Payment $payment, string $status, array $verified, ?User $actor = null): Payment
     {
-        return DB::transaction(function () use ($payment, $status, $verified) {
+        return DB::transaction(function () use ($payment, $status, $verified, $actor) {
             $payment->refresh();
 
             if ($payment->status === PaymentStatus::Confirmed) {
@@ -1046,7 +1051,7 @@ class PaymentService
                     'last_status_at' => now(),
                 ])->save();
 
-                $this->markApplicationPaid($payment, null);
+                $this->markApplicationPaid($payment, $actor);
 
                 $this->lifecycle->milestone(
                     application: $payment->application()->firstOrFail(),

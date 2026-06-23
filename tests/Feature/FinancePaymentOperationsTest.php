@@ -13,6 +13,7 @@ use App\Jobs\Verification\ProcessQualificationAutoVerificationJob;
 use App\Enums\DocumentType;
 use App\Enums\ApplicationStatus;
 use App\Enums\InvoiceStatus;
+use App\Enums\PaymentAttemptStatus;
 use App\Enums\PaymentMethod;
 use App\Enums\PaymentStatus;
 use App\Mail\Finance\BankTransferProofSubmittedMail;
@@ -23,6 +24,7 @@ use App\Models\Application;
 use App\Models\AuditLog;
 use App\Models\Invoice;
 use App\Models\Payment;
+use App\Models\PaymentAttempt;
 use App\Models\Qualification;
 use App\Models\QualificationDocument;
 use App\Models\QualificationType;
@@ -34,6 +36,7 @@ use Database\Seeders\RolesAndPermissionsSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Event;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Facades\Storage;
@@ -729,5 +732,155 @@ class FinancePaymentOperationsTest extends TestCase
 
         (new SendPaymentProofRejectedNotification)->handle(new PaymentProofRejected($payment, $finance, 'Blurry proof'));
         Mail::assertQueued(PaymentProofRejectedMail::class, fn (PaymentProofRejectedMail $m) => $m->hasTo($applicant->email) && $m->application->is($application));
+    }
+
+    public function test_finance_can_recheck_cgrate_gateway_status_for_expired_mobile_money_payment(): void
+    {
+        config([
+            'cgrate.enabled' => true,
+            'cgrate.username' => 'u',
+            'cgrate.password' => 'p',
+            'cgrate.base_url' => 'https://example.test',
+            'cgrate.soap.endpoint_path' => '/Konik/KonikWs',
+            'cgrate.soap.namespace' => 'http://konik.cgrate.com',
+        ]);
+
+        Http::fake([
+            'https://example.test/Konik/KonikWs' => Http::response($this->cgrateSoapReturn(0, 'Successful', 'MP260623.1058.Z36675'), 200),
+        ]);
+
+        [, $application, $invoice] = $this->makePaymentReadyApplication();
+        $payment = $this->createPaymentForInvoice($application, $invoice, PaymentStatus::Expired, [
+            'method' => PaymentMethod::MobileMoney,
+            'provider' => 'cgrate',
+            'provider_reference' => 'ZAQA-9-10-DAHMPMWEM1',
+            'expires_at' => now()->subMinute(),
+        ]);
+
+        PaymentAttempt::query()->create([
+            'payment_id' => $payment->id,
+            'invoice_id' => $invoice->id,
+            'application_id' => $application->id,
+            'gateway' => 'cgrate',
+            'method' => 'mobile_money',
+            'payment_reference' => 'ZAQA-9-10-DAHMPMWEM1',
+            'mobile_number' => '0970000000',
+            'status' => PaymentAttemptStatus::Expired,
+            'currency' => 'ZMW',
+            'amount_cents' => (int) $payment->amount_cents,
+            'expired_at' => now()->subMinute(),
+        ]);
+
+        $finance = User::factory()->activated()->create(['applicant_type' => null]);
+        $finance->assignRole('Finance Officer');
+
+        $this->actingAs($finance)
+            ->postJson("/admin/finance/payments/{$payment->id}/recheck-gateway")
+            ->assertOk()
+            ->assertJson([
+                'supported' => true,
+                'local_status' => PaymentStatus::Expired->value,
+                'gateway_status' => PaymentStatus::Confirmed->value,
+                'status_changed' => true,
+                'will_submit_application' => true,
+                'response_code' => 0,
+                'response_message' => 'Successful',
+                'provider_transaction_id' => 'MP260623.1058.Z36675',
+            ]);
+    }
+
+    public function test_finance_can_apply_gateway_recheck_to_confirm_payment_and_submit_application(): void
+    {
+        Queue::fake();
+
+        config([
+            'cgrate.enabled' => true,
+            'cgrate.username' => 'u',
+            'cgrate.password' => 'p',
+            'cgrate.base_url' => 'https://example.test',
+            'cgrate.soap.endpoint_path' => '/Konik/KonikWs',
+            'cgrate.soap.namespace' => 'http://konik.cgrate.com',
+        ]);
+
+        Http::fake([
+            'https://example.test/Konik/KonikWs' => Http::response($this->cgrateSoapReturn(0, 'Successful', 'MP260623.1058.Z36675'), 200),
+        ]);
+
+        [, $application, $invoice] = $this->makePaymentReadyApplication();
+        $payment = $this->createPaymentForInvoice($application, $invoice, PaymentStatus::Expired, [
+            'method' => PaymentMethod::MobileMoney,
+            'provider' => 'cgrate',
+            'provider_reference' => 'ZAQA-9-10-DAHMPMWEM1',
+            'expires_at' => now()->subMinute(),
+        ]);
+
+        $attempt = PaymentAttempt::query()->create([
+            'payment_id' => $payment->id,
+            'invoice_id' => $invoice->id,
+            'application_id' => $application->id,
+            'gateway' => 'cgrate',
+            'method' => 'mobile_money',
+            'payment_reference' => 'ZAQA-9-10-DAHMPMWEM1',
+            'mobile_number' => '0970000000',
+            'status' => PaymentAttemptStatus::Expired,
+            'currency' => 'ZMW',
+            'amount_cents' => (int) $payment->amount_cents,
+            'expired_at' => now()->subMinute(),
+        ]);
+
+        $finance = User::factory()->activated()->create(['applicant_type' => null]);
+        $finance->assignRole('Finance Officer');
+
+        $this->actingAs($finance)
+            ->from("/admin/finance/payments/{$payment->id}")
+            ->post("/admin/finance/payments/{$payment->id}/apply-gateway-recheck", [
+                'note' => 'Gateway shows successful payment after local expiry.',
+            ])
+            ->assertRedirect("/admin/finance/payments/{$payment->id}")
+            ->assertSessionHas('success');
+
+        $payment->refresh();
+        $attempt->refresh();
+        $invoice->refresh();
+        $application->refresh();
+
+        $this->assertSame(PaymentStatus::Confirmed, $payment->status);
+        $this->assertSame('MP260623.1058.Z36675', $payment->provider_transaction_id);
+        $this->assertSame(PaymentAttemptStatus::Confirmed, $attempt->status);
+        $this->assertSame(InvoiceStatus::Paid, $invoice->status);
+        $this->assertSame(ApplicationStatus::Submitted, $application->current_status);
+        $this->assertNotNull($application->submitted_at);
+
+        Queue::assertPushed(ProcessQualificationAutoVerificationJob::class);
+
+        $log = AuditLog::query()
+            ->where('event_type', 'finance.payment_gateway_recheck_applied')
+            ->where('entity_type', Payment::class)
+            ->where('entity_id', $payment->id)
+            ->latest('id')
+            ->first();
+
+        $this->assertNotNull($log);
+        $this->assertSame('expired', data_get($log?->before_state, 'status'));
+        $this->assertSame('confirmed', data_get($log?->after_state, 'status'));
+    }
+
+    private function cgrateSoapReturn(?int $code, string $message, ?string $paymentId = null): string
+    {
+        $codeXml = $code === null ? '' : '<responseCode>'.$code.'</responseCode>';
+        $pidXml = $paymentId ? '<paymentID>'.$paymentId.'</paymentID>' : '';
+
+        return '<?xml version="1.0" encoding="UTF-8"?>'
+            .'<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/">'
+            .'<soapenv:Body>'
+            .'<ns2:queryCustomerPaymentResponse xmlns:ns2="http://konik.cgrate.com">'
+            .'<return>'
+            .$codeXml
+            .'<responseMessage>'.$message.'</responseMessage>'
+            .$pidXml
+            .'</return>'
+            .'</ns2:queryCustomerPaymentResponse>'
+            .'</soapenv:Body>'
+            .'</soapenv:Envelope>';
     }
 }

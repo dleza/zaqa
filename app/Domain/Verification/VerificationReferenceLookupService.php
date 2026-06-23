@@ -30,36 +30,52 @@ class VerificationReferenceLookupService
      *   certificate: array<string, mixed>|null
      * }
      */
-    public function lookup(?string $applicationReference, ?string $qualificationReference, ?int $restrictToAwardingInstitutionId = null): array
+    public function lookup(?string $applicationReference, ?string $qualificationReference, ?int $restrictToAwardingInstitutionId = null, ?string $certificateReference = null): array
     {
-        $this->assertExactlyOneReference($applicationReference, $qualificationReference);
+        $this->assertExactlyOneReference($applicationReference, $qualificationReference, $certificateReference);
 
-        $appRef = ReferenceSearch::normalize($applicationReference);
+        $certRef = ReferenceSearch::normalize($certificateReference);
+        if (ReferenceSearch::isUsablePrefix($certRef)) {
+            return $this->lookupByCertificateReference($certRef, $restrictToAwardingInstitutionId);
+        }
+
         $qualRef = ReferenceSearch::normalize($qualificationReference);
-
         if (ReferenceSearch::isUsablePrefix($qualRef)) {
             return $this->lookupByQualificationReference($qualRef, $restrictToAwardingInstitutionId);
         }
 
+        $appRef = ReferenceSearch::normalize($applicationReference);
+
         return $this->lookupByApplicationReference($appRef, $restrictToAwardingInstitutionId);
     }
 
-    public function assertExactlyOneReference(?string $applicationReference, ?string $qualificationReference): void
+    public function assertExactlyOneReference(?string $applicationReference, ?string $qualificationReference, ?string $certificateReference = null): void
     {
         $appRef = ReferenceSearch::normalize($applicationReference);
         $qualRef = ReferenceSearch::normalize($qualificationReference);
+        $certRef = ReferenceSearch::normalize($certificateReference);
 
-        if ($appRef && $qualRef) {
+        $provided = array_filter([
+            'application_reference' => $appRef,
+            'qualification_reference' => $qualRef,
+            'certificate_reference' => $certRef,
+        ]);
+
+        if (count($provided) > 1) {
             throw ValidationException::withMessages([
-                'application_reference' => 'Provide either an application reference or a qualification reference, not both.',
-                'qualification_reference' => 'Provide either an application reference or a qualification reference, not both.',
+                'reference' => 'Provide one reference only.',
+                'application_reference' => 'Provide one reference only (application, qualification, or certificate).',
+                'qualification_reference' => 'Provide one reference only (application, qualification, or certificate).',
+                'certificate_reference' => 'Provide one reference only (application, qualification, or certificate).',
             ]);
         }
 
-        if (! ReferenceSearch::isUsablePrefix($appRef) && ! ReferenceSearch::isUsablePrefix($qualRef)) {
+        if (! ReferenceSearch::isUsablePrefix($appRef) && ! ReferenceSearch::isUsablePrefix($qualRef) && ! ReferenceSearch::isUsablePrefix($certRef)) {
             throw ValidationException::withMessages([
-                'application_reference' => 'Enter an application reference or a qualification reference (at least three characters).',
-                'qualification_reference' => 'Enter an application reference or a qualification reference (at least three characters).',
+                'reference' => 'Enter a reference with at least three characters.',
+                'application_reference' => 'Enter an application, qualification, or certificate reference (at least three characters).',
+                'qualification_reference' => 'Enter an application, qualification, or certificate reference (at least three characters).',
+                'certificate_reference' => 'Enter an application, qualification, or certificate reference (at least three characters).',
             ]);
         }
     }
@@ -184,6 +200,103 @@ class VerificationReferenceLookupService
             'status' => VerificationLookupStatusMapper::STATUS_IN_REVIEW,
             'status_label' => 'Multiple matches',
             'message' => 'Multiple qualification references matched this prefix. Enter the full qualification reference.',
+            'tone' => 'neutral',
+            'qualifications' => $rows,
+            'qualification' => null,
+            'certificate' => null,
+        ];
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function lookupByCertificateReference(string $certRef, ?int $restrictToAwardingInstitutionId): array
+    {
+        $certificates = QualificationCertificate::query()
+            ->with([
+                'qualification.application:id,application_number',
+                'qualification.awardingInstitution:id,name',
+                'qualification.country:id,name',
+                'qualification.certificates' => fn ($q) => $q->orderByDesc('id'),
+            ])
+            ->when(true, fn (Builder $q) => ReferenceSearch::applyCertificateReference($q, $certRef))
+            ->when(
+                $restrictToAwardingInstitutionId,
+                fn (Builder $q) => $q->whereHas(
+                    'qualification',
+                    fn (Builder $qq) => $qq->where('awarding_institution_id', $restrictToAwardingInstitutionId),
+                ),
+            )
+            ->orderBy('certificate_number')
+            ->limit(25)
+            ->get();
+
+        if ($certificates->isEmpty()) {
+            return $this->notFoundPayload('certificate_reference');
+        }
+
+        $exact = $certificates->first(
+            fn (QualificationCertificate $certificate) => strcasecmp((string) $certificate->certificate_number, $certRef) === 0,
+        );
+
+        if ($exact instanceof QualificationCertificate && $exact->qualification) {
+            $mapped = $this->mapQualificationSummary($exact->qualification);
+            $mapped['certificate'] = $this->mapCertificatePayload($exact->qualification, $exact);
+            $mapped['certificate_number'] = $exact->certificate_number;
+            $mapped['public_verification_url'] = $this->publicVerificationUrl($exact);
+
+            return [
+                'found' => true,
+                'searched_by' => 'certificate_reference',
+                'application_reference' => (string) ($exact->qualification->application?->application_number ?? ''),
+                'qualification_reference' => (string) ($exact->qualification->verification_reference_number ?? ''),
+                'status' => $mapped['status'],
+                'status_label' => $mapped['status_label'],
+                'message' => $mapped['message'],
+                'tone' => $mapped['tone'],
+                'qualifications' => [$mapped],
+                'qualification' => $mapped['qualification'],
+                'certificate' => $mapped['certificate'],
+            ];
+        }
+
+        $qualifications = $certificates
+            ->map(fn (QualificationCertificate $certificate) => $certificate->qualification)
+            ->filter()
+            ->unique('id')
+            ->values();
+
+        $rows = $qualifications
+            ->map(fn (Qualification $qualification) => $this->mapQualificationSummary($qualification))
+            ->values()
+            ->all();
+
+        if (count($rows) === 1) {
+            $primary = $rows[0];
+
+            return [
+                'found' => true,
+                'searched_by' => 'certificate_reference',
+                'application_reference' => $primary['application_reference'] ?? null,
+                'qualification_reference' => $primary['qualification_reference'] ?? null,
+                'status' => $primary['status'],
+                'status_label' => $primary['status_label'],
+                'message' => $primary['message'],
+                'tone' => $primary['tone'],
+                'qualifications' => $rows,
+                'qualification' => $primary['qualification'],
+                'certificate' => $primary['certificate'],
+            ];
+        }
+
+        return [
+            'found' => true,
+            'searched_by' => 'certificate_reference',
+            'application_reference' => null,
+            'qualification_reference' => null,
+            'status' => VerificationLookupStatusMapper::STATUS_IN_REVIEW,
+            'status_label' => 'Multiple matches',
+            'message' => 'Multiple certificate references matched this prefix. Enter the full certificate reference.',
             'tone' => 'neutral',
             'qualifications' => $rows,
             'qualification' => null,

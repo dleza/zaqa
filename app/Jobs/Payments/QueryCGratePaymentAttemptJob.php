@@ -49,10 +49,10 @@ class QueryCGratePaymentAttemptJob implements ShouldQueue
 
         $now = now();
 
-        $maxAttempts = (int) config('cgrate.max_query_attempts', 30);
-        $pollInterval = (int) config('cgrate.poll_interval_seconds', 10);
-        $expiryMinutes = (int) config('cgrate.payment_expiry_minutes', 10);
-        $unknownFailAfter = (int) config('cgrate.unknown_fail_after_attempts', 5);
+        $maxAttempts = (int) config('cgrate.max_query_attempts', 20);
+        $pollInterval = (int) config('cgrate.poll_interval_seconds', 15);
+        $expiryMinutes = (int) config('cgrate.payment_expiry_minutes', 5);
+        $unknownFailAfter = (int) config('cgrate.unknown_fail_after_attempts', 20);
 
         if ($attempt->next_query_at && $attempt->next_query_at->isFuture()) {
             return;
@@ -132,8 +132,9 @@ class QueryCGratePaymentAttemptJob implements ShouldQueue
                 $locked->status = PaymentAttemptStatus::Pending;
                 $locked->next_query_at = now()->addSeconds(max(1, $pollInterval));
             } else { // unknown (terminal after threshold)
-                $locked->status = PaymentAttemptStatus::Unknown;
-                $locked->failed_at = $locked->failed_at ?? now();
+                $locked->status = PaymentAttemptStatus::Expired;
+                $locked->expired_at = $locked->expired_at ?? now();
+                $status = 'expired';
             }
 
             $locked->save();
@@ -147,10 +148,7 @@ class QueryCGratePaymentAttemptJob implements ShouldQueue
         // Update the Payment row (and invoice/application if confirmed) idempotently.
         $attempt->refresh()->loadMissing('payment.invoice');
         if ($attempt->payment) {
-            $paymentStatus = (string) ($result['status'] ?? 'failed');
-            if ($paymentStatus === 'unknown') {
-                $paymentStatus = 'failed';
-            }
+            $paymentStatus = (string) ($result['status'] ?? 'expired');
 
             $payments->applyGatewayVerificationResult(
                 payment: $attempt->payment,
@@ -193,7 +191,7 @@ class QueryCGratePaymentAttemptJob implements ShouldQueue
             return 'unknown';
         }
 
-        // responseCode=0 on query is ambiguous across environments; treat as pending by default.
+        // Bare responseCode=0 on query (no paymentID) is not a final paid state.
         if ($responseCode === 0) {
             return 'pending';
         }

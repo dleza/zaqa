@@ -20,13 +20,13 @@ class VerificationRecordsController extends Controller
         /** @var InstitutionApiClient $client */
         $client = $request->user();
 
-        $applicationReference = (string) $request->query('application_reference', '');
-        $qualificationReference = (string) $request->query('qualification_reference', '');
+        [$applicationReference, $qualificationReference, $certificateReference] = $request->lookupInputs();
 
         $result = $lookup->lookup(
             $applicationReference,
             $qualificationReference,
             (int) $client->awarding_institution_id,
+            $certificateReference,
         );
 
         $audit->record(
@@ -42,6 +42,7 @@ class VerificationRecordsController extends Controller
                 'found' => (bool) ($result['found'] ?? false),
                 'application_reference' => $applicationReference !== '' ? $applicationReference : null,
                 'qualification_reference' => $qualificationReference !== '' ? $qualificationReference : null,
+                'certificate_reference' => $certificateReference !== '' ? $certificateReference : null,
                 'status' => $result['status'] ?? null,
             ],
             actor: null,

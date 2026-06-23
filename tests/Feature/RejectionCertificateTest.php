@@ -355,7 +355,7 @@ class RejectionCertificateTest extends TestCase
             ->firstOrFail();
 
         $this->assertSame(QualificationCertificate::TYPE_VERIFICATION, $verification->certificate_type);
-        $this->assertStringStartsWith('ZAQA-CVEQ-', $verification->certificate_number);
+        $this->assertStringStartsWith('CERT-', $verification->certificate_number);
         $this->assertSame($rejection->id, $verification->replaces_certificate_id);
         $this->assertSame(QualificationCertificate::STATUS_REVOKED, $rejection->fresh()->status);
     }

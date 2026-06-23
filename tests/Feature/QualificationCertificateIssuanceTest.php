@@ -254,21 +254,63 @@ class QualificationCertificateIssuanceTest extends TestCase
         Storage::fake('local');
         Mail::fake();
 
-        [, $qualification] = $this->eligiblePaidApprovedQualification('L1', subjectResults: [
+        [, $qualification] = $this->eligiblePaidApprovedQualification('L1', [
+            'examination_number' => 'ECZ-123456',
+        ], subjectResults: [
             ['subject_name' => 'English', 'grade' => '2', 'display_order' => 2],
             ['subject_name' => 'Mathematics', 'grade' => '1', 'display_order' => 1],
         ]);
 
-        $this->mockPdfLoadView(function (string $view, array $data) {
+        $expectedYear = $qualification->fresh()->award_date?->format('Y');
+
+        $this->mockPdfLoadView(function (string $view, array $data) use ($expectedYear) {
             $this->assertSame('pdf.qualification-certificate-subjects', $view);
             $this->assertSame('Mathematics', $data['subject_results'][0]['subject_name'] ?? null);
             $this->assertSame('1', $data['subject_results'][0]['grade'] ?? null);
             $this->assertSame('English', $data['subject_results'][1]['subject_name'] ?? null);
+            $this->assertSame('ECZ-123456', $data['subject_results'][0]['examination_number'] ?? null);
+            $this->assertSame($expectedYear, $data['subject_results'][0]['year'] ?? null);
+            $this->assertSame($expectedYear, $data['award_year'] ?? null);
         });
 
         $this->actingAs($this->makeCertificateAdmin())
             ->post(route('admin.verification.qualifications.issue_certificate', $qualification))
             ->assertRedirect();
+    }
+
+    public function test_school_subject_certificate_template_uses_ecz_layout_fields(): void
+    {
+        Storage::fake('local');
+        Mail::fake();
+
+        [, $qualification] = $this->eligiblePaidApprovedQualification('L2B', [
+            'examination_number' => 'ECZ-998877',
+        ], subjectResults: [
+            ['subject_name' => 'Mathematics', 'grade' => '1'],
+            ['subject_name' => 'English Language', 'grade' => 'B+'],
+        ]);
+
+        $capturedHtml = null;
+
+        $this->mockPdfLoadView(function (string $view, array $data) use (&$capturedHtml, $qualification) {
+            $this->assertSame('pdf.qualification-certificate-subjects', $view);
+            $this->assertSame('ECZ-998877', $data['subject_results'][0]['examination_number'] ?? null);
+            $expectedYear = $qualification->fresh()->award_date?->format('Y');
+            $this->assertSame($expectedYear, $data['subject_results'][1]['year'] ?? null);
+            $capturedHtml = view($view, $data)->render();
+        });
+
+        $this->actingAs($this->makeCertificateAdmin())
+            ->post(route('admin.verification.qualifications.issue_certificate', $qualification))
+            ->assertRedirect();
+
+        $this->assertIsString($capturedHtml);
+        $this->assertStringContainsString('Verification of Qualification', $capturedHtml);
+        $this->assertStringContainsString('Examination Number', $capturedHtml);
+        $this->assertStringContainsString('ECZ-998877', $capturedHtml);
+        $this->assertStringNotContainsString('Award date / year', $capturedHtml);
+        $this->assertStringNotContainsString('CVEQ Certificate Number', $capturedHtml);
+        $this->assertStringNotContainsString('and Evaluation of Qualification', $capturedHtml);
     }
 
     public function test_level1_officer_cannot_issue_certificate(): void

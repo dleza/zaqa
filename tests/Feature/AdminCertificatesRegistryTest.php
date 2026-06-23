@@ -95,7 +95,7 @@ class AdminCertificatesRegistryTest extends TestCase
         $cert = QualificationCertificate::query()->create([
             'qualification_id' => $qualification->id,
             'application_id' => $application->id,
-            'certificate_number' => 'ZAQA-CVEQ-'.now()->year.'-000099',
+            'certificate_number' => 'CERT-'.now()->year.'-000099',
             'zaqa_reference_number' => $qualification->verification_reference_number,
             'verification_token' => str_repeat('a', 48),
             'file_path' => $relativePath,

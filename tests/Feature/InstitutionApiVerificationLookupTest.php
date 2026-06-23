@@ -98,7 +98,7 @@ class InstitutionApiVerificationLookupTest extends TestCase
         QualificationCertificate::query()->create([
             'qualification_id' => $qualification->id,
             'application_id' => $application->id,
-            'certificate_number' => 'ZAQA-CVEQ-2026-000008',
+            'certificate_number' => 'CERT-2026-000008',
             'zaqa_reference_number' => $qualification->verification_reference_number,
             'verification_token' => 'api-lookup-token',
             'file_path' => 'certificates/test.pdf',
@@ -153,7 +153,7 @@ class InstitutionApiVerificationLookupTest extends TestCase
             ->assertOk()
             ->assertJsonPath('found', true)
             ->assertJsonPath('qualification.holder_name', 'Martin Mwale')
-            ->assertJsonPath('certificate.number', 'ZAQA-CVEQ-2026-000008')
+            ->assertJsonPath('certificate.number', 'CERT-2026-000008')
             ->assertJsonPath('certificate.public_verification_url', 'https://verify.example.test/certificates/api-lookup-token');
     }
 

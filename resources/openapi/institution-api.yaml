@@ -253,7 +253,7 @@ components:
         number:
           type: string
           nullable: true
-          example: ZAQA-CVEQ-2026-000008
+          example: CERT-2026-000008
         issued_at:
           type: string
           format: date
@@ -299,7 +299,7 @@ components:
         certificate_number:
           type: string
           nullable: true
-          example: ZAQA-CVEQ-2026-000008
+          example: CERT-2026-000008
         public_verification_url:
           type: string
           format: uri
@@ -667,7 +667,7 @@ paths:
                       exists: true
                       type: verification
                       type_label: Verification Certificate
-                      number: ZAQA-CVEQ-2026-000008
+                      number: CERT-2026-000008
                       issued_at: "2026-06-19"
                       revoked: false
                       revoked_at: null
@@ -690,7 +690,7 @@ paths:
                         awarding_institution: University of Lusaka
                         status: certificate_issued
                         status_label: Certificate Issued
-                        certificate_number: ZAQA-CVEQ-2026-000008
+                        certificate_number: CERT-2026-000008
                         public_verification_url: https://verify.example.test/certificates/api-lookup-token
                       - qualification_reference: "2026-000245-02"
                         application_reference: "2026-000245"
@@ -721,7 +721,7 @@ paths:
                       exists: true
                       type: verification
                       type_label: Verification Certificate
-                      number: ZAQA-CVEQ-2026-000008
+                      number: CERT-2026-000008
                       issued_at: "2026-06-19"
                       revoked: true
                       revoked_at: "2026-06-20"

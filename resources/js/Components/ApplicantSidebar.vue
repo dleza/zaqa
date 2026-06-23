@@ -104,65 +104,99 @@ const initials = computed(() => {
 
     <nav class="flex-1 overflow-auto px-3 pb-4" aria-label="Applicant navigation">
       <div v-for="section in sections" :key="section.key" class="mt-4 first:mt-0">
-        <button
-          type="button"
-          class="flex w-full items-center justify-between rounded-lg px-2 py-2 text-left text-xs font-semibold tracking-wider text-text-muted uppercase hover:bg-surface-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-surface"
-          :aria-expanded="expanded[section.key] ? 'true' : 'false'"
-          :aria-controls="`section-${section.key}`"
-          @click="toggleSection(section.key)"
+        <Link
+          v-if="section.standalone && section.items[0]"
+          :href="section.items[0].href"
+          class="group relative flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-surface"
+          :class="
+            isActive(section.items[0].href)
+              ? 'bg-brand/10 text-brand ring-1 ring-brand/15'
+              : 'text-text-primary hover:bg-surface-muted'
+          "
+          @click="emit('navigate')"
         >
-          <span class="flex items-center gap-2">
-            <span>{{ section.label }}</span>
-          </span>
-          <ChevronDown
-            class="h-4 w-4 transition-transform"
-            :class="expanded[section.key] ? 'rotate-0' : '-rotate-90'"
+          <span
+            class="absolute left-0 top-1/2 h-5 w-1 -translate-y-1/2 rounded-r"
+            :class="isActive(section.items[0].href) ? 'bg-accent' : 'bg-transparent group-hover:bg-border'"
             aria-hidden="true"
           />
-        </button>
 
-        <ul v-show="expanded[section.key]" :id="`section-${section.key}`" class="mt-2 space-y-1">
-          <li v-for="item in section.items" :key="item.key">
-            <Link
-              :href="item.href"
-              class="group relative flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-surface"
-              :class="
-                isActive(item.href)
-                  ? 'bg-brand/10 text-brand ring-1 ring-brand/15'
-                  : 'text-text-primary hover:bg-surface-muted'
-              "
-              @click="emit('navigate')"
-            >
-              <span
-                class="absolute left-0 top-1/2 h-5 w-1 -translate-y-1/2 rounded-r"
-                :class="isActive(item.href) ? 'bg-accent' : 'bg-transparent group-hover:bg-border'"
-                aria-hidden="true"
-              />
+          <component
+            :is="section.items[0].icon"
+            class="h-4 w-4 shrink-0"
+            :class="isActive(section.items[0].href) ? 'text-brand' : 'text-text-muted group-hover:text-brand'"
+            aria-hidden="true"
+          />
+          <span class="truncate">{{ section.items[0].label }}</span>
 
-              <component
-                :is="item.icon"
-                class="h-4 w-4 shrink-0"
-                :class="isActive(item.href) ? 'text-brand' : 'text-text-muted group-hover:text-brand'"
-                aria-hidden="true"
-              />
-              <span class="truncate">{{ item.label }}</span>
+          <span
+            v-if="isActive(section.items[0].href)"
+            class="ml-auto h-2 w-2 rounded-full bg-accent"
+            aria-hidden="true"
+          />
+        </Link>
 
-              <span
-                v-if="item.badgeKey && (badges?.[item.badgeKey] ?? 0) > 0"
-                class="ml-auto inline-flex items-center rounded-full border border-brand/15 bg-brand/10 px-2 py-0.5 text-[11px] font-semibold text-brand"
-                aria-label="Count badge"
+        <template v-else>
+          <button
+            type="button"
+            class="flex w-full items-center justify-between rounded-lg px-2 py-2 text-left text-xs font-semibold tracking-wider text-text-muted uppercase hover:bg-surface-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-surface"
+            :aria-expanded="expanded[section.key] ? 'true' : 'false'"
+            :aria-controls="`section-${section.key}`"
+            @click="toggleSection(section.key)"
+          >
+            <span class="flex items-center gap-2">
+              <span>{{ section.label }}</span>
+            </span>
+            <ChevronDown
+              class="h-4 w-4 transition-transform"
+              :class="expanded[section.key] ? 'rotate-0' : '-rotate-90'"
+              aria-hidden="true"
+            />
+          </button>
+
+          <ul v-show="expanded[section.key]" :id="`section-${section.key}`" class="mt-2 space-y-1">
+            <li v-for="item in section.items" :key="item.key">
+              <Link
+                :href="item.href"
+                class="group relative flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-surface"
+                :class="
+                  isActive(item.href)
+                    ? 'bg-brand/10 text-brand ring-1 ring-brand/15'
+                    : 'text-text-primary hover:bg-surface-muted'
+                "
+                @click="emit('navigate')"
               >
-                {{ badges?.[item.badgeKey] }}
-              </span>
+                <span
+                  class="absolute left-0 top-1/2 h-5 w-1 -translate-y-1/2 rounded-r"
+                  :class="isActive(item.href) ? 'bg-accent' : 'bg-transparent group-hover:bg-border'"
+                  aria-hidden="true"
+                />
 
-              <span
-                v-else-if="isActive(item.href)"
-                class="ml-auto h-2 w-2 rounded-full bg-accent"
-                aria-hidden="true"
-              />
-            </Link>
-          </li>
-        </ul>
+                <component
+                  :is="item.icon"
+                  class="h-4 w-4 shrink-0"
+                  :class="isActive(item.href) ? 'text-brand' : 'text-text-muted group-hover:text-brand'"
+                  aria-hidden="true"
+                />
+                <span class="truncate">{{ item.label }}</span>
+
+                <span
+                  v-if="item.badgeKey && (badges?.[item.badgeKey] ?? 0) > 0"
+                  class="ml-auto inline-flex items-center rounded-full border border-brand/15 bg-brand/10 px-2 py-0.5 text-[11px] font-semibold text-brand"
+                  aria-label="Count badge"
+                >
+                  {{ badges?.[item.badgeKey] }}
+                </span>
+
+                <span
+                  v-else-if="isActive(item.href)"
+                  class="ml-auto h-2 w-2 rounded-full bg-accent"
+                  aria-hidden="true"
+                />
+              </Link>
+            </li>
+          </ul>
+        </template>
       </div>
     </nav>
 

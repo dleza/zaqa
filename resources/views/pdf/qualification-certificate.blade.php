@@ -45,10 +45,6 @@
             </tr>
             <tr>
                 <td class="label">ZAQA Reference Number</td>
-                <td class="value">{{ $zaqa_reference !== '' ? $zaqa_reference : '—' }}</td>
-            </tr>
-            <tr>
-                <td class="label">CVEQ Certificate Number</td>
                 <td class="value">{{ $certificate_number }}</td>
             </tr>
             <tr>

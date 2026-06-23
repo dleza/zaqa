@@ -236,12 +236,6 @@ function formatDate(iso: string | null | undefined, includeTime = false) {
                       {{ formatDate(verification.verified_at, true) }}
                     </div>
                   </div>
-                  <div>
-                    <div class="text-[11px] font-semibold uppercase tracking-[0.16em] text-text-muted">Verification reference</div>
-                    <div class="mt-1 break-all font-mono text-xs text-text-primary">
-                      {{ verification.verification_reference || '—' }}
-                    </div>
-                  </div>
                 </div>
               </div>
             </div>
@@ -269,18 +263,10 @@ function formatDate(iso: string | null | undefined, includeTime = false) {
                   </div>
                 </div>
 
-                <div class="grid gap-3 rounded-[1.5rem] border border-brand/10 bg-brand/[0.03] p-4 sm:grid-cols-2 lg:grid-cols-1">
-                  <div>
-                    <div class="text-[11px] font-semibold uppercase tracking-[0.18em] text-text-muted">Certificate number</div>
-                    <div class="mt-1 font-mono text-sm font-semibold text-text-primary">
-                      {{ verification.certificate.certificate_number || '—' }}
-                    </div>
-                  </div>
-                  <div>
-                    <div class="text-[11px] font-semibold uppercase tracking-[0.18em] text-text-muted">ZAQA reference</div>
-                    <div class="mt-1 font-mono text-sm font-semibold text-text-primary">
-                      {{ verification.certificate.zaqa_reference_number || '—' }}
-                    </div>
+                <div class="rounded-[1.5rem] border border-brand/10 bg-brand/[0.03] p-4">
+                  <div class="text-[11px] font-semibold uppercase tracking-[0.18em] text-text-muted">ZAQA reference</div>
+                  <div class="mt-1 font-mono text-sm font-semibold text-text-primary">
+                    {{ verification.certificate.certificate_number || '—' }}
                   </div>
                 </div>
               </div>
